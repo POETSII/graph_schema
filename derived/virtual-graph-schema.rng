@@ -1,0 +1,158 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<grammar xmlns:a="http://relaxng.org/ns/compatibility/annotations/1.0" xmlns="http://relaxng.org/ns/structure/1.0" datatypeLibrary="http://www.w3.org/2001/XMLSchema-datatypes">
+  <start>
+    <element name="Graph">
+      <element name="EdgeTypes">
+        <zeroOrMore>
+          <ref name="edgeType"/>
+        </zeroOrMore>
+      </element>
+      <element name="DeviceTypes">
+        <zeroOrMore>
+          <ref name="deviceType"/>
+        </zeroOrMore>
+      </element>
+      <element name="Devices">
+        <zeroOrMore>
+          <ref name="device"/>
+        </zeroOrMore>
+      </element>
+    </element>
+  </start>
+  <define name="edgeType">
+    <element name="EdgeType">
+      <attribute name="id">
+        <a:documentation>Must be unique amongst all edge types</a:documentation>
+        <data type="string" datatypeLibrary=""/>
+      </attribute>
+      <optional>
+        <element name="Properties">
+          <ref name="dataType"/>
+        </element>
+      </optional>
+    </element>
+  </define>
+  <define name="deviceType">
+    <element name="DeviceType">
+      <attribute name="id">
+        <a:documentation>Must be unique amongst all device types</a:documentation>
+        <data type="string" datatypeLibrary=""/>
+      </attribute>
+      <element name="Inputs">
+        <zeroOrMore>
+          <element name="InputPort">
+            <attribute name="name">
+              <data type="string" datatypeLibrary=""/>
+            </attribute>
+            <attribute name="edgeType">
+              <data type="string" datatypeLibrary=""/>
+            </attribute>
+          </element>
+        </zeroOrMore>
+      </element>
+      <element name="Outputs">
+        <zeroOrMore>
+          <element name="OutputPort">
+            <attribute name="name">
+              <data type="string" datatypeLibrary=""/>
+            </attribute>
+            <attribute name="edgeType">
+              <data type="string" datatypeLibrary=""/>
+            </attribute>
+          </element>
+        </zeroOrMore>
+      </element>
+      <element name="Properties">
+        <ref name="dataType"/>
+      </element>
+    </element>
+  </define>
+  <define name="device">
+    <element name="Device">
+      <attribute name="id">
+        <a:documentation>A unique 24-bit number</a:documentation>
+        <data type="integer"/>
+      </attribute>
+      <optional>
+        <element name="Properties">
+          <ref name="dataValue"/>
+        </element>
+      </optional>
+    </element>
+  </define>
+  <define name="edge">
+    <element name="Edge">
+      <attribute name="type">
+        <data type="integer"/>
+      </attribute>
+      <attribute name="dstId">
+        <data type="integer"/>
+      </attribute>
+      <attribute name="dstPort">
+        <data type="integer"/>
+      </attribute>
+      <attribute name="srcId">
+        <data type="integer"/>
+      </attribute>
+      <attribute name="srcPort">
+        <data type="integer"/>
+      </attribute>
+      <optional>
+        <element name="Properties">
+          <ref name="dataValue"/>
+        </element>
+      </optional>
+    </element>
+  </define>
+  <define name="dataType">
+    <choice>
+      <element name="Int">
+        <optional>
+          <attribute name="name"/>
+        </optional>
+      </element>
+      <element name="Float">
+        <optional>
+          <attribute name="name"/>
+        </optional>
+      </element>
+      <element name="Bool">
+        <optional>
+          <attribute name="name"/>
+        </optional>
+      </element>
+      <element name="Tuple">
+        <optional>
+          <attribute name="name"/>
+        </optional>
+        <zeroOrMore>
+          <ref name="dataType"/>
+        </zeroOrMore>
+      </element>
+    </choice>
+  </define>
+  <define name="dataValue">
+    <choice>
+      <element name="Int">
+        <attribute name="value">
+          <data type="integer"/>
+        </attribute>
+      </element>
+      <element name="Float">
+        <attribute name="value">
+          <data type="float"/>
+        </attribute>
+      </element>
+      <element name="Bool">
+        <attribute name="value">
+          <data type="integer"/>
+        </attribute>
+      </element>
+      <element name="Tuple">
+        <zeroOrMore>
+          <ref name="dataValue"/>
+        </zeroOrMore>
+      </element>
+    </choice>
+  </define>
+</grammar>

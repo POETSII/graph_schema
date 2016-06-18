@@ -1,0 +1,174 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" elementFormDefault="qualified">
+  <xs:element name="Graph">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element ref="EdgeTypes"/>
+        <xs:element ref="DeviceTypes"/>
+        <xs:element ref="Devices"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="EdgeTypes">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element minOccurs="0" maxOccurs="unbounded" ref="EdgeType"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="DeviceTypes">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element minOccurs="0" maxOccurs="unbounded" ref="DeviceType"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="Devices">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element minOccurs="0" maxOccurs="unbounded" ref="Device"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="EdgeType">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element minOccurs="0" name="Properties">
+          <xs:complexType>
+            <xs:group ref="dataType"/>
+          </xs:complexType>
+        </xs:element>
+      </xs:sequence>
+      <xs:attribute name="id" use="required" type="xs:string">
+        <xs:annotation>
+          <xs:documentation>Must be unique amongst all edge types</xs:documentation>
+        </xs:annotation>
+      </xs:attribute>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="DeviceType">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element ref="Inputs"/>
+        <xs:element ref="Outputs"/>
+        <xs:element name="Properties">
+          <xs:complexType>
+            <xs:group ref="dataType"/>
+          </xs:complexType>
+        </xs:element>
+      </xs:sequence>
+      <xs:attribute name="id" use="required" type="xs:string">
+        <xs:annotation>
+          <xs:documentation>Must be unique amongst all device types</xs:documentation>
+        </xs:annotation>
+      </xs:attribute>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="Inputs">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element minOccurs="0" maxOccurs="unbounded" ref="InputPort"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="InputPort">
+    <xs:complexType>
+      <xs:attribute name="name" use="required" type="xs:string"/>
+      <xs:attribute name="edgeType" use="required" type="xs:string"/>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="Outputs">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element minOccurs="0" maxOccurs="unbounded" ref="OutputPort"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="OutputPort">
+    <xs:complexType>
+      <xs:attribute name="name" use="required" type="xs:string"/>
+      <xs:attribute name="edgeType" use="required" type="xs:string"/>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="Device">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element minOccurs="0" name="Properties">
+          <xs:complexType>
+            <xs:group ref="dataValue"/>
+          </xs:complexType>
+        </xs:element>
+      </xs:sequence>
+      <xs:attribute name="id" use="required" type="xs:integer">
+        <xs:annotation>
+          <xs:documentation>A unique 24-bit number</xs:documentation>
+        </xs:annotation>
+      </xs:attribute>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="Edge">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element minOccurs="0" name="Properties">
+          <xs:complexType>
+            <xs:group ref="dataValue"/>
+          </xs:complexType>
+        </xs:element>
+      </xs:sequence>
+      <xs:attribute name="type" use="required" type="xs:integer"/>
+      <xs:attribute name="dstId" use="required" type="xs:integer"/>
+      <xs:attribute name="dstPort" use="required" type="xs:integer"/>
+      <xs:attribute name="srcId" use="required" type="xs:integer"/>
+      <xs:attribute name="srcPort" use="required" type="xs:integer"/>
+    </xs:complexType>
+  </xs:element>
+  <xs:group name="dataType">
+    <xs:choice>
+      <xs:element name="Int">
+        <xs:complexType>
+          <xs:attribute name="name"/>
+        </xs:complexType>
+      </xs:element>
+      <xs:element name="Float">
+        <xs:complexType>
+          <xs:attribute name="name"/>
+        </xs:complexType>
+      </xs:element>
+      <xs:element name="Bool">
+        <xs:complexType>
+          <xs:attribute name="name"/>
+        </xs:complexType>
+      </xs:element>
+      <xs:element name="Tuple">
+        <xs:complexType>
+          <xs:group minOccurs="0" maxOccurs="unbounded" ref="dataType"/>
+          <xs:attribute name="name"/>
+        </xs:complexType>
+      </xs:element>
+    </xs:choice>
+  </xs:group>
+  <xs:group name="dataValue">
+    <xs:choice>
+      <xs:element name="Int">
+        <xs:complexType>
+          <xs:attribute name="value" use="required" type="xs:integer"/>
+        </xs:complexType>
+      </xs:element>
+      <xs:element name="Float">
+        <xs:complexType>
+          <xs:attribute name="value" use="required" type="xs:float"/>
+        </xs:complexType>
+      </xs:element>
+      <xs:element name="Bool">
+        <xs:complexType>
+          <xs:attribute name="value" use="required" type="xs:integer"/>
+        </xs:complexType>
+      </xs:element>
+      <xs:element name="Tuple">
+        <xs:complexType>
+          <xs:group minOccurs="0" maxOccurs="unbounded" ref="dataValue"/>
+        </xs:complexType>
+      </xs:element>
+    </xs:choice>
+  </xs:group>
+</xs:schema>
