@@ -8,7 +8,9 @@
             <xs:documentation>Global properties that are shared with all nodes. read-only.</xs:documentation>
           </xs:annotation>
           <xs:complexType>
-            <xs:group ref="v:dataType"/>
+            <xs:sequence>
+              <xs:element ref="v:typedData"/>
+            </xs:sequence>
           </xs:complexType>
         </xs:element>
         <xs:element ref="v:EdgeTypes"/>
@@ -72,7 +74,9 @@ delivered along-side messages which arrive along that edge
 An edge may have no properties, in which case this element will not exist</xs:documentation>
           </xs:annotation>
           <xs:complexType>
-            <xs:group ref="v:dataType"/>
+            <xs:sequence>
+              <xs:element ref="v:typedData"/>
+            </xs:sequence>
           </xs:complexType>
         </xs:element>
         <xs:element minOccurs="0" name="State">
@@ -83,7 +87,9 @@ TODO : This has unclear semantics (which is why I (DBT) was hesitant about it).
        that edge? Should there be state associated with outgoing edges?</xs:documentation>
           </xs:annotation>
           <xs:complexType>
-            <xs:group ref="v:dataType"/>
+            <xs:sequence>
+              <xs:element ref="v:typedData"/>
+            </xs:sequence>
           </xs:complexType>
         </xs:element>
       </xs:sequence>
@@ -100,7 +106,9 @@ TODO : This has unclear semantics (which is why I (DBT) was hesitant about it).
 (e.g. if it is only a pulse)</xs:documentation>
     </xs:annotation>
     <xs:complexType>
-      <xs:group ref="v:dataType"/>
+      <xs:sequence>
+        <xs:element ref="v:typedData"/>
+      </xs:sequence>
     </xs:complexType>
   </xs:element>
   <xs:element name="DeviceType">
@@ -129,7 +137,9 @@ may not appear if the device has no properties. There may be default
 values specified for some or all components of the properties.</xs:documentation>
           </xs:annotation>
           <xs:complexType>
-            <xs:group ref="v:dataType"/>
+            <xs:sequence>
+              <xs:element ref="v:typedData"/>
+            </xs:sequence>
           </xs:complexType>
         </xs:element>
         <xs:element minOccurs="0" name="State">
@@ -139,7 +149,9 @@ not appear, if the device has no state (I suppose all the mutable state could
 be in the edge properties).</xs:documentation>
           </xs:annotation>
           <xs:complexType>
-            <xs:group ref="v:dataType"/>
+            <xs:sequence>
+              <xs:element ref="v:typedData"/>
+            </xs:sequence>
           </xs:complexType>
         </xs:element>
         <xs:element minOccurs="0" maxOccurs="unbounded" ref="v:InputPort"/>
@@ -247,7 +259,9 @@ This element must not exist if the device type has no properties
 This element may not exist if the property has a (complete) default value</xs:documentation>
           </xs:annotation>
           <xs:complexType>
-            <xs:group ref="v:dataValue"/>
+            <xs:sequence>
+              <xs:element ref="v:typedData"/>
+            </xs:sequence>
           </xs:complexType>
         </xs:element>
       </xs:sequence>
@@ -273,7 +287,9 @@ This element can only exist if the edge has properties.
 This edge may not exist if all properties have a default</xs:documentation>
           </xs:annotation>
           <xs:complexType>
-            <xs:group ref="v:dataValue"/>
+            <xs:sequence>
+              <xs:element ref="v:typedData"/>
+            </xs:sequence>
           </xs:complexType>
         </xs:element>
         <xs:element minOccurs="0" name="State">
@@ -283,7 +299,9 @@ This element can only exist if the edge has state
 This edge may not exist if all parts of the state have a default.</xs:documentation>
           </xs:annotation>
           <xs:complexType>
-            <xs:group ref="v:dataValue"/>
+            <xs:sequence>
+              <xs:element ref="v:typedData"/>
+            </xs:sequence>
           </xs:complexType>
         </xs:element>
       </xs:sequence>
@@ -293,67 +311,31 @@ This edge may not exist if all parts of the state have a default.</xs:documentat
       <xs:attribute name="srcPortName" use="required" type="xs:string"/>
     </xs:complexType>
   </xs:element>
-  <xs:group name="dataType">
-    <xs:choice>
-      <xs:element name="Int32">
-        <xs:complexType>
-          <xs:attribute name="name" use="required" type="xs:string"/>
-          <xs:attribute name="default" type="xs:integer"/>
-        </xs:complexType>
-      </xs:element>
-      <xs:element name="Float32">
-        <xs:complexType>
-          <xs:attribute name="name" use="required" type="xs:string"/>
-          <xs:attribute name="default" type="xs:float"/>
-        </xs:complexType>
-      </xs:element>
-      <xs:element name="Bool">
-        <xs:complexType>
-          <xs:attribute name="name" use="required" type="xs:string"/>
-          <xs:attribute name="default"/>
-        </xs:complexType>
-      </xs:element>
-      <xs:element name="Tuple">
-        <xs:complexType>
-          <xs:group minOccurs="0" maxOccurs="unbounded" ref="v:dataType"/>
-          <xs:attribute name="name" use="required"/>
-        </xs:complexType>
-      </xs:element>
-    </xs:choice>
-  </xs:group>
-  <xs:group name="dataValue">
-    <xs:choice>
-      <xs:element name="Int32">
-        <xs:complexType>
-          <xs:attribute name="name" use="required" type="xs:string"/>
-          <xs:attribute name="value" use="required" type="xs:integer"/>
-        </xs:complexType>
-      </xs:element>
-      <xs:element name="Float32">
-        <xs:complexType>
-          <xs:attribute name="name" use="required" type="xs:string"/>
-          <xs:attribute name="value" use="required" type="xs:float"/>
-        </xs:complexType>
-      </xs:element>
-      <xs:element name="Bool">
-        <xs:complexType>
-          <xs:attribute name="name" use="required" type="xs:string"/>
-          <xs:attribute name="value" use="required">
-            <xs:simpleType>
-              <xs:restriction base="xs:token">
-                <xs:enumeration value="true"/>
-                <xs:enumeration value="false"/>
-              </xs:restriction>
-            </xs:simpleType>
-          </xs:attribute>
-        </xs:complexType>
-      </xs:element>
-      <xs:element name="Tuple">
-        <xs:complexType>
-          <xs:group minOccurs="0" maxOccurs="unbounded" ref="v:dataValue"/>
-          <xs:attribute name="name" use="required"/>
-        </xs:complexType>
-      </xs:element>
-    </xs:choice>
-  </xs:group>
+  <xs:element name="typedData" abstract="true"/>
+  <xs:element name="Int32" substitutionGroup="v:typedData">
+    <xs:complexType>
+      <xs:attribute name="name" use="required" type="xs:string"/>
+      <xs:attribute name="value" type="xs:integer"/>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="Float32" substitutionGroup="v:typedData">
+    <xs:complexType>
+      <xs:attribute name="name" use="required" type="xs:string"/>
+      <xs:attribute name="value" type="xs:float"/>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="Bool" substitutionGroup="v:typedData">
+    <xs:complexType>
+      <xs:attribute name="name" use="required" type="xs:string"/>
+      <xs:attribute name="value"/>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="Tuple" substitutionGroup="v:typedData">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element minOccurs="0" maxOccurs="unbounded" ref="v:typedData"/>
+      </xs:sequence>
+      <xs:attribute name="name" use="required"/>
+    </xs:complexType>
+  </xs:element>
 </xs:schema>

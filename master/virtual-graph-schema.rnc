@@ -10,7 +10,7 @@ grammar {
 
       ## Global properties that are shared with all nodes. read-only.
       element Properties {
-        dataType
+        typedData
       } ? ,
 
       ## Establishes the different types of edges that could exist in the graph,
@@ -39,14 +39,14 @@ grammar {
       ## The type of messages that are sent over this edge. This may not exist
       ## (e.g. if it is only a pulse)
       element Message {
-        dataType
+        typedData
       } ?,
 
       ## Indicates read-only properties associated with each edge. This will be
       ## delivered along-side messages which arrive along that edge
       ## An edge may have no properties, in which case this element will not exist
       element Properties {
-        dataType
+        typedData
       } ?,
 
       ## Indicates mutable properties associated with an edge.
@@ -54,7 +54,7 @@ grammar {
       ##        When is the state modifiable, is it _only_ when a message arrives over
       ##        that edge? Should there be state associated with outgoing edges?
       element State {
-        dataType
+        typedData
       } ?
     }
 
@@ -80,12 +80,12 @@ grammar {
       ## Read-only properties that could be specified on the device. This element
       ## may not appear if the device has no properties. There may be default
       ## values specified for some or all components of the properties.
-      element Properties { dataType } ?,
+      element Properties { typedData } ?,
 
       ## Mutable properties attached to the device. In principle this element might
       ## not appear, if the device has no state (I suppose all the mutable state could
       ## be in the edge properties).
-      element State { dataType } ?,
+      element State { typedData } ?,
 
       ## Zero or more input ports that appear on the device type.
       element InputPort {
@@ -158,7 +158,7 @@ grammar {
       ## Read-only properties associated with this device instance.
       ## This element must not exist if the device type has no properties
       ## This element may not exist if the property has a (complete) default value
-      element Properties { dataValue } ?
+      element Properties { typedData } ?
     }
 
   edgeInstance =
@@ -171,47 +171,34 @@ grammar {
       ## Read-only properties associated with this edge instance
       ## This element can only exist if the edge has properties.
       ## This edge may not exist if all properties have a default
-      element Properties { dataValue } ?,
+      element Properties { typedData } ?,
 
       ## Mutable properties associated with this edge instance.
       ## This element can only exist if the edge has state
       ## This edge may not exist if all parts of the state have a default.
-      element State { dataValue } ?
+      element State { typedData } ?
     }
 
-  dataType = (
+  typedData = (
     element Int32 {
       attribute name { string },
-      attribute default { xsd:integer } ?
+      attribute value { xsd:integer } ?
     }
     |
     element Float32 {
       attribute name { string },
-      attribute default { xsd:float } ?
+      attribute value { xsd:float } ?
     }
     |
     element Bool {
       attribute name { string },
-      attribute default { text } ?
+      attribute value { text } ?
     }
     |
     element Tuple {
         attribute name { text },
-        dataType *
+        typedData *
     }
   )
    
-  dataValue = (
-    element Int32 { attribute name {string},  attribute value { xsd:integer } }
-    |
-    element Float32 { attribute name {string}, attribute value { xsd:float } }
-    |
-    element Bool { attribute name { string}, attribute value { "true" | "false" } }
-    |
-    element Tuple {
-        attribute name { text },
-	dataValue *
-    }
-  )
-
 }

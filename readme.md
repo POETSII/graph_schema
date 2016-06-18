@@ -23,8 +23,16 @@ other graphs could also be added here, but that is up for discussion.
 Requirements
 ============
 
+This needs python3 and lxml:
 
+    
 
 Usage
 =====
 
+For a top-level check, do:
+
+     make virtual-validate
+
+This should check the schema, validate all examples/test-cases
+against the schema, and also validate them by parsing them.

@@ -1,0 +1,284 @@
+<ns0:Graph xmlns:ns0="TODO/POETS/virtual-graph-schema-v0" id="random">
+  <ns0:EdgeTypes>
+    <ns0:EdgeType id="et1">
+      <ns0:Message>
+        <ns0:Float32 name="v_3051201405"/>
+      </ns0:Message>
+    </ns0:EdgeType>
+    <ns0:EdgeType id="et0">
+      <ns0:Message>
+        <ns0:Bool name="v_1882233754" value="True"/>
+      </ns0:Message>
+    </ns0:EdgeType>
+    <ns0:EdgeType id="et3">
+      <ns0:Message>
+        <ns0:Bool name="v_3034431398"/>
+      </ns0:Message>
+      <ns0:Properties>
+        <ns0:Bool name="v_1347643012" value="True"/>
+      </ns0:Properties>
+      <ns0:State>
+        <ns0:Int32 name="v_1370882899"/>
+      </ns0:State>
+    </ns0:EdgeType>
+    <ns0:EdgeType id="et2">
+      <ns0:Message>
+        <ns0:Float32 name="v_2968015228"/>
+      </ns0:Message>
+      <ns0:Properties>
+        <ns0:Int32 name="v_3408576739"/>
+      </ns0:Properties>
+      <ns0:State>
+        <ns0:Tuple name="v_3273046443">
+          <ns0:Tuple name="v_863359155">
+            <ns0:Int32 name="v_3015369106" value="-573143117"/>
+            <ns0:Int32 name="v_3218841795"/>
+            <ns0:Float32 name="v_654176015" value="-0.1323450332284417"/>
+            <ns0:Float32 name="v_3091752039"/>
+          </ns0:Tuple>
+          <ns0:Bool name="v_3283723500"/>
+          <ns0:Tuple name="v_692347582">
+            <ns0:Int32 name="v_1572448773" value="63408047"/>
+            <ns0:Tuple name="v_3974091253">
+              <ns0:Tuple name="v_2887788249">
+                <ns0:Int32 name="v_3763520569"/>
+              </ns0:Tuple>
+            </ns0:Tuple>
+            <ns0:Tuple name="v_209016479">
+              <ns0:Float32 name="v_1665601834" value="-0.26635763386031064"/>
+            </ns0:Tuple>
+            <ns0:Int32 name="v_1024911099" value="1934114307"/>
+          </ns0:Tuple>
+          <ns0:Bool name="v_3599464481"/>
+        </ns0:Tuple>
+      </ns0:State>
+    </ns0:EdgeType>
+  </ns0:EdgeTypes>
+  <ns0:DeviceTypes>
+    <ns0:DeviceType id="dt3">
+      <ns0:Properties>
+        <ns0:Tuple name="v_3581987823">
+          <ns0:Float32 name="v_2919569839"/>
+        </ns0:Tuple>
+      </ns0:Properties>
+      <ns0:OutputPort name="p_3230275653" edgeTypeId="et3">
+        <ns0:OnSend><![CDATA[assert(0);]]></ns0:OnSend>
+      </ns0:OutputPort>
+      <ns0:OutputPort name="p_3194678909" edgeTypeId="et1">
+        <ns0:OnSend><![CDATA[assert(0);]]></ns0:OnSend>
+      </ns0:OutputPort>
+      <ns0:OutputPort name="p_3398798648" edgeTypeId="et1">
+        <ns0:OnSend><![CDATA[assert(0);]]></ns0:OnSend>
+      </ns0:OutputPort>
+      <ns0:OutputPort name="p_2537463314" edgeTypeId="et1">
+        <ns0:OnSend><![CDATA[assert(0);]]></ns0:OnSend>
+      </ns0:OutputPort>
+    </ns0:DeviceType>
+    <ns0:DeviceType id="dt2">
+      <ns0:Properties>
+        <ns0:Int32 name="v_269362439" value="655335184"/>
+      </ns0:Properties>
+      <ns0:State>
+        <ns0:Int32 name="v_2640077386" value="-1160335143"/>
+      </ns0:State>
+      <ns0:InputPort name="p_4041559035" edgeTypeId="et0">
+        <ns0:OnReceive><![CDATA[assert(0);]]></ns0:OnReceive>
+      </ns0:InputPort>
+      <ns0:OutputPort name="p_2246962541" edgeTypeId="et1">
+        <ns0:OnSend><![CDATA[assert(0);]]></ns0:OnSend>
+      </ns0:OutputPort>
+    </ns0:DeviceType>
+    <ns0:DeviceType id="dt0">
+      <ns0:State>
+        <ns0:Int32 name="v_4078531670" value="-990005887"/>
+      </ns0:State>
+      <ns0:InputPort name="p_1154760617" edgeTypeId="et1">
+        <ns0:OnReceive><![CDATA[assert(0);]]></ns0:OnReceive>
+      </ns0:InputPort>
+      <ns0:InputPort name="p_3281586604" edgeTypeId="et3">
+        <ns0:OnReceive><![CDATA[assert(0);]]></ns0:OnReceive>
+      </ns0:InputPort>
+      <ns0:InputPort name="p_3927506721" edgeTypeId="et3">
+        <ns0:OnReceive><![CDATA[assert(0);]]></ns0:OnReceive>
+      </ns0:InputPort>
+      <ns0:OutputPort name="p_4137644941" edgeTypeId="et2">
+        <ns0:OnSend><![CDATA[assert(0);]]></ns0:OnSend>
+      </ns0:OutputPort>
+      <ns0:OutputPort name="p_343187765" edgeTypeId="et3">
+        <ns0:OnSend><![CDATA[assert(0);]]></ns0:OnSend>
+      </ns0:OutputPort>
+      <ns0:OutputPort name="p_3585867133" edgeTypeId="et2">
+        <ns0:OnSend><![CDATA[assert(0);]]></ns0:OnSend>
+      </ns0:OutputPort>
+      <ns0:OutputPort name="p_2671571236" edgeTypeId="et3">
+        <ns0:OnSend><![CDATA[assert(0);]]></ns0:OnSend>
+      </ns0:OutputPort>
+      <ns0:OutputPort name="p_510904074" edgeTypeId="et1">
+        <ns0:OnSend><![CDATA[assert(0);]]></ns0:OnSend>
+      </ns0:OutputPort>
+      <ns0:OutputPort name="p_2780090844" edgeTypeId="et2">
+        <ns0:OnSend><![CDATA[assert(0);]]></ns0:OnSend>
+      </ns0:OutputPort>
+      <ns0:OutputPort name="p_3037393829" edgeTypeId="et1">
+        <ns0:OnSend><![CDATA[assert(0);]]></ns0:OnSend>
+      </ns0:OutputPort>
+      <ns0:OutputPort name="p_2023888777" edgeTypeId="et3">
+        <ns0:OnSend><![CDATA[assert(0);]]></ns0:OnSend>
+      </ns0:OutputPort>
+      <ns0:OutputPort name="p_1608529944" edgeTypeId="et1">
+        <ns0:OnSend><![CDATA[assert(0);]]></ns0:OnSend>
+      </ns0:OutputPort>
+      <ns0:OutputPort name="p_37694485" edgeTypeId="et0">
+        <ns0:OnSend><![CDATA[assert(0);]]></ns0:OnSend>
+      </ns0:OutputPort>
+      <ns0:OutputPort name="p_3137069555" edgeTypeId="et0">
+        <ns0:OnSend><![CDATA[assert(0);]]></ns0:OnSend>
+      </ns0:OutputPort>
+      <ns0:OutputPort name="p_2804554551" edgeTypeId="et2">
+        <ns0:OnSend><![CDATA[assert(0);]]></ns0:OnSend>
+      </ns0:OutputPort>
+      <ns0:OutputPort name="p_2688187459" edgeTypeId="et0">
+        <ns0:OnSend><![CDATA[assert(0);]]></ns0:OnSend>
+      </ns0:OutputPort>
+      <ns0:OutputPort name="p_336378729" edgeTypeId="et1">
+        <ns0:OnSend><![CDATA[assert(0);]]></ns0:OnSend>
+      </ns0:OutputPort>
+    </ns0:DeviceType>
+    <ns0:DeviceType id="dt1">
+      <ns0:State>
+        <ns0:Int32 name="v_1010447752"/>
+      </ns0:State>
+      <ns0:InputPort name="p_1090071633" edgeTypeId="et2">
+        <ns0:OnReceive><![CDATA[assert(0);]]></ns0:OnReceive>
+      </ns0:InputPort>
+      <ns0:InputPort name="p_4167559201" edgeTypeId="et1">
+        <ns0:OnReceive><![CDATA[assert(0);]]></ns0:OnReceive>
+      </ns0:InputPort>
+      <ns0:OutputPort name="p_946004326" edgeTypeId="et1">
+        <ns0:OnSend><![CDATA[assert(0);]]></ns0:OnSend>
+      </ns0:OutputPort>
+    </ns0:DeviceType>
+  </ns0:DeviceTypes>
+  <ns0:DeviceInstances>
+    <ns0:DeviceInstance id="di_1320822357" deviceTypeId="dt3">
+      <ns0:Properties>
+        <ns0:Tuple name="v_3581987823"/>
+      </ns0:Properties>
+    </ns0:DeviceInstance>
+    <ns0:DeviceInstance id="di_4134816514" deviceTypeId="dt3">
+      <ns0:Properties>
+        <ns0:Tuple name="v_3581987823">
+          <ns0:Float32 name="v_2919569839" value="-0.45997860443209504"/>
+        </ns0:Tuple>
+      </ns0:Properties>
+    </ns0:DeviceInstance>
+    <ns0:DeviceInstance id="di_676163246" deviceTypeId="dt1"/>
+    <ns0:DeviceInstance id="di_3398912066" deviceTypeId="dt3">
+      <ns0:Properties>
+        <ns0:Tuple name="v_3581987823">
+          <ns0:Float32 name="v_2919569839" value="-0.2706103344291526"/>
+        </ns0:Tuple>
+      </ns0:Properties>
+    </ns0:DeviceInstance>
+    <ns0:DeviceInstance id="di_3053727710" deviceTypeId="dt0"/>
+    <ns0:DeviceInstance id="di_3304269049" deviceTypeId="dt0"/>
+    <ns0:DeviceInstance id="di_3926010452" deviceTypeId="dt1"/>
+    <ns0:DeviceInstance id="di_3943805230" deviceTypeId="dt2">
+      <ns0:Properties>
+        <ns0:Int32 name="v_269362439" value="1621030521"/>
+      </ns0:Properties>
+    </ns0:DeviceInstance>
+    <ns0:DeviceInstance id="di_3626908473" deviceTypeId="dt2"/>
+    <ns0:DeviceInstance id="di_79122862" deviceTypeId="dt2">
+      <ns0:Properties>
+        <ns0:Int32 name="v_269362439" value="706274992"/>
+      </ns0:Properties>
+    </ns0:DeviceInstance>
+    <ns0:DeviceInstance id="di_4026999842" deviceTypeId="dt1"/>
+    <ns0:DeviceInstance id="di_1260116150" deviceTypeId="dt2">
+      <ns0:Properties>
+        <ns0:Int32 name="v_269362439" value="-1364181435"/>
+      </ns0:Properties>
+    </ns0:DeviceInstance>
+    <ns0:DeviceInstance id="di_1893799426" deviceTypeId="dt1"/>
+    <ns0:DeviceInstance id="di_533509209" deviceTypeId="dt2">
+      <ns0:Properties>
+        <ns0:Int32 name="v_269362439"/>
+      </ns0:Properties>
+    </ns0:DeviceInstance>
+    <ns0:DeviceInstance id="di_1975938152" deviceTypeId="dt2"/>
+    <ns0:DeviceInstance id="di_2284105479" deviceTypeId="dt2">
+      <ns0:Properties>
+        <ns0:Int32 name="v_269362439"/>
+      </ns0:Properties>
+    </ns0:DeviceInstance>
+    <ns0:DeviceInstance id="di_3485886303" deviceTypeId="dt3">
+      <ns0:Properties>
+        <ns0:Tuple name="v_3581987823"/>
+      </ns0:Properties>
+    </ns0:DeviceInstance>
+    <ns0:DeviceInstance id="di_518286792" deviceTypeId="dt2">
+      <ns0:Properties>
+        <ns0:Int32 name="v_269362439" value="1832724863"/>
+      </ns0:Properties>
+    </ns0:DeviceInstance>
+    <ns0:DeviceInstance id="di_1905918146" deviceTypeId="dt3">
+      <ns0:Properties>
+        <ns0:Tuple name="v_3581987823"/>
+      </ns0:Properties>
+    </ns0:DeviceInstance>
+    <ns0:DeviceInstance id="di_2536098281" deviceTypeId="dt1"/>
+  </ns0:DeviceInstances>
+  <ns0:EdgeInstances>
+    <ns0:EdgeInstance dstDeviceId="di_3053727710" dstPortName="p_1154760617" srcDeviceId="di_3398912066" srcPortName="p_3194678909"/>
+    <ns0:EdgeInstance dstDeviceId="di_4026999842" dstPortName="p_4167559201" srcDeviceId="di_3485886303" srcPortName="p_2537463314"/>
+    <ns0:EdgeInstance dstDeviceId="di_4026999842" dstPortName="p_4167559201" srcDeviceId="di_4026999842" srcPortName="p_946004326"/>
+    <ns0:EdgeInstance dstDeviceId="di_1893799426" dstPortName="p_4167559201" srcDeviceId="di_1260116150" srcPortName="p_2246962541"/>
+    <ns0:EdgeInstance dstDeviceId="di_3053727710" dstPortName="p_1154760617" srcDeviceId="di_4026999842" srcPortName="p_946004326"/>
+    <ns0:EdgeInstance dstDeviceId="di_3053727710" dstPortName="p_1154760617" srcDeviceId="di_1893799426" srcPortName="p_946004326"/>
+    <ns0:EdgeInstance dstDeviceId="di_4026999842" dstPortName="p_4167559201" srcDeviceId="di_518286792" srcPortName="p_2246962541"/>
+    <ns0:EdgeInstance dstDeviceId="di_1893799426" dstPortName="p_4167559201" srcDeviceId="di_676163246" srcPortName="p_946004326"/>
+    <ns0:EdgeInstance dstDeviceId="di_2536098281" dstPortName="p_4167559201" srcDeviceId="di_3485886303" srcPortName="p_2537463314"/>
+    <ns0:EdgeInstance dstDeviceId="di_3053727710" dstPortName="p_1154760617" srcDeviceId="di_1260116150" srcPortName="p_2246962541"/>
+    <ns0:EdgeInstance dstDeviceId="di_4026999842" dstPortName="p_1090071633" srcDeviceId="di_3053727710" srcPortName="p_2780090844">
+      <ns0:Properties>
+        <ns0:Int32 name="v_3408576739"/>
+      </ns0:Properties>
+    </ns0:EdgeInstance>
+    <ns0:EdgeInstance dstDeviceId="di_3304269049" dstPortName="p_1154760617" srcDeviceId="di_2284105479" srcPortName="p_2246962541"/>
+    <ns0:EdgeInstance dstDeviceId="di_1893799426" dstPortName="p_4167559201" srcDeviceId="di_3926010452" srcPortName="p_946004326"/>
+    <ns0:EdgeInstance dstDeviceId="di_4026999842" dstPortName="p_4167559201" srcDeviceId="di_3626908473" srcPortName="p_2246962541"/>
+    <ns0:EdgeInstance dstDeviceId="di_3304269049" dstPortName="p_1154760617" srcDeviceId="di_1260116150" srcPortName="p_2246962541"/>
+    <ns0:EdgeInstance dstDeviceId="di_676163246" dstPortName="p_4167559201" srcDeviceId="di_676163246" srcPortName="p_946004326"/>
+    <ns0:EdgeInstance dstDeviceId="di_3926010452" dstPortName="p_4167559201" srcDeviceId="di_2284105479" srcPortName="p_2246962541"/>
+    <ns0:EdgeInstance dstDeviceId="di_1893799426" dstPortName="p_4167559201" srcDeviceId="di_4026999842" srcPortName="p_946004326"/>
+    <ns0:EdgeInstance dstDeviceId="di_2536098281" dstPortName="p_4167559201" srcDeviceId="di_4026999842" srcPortName="p_946004326"/>
+    <ns0:EdgeInstance dstDeviceId="di_3926010452" dstPortName="p_4167559201" srcDeviceId="di_79122862" srcPortName="p_2246962541"/>
+    <ns0:EdgeInstance dstDeviceId="di_3926010452" dstPortName="p_4167559201" srcDeviceId="di_1893799426" srcPortName="p_946004326"/>
+    <ns0:EdgeInstance dstDeviceId="di_1893799426" dstPortName="p_4167559201" srcDeviceId="di_3626908473" srcPortName="p_2246962541"/>
+    <ns0:EdgeInstance dstDeviceId="di_2536098281" dstPortName="p_4167559201" srcDeviceId="di_3926010452" srcPortName="p_946004326"/>
+    <ns0:EdgeInstance dstDeviceId="di_4026999842" dstPortName="p_4167559201" srcDeviceId="di_79122862" srcPortName="p_2246962541"/>
+    <ns0:EdgeInstance dstDeviceId="di_2536098281" dstPortName="p_4167559201" srcDeviceId="di_1893799426" srcPortName="p_946004326"/>
+    <ns0:EdgeInstance dstDeviceId="di_676163246" dstPortName="p_4167559201" srcDeviceId="di_3943805230" srcPortName="p_2246962541"/>
+    <ns0:EdgeInstance dstDeviceId="di_3926010452" dstPortName="p_4167559201" srcDeviceId="di_2536098281" srcPortName="p_946004326"/>
+    <ns0:EdgeInstance dstDeviceId="di_1893799426" dstPortName="p_4167559201" srcDeviceId="di_1905918146" srcPortName="p_3398798648"/>
+    <ns0:EdgeInstance dstDeviceId="di_2536098281" dstPortName="p_4167559201" srcDeviceId="di_676163246" srcPortName="p_946004326"/>
+    <ns0:EdgeInstance dstDeviceId="di_676163246" dstPortName="p_4167559201" srcDeviceId="di_533509209" srcPortName="p_2246962541"/>
+    <ns0:EdgeInstance dstDeviceId="di_2536098281" dstPortName="p_4167559201" srcDeviceId="di_2536098281" srcPortName="p_946004326"/>
+    <ns0:EdgeInstance dstDeviceId="di_4026999842" dstPortName="p_4167559201" srcDeviceId="di_533509209" srcPortName="p_2246962541"/>
+    <ns0:EdgeInstance dstDeviceId="di_2536098281" dstPortName="p_4167559201" srcDeviceId="di_533509209" srcPortName="p_2246962541"/>
+    <ns0:EdgeInstance dstDeviceId="di_676163246" dstPortName="p_4167559201" srcDeviceId="di_3398912066" srcPortName="p_2537463314"/>
+    <ns0:EdgeInstance dstDeviceId="di_3304269049" dstPortName="p_1154760617" srcDeviceId="di_4134816514" srcPortName="p_3194678909"/>
+    <ns0:EdgeInstance dstDeviceId="di_3926010452" dstPortName="p_4167559201" srcDeviceId="di_3398912066" srcPortName="p_3398798648"/>
+    <ns0:EdgeInstance dstDeviceId="di_676163246" dstPortName="p_4167559201" srcDeviceId="di_1260116150" srcPortName="p_2246962541"/>
+    <ns0:EdgeInstance dstDeviceId="di_4026999842" dstPortName="p_4167559201" srcDeviceId="di_1975938152" srcPortName="p_2246962541"/>
+    <ns0:EdgeInstance dstDeviceId="di_1893799426" dstPortName="p_4167559201" srcDeviceId="di_1893799426" srcPortName="p_946004326"/>
+    <ns0:EdgeInstance dstDeviceId="di_3926010452" dstPortName="p_4167559201" srcDeviceId="di_518286792" srcPortName="p_2246962541"/>
+    <ns0:EdgeInstance dstDeviceId="di_3304269049" dstPortName="p_1154760617" srcDeviceId="di_3943805230" srcPortName="p_2246962541"/>
+    <ns0:EdgeInstance dstDeviceId="di_676163246" dstPortName="p_4167559201" srcDeviceId="di_1975938152" srcPortName="p_2246962541"/>
+    <ns0:EdgeInstance dstDeviceId="di_2536098281" dstPortName="p_4167559201" srcDeviceId="di_1975938152" srcPortName="p_2246962541"/>
+    <ns0:EdgeInstance dstDeviceId="di_4026999842" dstPortName="p_4167559201" srcDeviceId="di_4134816514" srcPortName="p_2537463314"/>
+    <ns0:EdgeInstance dstDeviceId="di_676163246" dstPortName="p_4167559201" srcDeviceId="di_1893799426" srcPortName="p_946004326"/>
+    <ns0:EdgeInstance dstDeviceId="di_1893799426" dstPortName="p_4167559201" srcDeviceId="di_1975938152" srcPortName="p_2246962541"/>
+  </ns0:EdgeInstances>
+</ns0:Graph>

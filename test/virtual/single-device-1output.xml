@@ -1,0 +1,25 @@
+<?xml version="1.0"?>
+<Graph xmlns="TODO/POETS/virtual-graph-schema-v0" id="single-device-1output">
+  <EdgeTypes>
+    <EdgeType id="e1">
+      
+    </EdgeType>
+    
+  </EdgeTypes>
+  
+  <DeviceTypes>
+    <DeviceType id="node">
+      <OutputPort name="out" edgeTypeId="e1">
+	<OnSend><![CDATA[
+	  requestSend[0]=false;
+	]]></OnSend>
+      </OutputPort>
+    </DeviceType>
+  </DeviceTypes>
+
+  <DeviceInstances>
+  </DeviceInstances>
+
+  <EdgeInstances>
+  </EdgeInstances>
+</Graph>

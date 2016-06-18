@@ -11,7 +11,7 @@
       <optional>
         <element name="Properties">
           <a:documentation>Global properties that are shared with all nodes. read-only.</a:documentation>
-          <ref name="dataType"/>
+          <ref name="typedData"/>
         </element>
       </optional>
       <element name="EdgeTypes">
@@ -50,7 +50,7 @@ and any properties or state associated with each edge type</a:documentation>
         <element name="Message">
           <a:documentation>The type of messages that are sent over this edge. This may not exist
 (e.g. if it is only a pulse)</a:documentation>
-          <ref name="dataType"/>
+          <ref name="typedData"/>
         </element>
       </optional>
       <optional>
@@ -58,7 +58,7 @@ and any properties or state associated with each edge type</a:documentation>
           <a:documentation>Indicates read-only properties associated with each edge. This will be
 delivered along-side messages which arrive along that edge
 An edge may have no properties, in which case this element will not exist</a:documentation>
-          <ref name="dataType"/>
+          <ref name="typedData"/>
         </element>
       </optional>
       <optional>
@@ -67,7 +67,7 @@ An edge may have no properties, in which case this element will not exist</a:doc
 TODO : This has unclear semantics (which is why I (DBT) was hesitant about it).
        When is the state modifiable, is it _only_ when a message arrives over
        that edge? Should there be state associated with outgoing edges?</a:documentation>
-          <ref name="dataType"/>
+          <ref name="typedData"/>
         </element>
       </optional>
     </element>
@@ -97,7 +97,7 @@ achieved on a particular port.</a:documentation>
           <a:documentation>Read-only properties that could be specified on the device. This element
 may not appear if the device has no properties. There may be default
 values specified for some or all components of the properties.</a:documentation>
-          <ref name="dataType"/>
+          <ref name="typedData"/>
         </element>
       </optional>
       <optional>
@@ -105,7 +105,7 @@ values specified for some or all components of the properties.</a:documentation>
           <a:documentation>Mutable properties attached to the device. In principle this element might
 not appear, if the device has no state (I suppose all the mutable state could
 be in the edge properties).</a:documentation>
-          <ref name="dataType"/>
+          <ref name="typedData"/>
         </element>
       </optional>
       <zeroOrMore>
@@ -194,7 +194,7 @@ executes, but the handler can set it high again if it wants.</a:documentation>
           <a:documentation>Read-only properties associated with this device instance.
 This element must not exist if the device type has no properties
 This element may not exist if the property has a (complete) default value</a:documentation>
-          <ref name="dataValue"/>
+          <ref name="typedData"/>
         </element>
       </optional>
     </element>
@@ -218,7 +218,7 @@ This element may not exist if the property has a (complete) default value</a:doc
           <a:documentation>Read-only properties associated with this edge instance
 This element can only exist if the edge has properties.
 This edge may not exist if all properties have a default</a:documentation>
-          <ref name="dataValue"/>
+          <ref name="typedData"/>
         </element>
       </optional>
       <optional>
@@ -226,19 +226,19 @@ This edge may not exist if all properties have a default</a:documentation>
           <a:documentation>Mutable properties associated with this edge instance.
 This element can only exist if the edge has state
 This edge may not exist if all parts of the state have a default.</a:documentation>
-          <ref name="dataValue"/>
+          <ref name="typedData"/>
         </element>
       </optional>
     </element>
   </define>
-  <define name="dataType">
+  <define name="typedData">
     <choice>
       <element name="Int32">
         <attribute name="name">
           <data type="string" datatypeLibrary=""/>
         </attribute>
         <optional>
-          <attribute name="default">
+          <attribute name="value">
             <data type="integer"/>
           </attribute>
         </optional>
@@ -248,7 +248,7 @@ This edge may not exist if all parts of the state have a default.</a:documentati
           <data type="string" datatypeLibrary=""/>
         </attribute>
         <optional>
-          <attribute name="default">
+          <attribute name="value">
             <data type="float"/>
           </attribute>
         </optional>
@@ -258,50 +258,13 @@ This edge may not exist if all parts of the state have a default.</a:documentati
           <data type="string" datatypeLibrary=""/>
         </attribute>
         <optional>
-          <attribute name="default"/>
+          <attribute name="value"/>
         </optional>
       </element>
       <element name="Tuple">
         <attribute name="name"/>
         <zeroOrMore>
-          <ref name="dataType"/>
-        </zeroOrMore>
-      </element>
-    </choice>
-  </define>
-  <define name="dataValue">
-    <choice>
-      <element name="Int32">
-        <attribute name="name">
-          <data type="string" datatypeLibrary=""/>
-        </attribute>
-        <attribute name="value">
-          <data type="integer"/>
-        </attribute>
-      </element>
-      <element name="Float32">
-        <attribute name="name">
-          <data type="string" datatypeLibrary=""/>
-        </attribute>
-        <attribute name="value">
-          <data type="float"/>
-        </attribute>
-      </element>
-      <element name="Bool">
-        <attribute name="name">
-          <data type="string" datatypeLibrary=""/>
-        </attribute>
-        <attribute name="value">
-          <choice>
-            <value>true</value>
-            <value>false</value>
-          </choice>
-        </attribute>
-      </element>
-      <element name="Tuple">
-        <attribute name="name"/>
-        <zeroOrMore>
-          <ref name="dataValue"/>
+          <ref name="typedData"/>
         </zeroOrMore>
       </element>
     </choice>
