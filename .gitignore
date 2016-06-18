@@ -1,0 +1,10 @@
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Objects, shared objects
+*.o
+*.so
+
+# Emacs
+*~
