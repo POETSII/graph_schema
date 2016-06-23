@@ -47,3 +47,8 @@ tt :
 	echo $(VIRTUAL_ALL_TESTS)
 
 validate-virtual : $(foreach t,$(VIRTUAL_ALL_TESTS),validate-virtual/$(t) output/virtual/$(t).svg)
+
+clean :
+	-find . -iname '*~' -exec rm {} ';'  # Get rid of emacs temporaries
+	-rm output/virtual/*.dot output/virtual/*.svg
+

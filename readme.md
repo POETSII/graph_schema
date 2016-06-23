@@ -20,10 +20,15 @@ not worry about physical implementation and layout, and only talk
 about structure, functionality, and connectivity. The schemas for
 other graphs could also be added here, but that is up for discussion.
 
+There are a few parts to the repository:
+
+- 
+
+
 Requirements
 ============
 
-This needs python3 and lxml:
+This needs python3 and lxml.
 
     
 
@@ -32,7 +37,8 @@ Usage
 
 For a top-level check, do:
 
-     make virtual-validate
+     make validate-virtual
 
 This should check the schema, validate all examples/test-cases
-against the schema, and also validate them by parsing them.
+against the schema, and also validate them by parsing them
+and generating graphs.

@@ -115,7 +115,9 @@ grammar {
 	##   edgeState : Mutable pointer to the edge state
 	##   messageData : Read-only pointer to the message payload
 	##   requestSend[] : an array of booleans which requests sending on the named port (one bool for each output port)
-	element OnReceive { string }
+	element OnReceive {
+	  string
+	}
       } *,
 
       ## Zero or more output ports that appear on the device type.

@@ -219,8 +219,9 @@ class EdgeInstance(object):
         
 
 class Graph:
-    def __init__(self,id):
+    def __init__(self,id,properties=None):
         self.id=id
+        self.properties=properties
         self.edge_types={}
         self.device_types={}
         self.device_instances={}
