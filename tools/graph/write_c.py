@@ -20,7 +20,10 @@ def render_typed_data_as_decl(proto,dst,indent=""):
         raise RuntimeError("Unknown data type {}.".format(type(proto)))
 
 def render_typed_data_as_struct(proto,name,parent,dst,indent=""):
-    dst.write("{}struct {} : {} {{\n".format(indent,parent,name))
+    if parent:
+        dst.write("{}struct {} : {} {{\n".format(indent,name,parent))
+    else:
+        dst.write("{}struct {}{{\n".format(indent,name))
     if proto:
         render_typed_data_as_decl(proto,dst,indent+"  ")
     else:
@@ -32,7 +35,10 @@ def render_typed_data_as_init(proto,dst,indent=""):
     if proto is None:
         pass
     elif isinstance(proto,ScalarData):
-        dst.write("{}\n".format(_typed_data_to_typename(indent, type(proto)), proto.name))
+        if proto.value is None:
+            dst.write("0")
+        else:
+            dst.write("{}\n".format(proto.value))
     elif isinstance(proto,TupleData):
         dst.write("{{ ")
         for elt in proto.elements_by_index:
@@ -41,38 +47,39 @@ def render_typed_data_as_init(proto,dst,indent=""):
     else:
         raise RuntimeError("Unknown data type.")
 
+def render_typed_data_as_struct_init(proto,dst,indent=""):
+    dst.write("{}{{\n".format(indent))
+    render_typed_data_as_init(proto,dst,indent+"  ")
+    dst.write("{}}}\n".format(indent))
+
+
 def render_edge_type_as_c(et,dst,indent=""):
 
     graph=et.parent
-    
-    if et.properties:
-        dst.write("{}struct {}_properties_t{{\n".format(indent, et.id))
-        render_typed_data_as_decl(et.properties, dst, indent+"  ")
-        dst.write("{}}};\n".format(indent))
 
-    if et.state:
-        dst.write("{}struct {}_state_t{{\n".format(indent, et.id))
-        render_typed_data_as_decl(et.properties,dst, indent+"  ")
-        dst.write("{}}};\n".format(indent))
-    
+    render_typed_data_as_struct(et.properties, "{}_properties_t".format(et.id), None, dst, indent)
+    render_typed_data_as_struct(et.state, "{}_state_t".format(et.id), None, dst, indent)
+    render_typed_data_as_struct(et.message, "{}_message_t".format(et.id), None, dst, indent)
+
+
 def render_device_type_as_c(dt,dst,indent=""):
 
     graph=dt.parent
-    
-    render_typed_data_as_struct(dt.properties, "{}_properties_t".format(dt.id), "device_properties_t", dst, indent)
-    render_typed_data_as_struct(dt.state, "{}_state_t".format(dt.id), "device_state_t", dst, indent)
+
+    render_typed_data_as_struct(dt.properties, "{}_properties_t".format(dt.id), None, dst, indent)
+    render_typed_data_as_struct(dt.state, "{}_state_t".format(dt.id), None, dst, indent)
 
     for pi in dt.inputs.values():
         et=pi.edge_type
-        
+
         dst.write("{}void {}_{}_on_receive(\n".format(indent, dt.id, pi.name))
-        dst.write("{}  const {}_graph_t *graphProperties,\n".format(indent,graph.id))
+        dst.write("{}  const {}_properties_t *graphProperties,\n".format(indent,graph.id))
         dst.write("{}  const {}_properties_t *deviceProperties,\n".format(indent,dt.id))
         dst.write("{}  {}_state_t *deviceState,\n".format(indent,dt.id))
         dst.write("{}  {}_properties_t *edgeProperties,\n".format(indent,et.id))
         dst.write("{}  {}_properties_t *edgeState,\n".format(indent,et.id))
         dst.write("{}  {}_message_t *message,\n".format(indent,et.id))
-        dst.write("{}  bool *requestSend\n".format(indent))       
+        dst.write("{}  bool *requestSend\n".format(indent))
         dst.write("{}){{\n".format(indent))
         for s in pi.receive_handler.splitlines():
             dst.write("{}  {}\n".format(indent,s))
@@ -81,7 +88,7 @@ def render_device_type_as_c(dt,dst,indent=""):
     for pi in dt.outputs.values():
         et=pi.edge_type
         dst.write("{}void {}_{}_on_send(\n".format(indent, dt.id, pi.name))
-        dst.write("{}  const {}_graph_t *graphProperties,\n".format(indent,graph.id))
+        dst.write("{}  const {}_properties_t *graphProperties,\n".format(indent,graph.id))
         dst.write("{}  const {}_properties_t *deviceProperties,\n".format(indent,dt.id))
         dst.write("{}  {}_state_t *deviceState,\n".format(indent,dt.id))
         dst.write("{}  {}_message_t *message,\n".format(indent,et.id))
@@ -103,23 +110,48 @@ def render_device_instances_as_c_static_data(graph,dst,indent=""):
     - DEVICE_properties
 
     """
-    for dt in graph.device_types:
-        instances=[di for di in graph.device_types.values() if di.device_type==dt]
+    for et in graph.edge_types.values():
+        dst.write("{}extern const {}_properties_t {}_properties[];\n".format(indent,et.id,et.id))
+        dst.write("{}extern const {}_state_t {}_state[];\n".format(indent,et.id,et.id))
+    for dt in graph.device_types.values():
+        dst.write("{}extern const {}_properties_t {}_properties[];\n".format(indent,dt.id,dt.id))
+        dst.write("{}extern const {}_state_t {}_state[];\n".format(indent,dt.id,dt.id))
 
-        dst.write("{}const int {}_count = {};\n".format(indent, di.device_type.name))
-        dst.write("{}const {}_properties_t {}_properties[]={{\n".format(indent,dt.name,dt.name))
-        
+    diToIndex={}
+    for di in graph.device_instances.values():
+        diToIndex[di]=len(diToIndex)
+    eiToIndex={}
+    for ei in graph.edge_instances.values():
+        eiToIndex[ei]=len(eiToIndex)
+
+    for dt in graph.device_types.values():
+        instances=[di for di in graph.device_instances.values() if di.device_type==dt]
+
+        dst.write("{}const int {}_count = {};\n".format(indent, dt.id, len(instances)))
+        dst.write("{}const {}_properties_t {}_properties[]={{\n".format(indent,dt.id,dt.id))
+        for i in range(len(instances)):
+            render_typed_data_as_struct_init(instances[i].properties,dst,indent+"  ")
+            if i+1!=len(instances):
+                dst.write("{},".format(indent))
+        dst.write("{}}};\n".format(indent))
+        dst.write("{}const {}_state_t {}_state[]={{\n".format(indent,dt.id,dt.id))
+        for i in range(len(instances)):
+            render_typed_data_as_struct_init(dt.state,dst,indent+"  ")
+            if i+1!=len(instances):
+                dst.write("{},".format(indent))
+        dst.write("{}}};\n".format(indent))
+
+
 
 def render_graph_as_c(graph,dst,indent=""):
+    dst.write('{}#include "runtime_graph.hpp"\n'.format(indent))
 
-    
-    if graph.properties:
-        dst.write("{}struct {}_properties_t{{\n".format(indent, graph.id))
-        render_typed_data_as_decl(graph.properties,dst, indent+"  ")
-        dst.write("{}}};\n".format(indent))
+    render_typed_data_as_struct(graph.properties, "{}_properties_t".format(graph.id), None, dst,indent)
 
     for dt in graph.edge_types.values():
         render_edge_type_as_c(dt,dst,indent+"  ")
-    
+
     for dt in graph.device_types.values():
         render_device_type_as_c(dt,dst,indent+"  ")
+
+    render_device_instances_as_c_static_data(graph,dst,indent)

@@ -1,4 +1,5 @@
-
+#ifndef runtime_graph_hpp
+#define runtime_graph_hpp
 
 #include <stdint.h>
 #include <assert.h>
@@ -32,10 +33,10 @@ typedef void (*receive_handler_t)(
 				  device_state_t *deviceState,
 				  const edge_properties_t *edgeProperties,
 				  edge_state_t *edgeState,
-				  const message_t *message, 
+				  const message_t *message,
 				  bool *requestSend // An array of bools, one per output port
 				  );
- 
+
 typedef void (*send_handler_t)(
 			       const graph_properties_t *graphProperties,
 			       const device_properties_t *deviceProperties,
@@ -46,9 +47,9 @@ typedef void (*send_handler_t)(
 			       );
 
 struct device_type_t;
-struct edge_instance_t;
 
 
+/*
 struct device_type_t
 {
   unsigned num_inputs;
@@ -58,20 +59,15 @@ struct device_type_t
   send_handler_t *output_handlers;
 };
 
-struct input_port_t
-{
-  unsigned num_edges;
-  receive_handler_t
-  incoming_instance_t *edges;
-};
 
 struct device_instance_t
 {
   const device_type_t *device_type;
   const device_properties_t *properties;
   device_state_t *state;
-  
+
   struct input_port_t *beginInputs, *endInputs;
   struct output_port_t *beginOutputs, *endOutputs;
-};
+};*/
 
+#endif

@@ -1,38 +1,46 @@
 <?xml version="1.0"?>
-<Graph xmlns="TODO/POETS/virtual-graph-schema-v0" id="two-device-box">
-  
+<Graph xmlns="TODO/POETS/virtual-graph-schema-v0" id="two_device_box">
+
   <EdgeTypes>
     <EdgeType id="et1">
       <Message>
 	<Int32 name="value" />
-      </Message>      
+      </Message>
     </EdgeType>
-    
+
     <EdgeType id="et2">
       <Message>
 	<Float32 name="bobble" />
-      </Message>      
+      </Message>
     </EdgeType>
   </EdgeTypes>
-  
+
   <DeviceTypes>
     <DeviceType id="dtA">
+      <Properties>
+        <Int32 name="xxx" />
+      </Properties>
+
       <InputPort name="in" edgeTypeId="et1">
-	<OnReceive />
+        <OnReceive >assert(0);</OnReceive>
       </InputPort>
 
       <OutputPort name="out" edgeTypeId="et2">
-	<OnSend></OnSend>
+        <OnSend>assert(0);</OnSend>
       </OutputPort>
     </DeviceType>
 
     <DeviceType id="dtB">
+      <State>
+        <Int32 name="yyy" />
+      </State>
+
       <InputPort name="in" edgeTypeId="et2">
-	<OnReceive />
+        <OnReceive >assert(0);</OnReceive>
       </InputPort>
 
       <OutputPort name="out" edgeTypeId="et1">
-	<OnSend></OnSend>
+        <OnSend>assert(0);</OnSend>
       </OutputPort>
     </DeviceType>
   </DeviceTypes>
