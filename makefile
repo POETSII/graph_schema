@@ -40,13 +40,17 @@ output/%.svg output/%.dot : test/%.xml tools/render_graph_as_dot.py graph_librar
 	$(PYTHON) tools/render_graph_as_dot.py < test/$*.xml > output/$*.dot
 	neato -Tsvg output/$*.dot > output/$*.svg
 
+output/%.graph.cpp : test/%.xml
+	mkdir -p $(dir output/$*)
+	$(PYTHON) tools/render_graph_as_cpp.py < test/$*.xml > output/$*.graph.cpp
+	
 
 VIRTUAL_ALL_TESTS := $(patsubst test/virtual/%.xml,%,$(wildcard test/virtual/*.xml))
 
 tt :
 	echo $(VIRTUAL_ALL_TESTS)
 
-validate-virtual : $(foreach t,$(VIRTUAL_ALL_TESTS),validate-virtual/$(t) output/virtual/$(t).svg)
+validate-virtual : $(foreach t,$(VIRTUAL_ALL_TESTS),validate-virtual/$(t) output/virtual/$(t).svg output/virtual/$(t).graph.cpp)
 
 clean :
 	-find . -iname '*~' -exec rm {} ';'  # Get rid of emacs temporaries

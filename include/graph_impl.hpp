@@ -1,9 +1,51 @@
+#ifndef graph_impl_hpp
+#define graph_impl_hpp
 
 #include "graph.hpp"
 
 
 #include <cassert>
 #include <cstdint>
+
+template<class T>
+void load_typed_data_attribute(T &dst, xmlpp::Element *parent, const char *name)
+{
+  auto all=parent->find(std::string("./*[@name='")+name+"]");
+  if(all.size()==0)
+    return;
+  if(all.size()>1)
+    throw std::runtime_error("More than one property.");
+  auto got=(xmlpp::Element*)all[0];
+  if(got->get_name()!="Int32")
+    throw std::runtime_error("Wrong xml node type.");
+  xmlpp::Attribute *a=got->get_attribute("value");
+  if(!a)
+    return;
+  std::stringstream tmp(a->get_value());
+  tmp>>dst;
+}
+
+xmlpp::Element *find_single(xmlpp::Element *parent, const char *path)
+{
+  auto all=parent->find(path);
+  if(all.size()==0)
+    return 0;
+  if(all.size()>1)
+    throw std::runtime_error("More than on matching element.");
+  auto res=dynamic_cast<xmlpp::Element*>(all[0]);
+  if(res==0)
+    throw std::runtime_error("Path did not identify an element.");
+  return res;
+}
+
+std::string get_attribute_required(xmlpp::Element *eParent, const char *name)
+{
+  auto a=eParent->get_attribute(name);
+  if(a==0)
+    throw std::runtime_error("Missing attribute.");
+
+  return a->get_value();
+}
 
 template<class T>
 const T *cast_typed_properties(const typed_data_t *properties)
@@ -176,3 +218,37 @@ public:
   { return m_outputsByName.at(name); }
 };
 typedef std::shared_ptr<DeviceType> DeviceTypePtr;
+
+
+
+void loadGraph(xmlpp::Element *parent, GraphLoadEvents *events)
+{
+  auto *eGraph=find_single(parent, "./Graph");
+  if(eGraph==0)
+    throw std::runtime_error("No graph element.");
+
+  std::string graphId=get_attribute_required(eGraph, "id");
+
+  TypedDataSpecPtr graphPropertiesSpec=TypedDataSpec::lookupTypedDataSpec(graphId+"_properties_t");
+  TypedDataPtr graphProperties; // Null by default
+
+  auto *eGraphProperties=find_single(eGraph, "./Properties");
+  if(eGraphProperties){
+    graphProperties=graphPropertiesSpec->load(eGraphProperties);
+  }
+
+  auto *eEdgeTypes=find_single(eGraph, "./EdgeTypes");
+  if(eEdgeTypes==0)
+    throw std::runtime_error("No EdgeTypes element.");
+
+  for(auto *nEdgeType : eEdgeTypes->find("./EdgeType")){
+    xmlpp::Element *eEdgeType=(xmlpp::Element*)nEdgeType;
+    std::string id=get_attribute_required(eEdgeType, "id");
+    
+    EdgeTypePtr et=EdgeType::lookupEdgeType(id);
+
+    events->onEdgeType(et);
+  }
+}
+
+#endif

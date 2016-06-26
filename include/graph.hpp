@@ -3,36 +3,6 @@
 
 #include <libxml++/nodes/element.h>
 
-template<class T>
-void load_typed_data_attribute(T &dst, xmlpp::Element *parent, const char *name)
-{
-  auto all=parent->find(std::string("./*[@name='")+name+"]");
-  if(all.size()==0)
-    return;
-  if(all.size()>1)
-    throw std::runtime_error("More than one property.");
-  auto got=(xmlpp::Element*)all[0];
-  if(got->get_name()!="Int32")
-    throw std::runtime_error("Wrong xml node type.");
-  xmlpp::Attribute *a=got->get_attribute("value");
-  if(!a)
-    return;
-  std::stringstream tmp(a->get_value());
-  tmp>>dst;
-}
-
-xmlpp::Element *find_single(xmlpp::Element *parent, const char *path)
-{
-  auto all=parent->find(path);
-  if(all.size()==0)
-    return 0;
-  if(all.size()>1)
-    throw std::runtime_error("More than on matching element.");
-  auto res=dynamic_cast<xmlpp::Element*>(all[0]);
-  if(res==0)
-    throw std::runtime_error("Path did not identify an element.");
-  return res;
-}
 
 class typed_data_t
 {
@@ -51,6 +21,9 @@ typedef std::shared_ptr<DeviceType> DeviceTypePtr;
 class TypedDataSpec
 {
 public:
+  static TypedDataSpecPtr lookupTypedDataSpec(const std::string &id);
+  static void registerTypedDataSpec(const std::string &id, const TypedDataSpecPtr &spec);
+  
   virtual TypedDataPtr create() const=0;
   virtual TypedDataPtr load(xmlpp::Element *parent) const=0;
   virtual void save(xmlpp::Element *parent, const TypedDataPtr &data) const=0;
@@ -60,6 +33,9 @@ public:
 class EdgeType
 {
 public:
+  static void registerEdgeType(const std::string &name, EdgeTypePtr dev);
+  static EdgeTypePtr lookupEdgeType(const std::string &name);
+  
   virtual const std::string &getId() const=0;
 
   virtual const TypedDataSpecPtr &getPropertiesSpec() const=0;
@@ -111,6 +87,9 @@ typedef std::shared_ptr<OutputPort> OutputPortPtr;
 class DeviceType
 {
 public:
+  static void registerDeviceType(const std::string &name, DeviceTypePtr dev);
+  static DeviceTypePtr lookupDeviceType(const std::string &name);
+  
   virtual const std::string &getId() const=0;
 
   virtual const TypedDataSpecPtr &getPropertiesSpec() const=0;
@@ -128,12 +107,20 @@ public:
 
 class GraphLoadEvents
 {
-protected:
-  virtual void onAddEdgeType(const EdgeTypePtr &et) =0;
+public:
+  virtual void onGraphProperties(const std::string &id,
+				 const TypedDataSpecPtr &propertiesSpec,
+				 const TypedDataPtr &properties);
+  
+  //! Notifies the graph that a new type of 
+  virtual void onDeviceType(const DeviceTypePtr &device);
 
-  virtual void onAddDeviceType(const DeviceTypePtr &dt) =0;
-
-  virtual uint64_t onAddDeviceInstance
+  virtual void onEdgeType(const EdgeTypePtr &edge);
+  
+  // Tells the consumer that a new instance is being added
+  /*! The return value is a unique identifier that means something
+    to the consumer. */
+  virtual uint64_t onDeviceInstance
   (
    const DeviceTypePtr &dt,
    const std::string &id,
@@ -141,7 +128,11 @@ protected:
    const TypedDataPtr &state
   ) =0;
 
-  virtual void onAddEdgeInstance
+  //! Tells the consumer that the a new edge is being added
+  /*! It is required that both device instances have already been
+    added (otherwise the ids would not been known).
+  */
+  virtual void onEdgeInstance
   (
    uint64_t dstDevInst, const DeviceTypePtr &dstDevType, const InputPortPtr &dstPort,
    uint64_t srcDevInst,  const DeviceTypePtr &srcDevType, const OutputPortPtr &srcPort,
