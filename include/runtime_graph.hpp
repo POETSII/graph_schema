@@ -49,9 +49,11 @@ typedef void (*send_handler_t)(
 struct device_type_t;
 
 
-/*
+
 struct device_type_t
 {
+  const char *id;
+  
   unsigned num_inputs;
   receive_handler_t *input_handlers;
 
@@ -59,6 +61,16 @@ struct device_type_t
   send_handler_t *output_handlers;
 };
 
+struct input_instance_t
+{
+  unsigned 
+};
+
+struct output_instance_t
+{
+  unsigned connected;
+  device_instance_t *
+};
 
 struct device_instance_t
 {
@@ -66,8 +78,16 @@ struct device_instance_t
   const device_properties_t *properties;
   device_state_t *state;
 
-  struct input_port_t *beginInputs, *endInputs;
-  struct output_port_t *beginOutputs, *endOutputs;
-};*/
+  port_instance_t *inputs;
+  port_instance_t *outputs;
+};
+
+struct graph_t
+{
+  const edge_type_t *edge_types;
+  const device_type_t *device_types;
+  device_instance_t *device_instances;
+  edge_instance_t *edge_instances;
+};
 
 #endif

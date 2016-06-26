@@ -85,6 +85,16 @@ def render_device_type_as_c(dt,dst,indent=""):
             dst.write("{}  {}\n".format(indent,s))
         dst.write("{}}}\n".format(indent));
 
+    dst.write("{}receive_handler_t {}_receive_handlers[]={{\n".format(indent,dt.id))
+    first=True
+    for pi in dt.inputs.values():
+        if first:
+            first=False
+        else:
+            dst.write("{}  ,".format(indent))
+        dst.write("{}  (receive_handler_t){}_{}_on_receive".format(indent,dt.id,pi.name))
+    dst.write("{}}};\n".format(indent))
+
     for pi in dt.outputs.values():
         et=pi.edge_type
         dst.write("{}void {}_{}_on_send(\n".format(indent, dt.id, pi.name))
@@ -98,6 +108,25 @@ def render_device_type_as_c(dt,dst,indent=""):
         for s in pi.send_handler.splitlines():
             dst.write("{}  {}\n".format(indent,s))
         dst.write("{}}}\n".format(indent));
+
+    dst.write("{}send_handler_t {}_send_handlers[]={{\n".format(indent,dt.id))
+    first=True
+    for pi in dt.outputs.values():
+        if first:
+            first=False
+        else:
+            dst.write("{}  ,".format(indent))
+        dst.write("{}  (send_handler_t){}_{}_on_send".format(indent,dt.id,pi.name))
+    dst.write("{}}};\n".format(indent))
+    
+
+    dst.write("{}const device_type_t {}_device_type = {{\n".format(indent,dt.id))
+    dst.write('{}  "{}",\n'.format(indent,dt.id))
+    dst.write("{}  {},\n".format(indent,len(dt.inputs)))
+    dst.write("{}  {}_receive_handlers,\n".format(indent,dt.id))
+    dst.write("{}  {},\n".format(indent,len(dt.outputs)))
+    dst.write("{}  {}_send_handlers\n".format(indent,dt.id))
+    dst.write("{}}};\n".format(indent))
 
 def render_device_instances_as_c_static_data(graph,dst,indent=""):
     """Loop over all the device types, and create arrays for the property and
