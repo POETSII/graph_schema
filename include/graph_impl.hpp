@@ -25,9 +25,9 @@ void load_typed_data_attribute(T &dst, xmlpp::Element *parent, const char *name)
   tmp>>dst;
 }
 
-xmlpp::Element *find_single(xmlpp::Element *parent, const char *path)
+xmlpp::Element *find_single(xmlpp::Element *parent, const std::string &name)
 {
-  auto all=parent->find(path);
+  auto all=parent->find(name);
   if(all.size()==0)
     return 0;
   if(all.size()>1)
@@ -36,6 +36,11 @@ xmlpp::Element *find_single(xmlpp::Element *parent, const char *path)
   if(res==0)
     throw std::runtime_error("Path did not identify an element.");
   return res;
+}
+
+xmlpp::Element *load_typed_data_tuple(xmlpp::Element *parent, const std::string &name)
+{
+  return find_single(parent, std::string("./Tuple[@name='")+name+"']");
 }
 
 std::string get_attribute_required(xmlpp::Element *eParent, const char *name)
@@ -219,6 +224,21 @@ public:
 };
 typedef std::shared_ptr<DeviceType> DeviceTypePtr;
 
+
+class GraphTypeImpl : public GraphImpl
+{
+private:
+  std::string m_id;
+  
+  
+  std::vector<EdgeTypePtr> m_edgeTypesByIndex;
+  std::unordered_map<EdgeTypePtr> m_edgeTypesById;
+
+  std::vector<DeviceTypePtr> m_deviceTypesByIndex;
+  std::unordered_map<DeviceTypePtr> m_deviceTypesById;
+
+  
+};
 
 
 void loadGraph(xmlpp::Element *parent, GraphLoadEvents *events)

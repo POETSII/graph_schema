@@ -3,10 +3,15 @@ datatypes xsd = "http://www.w3.org/2001/XMLSchema-datatypes"
 default namespace = "TODO/POETS/virtual-graph-schema-v0"
 
 grammar {
-  start =
-    element Graph {
-      ## Identifier or name for the graph. Doesn't need to exist.
-      attribute id { string } ?,
+  start = element Graph{
+    graphType*,
+    graphInstance*
+  }
+
+  graphType =
+    element GraphType {
+      ## Identifier or name for the graph.
+      attribute id { string },
 
       ## Global properties that are shared with all nodes. read-only.
       element Properties {
@@ -21,7 +26,18 @@ grammar {
       ## This establishes the shapes of devices, though not the internals.
       element DeviceTypes {
         deviceType *
-      },
+      }
+   }
+
+   graphInstance =
+     element GraphInstance {
+      attribute id { string },
+      attribute graphTypeId { string },
+
+      element Properties {
+      	typedData
+      } ?,
+
       element DeviceInstances {
         deviceInstance *
       },
@@ -34,7 +50,7 @@ grammar {
     ## An edge type captures a type of communication that could happen between ports
     element EdgeType {
       ## Must be unique amongst all edge types
-      attribute id { string },
+      attribute  id { string },
 
       ## The type of messages that are sent over this edge. This may not exist
       ## (e.g. if it is only a pulse)
@@ -165,6 +181,8 @@ grammar {
 
   edgeInstance =
     element EdgeInstance {
+      attribute edgeTypeId { string },
+
       attribute dstDeviceId   { xsd:string },
       attribute dstPortName   { xsd:string },
       attribute srcDeviceId   { xsd:string },

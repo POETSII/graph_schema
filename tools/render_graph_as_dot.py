@@ -14,18 +14,18 @@ print('digraph "{}"{{'.format(graph.id))
 print('  sep="+40,40";');
 print('  overlap=scalexy;');
 
-if len(graph.device_types) <= len(shapes):
-    for id in graph.device_types.keys():
+if len(graph.graph_type.device_types) <= len(shapes):
+    for id in graph.graph_type.device_types.keys():
         deviceTypeToShape[id]=shapes.pop(0)
 else:
-    for id in graph.device_types.keys():
+    for id in graph.graph_type.device_types.keys():
         deviceTypeToShape[id]=shapes[0]
 
-if len(graph.edge_types) <= len(colors):
-    for id in graph.edge_types.keys():
+if len(graph.graph_type.edge_types) <= len(colors):
+    for id in graph.graph_type.edge_types.keys():
         edgeTypeToColor[id]=colors.pop(0)
 else:
-    for id in graph.edge_types.keys():
+    for id in graph.graph_typ.edge_types.keys():
         edgeTypeToColor[id]="black"
 
 for di in graph.device_instances.values():

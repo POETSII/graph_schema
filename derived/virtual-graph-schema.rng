@@ -2,12 +2,20 @@
 <grammar ns="TODO/POETS/virtual-graph-schema-v0" xmlns:a="http://relaxng.org/ns/compatibility/annotations/1.0" xmlns="http://relaxng.org/ns/structure/1.0" datatypeLibrary="http://www.w3.org/2001/XMLSchema-datatypes">
   <start>
     <element name="Graph">
-      <optional>
-        <attribute name="id">
-          <a:documentation>Identifier or name for the graph. Doesn't need to exist.</a:documentation>
-          <data type="string" datatypeLibrary=""/>
-        </attribute>
-      </optional>
+      <zeroOrMore>
+        <ref name="graphType"/>
+      </zeroOrMore>
+      <zeroOrMore>
+        <ref name="graphInstance"/>
+      </zeroOrMore>
+    </element>
+  </start>
+  <define name="graphType">
+    <element name="GraphType">
+      <attribute name="id">
+        <a:documentation>Identifier or name for the graph.</a:documentation>
+        <data type="string" datatypeLibrary=""/>
+      </attribute>
       <optional>
         <element name="Properties">
           <a:documentation>Global properties that are shared with all nodes. read-only.</a:documentation>
@@ -27,6 +35,21 @@ and any properties or state associated with each edge type</a:documentation>
           <ref name="deviceType"/>
         </zeroOrMore>
       </element>
+    </element>
+  </define>
+  <define name="graphInstance">
+    <element name="GraphInstance">
+      <attribute name="id">
+        <data type="string" datatypeLibrary=""/>
+      </attribute>
+      <attribute name="graphTypeId">
+        <data type="string" datatypeLibrary=""/>
+      </attribute>
+      <optional>
+        <element name="Properties">
+          <ref name="typedData"/>
+        </element>
+      </optional>
       <element name="DeviceInstances">
         <zeroOrMore>
           <ref name="deviceInstance"/>
@@ -38,7 +61,7 @@ and any properties or state associated with each edge type</a:documentation>
         </zeroOrMore>
       </element>
     </element>
-  </start>
+  </define>
   <define name="edgeType">
     <element name="EdgeType">
       <a:documentation>An edge type captures a type of communication that could happen between ports</a:documentation>
@@ -201,6 +224,9 @@ This element may not exist if the property has a (complete) default value</a:doc
   </define>
   <define name="edgeInstance">
     <element name="EdgeInstance">
+      <attribute name="edgeTypeId">
+        <data type="string" datatypeLibrary=""/>
+      </attribute>
       <attribute name="dstDeviceId">
         <data type="string"/>
       </attribute>

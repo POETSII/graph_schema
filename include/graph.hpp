@@ -3,6 +3,40 @@
 
 #include <libxml++/nodes/element.h>
 
+/* What is the point of all this?
+
+   - C/C++ doesn't support introspection, so there is no way of getting at data-structures
+     at run-time.
+
+   - We want richly typed structures for debugging purposes. Persisted forms should be
+     human readable (for debuggable size graphs)
+
+   - We need to be able to bind code to arbitrary input/output ports in the graph
+
+   - We want speed for simulation purposes. Structured data can get in the way of that.
+
+The approach taken here is a mix of opaque and structured data types:
+
+- The kernel implementations are all strongly typed. Messages/state/properties are all
+  proper structs. The kernel implementations only work in terms of those structs.
+
+- The external implementations are all type-agnostic, and do not know the detailed
+  structure of anything. However, they have access to methods which allow them to
+  save/load the opaque data-types, and the opaque structures can be passed directly
+  to handlers with no need for translation.
+
+Handlers are made available at run-time via a registry. A given graph's types
+can be compiled into a shared object. The shared object contains the various
+type descriptors and handlers, and registers them in a run-time registry. As
+the graph is loaded, the various structs and device types are mapped to the
+equivalent handler.
+
+The intent is that when simulating, the only abstraction cost is for a
+virtual dispatch (usually quick), plus the loss of cross-function optimisation
+(which seems fair enough).
+
+*/
+
 
 class typed_data_t
 {
@@ -87,9 +121,6 @@ typedef std::shared_ptr<OutputPort> OutputPortPtr;
 class DeviceType
 {
 public:
-  static void registerDeviceType(const std::string &name, DeviceTypePtr dev);
-  static DeviceTypePtr lookupDeviceType(const std::string &name);
-  
   virtual const std::string &getId() const=0;
 
   virtual const TypedDataSpecPtr &getPropertiesSpec() const=0;
@@ -104,24 +135,58 @@ public:
   virtual const OutputPortPtr &getOutput(const std::string &name) const=0;
 };
 
+class GraphType
+{
+  virtual const std::string &getId() const=0;
+
+  virtual unsigned getDeviceTypeCount() const=0;
+  virtual const DeviceTypePtr &getDeviceType(unsigned index) const=0;
+  virtual const DeviceTypePtr &getDeviceType(const std::string &name) const=0;
+  
+  virtual unsigned getEdgeTypeCount() const=0;
+  virtual const EdgeTypePtr &getEdgeType(unsigned index) const=0;
+  virtual const EdgeTypePtr &getEdgeType(const std::string &name) const=0;
+};
+
+/* These allow registration/discovery of different data types at run-time */
+
+class Registry
+{
+public:
+  virtual void registerGraphType(GraphTypePtr graph);
+  virtual GraphTypePtr lookupGraphType(const std::string &id);
+  
+  virtual void registerEdgeType(EdgeTypePtr edge);
+  virtual EdgeTypePtr lookupEdgeType(const std::string &id);
+
+  virtual void registerDeviceType(DeviceTypePtr dev);
+  virtual DeviceTypePtr lookupDeviceType(const std::string &id);
+};
+
+/*! This is an entry-point exposed by graph shared objects that allows them
+  to register their various types.
+*/
+extern void registerGraphTypes(Registry *registry);
+
 
 class GraphLoadEvents
 {
 public:
-  virtual void onGraphProperties(const std::string &id,
-				 const TypedDataSpecPtr &propertiesSpec,
-				 const TypedDataPtr &properties);
+  virtual void onGraphTypeProperties(const GraphTypePtr &graph);
   
-  //! Notifies the graph that a new type of 
   virtual void onDeviceType(const DeviceTypePtr &device);
 
   virtual void onEdgeType(const EdgeTypePtr &edge);
+
+  //! Tells the consumer that a new graph is starting
+  virtual uint64_t onGraphInstance(const GraphTypePtr &graph, const std::string &id, const TypedDataPtr &properties);
   
   // Tells the consumer that a new instance is being added
   /*! The return value is a unique identifier that means something
     to the consumer. */
   virtual uint64_t onDeviceInstance
   (
+   uint64_t graphInst,
    const DeviceTypePtr &dt,
    const std::string &id,
    const TypedDataPtr &properties,
@@ -134,6 +199,7 @@ public:
   */
   virtual void onEdgeInstance
   (
+   uint64_t graphInst,
    uint64_t dstDevInst, const DeviceTypePtr &dstDevType, const InputPortPtr &dstPort,
    uint64_t srcDevInst,  const DeviceTypePtr &srcDevType, const OutputPortPtr &srcPort,
    const TypedDataPtr properties,

@@ -3,6 +3,14 @@
   <xs:element name="Graph">
     <xs:complexType>
       <xs:sequence>
+        <xs:element minOccurs="0" maxOccurs="unbounded" ref="v:GraphType"/>
+        <xs:element minOccurs="0" maxOccurs="unbounded" ref="v:GraphInstance"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="GraphType">
+    <xs:complexType>
+      <xs:sequence>
         <xs:element minOccurs="0" name="Properties">
           <xs:annotation>
             <xs:documentation>Global properties that are shared with all nodes. read-only.</xs:documentation>
@@ -15,12 +23,10 @@
         </xs:element>
         <xs:element ref="v:EdgeTypes"/>
         <xs:element ref="v:DeviceTypes"/>
-        <xs:element ref="v:DeviceInstances"/>
-        <xs:element ref="v:EdgeInstances"/>
       </xs:sequence>
-      <xs:attribute name="id" type="xs:string">
+      <xs:attribute name="id" use="required" type="xs:string">
         <xs:annotation>
-          <xs:documentation>Identifier or name for the graph. Doesn't need to exist.</xs:documentation>
+          <xs:documentation>Identifier or name for the graph.</xs:documentation>
         </xs:annotation>
       </xs:attribute>
     </xs:complexType>
@@ -44,6 +50,23 @@ and any properties or state associated with each edge type</xs:documentation>
       <xs:sequence>
         <xs:element minOccurs="0" maxOccurs="unbounded" ref="v:DeviceType"/>
       </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="GraphInstance">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element minOccurs="0" name="Properties">
+          <xs:complexType>
+            <xs:sequence>
+              <xs:element ref="v:typedData"/>
+            </xs:sequence>
+          </xs:complexType>
+        </xs:element>
+        <xs:element ref="v:DeviceInstances"/>
+        <xs:element ref="v:EdgeInstances"/>
+      </xs:sequence>
+      <xs:attribute name="id" use="required" type="xs:string"/>
+      <xs:attribute name="graphTypeId" use="required" type="xs:string"/>
     </xs:complexType>
   </xs:element>
   <xs:element name="DeviceInstances">
@@ -305,6 +328,7 @@ This edge may not exist if all parts of the state have a default.</xs:documentat
           </xs:complexType>
         </xs:element>
       </xs:sequence>
+      <xs:attribute name="edgeTypeId" use="required" type="xs:string"/>
       <xs:attribute name="dstDeviceId" use="required" type="xs:string"/>
       <xs:attribute name="dstPortName" use="required" type="xs:string"/>
       <xs:attribute name="srcDeviceId" use="required" type="xs:string"/>

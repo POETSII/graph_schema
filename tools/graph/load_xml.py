@@ -129,6 +129,27 @@ def load_device_type(graph,dtNode):
 
     return dt            
 
+def load_graph_type(graphNode):
+    id=get_attrib(graphNode,"id")
+
+    properties=None
+    propertiesNode=graphNode.find("p:Properties",ns)
+    if propertiesNode is not None:
+        assert(len(propertiesNode)==1)
+        properties=load_typed_data(propertiesNode[0])
+
+    graphType=GraphType(id,properties)
+        
+    for etNode in graphNode.findall("p:EdgeTypes/p:*",ns):
+        et=load_edge_type(graph,etNode)
+        graph.add_edge_type(et)
+
+    for dtNode in graphNode.findall("p:DeviceTypes/p:*",ns):
+        dt=load_device_type(graph,dtNode)
+        graph.add_device_type(dt)
+
+    return graphType
+
 
 def load_device_instance(graph,diNode):
     id=get_attrib(diNode,"id")
@@ -164,40 +185,44 @@ def load_edge_instance(graph,eiNode):
 
     return EdgeInstance(graph,dst_device,dst_port_name,src_device,src_port_name,properties)
 
+def load_graph_instance(graphTypes, graphNode):
+    id=get_attrib(graphNode,"id")
+    graphTypeId=get_attrib(graphNode,"graphTypeId")
+
+    graph=GraphInstance(id,graphTypes[graphTypeId])
+
+    properties=None
+    propertiesNode=graphNode.find("p:Properties",ns)
+    if propertiesNode is not None:
+        assert(len(propertiesNode)==1)
+        properties=load_typed_data(propertiesNode[0])
+
+    for diNode in graphNode.findall("p:DeviceInstances/p:*",ns):
+        di=load_device_instance(graph,diNode)
+        graph.add_device_instance(di)
+
+    for eiNode in graphNode.findall("p:EdgeInstances/p:*",ns):
+        ei=load_edge_instance(graph,eiNode)
+        graph.add_edge_instance(ei)
+
+    return graph
+
 
 def load_graph(src):
     tree = etree.parse(os.sys.stdin)
     doc = tree.getroot()
-    graphNode = doc;
+    graphsNode = doc;
 
+    graphTypes={}
+    
     try:
-        id=get_attrib(graphNode,"id")
+        for gtNode in graphsNode.findall("p:GraphType",ns):
+            gt=load_graph_type(gtNode)
+            graphTypes[gt.id]=gt
 
-        graph=Graph(id)
+        for giNode in graphsNode.findall("p:GraphInstance",ns):
+            return load_graph_instance(graphTypes, giNode)
 
-        properties=None
-        propertiesNode=graphNode.find("p:Properties",ns)
-        if propertiesNode is not None:
-            assert(len(propertiesNode)==1)
-            properties=load_typed_data(propertiesNode[0])
-
-        for etNode in graphNode.findall("p:EdgeTypes/p:*",ns):
-            et=load_edge_type(graph,etNode)
-            graph.add_edge_type(et)
-
-        for dtNode in graphNode.findall("p:DeviceTypes/p:*",ns):
-            dt=load_device_type(graph,dtNode)
-            graph.add_device_type(dt)
-
-        for diNode in graphNode.findall("p:DeviceInstances/p:*",ns):
-            di=load_device_instance(graph,diNode)
-            graph.add_device_instance(di)
-
-        for eiNode in graphNode.findall("p:EdgeInstances/p:*",ns):
-            ei=load_edge_instance(graph,eiNode)
-            graph.add_edge_instance(ei)
-
-        return graph
     except XMLSyntaxError as e:
         print(e)
         if e.node is not None:

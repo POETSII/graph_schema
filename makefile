@@ -5,6 +5,8 @@ CPPFLAGS += $(shell pkg-config --cflags libxml++-2.6)
 
 LDFLAGS += $(shell pkg-config --libs libxml++-2.6)
 
+SO_CPPFLAGS += -dynamiclib -fPIC
+
 CPPFLAGS += -std=c++11
 
 TRANG = external/trang-20091111/trang.jar
@@ -43,14 +45,16 @@ output/%.svg output/%.dot : test/%.xml tools/render_graph_as_dot.py graph_librar
 output/%.graph.cpp : test/%.xml
 	mkdir -p $(dir output/$*)
 	$(PYTHON) tools/render_graph_as_cpp.py < test/$*.xml > output/$*.graph.cpp
-	
+
+output/%.graph.so : output/%.graph.cpp
+	g++ $(CPPFLAGS) $(SO_CPPFLAGS) $< -o $@ $(LDFLAGS)
 
 VIRTUAL_ALL_TESTS := $(patsubst test/virtual/%.xml,%,$(wildcard test/virtual/*.xml))
 
 tt :
 	echo $(VIRTUAL_ALL_TESTS)
 
-validate-virtual : $(foreach t,$(VIRTUAL_ALL_TESTS),validate-virtual/$(t) output/virtual/$(t).svg output/virtual/$(t).graph.cpp)
+validate-virtual : $(foreach t,$(VIRTUAL_ALL_TESTS),validate-virtual/$(t) output/virtual/$(t).svg output/virtual/$(t).graph.cpp output/virtual/$(t).graph.so)
 
 clean :
 	-find . -iname '*~' -exec rm {} ';'  # Get rid of emacs temporaries

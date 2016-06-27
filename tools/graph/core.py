@@ -177,6 +177,23 @@ class DeviceType(object):
         self.outputs_by_index.append(p)
         self.ports[name]=p
 
+
+class GraphType(object):
+    def __init__(self,id,properties):
+        self.id=id
+        self.properties=properties
+        self.device_types={}
+        self.edge_types={}
+
+    def add_edge_type(self,edge_type):
+        if edge_type.id in self.edge_types:
+            raise GraphDescriptionError("Edge type already exists.")
+        self.edge_types[edge_type.id]=edge_type
+
+    def add_device_type(self,device_type):
+        if device_type.id in self.device_types:
+            raise GraphDescriptionError("Device type already exists.")
+        self.device_types[device_type.id]=device_type
         
 class DeviceInstance(object):
     def __init__(self,parent,id,device_type,properties):
@@ -218,12 +235,12 @@ class EdgeInstance(object):
         self.properties=properties
         
 
-class Graph:
-    def __init__(self,id,properties=None):
+class GraphInstance:
+    def __init__(self,id,graph_type,properties=None):
         self.id=id
+        self.graph_type=graph_type
+        assert(is_refinement_compatible(graph_type.properties,properties))
         self.properties=properties
-        self.edge_types={}
-        self.device_types={}
         self.device_instances={}
         self.edge_instances={}
         self._validated=True
@@ -233,15 +250,15 @@ class Graph:
 
     def _validate_device_type(self,dt):
         for p in dt.ports.values():
-            if p.edge_type.id not in self.edge_types:
+            if p.edge_type.id not in self.graph_type.edge_types:
                 raise GraphDescriptionError("DeviceType uses an edge type that is uknown.")
-            if p.edge_type != self.edge_types[p.edge_type.id]:
+            if p.edge_type != self.graph_type.edge_types[p.edge_type.id]:
                 raise GraphDescriptionError("DeviceType uses an edge type object that is not part of this graph.")
 
     def _validate_device_instance(self,di):
-        if di.device_type.id not in self.device_types:
+        if di.device_type.id not in self.graph_type.device_types:
             raise GraphDescriptionError("DeviceInstance refers to unknown device type.")
-        if di.device_type != self.device_types[di.device_type.id]:
+        if di.device_type != self.graph_type.device_types[di.device_type.id]:
             raise GraphDescriptionError("DeviceInstance refers to a device tye object that is not part of this graph.")
 
         if not is_refinement_compatible(di.device_type.properties,di.properties):
@@ -252,28 +269,6 @@ class Graph:
         pass
 
             
-    def add_edge_type(self,et,validate=True):
-        if et.id in self.edge_types:
-            raise GraphDescriptionError("Duplicate edgeType id {}".format(id))
-
-        if validate:
-            self._validate_edge_type(et)
-        else:
-            self._validated=False
-        
-        self.edge_types[et.id]=et
-
-    def add_device_type(self,dt,validate=True):
-        if dt.id in self.edge_types:
-            raise GraphDescriptionError("Duplicate deviceType id {}".format(id))
-
-        if validate:
-            self._validate_device_type(dt)
-        else:
-            self._validated=False
-        
-        self.device_types[dt.id]=dt
-
     def add_device_instance(self,di,validate=True):
         if di.id in self.device_instances:
             raise GraphDescriptionError("Duplicate deviceInstance id {}".format(id))
