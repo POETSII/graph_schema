@@ -8,7 +8,7 @@
     </DeviceTypes>
   </GraphType>
 
-  <GraphInstance id="minimal-inst" graphTypeId="minimal">
+  <GraphInstance id="minimal_inst" graphTypeId="minimal">
 
     <DeviceInstances>
     </DeviceInstances>

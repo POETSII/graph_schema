@@ -141,12 +141,12 @@ def load_graph_type(graphNode):
     graphType=GraphType(id,properties)
         
     for etNode in graphNode.findall("p:EdgeTypes/p:*",ns):
-        et=load_edge_type(graph,etNode)
-        graph.add_edge_type(et)
+        et=load_edge_type(graphType,etNode)
+        graphType.add_edge_type(et)
 
     for dtNode in graphNode.findall("p:DeviceTypes/p:*",ns):
-        dt=load_device_type(graph,dtNode)
-        graph.add_device_type(dt)
+        dt=load_device_type(graphType,dtNode)
+        graphType.add_device_type(dt)
 
     return graphType
 
@@ -155,9 +155,9 @@ def load_device_instance(graph,diNode):
     id=get_attrib(diNode,"id")
     
     device_type_id=get_attrib(diNode,"deviceTypeId")
-    if device_type_id not in graph.device_types:
+    if device_type_id not in graph.graph_type.device_types:
         raise XMLSyntaxError("Unknown device type id {}".format(device_type_id))
-    device_type=graph.device_types[device_type_id]
+    device_type=graph.graph_type.device_types[device_type_id]
 
     properties=None
     propertiesNode=diNode.find("p:Properties",ns)

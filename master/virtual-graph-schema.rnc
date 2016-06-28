@@ -180,9 +180,10 @@ grammar {
     }
 
   edgeInstance =
+    ## The edgeTypeId can be inferred from the types of the ports,
+    ## and it is worth explicitly checking they have the same port on
+    ## load, so it is not included here.
     element EdgeInstance {
-      attribute edgeTypeId { string },
-
       attribute dstDeviceId   { xsd:string },
       attribute dstPortName   { xsd:string },
       attribute srcDeviceId   { xsd:string },

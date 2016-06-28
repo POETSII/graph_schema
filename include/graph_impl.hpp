@@ -3,7 +3,7 @@
 
 #include "graph.hpp"
 
-
+#include <unordered_map>
 #include <cassert>
 #include <cstdint>
 
@@ -225,31 +225,31 @@ public:
 typedef std::shared_ptr<DeviceType> DeviceTypePtr;
 
 
-class GraphTypeImpl : public GraphImpl
+class GraphTypeImpl : public GraphType
 {
 private:
   std::string m_id;
   
   
   std::vector<EdgeTypePtr> m_edgeTypesByIndex;
-  std::unordered_map<EdgeTypePtr> m_edgeTypesById;
+  std::unordered_map<std::string,EdgeTypePtr> m_edgeTypesById;
 
   std::vector<DeviceTypePtr> m_deviceTypesByIndex;
-  std::unordered_map<DeviceTypePtr> m_deviceTypesById;
+  std::unordered_map<std::string,DeviceTypePtr> m_deviceTypesById;
 
   
 };
 
 
-void loadGraph(xmlpp::Element *parent, GraphLoadEvents *events)
+void loadGraph(Registry *registry, xmlpp::Element *parent, GraphLoadEvents *events)
 {
   auto *eGraph=find_single(parent, "./Graph");
   if(eGraph==0)
     throw std::runtime_error("No graph element.");
-
+  /*
   std::string graphId=get_attribute_required(eGraph, "id");
 
-  TypedDataSpecPtr graphPropertiesSpec=TypedDataSpec::lookupTypedDataSpec(graphId+"_properties_t");
+  TypedDataSpecPtr graphPropertiesSpec=registry->lookupTypedDataSpec(graphId+"_properties_t");
   TypedDataPtr graphProperties; // Null by default
 
   auto *eGraphProperties=find_single(eGraph, "./Properties");
@@ -269,6 +269,7 @@ void loadGraph(xmlpp::Element *parent, GraphLoadEvents *events)
 
     events->onEdgeType(et);
   }
+  */
 }
 
 #endif

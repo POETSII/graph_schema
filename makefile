@@ -16,11 +16,11 @@ JING = external/jing-20081028/bin/jing.jar
 PYTHON = python3.4
 
 $(TRANG) : external/trang-20091111.zip
-	(cd external && unzip trang-20091111.zip)
+	(cd external && unzip -o trang-20091111.zip)
 	touch $@
 
 $(JING) : external/jing-20081028.zip
-	(cd external && unzip jing-20081028.zip)
+	(cd external && unzip -o jing-20081028.zip)
 	touch $@
 
 graph_library : $(wildcard tools/graph/*.py)

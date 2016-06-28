@@ -25,7 +25,7 @@ if len(graph.graph_type.edge_types) <= len(colors):
     for id in graph.graph_type.edge_types.keys():
         edgeTypeToColor[id]=colors.pop(0)
 else:
-    for id in graph.graph_typ.edge_types.keys():
+    for id in graph.graph_type.edge_types.keys():
         edgeTypeToColor[id]="black"
 
 for di in graph.device_instances.values():

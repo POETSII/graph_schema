@@ -5,10 +5,10 @@ import sys
 import os
 import random
 
-nEdgeTypes=4
-nDeviceTypes=4
-nDeviceInstances=50
-nEdgeInstances=200
+nEdgeTypes=5
+nDeviceTypes=5
+nDeviceInstances=80
+nEdgeInstances=400
 
 urng=random.random
 
@@ -84,47 +84,49 @@ def make_random_instance(proto):
     else:
         raise RuntimeError("Unknown data type.")
 
-graph=Graph("random")
+graphType=GraphType("random", make_random_data())
+
+graphInstance=GraphInstance("random", graphType)
 
 edge_types=[]
 for i in range(nEdgeTypes):
     message=make_random_data()
     state=make_random_data()
     properties=make_random_data()
-    et=EdgeType(graph,"et{}".format(i),message,state,properties )
-    graph.add_edge_type(et)
+    et=EdgeType(graphType,"et{}".format(i),message,state,properties )
+    graphType.add_edge_type(et)
     edge_types.append(et)
 
 device_types=[]
 for i in range(nDeviceTypes):
     state=make_random_data()
     properties=make_random_data()
-    dt=DeviceType(graph,"dt{}".format(i),state,properties )
+    dt=DeviceType(graphType,"dt{}".format(i),state,properties )
     device_types.append(dt)
     
     while urng()<0.7:
         name=make_random_string("p")
-        edge_type=random.choice(list( graph.edge_types.values()  ))
+        edge_type=random.choice(list( graphType.edge_types.values()  ))
         handler="assert(0);"
         dt.add_input(name,edge_type,handler)
 
     while urng()<0.7:
         name=make_random_string("p")
-        edge_type=random.choice(list( graph.edge_types.values()  ))
+        edge_type=random.choice(list( graphType.edge_types.values()  ))
         handler="assert(0);"
         dt.add_output(name,edge_type,handler)
     
-    graph.add_device_type(dt)
+    graphType.add_device_type(dt)
 
 device_instances=[]
 for i in range(nDeviceInstances):
     dt=random.choice(device_types)
     properties=make_random_instance(dt.properties)
     #sys.stderr.write("proto={}, properties={}".format(dt.properties,properties))
-    di=DeviceInstance(graph, make_random_string("di"), dt, properties)
+    di=DeviceInstance(graphInstance, make_random_string("di"), dt, properties)
     device_instances.append(di)
 
-    graph.add_device_instance(di)
+    graphInstance.add_device_instance(di)
 
 edge_instances=[]
 for i in range(nEdgeInstances):
@@ -151,14 +153,14 @@ for i in range(nEdgeInstances):
     if not dst_port:
         continue
 
-    if ( dst_device.id, dst_port.name, src_device.id, src_port.name) in graph.edge_instances:
+    if ( dst_device.id, dst_port.name, src_device.id, src_port.name) in graphInstance.edge_instances:
         continue
 
     properties=make_random_instance(dst_port.edge_type.properties)
-    ei=EdgeInstance(graph, dst_device, dst_port.name, src_device, src_port.name,properties)
-    graph.add_edge_instance(ei)
+    ei=EdgeInstance(graphInstance, dst_device, dst_port.name, src_device, src_port.name,properties)
+    graphInstance.add_edge_instance(ei)
         
     
     
 
-save_graph(graph,sys.stdout)
+save_graph(graphInstance,sys.stdout)

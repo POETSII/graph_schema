@@ -301,6 +301,11 @@ This element may not exist if the property has a (complete) default value</xs:do
     </xs:complexType>
   </xs:element>
   <xs:element name="EdgeInstance">
+    <xs:annotation>
+      <xs:documentation>The edgeTypeId can be inferred from the types of the ports,
+and it is worth explicitly checking they have the same port on
+load, so it is not included here.</xs:documentation>
+    </xs:annotation>
     <xs:complexType>
       <xs:sequence>
         <xs:element minOccurs="0" name="Properties">
@@ -328,7 +333,6 @@ This edge may not exist if all parts of the state have a default.</xs:documentat
           </xs:complexType>
         </xs:element>
       </xs:sequence>
-      <xs:attribute name="edgeTypeId" use="required" type="xs:string"/>
       <xs:attribute name="dstDeviceId" use="required" type="xs:string"/>
       <xs:attribute name="dstPortName" use="required" type="xs:string"/>
       <xs:attribute name="srcDeviceId" use="required" type="xs:string"/>

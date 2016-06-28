@@ -1,48 +1,52 @@
 <?xml version="1.0"?>
-<Graph xmlns="TODO/POETS/virtual-graph-schema-v0" id="ring">
-  <Properties>
-    <Int32 name="maxCount" value="10" />
-  </Properties>
-  
-  <EdgeTypes>
-    <EdgeType id="et1">
-      <Message>
-	<Int32 name="value" />
-      </Message>      
-    </EdgeType>
-  </EdgeTypes>
-  
-  <DeviceTypes>
-    <DeviceType id="node">
-      <State>
-	<Int32 name="counter" value="0" />
-      </State>
-      
-      <InputPort name="in" edgeTypeId="et1">
-	<OnReceive><![CDATA[
-	uint32_t next=std::max(globalProperties->maxCount, deviceState->counter + messageData->value);
-	if(next != globalProperties->maxCount){
+<Graph xmlns="TODO/POETS/virtual-graph-schema-v0">
+  <GraphType id="ring">
+    <Properties>
+      <Int32 name="maxCount" value="10" />
+    </Properties>
+    
+    <EdgeTypes>
+      <EdgeType id="et1">
+	<Message>
+	  <Int32 name="value" />
+	</Message>      
+      </EdgeType>
+    </EdgeTypes>
+    
+    <DeviceTypes>
+      <DeviceType id="node">
+	<State>
+	  <Int32 name="counter" value="0" />
+	</State>
+	
+	<InputPort name="in" edgeTypeId="et1">
+	  <OnReceive><![CDATA[
+	  uint32_t next=std::max(graphProperties->maxCount, deviceState->counter + message->value);
+	  if(next != graphProperties->maxCount){
 	  deviceState->counter = next;
-	  requestSend[out]=true;
-	}
-	]]></OnReceive>
-      </InputPort>
-
-      <OutputPort name="out" edgeTypeId="et1">
+	  requestSend[0]=true;
+	  }
+	  ]]></OnReceive>
+	</InputPort>
+	
+	<OutputPort name="out" edgeTypeId="et1">
 	<OnSend><![CDATA[
-        messageData->value = 1;
+        message->value = 1;
 	]]></OnSend>
-      </OutputPort>
-    </DeviceType>
-  </DeviceTypes>
+	</OutputPort>
+      </DeviceType>
+    </DeviceTypes>
+  </GraphType>
 
-  <DeviceInstances>
-    <DeviceInstance id="d1" deviceTypeId="node" />
-    <DeviceInstance id="d2" deviceTypeId="node" />
-  </DeviceInstances>
-
-  <EdgeInstances>
-    <EdgeInstance dstDeviceId="d1" dstPortName="in" srcDeviceId="d2" srcPortName="out" />
-    <EdgeInstance dstDeviceId="d2" dstPortName="in" srcDeviceId="d1" srcPortName="out" />    
-  </EdgeInstances>
+  <GraphInstance id="single_device_ring" graphTypeId="ring">
+    <DeviceInstances>
+      <DeviceInstance id="d1" deviceTypeId="node" />
+      <DeviceInstance id="d2" deviceTypeId="node" />
+    </DeviceInstances>
+    
+    <EdgeInstances>
+      <EdgeInstance dstDeviceId="d1" dstPortName="in" srcDeviceId="d2" srcPortName="out" />
+      <EdgeInstance dstDeviceId="d2" dstPortName="in" srcDeviceId="d1" srcPortName="out" />    
+    </EdgeInstances>
+  </GraphInstance>
 </Graph>

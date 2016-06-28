@@ -47,10 +47,12 @@ typedef std::shared_ptr<typed_data_t> TypedDataPtr;
 class TypedDataSpec;
 class EdgeType;
 class DeviceType;
+class GraphType;
 
 typedef std::shared_ptr<TypedDataSpec> TypedDataSpecPtr;
 typedef std::shared_ptr<EdgeType> EdgeTypePtr;
 typedef std::shared_ptr<DeviceType> DeviceTypePtr;
+typedef std::shared_ptr<GraphType> GraphTypePtr;
 
 class TypedDataSpec
 {

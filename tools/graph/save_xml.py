@@ -19,11 +19,12 @@ _type_to_tag={
     Float32Data : toNS("p:Float32"),
     BoolData : toNS("p:Bool"),
 
-    Graph : toNS("p:Graph"),
+    GraphType : toNS("p:GraphType"),
     EdgeType : toNS("p:EdgeType"),
     DeviceType : toNS("p:DeviceType"),
     InputPort : toNS("p:InputPort"),
     OutputPort : toNS("p:OutputPort"),
+    GraphInstance : toNS("p:GraphInstance"),
     EdgeInstance : toNS("p:EdgeInstance"),
     DeviceInstance : toNS("p:DeviceInstance")
 }
@@ -120,8 +121,7 @@ def save_edge_instance(ei):
     return n
 
 
-
-def save_graph(graph,dst):
+def save_graph_type(graph):
     gn = _type_to_element(graph);
     gn.attrib["id"]=graph.id
 
@@ -135,6 +135,13 @@ def save_graph(graph,dst):
     for dt in graph.device_types.values():
         dtn.append(save_device_type(dt))
 
+    return gn
+
+def save_graph_instance(graph):
+    gn = _type_to_element(graph);
+    gn.attrib["id"]=graph.id
+    gn.attrib["graphTypeId"]=graph.graph_type.id
+    
     din = etree.Element(toNS("p:DeviceInstances"))
     gn.append(din)
     for di in graph.device_instances.values():
@@ -145,8 +152,16 @@ def save_graph(graph,dst):
     for ei in graph.edge_instances.values():
         ein.append(save_edge_instance(ei))
 
+    return gn
+
+def save_graph(graph,dst):
+    root=etree.Element(toNS("p:Graph"))
+    
+    root.append(save_graph_type(graph.graph_type))
+    root.append(save_graph_instance(graph))
+
     # The wierdness is because stdout is in text mode, so we send
     # it via a string. Ideally it would write it straight to the file...
-    tree = etree.ElementTree(gn)
-    s=etree.tostring(gn,pretty_print=True).decode("utf8")
-    sys.stdout.write(s)
+    tree = etree.ElementTree(root)
+    s=etree.tostring(root,pretty_print=True).decode("utf8")
+    dst.write(s)
