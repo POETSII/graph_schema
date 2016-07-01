@@ -237,7 +237,22 @@ private:
   std::vector<DeviceTypePtr> m_deviceTypesByIndex;
   std::unordered_map<std::string,DeviceTypePtr> m_deviceTypesById;
 
-  
+protected:
+  GraphTypeImpl(std::string id)
+    : m_id(id)
+  {}
+
+  void addEdgeType(EdgeTypePtr et)
+  {
+    m_edgeTypesByIndex.push_back(et);
+    m_edgeTypesById[et->getId()]=et;
+  }
+
+  void addDeviceType(DeviceTypePtr et)
+  {
+    m_deviceTypesByIndex.push_back(et);
+    m_deviceTypesById[et->getId()]=et;
+  }
 };
 
 

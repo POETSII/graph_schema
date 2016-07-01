@@ -42,12 +42,15 @@ output/%.svg output/%.dot : test/%.xml tools/render_graph_as_dot.py graph_librar
 	$(PYTHON) tools/render_graph_as_dot.py < test/$*.xml > output/$*.dot
 	neato -Tsvg output/$*.dot > output/$*.svg
 
-output/%.graph.cpp : test/%.xml
+output/%.graph.cpp : test/%.xml graph_library
 	mkdir -p $(dir output/$*)
 	$(PYTHON) tools/render_graph_as_cpp.py < test/$*.xml > output/$*.graph.cpp
 
 output/%.graph.so : output/%.graph.cpp
 	g++ $(CPPFLAGS) $(SO_CPPFLAGS) $< -o $@ $(LDFLAGS)
+
+bin/print_graph_properties : tools/print_graph_properties.cpp
+	$(CXX) $(CPPFLAGS) $< -o $@ $(LDFLAGS) $(LDLIBS)
 
 VIRTUAL_ALL_TESTS := $(patsubst test/virtual/%.xml,%,$(wildcard test/virtual/*.xml))
 

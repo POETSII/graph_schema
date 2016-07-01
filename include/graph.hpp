@@ -174,11 +174,14 @@ extern void registerGraphTypes(Registry *registry);
 class GraphLoadEvents
 {
 public:
-  virtual void onGraphTypeProperties(const GraphTypePtr &graph);
+  virtual void onGraphTypeProperties(const GraphTypePtr &graph)
+  {}
   
-  virtual void onDeviceType(const DeviceTypePtr &device);
+  virtual void onDeviceType(const DeviceTypePtr &device)
+  {}
 
-  virtual void onEdgeType(const EdgeTypePtr &edge);
+  virtual void onEdgeType(const EdgeTypePtr &edge)
+  {}
 
   //! Tells the consumer that a new graph is starting
   virtual uint64_t onGraphInstance(const GraphTypePtr &graph, const std::string &id, const TypedDataPtr &properties);
