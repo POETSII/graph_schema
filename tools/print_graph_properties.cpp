@@ -39,6 +39,21 @@ public:
   
   std::vector<instance> instances;
 
+  virtual void onGraphType(const GraphTypePtr &graph) override 
+  {
+    fprintf(stderr, "  onGraphType(%s)\n", graph->getId().c_str());
+  }
+  
+  virtual void onDeviceType(const DeviceTypePtr &device) override
+  {
+    fprintf(stderr, "  onDeviceType(%s)\n", device->getId().c_str());
+  }
+
+  virtual void onEdgeType(const EdgeTypePtr &edge) override
+  {
+    fprintf(stderr, "  onEdgeType(%s)\n", edge->getId().c_str());
+  }
+
   
   virtual uint64_t onGraphInstance(const GraphTypePtr &graphType,
 				 const std::string &id,
@@ -87,9 +102,13 @@ public:
    uint64_t srcDevInst,  const DeviceTypePtr &srcDevType, const OutputPortPtr &srcPort,
    const TypedDataPtr properties
   ) override
-  {
+  { 
     auto dst=instances.at(dstDevInst);
     auto src=instances.at(srcDevInst);
+
+    fprintf(stderr, "  onEdgeInstance(%s.%s <- %s.%s)\n",
+	    dst.id.c_str(), dstPort->getName().c_str(),
+	    src.id.c_str(), srcPort->getName().c_str());
 
     TypedDataPtr state;
     

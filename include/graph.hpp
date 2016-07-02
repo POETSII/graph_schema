@@ -179,7 +179,7 @@ extern void registerGraphTypes(Registry *registry);
 class GraphLoadEvents
 {
 public:
-  virtual void onGraphTypeProperties(const GraphTypePtr &graph)
+  virtual void onGraphType(const GraphTypePtr &graph)
   {}
   
   virtual void onDeviceType(const DeviceTypePtr &device)

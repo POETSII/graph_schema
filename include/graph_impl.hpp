@@ -359,9 +359,19 @@ void loadGraph(Registry *registry, xmlpp::Element *parent, GraphLoadEvents *even
 
   auto graphType=registry->lookupGraphType(graphTypeId);
 
+  for(auto et : graphType->getEdgeTypes()){
+    events->onEdgeType(et);
+  }
+  for(auto dt : graphType->getDeviceTypes()){
+    events->onDeviceType(dt);
+  }
+  events->onGraphType(graphType);
+
   TypedDataPtr graphProperties;
 
   auto gId=events->onGraphInstance(graphType, graphId, graphProperties);
+
+  std::unordered_map<std::string, std::pair<uint64_t,DeviceTypePtr> > devices;
 
   auto *eDeviceInstances=find_single(eGraph, "./g:DeviceInstances", ns);
   if(!eDeviceInstances)
@@ -377,7 +387,34 @@ void loadGraph(Registry *registry, xmlpp::Element *parent, GraphLoadEvents *even
 
     TypedDataPtr deviceProperties;
 
-    events->onDeviceInstance(gId, dt, id, deviceProperties);
+    uint64_t dId=events->onDeviceInstance(gId, dt, id, deviceProperties);
+
+    devices.insert(std::make_pair( id, std::make_pair(dId, dt)));
+  }
+
+  auto *eEdgeInstances=find_single(eGraph, "./g:EdgeInstances", ns);
+  if(!eEdgeInstances)
+    throw std::runtime_error("No EdgeInstances element");
+  
+  for(auto *nEdge : eEdgeInstances->find("./g:EdgeInstance", ns)){
+    auto *eEdge=(xmlpp::Element *)nEdge;
+
+    std::string srcDeviceId=get_attribute_required(eEdge, "srcDeviceId");
+    std::string srcPortName=get_attribute_required(eEdge, "srcPortName");
+    std::string dstDeviceId=get_attribute_required(eEdge, "dstDeviceId");
+    std::string dstPortName=get_attribute_required(eEdge, "dstPortName");
+
+    auto &srcDevice=devices.at(srcDeviceId);
+    auto &dstDevice=devices.at(dstDeviceId);
+    auto srcPort=srcDevice.second->getOutput(srcPortName);
+    auto dstPort=dstDevice.second->getInput(dstPortName);
+
+    TypedDataPtr edgeProperties;
+
+    events->onEdgeInstance(gId,
+			   dstDevice.first, dstDevice.second, dstPort, 
+			   srcDevice.first, srcDevice.second, srcPort,
+			   edgeProperties);
   }
 }
 
