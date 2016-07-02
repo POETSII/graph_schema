@@ -7,6 +7,8 @@
 #include <cassert>
 #include <cstdint>
 
+#include <dlfcn.h>
+
 template<class T>
 void load_typed_data_attribute(T &dst, xmlpp::Element *parent, const char *name)
 {
@@ -25,9 +27,9 @@ void load_typed_data_attribute(T &dst, xmlpp::Element *parent, const char *name)
   tmp>>dst;
 }
 
-xmlpp::Element *find_single(xmlpp::Element *parent, const std::string &name)
+xmlpp::Element *find_single(xmlpp::Element *parent, const std::string &name, const xmlpp::Node::PrefixNsMap &ns=xmlpp::Node::PrefixNsMap())
 {
-  auto all=parent->find(name);
+  auto all=parent->find(name,ns);
   if(all.size()==0)
     return 0;
   if(all.size()>1)
@@ -213,6 +215,9 @@ public:
   virtual const InputPortPtr &getInput(const std::string &name) const override
   { return m_inputsByName.at(name); }
 
+  virtual const std::vector<InputPortPtr> &getInputs() const override
+  { return m_inputsByIndex; }
+
   virtual unsigned getOutputCount() const override
   { return m_outputsByIndex.size(); }
   
@@ -221,6 +226,9 @@ public:
   
   virtual const OutputPortPtr &getOutput(const std::string &name) const override
   { return m_outputsByName.at(name); }
+
+  virtual const std::vector<OutputPortPtr> &getOutputs() const override
+  { return m_outputsByIndex; }
 };
 typedef std::shared_ptr<DeviceType> DeviceTypePtr;
 
@@ -242,6 +250,33 @@ protected:
     : m_id(id)
   {}
 
+  const std::string &getId() const override
+  { return m_id; }
+
+  virtual unsigned getDeviceTypeCount() const override
+  { return m_deviceTypesByIndex.size(); }
+  
+  virtual const DeviceTypePtr &getDeviceType(unsigned index) const override
+  { return m_deviceTypesByIndex.at(index); }
+  
+  virtual const DeviceTypePtr &getDeviceType(const std::string &name) const override
+  { return m_deviceTypesById.at(name); }
+  
+  virtual const std::vector<DeviceTypePtr> &getDeviceTypes() const override
+  { return m_deviceTypesByIndex; }
+  
+  virtual unsigned getEdgeTypeCount() const override
+  { return m_edgeTypesByIndex.size(); }
+  
+  virtual const EdgeTypePtr &getEdgeType(unsigned index) const override
+  { return m_edgeTypesByIndex.at(index); }
+  
+  virtual const EdgeTypePtr &getEdgeType(const std::string &name) const override
+  { return m_edgeTypesById.at(name); }
+  
+  virtual const std::vector<EdgeTypePtr> &getEdgeTypes() const override
+  { return m_edgeTypesByIndex; }
+
   void addEdgeType(EdgeTypePtr et)
   {
     m_edgeTypesByIndex.push_back(et);
@@ -255,36 +290,95 @@ protected:
   }
 };
 
+class RegistryImpl
+  : public Registry
+{
+private:
+  std::unordered_map<std::string,GraphTypePtr> m_graphs;
+  std::unordered_map<std::string,EdgeTypePtr> m_edges;
+  std::unordered_map<std::string,DeviceTypePtr> m_devices;
+  
+public:
+  void loadProvider(const std::string &path)
+  {
+    fprintf(stderr, "Loading provider '%s'\n", path.c_str());
+    void *lib=dlopen(path.c_str(), RTLD_NOW|RTLD_LOCAL);
+    if(lib==0)
+      throw std::runtime_error("Couldn't load provider '"+path+"'");
+
+    // Mangled name of the export. TODO : A bit fragile.
+    void *entry=dlsym(lib, "_Z18registerGraphTypesP8Registry");
+    if(entry==0)
+      throw std::runtime_error("Couldn't find registerGraphTypes entry point.");
+
+    typedef void (*entry_func_t)(Registry *);
+    
+    auto entryFunc=(entry_func_t)(entry);
+    entryFunc(this);
+  }
+  
+  virtual void registerGraphType(GraphTypePtr graph) override
+  {
+    fprintf(stderr, "  registerGraphType(%s)\n", graph->getId().c_str());
+    m_graphs.insert(std::make_pair(graph->getId(), graph));
+  }
+  
+  virtual GraphTypePtr lookupGraphType(const std::string &id) const override
+  { return m_graphs.at(id); }
+  
+  virtual void registerEdgeType(EdgeTypePtr edge) override 
+  {  m_edges.insert(std::make_pair(edge->getId(), edge)); }
+  
+  virtual EdgeTypePtr lookupEdgeType(const std::string &id) const override
+  { return m_edges.at(id); }
+
+  virtual void registerDeviceType(DeviceTypePtr dev) override 
+  { m_devices.insert(std::make_pair(dev->getId(), dev)); }
+  
+  virtual DeviceTypePtr lookupDeviceType(const std::string &id) const override
+  { return m_devices.at(id); }
+};
+
+
 
 void loadGraph(Registry *registry, xmlpp::Element *parent, GraphLoadEvents *events)
 {
-  auto *eGraph=find_single(parent, "./Graph");
+  xmlpp::Node::PrefixNsMap ns;
+  ns["g"]="TODO/POETS/virtual-graph-schema-v0";
+  
+  fprintf(stderr, "loadGraph begin\n");
+  
+  auto *eGraph=find_single(parent, "./g:GraphInstance", ns);
   if(eGraph==0)
     throw std::runtime_error("No graph element.");
-  /*
+  
   std::string graphId=get_attribute_required(eGraph, "id");
+  std::string graphTypeId=get_attribute_required(eGraph, "graphTypeId");
 
-  TypedDataSpecPtr graphPropertiesSpec=registry->lookupTypedDataSpec(graphId+"_properties_t");
-  TypedDataPtr graphProperties; // Null by default
+  fprintf(stderr, "graphId = %s, graphTypeId = %s\n", graphId.c_str(), graphTypeId.c_str());
 
-  auto *eGraphProperties=find_single(eGraph, "./Properties");
-  if(eGraphProperties){
-    graphProperties=graphPropertiesSpec->load(eGraphProperties);
+  auto graphType=registry->lookupGraphType(graphTypeId);
+
+  TypedDataPtr graphProperties;
+
+  auto gId=events->onGraphInstance(graphType, graphId, graphProperties);
+
+  auto *eDeviceInstances=find_single(eGraph, "./g:DeviceInstances", ns);
+  if(!eDeviceInstances)
+    throw std::runtime_error("No DeviceInstances element");
+  
+  for(auto *nDevice : eDeviceInstances->find("./g:DeviceInstance", ns)){
+    auto *eDevice=(xmlpp::Element *)nDevice;
+
+    std::string id=get_attribute_required(eDevice, "id");
+    std::string deviceTypeId=get_attribute_required(eDevice, "deviceTypeId");
+
+    auto dt=graphType->getDeviceType(deviceTypeId);
+
+    TypedDataPtr deviceProperties;
+
+    events->onDeviceInstance(gId, dt, id, deviceProperties);
   }
-
-  auto *eEdgeTypes=find_single(eGraph, "./EdgeTypes");
-  if(eEdgeTypes==0)
-    throw std::runtime_error("No EdgeTypes element.");
-
-  for(auto *nEdgeType : eEdgeTypes->find("./EdgeType")){
-    xmlpp::Element *eEdgeType=(xmlpp::Element*)nEdgeType;
-    std::string id=get_attribute_required(eEdgeType, "id");
-    
-    EdgeTypePtr et=EdgeType::lookupEdgeType(id);
-
-    events->onEdgeType(et);
-  }
-  */
 }
 
 #endif

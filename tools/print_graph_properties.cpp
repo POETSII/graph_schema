@@ -1,4 +1,9 @@
-#include "graph.hpp"
+#include "graph_impl.hpp"
+
+#include <libxml++/parsers/domparser.h>
+
+#include <iostream>
+#include <fstream>
 
 class GraphInfo : public GraphLoadEvents
 {
@@ -35,7 +40,7 @@ public:
   std::vector<instance> instances;
 
   
-  virtual uint64_t onGraphProperties(const GraphTypePtr &graphType,
+  virtual uint64_t onGraphInstance(const GraphTypePtr &graphType,
 				 const std::string &id,
 				 const TypedDataPtr &properties) override
   {
@@ -53,16 +58,21 @@ public:
    uint64_t graphId,
    const DeviceTypePtr &dt,
    const std::string &id,
-   const TypedDataPtr &properties,
-   const TypedDataPtr &state
+   const TypedDataPtr &properties
    ) override {
+    fprintf(stderr, "  onDeviceInstance(%s)\n", id.c_str());
+
     std::vector<output> outputs;
-    for(auto output : dt->getOutputs()){
-      outputs.emplace_back(output->getEdgeType(), {});
+    for(auto o : dt->getOutputs()){
+      output to{ o->getEdgeType(), {} };
+      outputs.emplace_back(std::move(to));
     }
+
+    TypedDataPtr state;
     
     uint64_t index=instances.size();
-    instances.emplace_back(index, id, deviceType, properties,state, outputs);
+    instance inst{ index, id, dt, properties, state, outputs   };
+    instances.emplace_back(std::move(inst));
     return index;
   }
 
@@ -75,24 +85,56 @@ public:
    uint64_t graphInst,
    uint64_t dstDevInst, const DeviceTypePtr &dstDevType, const InputPortPtr &dstPort,
    uint64_t srcDevInst,  const DeviceTypePtr &srcDevType, const OutputPortPtr &srcPort,
-   const TypedDataPtr properties,
-   TypedDataPtr state
+   const TypedDataPtr properties
   ) override
   {
     auto dst=instances.at(dstDevInst);
     auto src=instances.at(srcDevInst);
 
-    src.outputs.at(OutputPortPtr->getIndex()).edges.emplace_back(dstDevInst, srcPort->getIndex(), properties, state));
+    TypedDataPtr state;
+    
+    edge e{ dstDevInst, srcPort->getIndex(), properties, state };
+    src.outputs.at(srcPort->getIndex()).edges.emplace_back(std::move(e));
   }
 };
 
 
-int main()
+int main(int argc, char *argv[])
 {
-  xmlpp::DomParser parser;
+  try{
+    RegistryImpl registry;
+    registry.loadProvider("output/virtual/random1.graph.so");
+    
+    xmlpp::DomParser parser;
+    
+    std::istream *src=&std::cin;
+    std::ifstream srcFile;
+    
+    if(argc>1){
+      fprintf(stderr,"Reading from '%s'\n", argv[1]);
+      srcFile.open(argv[1]);
+      if(!srcFile.is_open())
+	throw std::runtime_error(std::string("Couldn't open '")+argv[1]+"'");
+      src=&srcFile;
+      
+    }
 
-  parser.parse_stream(std::cin);
-  if(!parser){
+    fprintf(stderr, "Parsing XML\n");
+    parser.parse_stream(*src);
+    fprintf(stderr, "Parsed XML\n");
+
+    GraphInfo graph;
+    
+    loadGraph(&registry, parser.get_document()->get_root_node(), &graph);
+
+    fprintf(stderr, "Done\n");
+
+  }catch(std::exception &e){
+    std::cerr<<"Exception : "<<e.what()<<"\n";
+    exit(1);
+  }catch(...){
+    std::cerr<<"Exception of unknown type\n";
     exit(1);
   }
+
 }

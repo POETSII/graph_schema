@@ -131,23 +131,28 @@ public:
   virtual unsigned getInputCount() const=0;
   virtual const InputPortPtr &getInput(unsigned index) const=0;
   virtual const InputPortPtr &getInput(const std::string &name) const=0;
+  virtual const std::vector<InputPortPtr> &getInputs() const=0;
 
   virtual unsigned getOutputCount() const=0;
   virtual const OutputPortPtr &getOutput(unsigned index) const=0;
   virtual const OutputPortPtr &getOutput(const std::string &name) const=0;
+  virtual const std::vector<OutputPortPtr> &getOutputs() const=0;
 };
 
 class GraphType
 {
+public:
   virtual const std::string &getId() const=0;
 
   virtual unsigned getDeviceTypeCount() const=0;
   virtual const DeviceTypePtr &getDeviceType(unsigned index) const=0;
   virtual const DeviceTypePtr &getDeviceType(const std::string &name) const=0;
+  virtual const std::vector<DeviceTypePtr> &getDeviceTypes() const=0;
   
   virtual unsigned getEdgeTypeCount() const=0;
   virtual const EdgeTypePtr &getEdgeType(unsigned index) const=0;
   virtual const EdgeTypePtr &getEdgeType(const std::string &name) const=0;
+  virtual const std::vector<EdgeTypePtr> &getEdgeTypes() const=0;
 };
 
 /* These allow registration/discovery of different data types at run-time */
@@ -155,14 +160,14 @@ class GraphType
 class Registry
 {
 public:
-  virtual void registerGraphType(GraphTypePtr graph);
-  virtual GraphTypePtr lookupGraphType(const std::string &id);
+  virtual void registerGraphType(GraphTypePtr graph) =0;
+  virtual GraphTypePtr lookupGraphType(const std::string &id) const=0;
   
-  virtual void registerEdgeType(EdgeTypePtr edge);
-  virtual EdgeTypePtr lookupEdgeType(const std::string &id);
+  virtual void registerEdgeType(EdgeTypePtr edge) =0;
+  virtual EdgeTypePtr lookupEdgeType(const std::string &id) const=0;
 
-  virtual void registerDeviceType(DeviceTypePtr dev);
-  virtual DeviceTypePtr lookupDeviceType(const std::string &id);
+  virtual void registerDeviceType(DeviceTypePtr dev) =0;
+  virtual DeviceTypePtr lookupDeviceType(const std::string &id) const=0;
 };
 
 /*! This is an entry-point exposed by graph shared objects that allows them
@@ -184,7 +189,7 @@ public:
   {}
 
   //! Tells the consumer that a new graph is starting
-  virtual uint64_t onGraphInstance(const GraphTypePtr &graph, const std::string &id, const TypedDataPtr &properties);
+  virtual uint64_t onGraphInstance(const GraphTypePtr &graph, const std::string &id, const TypedDataPtr &properties) =0;
   
   // Tells the consumer that a new instance is being added
   /*! The return value is a unique identifier that means something
@@ -194,8 +199,7 @@ public:
    uint64_t graphInst,
    const DeviceTypePtr &dt,
    const std::string &id,
-   const TypedDataPtr &properties,
-   const TypedDataPtr &state
+   const TypedDataPtr &properties
   ) =0;
 
   //! Tells the consumer that the a new edge is being added
@@ -207,11 +211,10 @@ public:
    uint64_t graphInst,
    uint64_t dstDevInst, const DeviceTypePtr &dstDevType, const InputPortPtr &dstPort,
    uint64_t srcDevInst,  const DeviceTypePtr &srcDevType, const OutputPortPtr &srcPort,
-   const TypedDataPtr properties,
-   TypedDataPtr state
+   const TypedDataPtr properties
   ) =0;
 };
 
-void loadGraph(xmlpp::Element *elt, GraphLoadEvents *events);
+void loadGraph(Registry *registry, xmlpp::Element *elt, GraphLoadEvents *events);
 
 #endif

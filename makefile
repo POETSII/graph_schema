@@ -50,6 +50,7 @@ output/%.graph.so : output/%.graph.cpp
 	g++ $(CPPFLAGS) $(SO_CPPFLAGS) $< -o $@ $(LDFLAGS)
 
 bin/print_graph_properties : tools/print_graph_properties.cpp
+	mkdir -p bin
 	$(CXX) $(CPPFLAGS) $< -o $@ $(LDFLAGS) $(LDLIBS)
 
 VIRTUAL_ALL_TESTS := $(patsubst test/virtual/%.xml,%,$(wildcard test/virtual/*.xml))
