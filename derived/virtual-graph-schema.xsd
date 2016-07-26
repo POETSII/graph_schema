@@ -342,19 +342,31 @@ This edge may not exist if all parts of the state have a default.</xs:documentat
   <xs:element name="typedData" abstract="true"/>
   <xs:element name="Int32" substitutionGroup="v:typedData">
     <xs:complexType>
-      <xs:attribute name="name" use="required" type="xs:string"/>
+      <xs:attribute name="name" use="required" type="xs:string">
+        <xs:annotation>
+          <xs:documentation>typeHash is name -&gt; "Int32"</xs:documentation>
+        </xs:annotation>
+      </xs:attribute>
       <xs:attribute name="value" type="xs:integer"/>
     </xs:complexType>
   </xs:element>
   <xs:element name="Float32" substitutionGroup="v:typedData">
     <xs:complexType>
-      <xs:attribute name="name" use="required" type="xs:string"/>
+      <xs:attribute name="name" use="required" type="xs:string">
+        <xs:annotation>
+          <xs:documentation>typeHash is name -&gt; "Float32"</xs:documentation>
+        </xs:annotation>
+      </xs:attribute>
       <xs:attribute name="value" type="xs:float"/>
     </xs:complexType>
   </xs:element>
   <xs:element name="Bool" substitutionGroup="v:typedData">
     <xs:complexType>
-      <xs:attribute name="name" use="required" type="xs:string"/>
+      <xs:attribute name="name" use="required" type="xs:string">
+        <xs:annotation>
+          <xs:documentation>typeHash is name -&gt; "Bool"</xs:documentation>
+        </xs:annotation>
+      </xs:attribute>
       <xs:attribute name="value"/>
     </xs:complexType>
   </xs:element>
@@ -363,7 +375,11 @@ This edge may not exist if all parts of the state have a default.</xs:documentat
       <xs:sequence>
         <xs:element minOccurs="0" maxOccurs="unbounded" ref="v:typedData"/>
       </xs:sequence>
-      <xs:attribute name="name" use="required"/>
+      <xs:attribute name="name" use="required">
+        <xs:annotation>
+          <xs:documentation>typeHash is name -&gt; "Tuple" -&gt; typeHash(elt1) -&gt; typeHash(elt2) -&gt; ...</xs:documentation>
+        </xs:annotation>
+      </xs:attribute>
     </xs:complexType>
   </xs:element>
 </xs:schema>

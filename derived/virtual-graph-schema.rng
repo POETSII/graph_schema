@@ -259,8 +259,34 @@ This edge may not exist if all parts of the state have a default.</a:documentati
   </define>
   <define name="typedData">
     <choice>
+      <a:documentation>This represents either a prototype for a typed piece of data, or
+as an instance of the data itself.
+As a prototype, each typedData spec also has a 64-bit typeHash
+for sanity checking purposes (e.g. checking that a dynamic
+configuration matches a compiled static provider).
+
+Hashes are done using FNV1a in 64-bit mode.
+
+Positive integers are hashed from least-significant byte
+to most significant, until there are no more non-zero bytes.
+Negative integers are hashed as 0xCC followed by the hash of
+the value+1 (to avoid twos-complement overflow problems):
+
+def hash_int(hash, x):
+  if x&lt;0: return hash_int(hash_byte(0xCC), -(x+1))
+  while True:
+     hash=hash_byte(hash,x&amp;0xFF)
+     x=x&gt;&gt;8
+     if x==0: break
+  return hash
+
+Strings are hashed as their ascii values from first to last character.
+
+Hashes are combined by hashing each octet of the the LHS into the RHS,
+from LSO to MSO</a:documentation>
       <element name="Int32">
         <attribute name="name">
+          <a:documentation>typeHash is name -&gt; "Int32"</a:documentation>
           <data type="string" datatypeLibrary=""/>
         </attribute>
         <optional>
@@ -271,6 +297,7 @@ This edge may not exist if all parts of the state have a default.</a:documentati
       </element>
       <element name="Float32">
         <attribute name="name">
+          <a:documentation>typeHash is name -&gt; "Float32"</a:documentation>
           <data type="string" datatypeLibrary=""/>
         </attribute>
         <optional>
@@ -281,6 +308,7 @@ This edge may not exist if all parts of the state have a default.</a:documentati
       </element>
       <element name="Bool">
         <attribute name="name">
+          <a:documentation>typeHash is name -&gt; "Bool"</a:documentation>
           <data type="string" datatypeLibrary=""/>
         </attribute>
         <optional>
@@ -288,7 +316,9 @@ This edge may not exist if all parts of the state have a default.</a:documentati
         </optional>
       </element>
       <element name="Tuple">
-        <attribute name="name"/>
+        <attribute name="name">
+          <a:documentation>typeHash is name -&gt; "Tuple" -&gt; typeHash(elt1) -&gt; typeHash(elt2) -&gt; ...</a:documentation>
+        </attribute>
         <zeroOrMore>
           <ref name="typedData"/>
         </zeroOrMore>

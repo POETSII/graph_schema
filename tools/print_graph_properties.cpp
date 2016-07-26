@@ -122,7 +122,6 @@ int main(int argc, char *argv[])
 {
   try{
     RegistryImpl registry;
-    registry.loadProvider("output/virtual/random1.graph.so");
     
     xmlpp::DomParser parser;
     

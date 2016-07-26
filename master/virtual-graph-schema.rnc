@@ -1,8 +1,9 @@
 datatypes xsd = "http://www.w3.org/2001/XMLSchema-datatypes"
 
-default namespace = "TODO/POETS/virtual-graph-schema-v0"
+default namespace = "http://TODO.org/POETS/virtual-graph-schema-v0"
 
 grammar {
+
   start = element Graph{
     graphType*,
     graphInstance*
@@ -15,7 +16,7 @@ grammar {
 
       ## Global properties that are shared with all nodes. read-only.
       element Properties {
-        typedData
+        typedData *
       } ? ,
 
       ## Establishes the different types of edges that could exist in the graph,
@@ -35,7 +36,7 @@ grammar {
       attribute graphTypeId { string },
 
       element Properties {
-      	typedData
+      	typedData *
       } ?,
 
       element DeviceInstances {
@@ -55,14 +56,14 @@ grammar {
       ## The type of messages that are sent over this edge. This may not exist
       ## (e.g. if it is only a pulse)
       element Message {
-        typedData
+        typedData *
       } ?,
 
       ## Indicates read-only properties associated with each edge. This will be
       ## delivered along-side messages which arrive along that edge
       ## An edge may have no properties, in which case this element will not exist
       element Properties {
-        typedData
+        typedData *
       } ?,
 
       ## Indicates mutable properties associated with an edge.
@@ -96,12 +97,12 @@ grammar {
       ## Read-only properties that could be specified on the device. This element
       ## may not appear if the device has no properties. There may be default
       ## values specified for some or all components of the properties.
-      element Properties { typedData } ?,
+      element Properties { typedData * } ?,
 
       ## Mutable properties attached to the device. In principle this element might
       ## not appear, if the device has no state (I suppose all the mutable state could
       ## be in the edge properties).
-      element State { typedData } ?,
+      element State { typedData * } ?,
 
       ## Zero or more input ports that appear on the device type.
       element InputPort {
@@ -125,11 +126,12 @@ grammar {
 	## code would make much more sense.
 	##
 	## Variables which will be in scope are:
+	##   graphProperties : Read-only pointer to the graph properties
 	##   deviceProperties : Read-only pointer to the device state
 	##   deviceState : Mutable pointer to the device state
 	##   edgeProperties : Read-only pointer to the edge state
 	##   edgeState : Mutable pointer to the edge state
-	##   messageData : Read-only pointer to the message payload
+	##   message : Read-only pointer to the message payload
 	##   requestSend[] : an array of booleans which requests sending on the named port (one bool for each output port)
 	element OnReceive {
 	  string
@@ -152,10 +154,11 @@ grammar {
 	## statements, and does not contain any function header.
 	##
 	## Variables which will be in scope are:
-	##   deviceProperties : Read-only pointer to the device state
+	##   graphProperties : Read-only pointer to the graph properties
+	##   deviceProperties : Read-only pointer to the device properties
 	##   deviceState : Mutable pointer to the device state
 	##   requestSend[] : an array of  booleans which requests sending on the named port (one bool for each port)
-	##   messageData : A mutable pointer to payload associate with the edge
+	##   message : A mutable pointer to payload associate with the edge
 	##   cancelSend : mutable boolean which is true by default. Set to false to cancel the send.
 	##
 	## Whenever requestSend[index] is high, then eventually this handler will get
@@ -200,26 +203,58 @@ grammar {
       element State { typedData } ?
     }
 
-  typedData = (
+  typedData =
+  ## This represents either a prototype for a typed piece of data, or
+  ## as an instance of the data itself.
+  ## As a prototype, each typedData spec also has a 64-bit typeHash
+  ## for sanity checking purposes (e.g. checking that a dynamic
+  ## configuration matches a compiled static provider).
+  ##
+  ## Hashes are done using FNV1a in 64-bit mode.
+  ##
+  ## Positive integers are hashed from least-significant byte
+  ## to most significant, until there are no more non-zero bytes.
+  ## Negative integers are hashed as 0xCC followed by the hash of
+  ## the value+1 (to avoid twos-complement overflow problems):
+  ##
+  ## def hash_int(hash, x):
+  ##   if x<0: return hash_int(hash_byte(0xCC), -(x+1))
+  ##   while True:
+  ##      hash=hash_byte(hash,x&0xFF)
+  ##      x=x>>8
+  ##      if x==0: break
+  ##   return hash
+  ##
+  ## Strings are hashed as their ascii values from first to last character.
+  ##
+  ## Hashes are combined by hashing each octet of the the LHS into the RHS,
+  ## from LSO to MSO
+  (
     element Int32 {
+      ## typeHash is name -> "Int32"
       attribute name { string },
       attribute value { xsd:integer } ?
     }
     |
     element Float32 {
+      ## typeHash is name -> "Float32"
       attribute name { string },
       attribute value { xsd:float } ?
     }
     |
     element Bool {
+      ## typeHash is name -> "Bool"
       attribute name { string },
       attribute value { text } ?
     }
     |
     element Tuple {
+      ## typeHash is name -> "Tuple" -> typeHash(elt1) -> typeHash(elt2) -> ...
         attribute name { text },
         typedData *
     }
   )
-   
+
+
+
 }

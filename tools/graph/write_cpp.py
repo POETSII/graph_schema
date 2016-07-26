@@ -27,6 +27,7 @@ def render_typed_data_init(proto,dst,prefix):
     elif isinstance(proto,ScalarData):
         if proto.value:
             value=proto.value
+            dst.write("// {}\n".format(proto.value))
             if isinstance(proto,BoolData):
                 value = 1 if value else 0
             dst.write('{}{} = {};\n'.format(prefix,proto.name,value))
@@ -58,26 +59,35 @@ def render_typed_data_load(proto,dst,elt,prefix, indent):
 def render_typed_data_as_spec(proto,name,elt_name,dst):
     dst.write("struct {} : typed_data_t{{\n".format(name))
     if proto:
-        render_typed_data_as_decl(proto,dst,"  ")
+        assert isinstance(proto, TupleData)
+        for elt in proto.elements_by_index:
+            render_typed_data_as_decl(elt,dst,"  ")
     else:
         dst.write("  //empty\n")
     dst.write("};\n")
     dst.write("class {}_Spec : public TypedDataSpec {{\n".format(name))
     dst.write("  public: TypedDataPtr create() const override {\n")
     if proto:
-        dst.write("    return TypedDataPtr(new {});\n".format(name))
+        dst.write("    auto res=std::make_shared<{}>();\n".format(name))
+        for elt in proto.elements_by_index:
+            render_typed_data_init(elt, dst, "    res->");
+        dst.write("    return res;\n")
     else:
         dst.write("    return TypedDataPtr();\n")
     dst.write("  }\n")
-    dst.write("  TypedDataPtr load(xmlpp::Element *parent) const override {\n")
+    dst.write("  TypedDataPtr load(xmlpp::Element *elt) const override {\n")
     if proto is None:
         dst.write("    return TypedDataPtr();\n")
     else:
+        dst.write("    xmlpp::Node::PrefixNsMap ns;\n")
+        dst.write('    ns["g"]="TODO/POETS/virtual-graph-schema-v0";\n')
         dst.write("    std::shared_ptr<{}> res(new {});\n".format(name,name))
-        render_typed_data_init(proto,dst,"    res->")
-        dst.write('    xmlpp::Element *elt=find_single(parent, "./{}");\n'.format(elt_name))
+        for elt in proto.elements_by_index:
+            render_typed_data_init(elt,dst,"    res->")
+        dst.write('    fprintf(stderr, "   Loading {}_Spec, elt=%p\\n",elt);'.format(name))
         dst.write("    if(elt){\n")
-        render_typed_data_load(proto, dst, "elt", "res->",  "      ")
+        for elt in proto.elements_by_index:
+            render_typed_data_load(elt, dst, "elt", "res->",  "      ")
         dst.write("    }\n")
         dst.write("    return res;\n")
     dst.write("  }\n")
@@ -92,6 +102,7 @@ def render_typed_data_as_spec(proto,name,elt_name,dst):
 
 def render_input_port_as_cpp(ip,dst):
     dt=ip.parent
+    et=ip.edge_type
     graph=dt.parent
     for index in range(len(dt.inputs_by_index)):
         if ip==dt.inputs_by_index[index]:
@@ -112,8 +123,8 @@ def render_input_port_as_cpp(ip,dst):
     dst.write('    auto graphProperties=cast_typed_properties<{}_properties_t>(gGraphProperties);\n'.format( graph.id ))
     dst.write('    auto deviceProperties=cast_typed_properties<{}_properties_t>(gDeviceProperties);\n'.format( dt.id ))
     dst.write('    auto deviceState=cast_typed_data<{}_state_t>(gDeviceState);\n'.format( dt.id ))
-    dst.write('    auto edgeProperties=cast_typed_properties<{}_state_t>(gEdgeProperties);\n'.format( dt.id ))
-    dst.write('    auto edgeState=cast_typed_data<{}_state_t>(gEdgeState);\n'.format( dt.id ))
+    dst.write('    auto edgeProperties=cast_typed_properties<{}_properties_t>(gEdgeProperties);\n'.format( et.id ))
+    dst.write('    auto edgeState=cast_typed_data<{}_state_t>(gEdgeState);\n'.format( et.id ))
     dst.write('    auto message=cast_typed_properties<{}_message_t>(gMessage);\n'.format(ip.edge_type.id))
 
     dst.write('    // Begin custom handler\n')
@@ -144,7 +155,7 @@ def render_output_port_as_cpp(op,dst):
 		      typed_data_t *gDeviceState,
 		      typed_data_t *gMessage,
 		      bool *requestSend,
-		      bool *abortSend
+		      bool *cancelSend
 		      ) const override {""")
     dst.write('    auto graphProperties=cast_typed_properties<{}_properties_t>(gGraphProperties);\n'.format( graph.id ))
     dst.write('    auto deviceProperties=cast_typed_properties<{}_properties_t>(gDeviceProperties);\n'.format( dt.id ))
@@ -225,6 +236,7 @@ def render_graph_as_cpp(graph,dst):
 
     gt=graph.graph_type
 
+ 
     render_typed_data_as_spec(graph.graph_type.properties, "{}_properties_t".format(graph.graph_type.id),"pp:Properties",dst)
 
     for et in graph.graph_type.edge_types.values():
@@ -234,7 +246,7 @@ def render_graph_as_cpp(graph,dst):
         render_device_type_as_cpp(dt,dst)
 
     dst.write("class {}_Spec : public GraphTypeImpl {{\n".format(graph.graph_type.id))
-    dst.write('  public: {}_Spec() : GraphTypeImpl("{}") {{\n'.format(gt.id,gt.id))
+    dst.write('  public: {}_Spec() : GraphTypeImpl("{}", {}_properties_t_Spec_get()) {{\n'.format(gt.id,gt.id,gt.id))
     for et in gt.edge_types.values():
         dst.write('    addEdgeType({}_Spec_get());\n'.format(et.id))
     for et in gt.device_types.values():

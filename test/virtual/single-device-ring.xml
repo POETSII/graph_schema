@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
 <Graph xmlns="TODO/POETS/virtual-graph-schema-v0">
-  <GraphType id="ring">
+  <GraphType id="single_device_ring">
     <Properties>
       <Int32 name="maxCount" value="10" />
     </Properties>
@@ -38,7 +38,7 @@
     </DeviceTypes>
   </GraphType>
 
-  <GraphInstance id="single_device_ring" graphTypeId="ring">
+  <GraphInstance id="single_device_ring" graphTypeId="single_device_ring">
     <DeviceInstances>
       <DeviceInstance id="d1" deviceTypeId="node" />
       <DeviceInstance id="d2" deviceTypeId="node" />

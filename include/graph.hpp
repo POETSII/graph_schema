@@ -57,12 +57,15 @@ typedef std::shared_ptr<GraphType> GraphTypePtr;
 class TypedDataSpec
 {
 public:
-  static TypedDataSpecPtr lookupTypedDataSpec(const std::string &id);
-  static void registerTypedDataSpec(const std::string &id, const TypedDataSpecPtr &spec);
-  
   virtual TypedDataPtr create() const=0;
   virtual TypedDataPtr load(xmlpp::Element *parent) const=0;
   virtual void save(xmlpp::Element *parent, const TypedDataPtr &data) const=0;
+
+  virtual uint64_t getTypeHash() const
+  {
+    // TODO
+    throw std::runtime_error("getTypeHash - Not implemented.");
+  }
 };
 
 
@@ -130,12 +133,12 @@ public:
 
   virtual unsigned getInputCount() const=0;
   virtual const InputPortPtr &getInput(unsigned index) const=0;
-  virtual const InputPortPtr &getInput(const std::string &name) const=0;
+  virtual InputPortPtr getInput(const std::string &name) const=0;
   virtual const std::vector<InputPortPtr> &getInputs() const=0;
 
   virtual unsigned getOutputCount() const=0;
   virtual const OutputPortPtr &getOutput(unsigned index) const=0;
-  virtual const OutputPortPtr &getOutput(const std::string &name) const=0;
+  virtual OutputPortPtr getOutput(const std::string &name) const=0;
   virtual const std::vector<OutputPortPtr> &getOutputs() const=0;
 };
 
@@ -143,6 +146,8 @@ class GraphType
 {
 public:
   virtual const std::string &getId() const=0;
+
+  virtual const TypedDataSpecPtr getPropertiesSpec() const=0;
 
   virtual unsigned getDeviceTypeCount() const=0;
   virtual const DeviceTypePtr &getDeviceType(unsigned index) const=0;
@@ -211,7 +216,7 @@ public:
    uint64_t graphInst,
    uint64_t dstDevInst, const DeviceTypePtr &dstDevType, const InputPortPtr &dstPort,
    uint64_t srcDevInst,  const DeviceTypePtr &srcDevType, const OutputPortPtr &srcPort,
-   const TypedDataPtr properties
+   const TypedDataPtr &properties
   ) =0;
 };
 

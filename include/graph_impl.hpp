@@ -6,25 +6,107 @@
 #include <unordered_map>
 #include <cassert>
 #include <cstdint>
+#include <iostream>
 
 #include <dlfcn.h>
 
+#include <sys/types.h>
+#include <dirent.h>
+
 template<class T>
-void load_typed_data_attribute(T &dst, xmlpp::Element *parent, const char *name)
+const char *typed_data_attribute_node_type();
+
+template<>
+const char *typed_data_attribute_node_type<int32_t>()
+{ return "Int32"; }
+
+template<>
+const char *typed_data_attribute_node_type<float>()
+{ return "Float32"; }
+
+template<>
+const char *typed_data_attribute_node_type<bool>()
+{ return "Bool"; }
+
+const uint64_t FNV64_PRIME=1099511628211ull;
+const uint64_t FNV64_OFFSET=14695981039346656037ull;
+
+uint64_t fnv64_hash_byte(uint64_t hash, uint8_t data)
 {
-  auto all=parent->find(std::string("./*[@name='")+name+"]");
+  // This is FNV-1a : http://www.isthe.com/chongo/tech/comp/fnv/index.html
+  return (hash^data)*FNV64_PRIME;
+}
+
+uint64_t fnv64_hash_uint64(uint64_t hash, uint64_t data)
+{
+  for(unsigned i=0;i<8;i++){
+    hash=(hash^(data&0xFF))*FNV64_PRIME;
+    data=data>>8;
+  }
+  return hash;
+}
+
+template<class TNum>
+uint64_t fnv64_hash_int(uint64_t hash, TNum data)
+{
+  // Handle the case where data is zero so that...
+  if(data==0){
+    return hash*FNV64_PRIME;
+  }
+
+  // ...we can use this (otherwise the compiler will whinge for unsigned types)
+  if(data <= 0){
+    return fnv64_hash_num(fnv64_hash_byte(hash, 0xCC), -(data+1));
+  }
+  
+  while(data > 0){
+    hash=fnv64_hash_byte(hash, data&0xFF);
+    data=data>>8;
+  }
+  return hash;
+}
+
+uint64_t fnv64_hash_string(uint64_t hash, const char *data)
+{
+  while(*data){
+    hash=fnv64_hash_byte(hash, (uint8_t)*data);
+    data++;
+  }
+  return hash;
+}
+
+uint64_t fnv64_hash_combine(uint64_t hash, uint64_t data)
+{
+  for(unsigned i=0;i<8;i++){
+    hash=fnv64_hash_byte(hash, data&0xFF);
+    data=data>>8;
+  }
+  return hash;
+}
+
+
+
+
+template<class T>
+void load_typed_data_attribute(T &dst, xmlpp::Element *parent, const char *name, const xmlpp::Node::PrefixNsMap &ns=xmlpp::Node::PrefixNsMap())
+{
+  auto all=parent->find(std::string("./*[@name='")+name+"']", ns);
   if(all.size()==0)
     return;
   if(all.size()>1)
     throw std::runtime_error("More than one property.");
   auto got=(xmlpp::Element*)all[0];
-  if(got->get_name()!="Int32")
-    throw std::runtime_error("Wrong xml node type.");
+  if(got->get_name()!=typed_data_attribute_node_type<T>()){
+    std::stringstream tmp;
+    tmp<<"Wrong XML node type for "<<name<<", expected "<<typed_data_attribute_node_type<T>()<<", got "<<got->get_name();
+    throw std::runtime_error(tmp.str());
+  }
   xmlpp::Attribute *a=got->get_attribute("value");
   if(!a)
     return;
   std::stringstream tmp(a->get_value());
   tmp>>dst;
+  std::cerr<<"  loaded: "<<a->get_value()<<" -> "<<dst<<"\n";
 }
 
 xmlpp::Element *find_single(xmlpp::Element *parent, const std::string &name, const xmlpp::Node::PrefixNsMap &ns=xmlpp::Node::PrefixNsMap())
@@ -212,8 +294,13 @@ public:
   virtual const InputPortPtr &getInput(unsigned index) const override
   { return m_inputsByIndex.at(index); }
   
-  virtual const InputPortPtr &getInput(const std::string &name) const override
-  { return m_inputsByName.at(name); }
+  virtual InputPortPtr getInput(const std::string &name) const override
+  {
+    auto it=m_inputsByName.find(name);
+    if(it==m_inputsByName.end())
+      return InputPortPtr();
+    return it->second;
+  }
 
   virtual const std::vector<InputPortPtr> &getInputs() const override
   { return m_inputsByIndex; }
@@ -224,8 +311,13 @@ public:
   virtual const OutputPortPtr &getOutput(unsigned index) const override
   { return m_outputsByIndex.at(index); }
   
-  virtual const OutputPortPtr &getOutput(const std::string &name) const override
-  { return m_outputsByName.at(name); }
+  virtual OutputPortPtr getOutput(const std::string &name) const override
+  {
+    auto it=m_outputsByName.find(name);
+    if(it==m_outputsByName.end())
+      return OutputPortPtr();
+    return it->second;
+  }
 
   virtual const std::vector<OutputPortPtr> &getOutputs() const override
   { return m_outputsByIndex; }
@@ -237,7 +329,8 @@ class GraphTypeImpl : public GraphType
 {
 private:
   std::string m_id;
-  
+
+  TypedDataSpecPtr m_propertiesSpec;
   
   std::vector<EdgeTypePtr> m_edgeTypesByIndex;
   std::unordered_map<std::string,EdgeTypePtr> m_edgeTypesById;
@@ -246,12 +339,16 @@ private:
   std::unordered_map<std::string,DeviceTypePtr> m_deviceTypesById;
 
 protected:
-  GraphTypeImpl(std::string id)
+  GraphTypeImpl(std::string id, TypedDataSpecPtr propertiesSpec)
     : m_id(id)
+    , m_propertiesSpec(propertiesSpec)
   {}
 
   const std::string &getId() const override
   { return m_id; }
+
+  const TypedDataSpecPtr getPropertiesSpec() const override
+  { return m_propertiesSpec; }
 
   virtual unsigned getDeviceTypeCount() const override
   { return m_deviceTypesByIndex.size(); }
@@ -299,6 +396,42 @@ private:
   std::unordered_map<std::string,DeviceTypePtr> m_devices;
   
 public:
+  RegistryImpl()
+  {
+    // TODO : Do we want a better name for this?
+    std::string soExtension=".graph.so";
+    
+    auto searchPath=getenv("POETS_PROVIDER_PATH");
+    if(searchPath){
+      DIR *hDir=opendir(searchPath);
+      if(!hDir){
+	fprintf(stderr, "Warning: Couldn't open POETS_PROVIDER_PATH='%s'", searchPath);
+      }else{
+	try{
+	  struct dirent *de=0;
+
+	  while( (de=readdir(hDir)) ){
+	    std::string path=de->d_name;
+	    if(soExtension.size() > path.size())
+	      continue;
+	    
+	    if(soExtension != path.substr(path.size()-soExtension.size()))
+	      continue;
+
+	    std::string fullPath=std::string(searchPath)+"/"+path;
+
+	    loadProvider(fullPath);
+	    
+	  }
+	  
+	}catch(...){
+	  closedir(hDir);
+	  throw;
+	}
+      }
+    }
+  }
+  
   void loadProvider(const std::string &path)
   {
     fprintf(stderr, "Loading provider '%s'\n", path.c_str());
@@ -344,7 +477,7 @@ public:
 void loadGraph(Registry *registry, xmlpp::Element *parent, GraphLoadEvents *events)
 {
   xmlpp::Node::PrefixNsMap ns;
-  ns["g"]="TODO/POETS/virtual-graph-schema-v0";
+  ns["g"]="http://TODO.org/POETS/virtual-graph-schema-v0";
   
   fprintf(stderr, "loadGraph begin\n");
   
@@ -367,7 +500,18 @@ void loadGraph(Registry *registry, xmlpp::Element *parent, GraphLoadEvents *even
   }
   events->onGraphType(graphType);
 
+  fprintf(stderr, "Pre properties\n");
   TypedDataPtr graphProperties;
+  auto *eProperties=find_single(eGraph, "./g:Properties", ns);
+  if(eProperties){
+    fprintf(stderr, "Loading properties\n");
+    graphProperties=graphType->getPropertiesSpec()->load(eProperties);
+  }else{
+    fprintf(stderr, "Default constructing properties.\n");
+    graphProperties=graphType->getPropertiesSpec()->create();
+  }
+  fprintf(stderr, "Post properties\n");
+
 
   auto gId=events->onGraphInstance(graphType, graphId, graphProperties);
 
@@ -386,6 +530,14 @@ void loadGraph(Registry *registry, xmlpp::Element *parent, GraphLoadEvents *even
     auto dt=graphType->getDeviceType(deviceTypeId);
 
     TypedDataPtr deviceProperties;
+    auto *eProperties=find_single(eDevice, "./g:Properties", ns);
+    if(eProperties){
+      fprintf(stderr, "Loading device properties\n");
+      deviceProperties=dt->getPropertiesSpec()->load(eProperties);
+    }else{
+      fprintf(stderr, "Default cosntructing device properties\n");
+      deviceProperties=dt->getPropertiesSpec()->create();
+    }
 
     uint64_t dId=events->onDeviceInstance(gId, dt, id, deviceProperties);
 
@@ -409,7 +561,22 @@ void loadGraph(Registry *registry, xmlpp::Element *parent, GraphLoadEvents *even
     auto srcPort=srcDevice.second->getOutput(srcPortName);
     auto dstPort=dstDevice.second->getInput(dstPortName);
 
+    if(srcPort->getEdgeType()!=dstPort->getEdgeType())
+      throw std::runtime_error("Edge type mismatch on ports.");
+
+    auto et=srcPort->getEdgeType();
+
+    
+
     TypedDataPtr edgeProperties;
+    auto *eProperties=find_single(eEdge, "./g:Properties", ns);
+    if(eProperties){
+      fprintf(stderr, "Loading properties\n");
+      edgeProperties=et->getPropertiesSpec()->load(eProperties);
+    }else{
+      edgeProperties=et->getPropertiesSpec()->create();
+    }
+
 
     events->onEdgeInstance(gId,
 			   dstDevice.first, dstDevice.second, dstPort, 

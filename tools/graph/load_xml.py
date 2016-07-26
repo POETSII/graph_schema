@@ -6,7 +6,7 @@ from lxml import etree
 import os
 import sys
 
-ns={"p":"TODO/POETS/virtual-graph-schema-v0"}
+ns={"p":"http://TODO.org/POETS/virtual-graph-schema-v0"}
 
 def deNS(t):
     tt=t.replace("{"+ns["p"]+"}","p:")
@@ -64,6 +64,13 @@ def load_typed_data(dt):
     else:
         raise XMLSyntaxError("Unknown data type.",dt)
 
+def load_struct(name, members):
+    elts=[]
+    for eltNode in members.findall("p:*",ns): # Anything from this namespace must be a member
+        elt=load_typed_data(eltNode)
+        elts.append(elt)
+    return TupleData(name, elts)
+        
     
 def load_edge_type(parent,dt):
     id=get_attrib(dt,"id")
@@ -72,20 +79,17 @@ def load_edge_type(parent,dt):
         message=None
         messageNode=dt.find("p:Message",ns)
         if messageNode is not None:
-            assert(len(messageNode)==1)
-            message=load_typed_data(messageNode[0])
+            message=load_struct(id+"_message", messageNode)
 
         state=None
         stateNode=dt.find("p:State",ns)
         if stateNode is not None:
-            assert(len(stateNode)==1)
-            tate=load_typed_data(stateNode[0])
+            state=load_struct(id+"_state", stateNode)
 
         properties=None
         propertiesNode=dt.find("p:Properties",ns)
         if propertiesNode is not None:
-            assert(len(propertiesNode)==1)
-            properties=load_typed_data(propertiesNode[0])
+            properties=load_struct(id+"_properties", propertiesNode)
             
         return EdgeType(parent,id,message,state,properties)
     except Exception as e:
@@ -98,14 +102,12 @@ def load_device_type(graph,dtNode):
     state=None
     stateNode=dtNode.find("p:State",ns)
     if stateNode is not None:
-        assert(len(stateNode)==1)
-        state=load_typed_data(stateNode[0])
+        state=load_struct(id+"_state", stateNode)
 
     properties=None
     propertiesNode=dtNode.find("p:Properties",ns)
     if propertiesNode is not None:
-        assert(len(propertiesNode)==1)
-        properties=load_typed_data(propertiesNode[0])
+        properties=load_struct(id+"_properties", propertiesNode)
 
     dt=DeviceType(graph,id,state,properties)
         
@@ -135,8 +137,7 @@ def load_graph_type(graphNode):
     properties=None
     propertiesNode=graphNode.find("p:Properties",ns)
     if propertiesNode is not None:
-        assert(len(propertiesNode)==1)
-        properties=load_typed_data(propertiesNode[0])
+        properties=load_struct(id+"_properties", propertiesNode)
 
     graphType=GraphType(id,properties)
         
@@ -162,8 +163,7 @@ def load_device_instance(graph,diNode):
     properties=None
     propertiesNode=diNode.find("p:Properties",ns)
     if propertiesNode is not None:
-        assert(len(propertiesNode)==1)
-        properties=load_typed_data(propertiesNode[0])
+        properties=load_struct(id+"_properties", propertiesNode)
 
     return DeviceInstance(graph,id,device_type,properties)
     

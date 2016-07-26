@@ -1,0 +1,149 @@
+<?xml version="1.0"?>
+<Graph xmlns="http://TODO.org/POETS/virtual-graph-schema-v0">
+  <GraphType id="heat">   <!--TODO : Should be a unique id-->
+    <Properties>
+      <Float32 name="fireThreshold" value="0.1" />
+    </Properties>
+    
+    <EdgeTypes>
+      <EdgeType id="__init__">
+	<!-- This doesn't have any properties -->
+      </EdgeType>
+      
+      <EdgeType id="conductor">
+	<Properties>
+	  <Float32 name="conductance" value="0.5" />
+	</Properties>
+	<State>
+	  <Float32 name="ghost" value="0.0" />
+	</State>
+	<Message>
+	  <Float32 name="temperature" />
+	</Message>      
+      </EdgeType>
+    </EdgeTypes>
+  
+    <DeviceTypes>
+      <DeviceType id="region">
+	<Properties>
+	  <Bool name="isFixed" value="0" />
+	  <Float32 name="initialTemp" value="0" />
+	</Properties>
+	
+	<State>
+	  <Float32 name="currTemp" value="0" />
+	  <Float32 name="lastFiredTemp" value="0" />
+	</State>
+
+	<InputPort name="__init__" edgeTypeId="__init__">
+	  <OnReceive><![CDATA[
+	  fprintf(stderr,"       fireThreshold = %f\n", graphProperties->fireThreshold);
+	  fprintf(stderr,"       fixed = %d, initialTemperature = %f\n", deviceProperties->isFixed, deviceProperties->initialTemp);
+	  
+	  deviceState->currTemp = deviceProperties->initialTemp;
+
+	  // Force the node into a firing state, no matter if it gets updates
+	  // before it manages its first firing
+	  // TODO : this is a hack
+	  deviceState->lastFiredTemp = deviceState->currTemp + graphProperties->fireThreshold * 1000000;
+
+	  fprintf(stderr, "       currTemp=%f, lastFiredTemp=%f\n", deviceState->currTemp, deviceState->lastFiredTemp);
+
+	  // TODO : Bind by name
+	  requestSend[0] = true;
+	  ]]>
+	  </OnReceive>
+	</InputPort>
+	
+	<InputPort name="in" edgeTypeId="conductor">
+	  <OnReceive><![CDATA[
+	  if(deviceProperties->isFixed){
+	    fprintf(stderr,"      fixed.\n");
+	    requestSend[0] = false;
+	  }else{
+	    fprintf(stderr,"      conductance = %f, ghost = %f\n", edgeProperties->conductance, edgeState->ghost);
+	    
+	    float oldTemp=deviceState->currTemp;
+	    float newTemp=deviceState->currTemp;
+	    newTemp -= edgeProperties->conductance * edgeState->ghost;
+	    edgeState->ghost = message->temperature;
+	    newTemp += edgeProperties->conductance * edgeState->ghost;
+	    deviceState->currTemp=newTemp;
+
+	    fprintf(stderr, "        incoming = %f, oldTemp = %f, newTemp = %f\n", message->temperature, oldTemp, newTemp);
+
+	    float delta=(deviceState->currTemp - deviceState->lastFiredTemp);
+	    if(delta<0){
+	      delta=-delta;
+	      }
+	    fprintf(stderr, "        delta = %f, fireThreshold = %f\n", delta, graphProperties->fireThreshold);
+
+	    // TODO : This should be bound by name, not index
+	    requestSend[0] = (delta >= graphProperties->fireThreshold);
+	  }
+	  ]]></OnReceive>
+	</InputPort>
+
+	<OutputPort name="out" edgeTypeId="conductor">
+	  <OnSend><![CDATA[
+	  float delta=(deviceState->currTemp - deviceState->lastFiredTemp);
+	  if(delta<0){
+	    delta=-delta;
+	  }
+
+	  if(delta < graphProperties->fireThreshold){
+	    *cancelSend=true;
+	  }else{
+	    message->temperature=deviceState->currTemp;
+	    deviceState->lastFiredTemp=deviceState->currTemp;
+	  }
+
+	  // TODO : Bind by name
+	  // Unless something happens, we are now quiescent
+	  requestSend[0] = false; // For information; this is the default
+	  ]]></OnSend>
+	</OutputPort>
+      </DeviceType>
+    </DeviceTypes>
+  </GraphType>
+
+  <!-- TODO : There is no reason this is needed, quirk of cpp generator -->
+  <GraphInstance id="single_device_1input" graphTypeId="heat">
+    <Properties>
+      <Float32 name="fireThreshold" value="0.0001" />
+    </Properties>
+    
+    <DeviceInstances>
+      <DeviceInstance id="dLeft" deviceTypeId="region">
+	<Properties>
+	  <Bool name="isFixed" value="1" />
+	  <Float32 name="initialTemp" value="1" />
+	</Properties>
+      </DeviceInstance>
+      <DeviceInstance id="dMid1" deviceTypeId="region" >
+	<Properties>
+	  <Float32 name="initialTemp" value="10" />
+	</Properties>
+      </DeviceInstance>
+      <DeviceInstance id="dMid2" deviceTypeId="region" >
+      </DeviceInstance>
+      <DeviceInstance id="dRight" deviceTypeId="region">
+	<Properties>
+	  <Bool name="isFixed" value="1" />
+	  <Float32 name="initialTemp" value="2" />
+	</Properties>
+      </DeviceInstance>
+    </DeviceInstances>
+  
+    <EdgeInstances>
+      <EdgeInstance dstDeviceId="dLeft" dstPortName="in" srcDeviceId="dMid1" srcPortName="out" />
+      <EdgeInstance dstDeviceId="dMid1" dstPortName="in" srcDeviceId="dLeft" srcPortName="out" />
+
+      <EdgeInstance dstDeviceId="dMid1" dstPortName="in" srcDeviceId="dMid2" srcPortName="out" />
+      <EdgeInstance dstDeviceId="dMid2" dstPortName="in" srcDeviceId="dMid1" srcPortName="out" />
+
+      <EdgeInstance dstDeviceId="dMid2" dstPortName="in" srcDeviceId="dRight" srcPortName="out" />
+      <EdgeInstance dstDeviceId="dRight" dstPortName="in" srcDeviceId="dMid2" srcPortName="out" />
+    </EdgeInstances>
+  </GraphInstance>
+</Graph>

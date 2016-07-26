@@ -1,5 +1,5 @@
 <ns0:Graph xmlns:ns0="TODO/POETS/virtual-graph-schema-v0">
-  <ns0:GraphType id="random">
+  <ns0:GraphType id="random2">
     <ns0:EdgeTypes>
       <ns0:EdgeType id="et2">
         <ns0:Message>
@@ -126,7 +126,7 @@
       </ns0:DeviceType>
     </ns0:DeviceTypes>
   </ns0:GraphType>
-  <ns0:GraphInstance id="random" graphTypeId="random">
+  <ns0:GraphInstance id="random" graphTypeId="random2">
     <ns0:DeviceInstances>
       <ns0:DeviceInstance id="di_3244428681" deviceTypeId="dt0">
         <ns0:Properties>

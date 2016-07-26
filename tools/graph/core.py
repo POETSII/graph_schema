@@ -1,21 +1,75 @@
 class GraphDescriptionError(Exception):
     def __init__(self,msg):
         Exception.__init__(self,msg)
-        
+
+FNV64_PRIME=1099511628211;
+FNV64_OFFSET=14695981039346656037;
+
+def fnv64_hash_byte(hash,data):
+    assert(isinstance(data,int) and 0<=data<256)
+    assert(isinstance(hash,int) and 0<=hash<2**64)
+    return ((hash^data)*FNV64_PRIME) % 2**64
+
+def fnv64_hash_uint64(hash, data):
+    assert(isinstance(data,int) and 0<=data<2**64)
+    assert(isinstance(hash,int) and 0<=hash<2**64)
+    for i in range(0,8):
+        v=data&0xFF
+        hash((hash^v)*FNV64_PRIME) % 2**64
+        data=data>>8
+    return data
+
+
+def fnv64_hash_int(hash, data):
+    assert(isinstance(data,int))
+    assert(isinstance(hash,int))
+    print(hash);
+    assert(0<=hash<2**64)
+
+    if data<0:
+        return fnv64_hash_int(fnv64_hash_byte(hash, 0xCC), -(data+1))
+
+    while data:
+        hash=fnv64_hash_byte(hash, data & 0xFF)
+        data=data >> 8
+
+    return data
+
+def fnv64_hash_combine(*hashes):
+    res=hashes[0]
+    for i in range(1,len(hashes)):
+        res=fnv64_hash_uint64(res, hashes[i])
+    return res
+    
+
+def fnv64_hash_string(hash, data):
+    assert(isinstance(data,str))
+    assert(isinstance(hash,int) and 0<=hash<2**64)
+
+    for c in data:
+        co=ord(c)
+        assert(0<co<256)
+        hash=((hash^data)*FNV64_PRIME) % 2**64
+
+    return hash
 
 class TypedData(object):
     def __init__(self,name):
         self.name=name
 
+    def calc_hash(self):
+        raise NotImplementedError()
+
 
 class ScalarData(TypedData):
-    def __init__(self,elt,value):
-        TypedData.__init__(self,elt)
+    def __init__(self,name,value):
+        TypedData.__init__(self,name)
         if value is not None:
             self.value=self._check_value(value)
         else:
             self.value=None
         self.is_complete=value is not None
+        self._print_name=None
 
     def _check_value(self,value):
         raise NotImplementedError()
@@ -31,33 +85,55 @@ class ScalarData(TypedData):
 
     def __str__(self):
         if self.value:
-            return "Int32:{}={},complete={}".format(self.name,self.value,self.is_complete)
+            return "{}:{}={},complete={}".format(self._print_name,self.name,self.value,self.is_complete)
         else:
-            return "Int32:{}".format(self.name)
+            return "{}:{}".format(self._print_name,self.name)
 
     
 class Int32Data(ScalarData):
     def __init__(self,name,value):
         ScalarData.__init__(self,name,value)
+        self._print_name="Int32"
         
     def _check_value(self,value):
         return int(value)
+
+    def calc_hash(self):
+        return fnv64_hash_combine(fnv64_hash_string("Int32"),fnv64_hash_string(name))
 
 
 class Float32Data(ScalarData):
     def __init__(self,name,value):
         ScalarData.__init__(self,name,value)
+        self._print_name="Float32"
         
     def _check_value(self,value):
         return float(value)
+
+    def calc_hash(self):
+        return fnv64_hash_combine(fnv64_hash_string("Float32"),fnv64_hash_string(name))
 
 
 class BoolData(ScalarData):
     def __init__(self,name,value):
         ScalarData.__init__(self,name,value)
+        self._print_name="Bool"
         
     def _check_value(self,value):
-        return bool(value)
+        if isinstance(value,bool):
+            return value
+        if isinstance(value,str):
+            if value in ['True','true','Yes','yes','1']:
+                return True
+            if value in ['False','false','No','no','0']:
+                return False
+            raise GraphDescriptionError("Couldn't convert '{}' to a boolean".format(value))
+        if isinstance(value,int):
+            return value!=0
+        raise GraphDescriptionError("Don't know how to convert value to boolean.")
+
+    def calc_hash(self):
+        return fnv64_hash_combine(fnv64_hash_string("Bool"),fnv64_hash_string(name))
 
 
 class TupleData(TypedData):
@@ -89,6 +165,12 @@ class TupleData(TypedData):
             acc=acc+str(self._elts_by_index[i])
             acc=acc+"\n"
         return acc+"]"
+
+    def calc_hash(self):
+        hash=fnv64_hash_combine(fnv64_hash_string("Tuple"),fnv64_hash_string(name))
+        for e in self.elements_by_index:
+            hash=fnv64_hash_combine(hash, e.calc_hash())
+        return hash
 
     def is_refinement_compatible(self,inst):
         if not isinstance(inst,TupleData):
