@@ -1,5 +1,7 @@
 from graph.core import *
 
+import sys
+
 _typed_data_to_typename={
     Int32Data: "int32_t",
     Float32Data: "float",
@@ -56,6 +58,33 @@ def render_typed_data_load(proto,dst,elt,prefix, indent):
         raise RuntimeError("Unknown data type {}".format(type(proto)))
                            
 
+def render_typed_data_load_v2(proto,dst,elt,prefix,indent):
+    """This version walks over the xml and puts things in the right place,
+       rather than searching for each thing, as it is much more efficient."""
+    if proto is None:
+        pass
+    if isinstance(proto,ScalarData):
+        raise RuntimeError("This must be passed a tuple.")
+
+    dst.write('{}{{'.format(indent))
+    dst.write('{}  auto nodes={}->get_children();\n'.format(indent, elt))
+    dst.write('{}  for(auto &child : nodes){{\n'.format(indent))
+    dst.write('{}    xmlpp::Element *childPtr=(xmlpp::Element*)child;\n'.format(indent))
+    dst.write('{}    auto name=childPtr->get_attribute_value("name");\n'.format(indent))
+    # If all names are ascii, we can use much faster strcmp. This helps quite a bit on loading
+    dst.write('{}    assert(name.is_ascii());\n'.format(indent))
+    for child in proto.elements_by_index:
+        dst.write('{}    if(!strcmp(name.c_str(),"{}")){{\n'.format(indent, child.name))
+        if isinstance(child,ScalarData):
+            dst.write('{}      std::stringstream value(childPtr->get_attribute_value("value"));\n'.format(indent))
+            dst.write('{}      value>>{}{};\n'.format(indent, prefix, child.name))
+        else:
+            render_typed_data_load_v2(child, dst, "childPtr", prefix+child.name+".", indent+"      ")
+        dst.write('{}    }}'.format(indent))
+    dst.write('{}  }}\n'.format(indent))
+    dst.write('{}}}'.format(indent))
+        
+    
 def render_typed_data_as_spec(proto,name,elt_name,dst):
     dst.write("struct {} : typed_data_t{{\n".format(name))
     if proto:
@@ -84,10 +113,13 @@ def render_typed_data_as_spec(proto,name,elt_name,dst):
         dst.write("    std::shared_ptr<{}> res(new {});\n".format(name,name))
         for elt in proto.elements_by_index:
             render_typed_data_init(elt,dst,"    res->")
-        dst.write('    fprintf(stderr, "   Loading {}_Spec, elt=%p\\n",elt);'.format(name))
+        #dst.write('    fprintf(stderr, "   Loading {}_Spec, elt=%p\\n",elt);'.format(name))
         dst.write("    if(elt){\n")
-        for elt in proto.elements_by_index:
-            render_typed_data_load(elt, dst, "elt", "res->",  "      ")
+        if False:
+            for elt in proto.elements_by_index:
+                render_typed_data_load(elt, dst, "elt", "res->",  "      ")
+        else:
+            render_typed_data_load_v2(proto, dst, "elt", "res->", "      ")
         dst.write("    }\n")
         dst.write("    return res;\n")
     dst.write("  }\n")
@@ -112,7 +144,9 @@ def render_input_port_as_cpp(ip,dst):
         
     dst.write("class {}_{}_Spec : public InputPortImpl {{\n".format(dt.id,ip.name))
     dst.write('  public: {}_{}_Spec() : InputPortImpl({}_Spec_get, "{}", {}, {}_Spec_get()) {{}} \n'.format(dt.id,ip.name, dt.id, ip.name, index, ip.edge_type.id))
-    dst.write("""  virtual void onReceive(const typed_data_t *gGraphProperties,
+    dst.write("""  virtual void onReceive(
+                         OrchestratorServices *orchestrator,
+                         const typed_data_t *gGraphProperties,
 			 const typed_data_t *gDeviceProperties,
 			 typed_data_t *gDeviceState,
 			 const typed_data_t *gEdgeProperties,
@@ -126,6 +160,7 @@ def render_input_port_as_cpp(ip,dst):
     dst.write('    auto edgeProperties=cast_typed_properties<{}_properties_t>(gEdgeProperties);\n'.format( et.id ))
     dst.write('    auto edgeState=cast_typed_data<{}_state_t>(gEdgeState);\n'.format( et.id ))
     dst.write('    auto message=cast_typed_properties<{}_message_t>(gMessage);\n'.format(ip.edge_type.id))
+    dst.write('    HandlerLogImpl handler_log(orchestrator);\n')
 
     dst.write('    // Begin custom handler\n')
     for line in ip.receive_handler.splitlines():
@@ -150,7 +185,9 @@ def render_output_port_as_cpp(op,dst):
         
     dst.write("class {}_{}_Spec : public OutputPortImpl {{\n".format(dt.id,op.name))
     dst.write('  public: {}_{}_Spec() : OutputPortImpl({}_Spec_get, "{}", {}, {}_Spec_get()) {{}} \n'.format(dt.id,op.name, dt.id, op.name, index, op.edge_type.id))
-    dst.write("""    virtual void onSend(const typed_data_t *gGraphProperties,
+    dst.write("""    virtual void onSend(
+                      OrchestratorServices *orchestrator,
+                      const typed_data_t *gGraphProperties,
 		      const typed_data_t *gDeviceProperties,
 		      typed_data_t *gDeviceState,
 		      typed_data_t *gMessage,
@@ -161,6 +198,7 @@ def render_output_port_as_cpp(op,dst):
     dst.write('    auto deviceProperties=cast_typed_properties<{}_properties_t>(gDeviceProperties);\n'.format( dt.id ))
     dst.write('    auto deviceState=cast_typed_data<{}_state_t>(gDeviceState);\n'.format( dt.id ))
     dst.write('    auto message=cast_typed_data<{}_message_t>(gMessage);\n'.format(op.edge_type.id))
+    dst.write('    HandlerLogImpl handler_log(orchestrator);\n')
 
     dst.write('    // Begin custom handler\n')
     for line in op.send_handler.splitlines():
@@ -234,19 +272,19 @@ def render_device_type_as_cpp(dt,dst):
 def render_graph_as_cpp(graph,dst):
     dst.write('#include "graph_impl.hpp"\n')
 
-    gt=graph.graph_type
+    gt=graph
 
  
-    render_typed_data_as_spec(graph.graph_type.properties, "{}_properties_t".format(graph.graph_type.id),"pp:Properties",dst)
+    render_typed_data_as_spec(gt.properties, "{}_properties_t".format(gt.id),"pp:Properties",dst)
 
-    for et in graph.graph_type.edge_types.values():
+    for et in gt.edge_types.values():
         render_edge_type_as_cpp(et,dst)
 
-    for dt in graph.graph_type.device_types.values():
+    for dt in gt.device_types.values():
         render_device_type_as_cpp(dt,dst)
 
-    dst.write("class {}_Spec : public GraphTypeImpl {{\n".format(graph.graph_type.id))
-    dst.write('  public: {}_Spec() : GraphTypeImpl("{}", {}_properties_t_Spec_get()) {{\n'.format(gt.id,gt.id,gt.id))
+    dst.write("class {}_Spec : public GraphTypeImpl {{\n".format(gt.id))
+    dst.write('  public: {}_Spec() : GraphTypeImpl("{}", {}, {}_properties_t_Spec_get()) {{\n'.format(gt.id,gt.id,gt.native_dimension,gt.id))
     for et in gt.edge_types.values():
         dst.write('    addEdgeType({}_Spec_get());\n'.format(et.id))
     for et in gt.device_types.values():

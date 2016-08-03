@@ -11,6 +11,8 @@ SO_CPPFLAGS += -dynamiclib -fPIC
 
 CPPFLAGS += -std=c++11 -g
 
+CPPFLAGS += -DNDEBUG=1 -O2
+
 TRANG = external/trang-20091111/trang.jar
 JING = external/jing-20081028/bin/jing.jar
 
@@ -63,6 +65,7 @@ bin/epoch_sim : tools/epoch_sim.cpp
 	mkdir -p bin
 	$(CXX) $(CPPFLAGS) $< -o $@ $(LDFLAGS) $(LDLIBS)
 
+all_tools : bin/print_graph_properties bin/epoch_sim
 
 
 VIRTUAL_ALL_TESTS := $(patsubst test/virtual/%.xml,%,$(wildcard test/virtual/*.xml))

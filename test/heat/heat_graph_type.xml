@@ -37,8 +37,8 @@
 
 	<InputPort name="__init__" edgeTypeId="__init__">
 	  <OnReceive><![CDATA[
-	  fprintf(stderr,"       fireThreshold = %f\n", graphProperties->fireThreshold);
-	  fprintf(stderr,"       fixed = %d, initialTemperature = %f\n", deviceProperties->isFixed, deviceProperties->initialTemp);
+	  handler_log(2, "fireThreshold = %f\n", graphProperties->fireThreshold);
+	  handler_log(2,"fixed = %d, initialTemperature = %f\n", deviceProperties->isFixed, deviceProperties->initialTemp);
 	  
 	  deviceState->currTemp = deviceProperties->initialTemp;
 
@@ -47,7 +47,7 @@
 	  // TODO : this is a hack
 	  deviceState->lastFiredTemp = deviceState->currTemp + graphProperties->fireThreshold * 1000000;
 
-	  fprintf(stderr, "       currTemp=%f, lastFiredTemp=%f\n", deviceState->currTemp, deviceState->lastFiredTemp);
+	  handler_log(2,"currTemp=%f, lastFiredTemp=%f\n", deviceState->currTemp, deviceState->lastFiredTemp);
 
 	  // TODO : Bind by name
 	  requestSend[0] = true;
@@ -58,10 +58,10 @@
 	<InputPort name="in" edgeTypeId="conductor">
 	  <OnReceive><![CDATA[
 	  if(deviceProperties->isFixed){
-	    fprintf(stderr,"      fixed.\n");
+	    handler_log(2,"fixed, no change.\n");
 	    requestSend[0] = false;
 	  }else{
-	    fprintf(stderr,"      conductance = %f, ghost = %f\n", edgeProperties->conductance, edgeState->ghost);
+	    handler_log(2,"conductance = %f, ghost = %f\n", edgeProperties->conductance, edgeState->ghost);
 	    
 	    float oldTemp=deviceState->currTemp;
 	    float newTemp=deviceState->currTemp;
@@ -70,13 +70,13 @@
 	    newTemp += edgeProperties->conductance * edgeState->ghost;
 	    deviceState->currTemp=newTemp;
 
-	    fprintf(stderr, "        incoming = %f, oldTemp = %f, newTemp = %f\n", message->temperature, oldTemp, newTemp);
+	    handler_log(2, "incoming = %f, oldTemp = %f, newTemp = %f\n", message->temperature, oldTemp, newTemp);
 
 	    float delta=(deviceState->currTemp - deviceState->lastFiredTemp);
 	    if(delta<0){
 	      delta=-delta;
 	      }
-	    fprintf(stderr, "        delta = %f, fireThreshold = %f\n", delta, graphProperties->fireThreshold);
+	    handler_log(2, "delta = %f, fireThreshold = %f\n", delta, graphProperties->fireThreshold);
 
 	    // TODO : This should be bound by name, not index
 	    requestSend[0] = (delta >= graphProperties->fireThreshold);
@@ -106,44 +106,4 @@
       </DeviceType>
     </DeviceTypes>
   </GraphType>
-
-  <!-- TODO : There is no reason this is needed, quirk of cpp generator -->
-  <GraphInstance id="single_device_1input" graphTypeId="heat">
-    <Properties>
-      <Float32 name="fireThreshold" value="0.0001" />
-    </Properties>
-    
-    <DeviceInstances>
-      <DeviceInstance id="dLeft" deviceTypeId="region">
-	<Properties>
-	  <Bool name="isFixed" value="1" />
-	  <Float32 name="initialTemp" value="1" />
-	</Properties>
-      </DeviceInstance>
-      <DeviceInstance id="dMid1" deviceTypeId="region" >
-	<Properties>
-	  <Float32 name="initialTemp" value="10" />
-	</Properties>
-      </DeviceInstance>
-      <DeviceInstance id="dMid2" deviceTypeId="region" >
-      </DeviceInstance>
-      <DeviceInstance id="dRight" deviceTypeId="region">
-	<Properties>
-	  <Bool name="isFixed" value="1" />
-	  <Float32 name="initialTemp" value="2" />
-	</Properties>
-      </DeviceInstance>
-    </DeviceInstances>
-  
-    <EdgeInstances>
-      <EdgeInstance dstDeviceId="dLeft" dstPortName="in" srcDeviceId="dMid1" srcPortName="out" />
-      <EdgeInstance dstDeviceId="dMid1" dstPortName="in" srcDeviceId="dLeft" srcPortName="out" />
-
-      <EdgeInstance dstDeviceId="dMid1" dstPortName="in" srcDeviceId="dMid2" srcPortName="out" />
-      <EdgeInstance dstDeviceId="dMid2" dstPortName="in" srcDeviceId="dMid1" srcPortName="out" />
-
-      <EdgeInstance dstDeviceId="dMid2" dstPortName="in" srcDeviceId="dRight" srcPortName="out" />
-      <EdgeInstance dstDeviceId="dRight" dstPortName="in" srcDeviceId="dMid2" srcPortName="out" />
-    </EdgeInstances>
-  </GraphInstance>
 </Graph>

@@ -2,7 +2,14 @@ from graph.load_xml import load_graph
 import sys
 import os
 
-graph=load_graph(sys.stdin)
+if len(sys.argv)>1:
+    src=sys.argv[1]
+    basePath=os.path.dirname(src)
+else:
+    src=sys.stdin
+    basePath=os.getcwd()
+
+graph=load_graph(src,basePath)
 print("graph '{}'".format(graph.id))
 print("edge type count = {}".format(len(graph.graph_type.edge_types)))
 print("device type count = {}".format(len(graph.graph_type.device_types)))

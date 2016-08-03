@@ -1,5 +1,5 @@
 <?xml version="1.0"?>
-<Graph xmlns="TODO/POETS/virtual-graph-schema-v0">
+<Graph xmlns="http://TODO.org/POETS/virtual-graph-schema-v0">
   <GraphType id="single_device_1input_type">
     <EdgeTypes>
       <EdgeType id="e1">

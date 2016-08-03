@@ -5,7 +5,7 @@ default namespace = "http://TODO.org/POETS/virtual-graph-schema-v0"
 grammar {
 
   start = element Graph{
-    graphType*,
+    ( graphType | graphTypeReference )*,
     graphInstance*
   }
 
@@ -14,7 +14,11 @@ grammar {
       ## Identifier or name for the graph.
       attribute id { string },
 
-      ## Global properties that are shared with all nodes. read-only.
+      ## Gives the native dimension of the problem, if there is one. Zero if not set of if not applicable.
+      ## For example in a 2D heat equation this would be 2.
+      attribute native_dimension { xsd:integer } ? ,
+
+      ## Global properties that are shared with all nodes at run-time. read-only.
       element Properties {
         typedData *
       } ? ,
@@ -30,9 +34,23 @@ grammar {
       }
    }
 
+   graphTypeReference =
+     ## This is used when we want the graph type to live in a different file, or
+     ## to use a graph-type that is defined by a software provider
+     element GraphTypeReference {
+       attribute id { string},
+
+       ## This may be missing, in which case it is assumed some other mechanism will
+       ## connect it up
+       attribute src { string } ?
+     }
+
    graphInstance =
      element GraphInstance {
+
       attribute id { string },
+
+      ## The graph type must have been declared using either a GraphType or a GraphTypeReference
       attribute graphTypeId { string },
 
       element Properties {
@@ -175,6 +193,11 @@ grammar {
 
       ## Links to a previously declared device type
       attribute deviceTypeId { string },
+
+      ## If the device has a natural location (e.g. in the problem space), then this gives it.
+      ## The format is decimal values seperated by commas. The number of values should follow
+      ## the native dimension of the graph type.
+      attribute native_location { string } ?,
 
       ## Read-only properties associated with this device instance.
       ## This element must not exist if the device type has no properties

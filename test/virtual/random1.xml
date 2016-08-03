@@ -1,4 +1,4 @@
-<ns0:Graph xmlns:ns0="TODO/POETS/virtual-graph-schema-v0">
+<ns0:Graph xmlns:ns0="http://TODO.org/POETS/virtual-graph-schema-v0">
   <ns0:GraphType id="random1">
     <ns0:EdgeTypes>
       <ns0:EdgeType id="et0">

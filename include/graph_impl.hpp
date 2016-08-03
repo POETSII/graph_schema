@@ -7,6 +7,7 @@
 #include <cassert>
 #include <cstdint>
 #include <iostream>
+#include <string>
 
 #include <dlfcn.h>
 
@@ -106,7 +107,6 @@ void load_typed_data_attribute(T &dst, xmlpp::Element *parent, const char *name,
     return;
   std::stringstream tmp(a->get_value());
   tmp>>dst;
-  std::cerr<<"  loaded: "<<a->get_value()<<" -> "<<dst<<"\n";
 }
 
 xmlpp::Element *find_single(xmlpp::Element *parent, const std::string &name, const xmlpp::Node::PrefixNsMap &ns=xmlpp::Node::PrefixNsMap())
@@ -132,6 +132,15 @@ std::string get_attribute_required(xmlpp::Element *eParent, const char *name)
   auto a=eParent->get_attribute(name);
   if(a==0)
     throw std::runtime_error("Missing attribute.");
+
+  return a->get_value();
+}
+
+std::string get_attribute(xmlpp::Element *eParent, const char *name)
+{
+  auto a=eParent->get_attribute(name);
+  if(a==0)
+    return std::string();
 
   return a->get_value();
 }
@@ -330,6 +339,8 @@ class GraphTypeImpl : public GraphType
 private:
   std::string m_id;
 
+  unsigned m_nativeDimension;
+
   TypedDataSpecPtr m_propertiesSpec;
   
   std::vector<EdgeTypePtr> m_edgeTypesByIndex;
@@ -339,13 +350,17 @@ private:
   std::unordered_map<std::string,DeviceTypePtr> m_deviceTypesById;
 
 protected:
-  GraphTypeImpl(std::string id, TypedDataSpecPtr propertiesSpec)
+  GraphTypeImpl(std::string id, unsigned nativeDimension, TypedDataSpecPtr propertiesSpec)
     : m_id(id)
+    , m_nativeDimension(nativeDimension)
     , m_propertiesSpec(propertiesSpec)
   {}
 
   const std::string &getId() const override
   { return m_id; }
+
+  unsigned getNativeDimension() const override
+  { return m_nativeDimension; }
 
   const TypedDataSpecPtr getPropertiesSpec() const override
   { return m_propertiesSpec; }
@@ -384,6 +399,81 @@ protected:
   {
     m_deviceTypesByIndex.push_back(et);
     m_deviceTypesById[et->getId()]=et;
+  }
+};
+
+class ReceiveOrchestratorServicesImpl
+  : public OrchestratorServices
+{
+private:
+  unsigned m_logLevel;
+  FILE *m_dst;
+  const char *m_device;
+  const char *m_input;
+public:
+  ReceiveOrchestratorServicesImpl(unsigned logLevel, FILE *dst, const char *device, const char *input)
+    : m_logLevel(logLevel)
+    , m_dst(dst)
+    , m_device(device)
+    , m_input(input)
+  {}
+  
+  virtual unsigned getLogLevel() const override
+  { return m_logLevel; }
+  
+  virtual void vlog(unsigned level, const char *msg, va_list args) override
+  {
+    if(m_logLevel >= level){
+      fprintf(m_dst, "device:%s, input:%s : ", m_device, m_input);
+      vfprintf(m_dst, msg, args);
+      fprintf(m_dst, "\n");
+    }
+  }
+};
+
+class SendOrchestratorServicesImpl
+  : public OrchestratorServices
+{
+private:
+  unsigned m_logLevel;
+  FILE *m_dst;
+  const char *m_device;
+  const char *m_output;
+public:
+  SendOrchestratorServicesImpl(unsigned logLevel, FILE *dst, const char *device, const char *output)
+    : m_logLevel(logLevel)
+    , m_dst(dst)
+    , m_output(output)
+  {}
+  
+  virtual unsigned getLogLevel() const override
+  { return m_logLevel; }
+  
+  virtual void vlog(unsigned level, const char *msg, va_list args) override
+  {
+    if(m_logLevel >= level){
+      fprintf(m_dst, "device:%s, output:%s : ", m_device, m_output);
+      vfprintf(m_dst, msg, args);
+      fprintf(m_dst, "\n");
+    }
+  }
+};
+
+class HandlerLogImpl
+{
+private:
+  OrchestratorServices *m_services;
+public:
+  HandlerLogImpl(OrchestratorServices *services)
+    : m_services(services)
+  {}
+
+  void operator()(unsigned level, const char *msg, ...)
+  {
+    va_list args;
+    va_start(args, msg);
+    m_services->vlog(level, msg, args);
+    va_end(args);
   }
 };
 
@@ -479,16 +569,12 @@ void loadGraph(Registry *registry, xmlpp::Element *parent, GraphLoadEvents *even
   xmlpp::Node::PrefixNsMap ns;
   ns["g"]="http://TODO.org/POETS/virtual-graph-schema-v0";
   
-  fprintf(stderr, "loadGraph begin\n");
-  
   auto *eGraph=find_single(parent, "./g:GraphInstance", ns);
   if(eGraph==0)
     throw std::runtime_error("No graph element.");
   
   std::string graphId=get_attribute_required(eGraph, "id");
   std::string graphTypeId=get_attribute_required(eGraph, "graphTypeId");
-
-  fprintf(stderr, "graphId = %s, graphTypeId = %s\n", graphId.c_str(), graphTypeId.c_str());
 
   auto graphType=registry->lookupGraphType(graphTypeId);
 
@@ -500,7 +586,6 @@ void loadGraph(Registry *registry, xmlpp::Element *parent, GraphLoadEvents *even
   }
   events->onGraphType(graphType);
 
-  fprintf(stderr, "Pre properties\n");
   TypedDataPtr graphProperties;
   auto *eProperties=find_single(eGraph, "./g:Properties", ns);
   if(eProperties){
@@ -510,8 +595,6 @@ void loadGraph(Registry *registry, xmlpp::Element *parent, GraphLoadEvents *even
     fprintf(stderr, "Default constructing properties.\n");
     graphProperties=graphType->getPropertiesSpec()->create();
   }
-  fprintf(stderr, "Post properties\n");
-
 
   auto gId=events->onGraphInstance(graphType, graphId, graphProperties);
 
@@ -527,19 +610,38 @@ void loadGraph(Registry *registry, xmlpp::Element *parent, GraphLoadEvents *even
     std::string id=get_attribute_required(eDevice, "id");
     std::string deviceTypeId=get_attribute_required(eDevice, "deviceTypeId");
 
+    std::vector<double> nativeLocation;
+    const double *nativeLocationPtr = 0;
+    std::string nativeLocationStr=get_attribute(eDevice, "nativeLocation");
+    if(!nativeLocationStr.empty()){
+      size_t start=0;
+      while(start!=std::string::npos){
+	size_t end=nativeLocationStr.find(',',start);
+	std::string part=nativeLocationStr.substr(start, end==std::string::npos ? end : end-start);
+
+	nativeLocation.push_back(std::stod(part));
+
+	start=end+1;
+      }
+
+      if(nativeLocation.size()!=graphType->getNativeDimension()){
+	throw std::runtime_error("Device instance location does not match dimension of problem.");
+      }
+
+      nativeLocationPtr = &nativeLocation[0];
+    }
+
     auto dt=graphType->getDeviceType(deviceTypeId);
 
     TypedDataPtr deviceProperties;
     auto *eProperties=find_single(eDevice, "./g:Properties", ns);
     if(eProperties){
-      fprintf(stderr, "Loading device properties\n");
       deviceProperties=dt->getPropertiesSpec()->load(eProperties);
     }else{
-      fprintf(stderr, "Default cosntructing device properties\n");
       deviceProperties=dt->getPropertiesSpec()->create();
     }
 
-    uint64_t dId=events->onDeviceInstance(gId, dt, id, deviceProperties);
+    uint64_t dId=events->onDeviceInstance(gId, dt, id, deviceProperties, nativeLocationPtr);
 
     devices.insert(std::make_pair( id, std::make_pair(dId, dt)));
   }
@@ -547,9 +649,14 @@ void loadGraph(Registry *registry, xmlpp::Element *parent, GraphLoadEvents *even
   auto *eEdgeInstances=find_single(eGraph, "./g:EdgeInstances", ns);
   if(!eEdgeInstances)
     throw std::runtime_error("No EdgeInstances element");
-  
-  for(auto *nEdge : eEdgeInstances->find("./g:EdgeInstance", ns)){
-    auto *eEdge=(xmlpp::Element *)nEdge;
+
+  // for(auto *nEdge : eEdgeInstances->find("./g:EdgeInstance", ns)){
+  for(auto *nEdge : eEdgeInstances->get_children()){
+    auto *eEdge=dynamic_cast<xmlpp::Element *>(nEdge);
+    if(!eEdge)
+      continue;
+    if(eEdge->get_name()!="EdgeInstance")
+      continue;
 
     std::string srcDeviceId=get_attribute_required(eEdge, "srcDeviceId");
     std::string srcPortName=get_attribute_required(eEdge, "srcPortName");
@@ -569,9 +676,23 @@ void loadGraph(Registry *registry, xmlpp::Element *parent, GraphLoadEvents *even
     
 
     TypedDataPtr edgeProperties;
-    auto *eProperties=find_single(eEdge, "./g:Properties", ns);
+    xmlpp::Element *eProperties=0;
+    {
+      const auto &children=eEdge->get_children();
+      if(children.size()<10){
+	for(const auto &nChild : children){
+	  assert(nChild->getName().is_ascii());
+	  
+	  if(!strcmp(nChild->get_name().c_str(),"Properties")){
+	    eProperties=(xmlpp::Element*)nChild;
+	    break;
+	  }
+	}
+      }else{
+	eProperties=find_single(eEdge, "./g:Properties", ns);
+      }
+    }
     if(eProperties){
-      fprintf(stderr, "Loading properties\n");
       edgeProperties=et->getPropertiesSpec()->load(eProperties);
     }else{
       edgeProperties=et->getPropertiesSpec()->create();

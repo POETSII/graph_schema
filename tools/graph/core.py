@@ -261,8 +261,9 @@ class DeviceType(object):
 
 
 class GraphType(object):
-    def __init__(self,id,properties):
+    def __init__(self,id,native_dimension,properties):
         self.id=id
+        self.native_dimension=native_dimension
         self.properties=properties
         self.device_types={}
         self.edge_types={}
@@ -277,14 +278,48 @@ class GraphType(object):
             raise GraphDescriptionError("Device type already exists.")
         self.device_types[device_type.id]=device_type
         
+class GraphTypeReference(object):
+    def __init__(self,id,src):
+        self.id=id
+        self.src=src
+        
+        self.native_dimension=native_dimension
+        self.properties=properties
+        self.device_types={}
+        self.edge_types={}
+
+    @property
+    def native_dimension(self):
+        raise RuntimeError("Cannot get dimension of unresolved GraphTypeReference.")
+
+    @property
+    def properties(self):
+        raise RuntimeError("Cannot get properties of unresolved GraphTypeReference.")
+
+    @property
+    def device_types(self):
+        raise RuntimeError("Cannot get device_types of unresolved GraphTypeReference.")
+
+    @property
+    def edge_types(self):
+        raise RuntimeError("Cannot get edge_types of unresolved GraphTypeReference.")
+
+    def add_edge_type(self,edge_type):
+        raise RuntimeError("Cannot add to unresolved GraphTypeReference.")
+
+    def add_device_type(self,device_type):
+        raise RuntimeError("Cannot add to unresolved GraphTypeReference.")
+
+        
 class DeviceInstance(object):
-    def __init__(self,parent,id,device_type,properties):
+    def __init__(self,parent,id,device_type,native_location,properties):
         if not is_refinement_compatible(device_type.properties,properties):
             raise GraphDescriptionError("Properties not compatible with device type properties: proto={}, value={}".format(device_type.properties, properties))
 
         self.parent=parent
         self.id=id
         self.device_type=device_type
+        self.native_location=native_location
         self.properties=properties
 
         

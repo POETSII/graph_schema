@@ -6,7 +6,7 @@ from lxml import etree
 import os
 import sys
 
-ns={"p":"TODO/POETS/virtual-graph-schema-v0"}
+ns={"p":"http://TODO.org/POETS/virtual-graph-schema-v0"}
 
 def toNS(t):
     tt=t.replace("p:","{"+ns["p"]+"}")
@@ -48,22 +48,32 @@ def save_typed_data(dt):
 
     return n
 
-def attach_typed_data(node,childType,data):
-    if data is None:
-        return None
-    
+def attach_typed_data(node,childType,data):    
     r=etree.Element(toNS(childType))
     r.append(save_typed_data(data))
     node.append(r)
     return r
+
+def attach_typed_struct(node,childType,tuple):
+    if tuple is None:
+        return
+    if len(tuple.elements_by_index)==0:
+        return
+
+    r=etree.Element(toNS(childType))
+    for elt in tuple.elements_by_index:
+        r.append(save_typed_data(elt))
+    node.append(r)
+    return r
+    
     
 def save_edge_type(et):
     n=_type_to_element(et)
 
     n.attrib["id"]=et.id
-    attach_typed_data(n, "p:Message", et.message)
-    attach_typed_data(n, "p:Properties", et.properties)
-    attach_typed_data(n, "p:State", et.state)
+    attach_typed_struct(n, "p:Message", et.message)
+    attach_typed_struct(n, "p:Properties", et.properties)
+    attach_typed_struct(n, "p:State", et.state)
 
     return n
 
@@ -72,8 +82,8 @@ def save_device_type(dt):
     n=_type_to_element(dt)
 
     n.attrib["id"]=dt.id
-    attach_typed_data(n, "p:Properties", dt.properties)
-    attach_typed_data(n, "p:State", dt.state)
+    attach_typed_struct(n, "p:Properties", dt.properties)
+    attach_typed_struct(n, "p:State", dt.state)
         
     for p in dt.inputs_by_index:
         pn=_type_to_element(p)
@@ -103,7 +113,7 @@ def save_device_instance(di):
 
     n.attrib["id"]=di.id
     n.attrib["deviceTypeId"]=di.device_type.id
-    attach_typed_data(n, "p:Properties", di.properties)
+    attach_typed_struct(n, "p:Properties", di.properties)
 
     return n
 
@@ -116,7 +126,7 @@ def save_edge_instance(ei):
     n.attrib["srcDeviceId"]=ei.src_device.id
     n.attrib["srcPortName"]=ei.src_port.name
     
-    attach_typed_data(n, "p:Properties", ei.properties)
+    attach_typed_struct(n, "p:Properties", ei.properties)
 
     return n
 
@@ -124,6 +134,8 @@ def save_edge_instance(ei):
 def save_graph_type(graph):
     gn = _type_to_element(graph);
     gn.attrib["id"]=graph.id
+
+    attach_typed_struct(gn, "p:Properties", graph.properties)
 
     etn = etree.Element(toNS("p:EdgeTypes"))
     gn.append(etn)
@@ -141,6 +153,8 @@ def save_graph_instance(graph):
     gn = _type_to_element(graph);
     gn.attrib["id"]=graph.id
     gn.attrib["graphTypeId"]=graph.graph_type.id
+
+    attach_typed_struct(gn, "p:Properties", graph.properties)
     
     din = etree.Element(toNS("p:DeviceInstances"))
     gn.append(din)

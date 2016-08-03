@@ -34,6 +34,11 @@ def get_attrib_optional(node,name):
         return None
     return node.attrib[name]
 
+def get_attrib_defaulted(node,name,default):
+    if name not in node.attrib:
+        return default
+    return node.attrib[name]
+
 def get_child_text(node,name):
     n=node.find(name,ns)
     if n is None:
@@ -134,12 +139,18 @@ def load_device_type(graph,dtNode):
 def load_graph_type(graphNode):
     id=get_attrib(graphNode,"id")
 
+    dimension=get_attrib_optional(graphNode, "nativeDimension")
+    if dimension:
+        dimension=int(dimension)
+    else:
+        dimension=0
+        
     properties=None
     propertiesNode=graphNode.find("p:Properties",ns)
     if propertiesNode is not None:
         properties=load_struct(id+"_properties", propertiesNode)
 
-    graphType=GraphType(id,properties)
+    graphType=GraphType(id,dimension,properties)
         
     for etNode in graphNode.findall("p:EdgeTypes/p:*",ns):
         et=load_edge_type(graphType,etNode)
@@ -151,9 +162,38 @@ def load_graph_type(graphNode):
 
     return graphType
 
+def load_graph_type_reference(graphNode,basePath):
+    id=get_attrib(graphNode,"id")
+
+    src=get_attrib_optional(graphNode, "src")
+    if src:
+        fullSrc=os.path.join(basePath, src)
+        print("  basePath = {}, src = {}, fullPath = {}".format(basePath,src,fullSrc))
+        
+        tree = etree.parse(fullSrc)
+        doc = tree.getroot()
+        graphsNode = doc;
+    
+        for gtNode in graphsNode.findall("p:GraphType",ns):
+            gt=load_graph_type(gtNode)
+            if gt.id==id:
+                return gt
+
+        raise XMLSyntaxError("Couldn't load graph type '{}' from src '{}'".format(id,src))
+    else:
+        return GraphTypeReference(id)        
+        
 
 def load_device_instance(graph,diNode):
     id=get_attrib(diNode,"id")
+
+    nativeLocationStr=get_attrib_optional(diNode,"nativeLocation")
+    if(nativeLocationStr):
+        nativeLocation=[real(p) for p in nativeLocationStr.split(',')]
+        if len(nativeLocation) != graph.graph_type.native_dimension:
+            raise XMLSyntaxError("native location does not match graph dimension.")
+    else:
+        nativeLocation=None
     
     device_type_id=get_attrib(diNode,"deviceTypeId")
     if device_type_id not in graph.graph_type.device_types:
@@ -165,7 +205,7 @@ def load_device_instance(graph,diNode):
     if propertiesNode is not None:
         properties=load_struct(id+"_properties", propertiesNode)
 
-    return DeviceInstance(graph,id,device_type,properties)
+    return DeviceInstance(graph,id,device_type,nativeLocation,properties)
     
 
 def load_edge_instance(graph,eiNode):
@@ -181,7 +221,7 @@ def load_edge_instance(graph,eiNode):
     propertiesNode=eiNode.find("p:Properties",ns)
     if propertiesNode is not None:
         assert(len(propertiesNode)==1)
-        properties=load_typed_data(propertiesNode[0])
+        properties=load_struct(None, propertiesNode[0])
 
     return EdgeInstance(graph,dst_device,dst_port_name,src_device,src_port_name,properties)
 
@@ -208,23 +248,49 @@ def load_graph_instance(graphTypes, graphNode):
     return graph
 
 
-def load_graph(src):
-    tree = etree.parse(os.sys.stdin)
+def load_graph_types_and_instances(src,basePath=None):
+    if basePath==None:
+        if isinstance(src,str):
+            basePath=os.path.dirname(src)
+        else:
+            basePath=os.getcwd()
+    
+    tree = etree.parse(src)
     doc = tree.getroot()
     graphsNode = doc;
 
     graphTypes={}
+    graphs={}
     
     try:
         for gtNode in graphsNode.findall("p:GraphType",ns):
+            sys.stderr.write("Loading graph type")
             gt=load_graph_type(gtNode)
             graphTypes[gt.id]=gt
 
-        for giNode in graphsNode.findall("p:GraphInstance",ns):
-            return load_graph_instance(graphTypes, giNode)
+        for gtRefNode in graphsNode.findall("p:GraphTypeReference",ns):
+            sys.stderr.write("Loading graph reference")
+            gt=load_graph_type_reference(gtRefNode,basePath)
+            graphTypes[gt.id]=gt
+            
+        for giNode in graphsNode.findall("p:GraphInstance",ns): 
+            sys.stderr.write("Loading graph")
+            g=load_graph_instance(graphTypes, giNode)
+            graphs[g.id]=g
+
+        return (graphTypes,graphs)
 
     except XMLSyntaxError as e:
         print(e)
         if e.node is not None:
             print(etree.tostring(e.node, pretty_print = True, encoding='utf-8').decode("utf-8"))
         raise e
+
+def load_graph(src,basePath=None):
+    (graphTypes,graphInstances)=load_graph_types_and_instances(src,basePath)
+    if len(graphInstances)==0:
+        raise RuntimeError("File contained no graph instances.")
+    if len(graphInstances)>1:
+        raise RuntimeError("File contained more than one graph instance.")
+    for x in graphInstances.values():
+        return x

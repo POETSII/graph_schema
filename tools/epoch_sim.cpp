@@ -6,15 +6,30 @@
 #include <fstream>
 #include <memory>
 #include <random>
+#include <unordered_set>
+
+static unsigned  logLevel=1;
 
 struct EpochSim
   : public GraphLoadEvents
 {
+  std::unordered_set<std::string> m_interned;
+
+  // Return a stable C pointer to the name. Avoids us to store
+  // pointers in the data structures, and avoid calling .c_str() everywhere
+  const char *intern(const std::string &name)
+  {
+    auto it=m_interned.insert(name);
+    return it.first->c_str();
+  }
+  
   struct output
   {
     unsigned dstDevice;
     unsigned dstPortIndex;
     unsigned dstPortSlot; // This is the actual landing zone within the destination, i.e. where the state is
+    const char *dstDeviceId;
+    const char *dstInputName;
   };
 
   struct input
@@ -27,11 +42,14 @@ struct EpochSim
   {
     unsigned index;
     std::string id;
+    const char *name; // interned id
     DeviceTypePtr type;
     TypedDataPtr properties;
     TypedDataPtr state;
 
     std::shared_ptr<bool> readyToSend; // Grrr, std::vector<bool> !
+
+    std::vector<const char *> outputNames; // interned names
     
     std::vector<std::vector<output> > outputs;
     std::vector<std::vector<input> > inputs;
@@ -51,7 +69,7 @@ struct EpochSim
     return 0;
   }
 
-  virtual uint64_t onDeviceInstance(uint64_t gId, const DeviceTypePtr &dt, const std::string &id, const TypedDataPtr &deviceProperties) override
+  virtual uint64_t onDeviceInstance(uint64_t gId, const DeviceTypePtr &dt, const std::string &id, const TypedDataPtr &deviceProperties, const double */*nativeLocation*/) override
   {
     TypedDataPtr state=dt->getStateSpec()->create();
     device d;
@@ -62,6 +80,9 @@ struct EpochSim
     d.state=state;
     d.readyToSend.reset(new bool[dt->getOutputCount()], [](bool *p){ delete[](p);} );
     d.outputs.resize(dt->getOutputCount());
+    for(unsigned i=0;i<dt->getOutputCount();i++){
+      d.outputNames.push_back(intern(dt->getOutput(i)->getName()));
+    }
     d.inputs.resize(dt->getInputCount());
     m_devices.push_back(d);
     return d.index;
@@ -80,6 +101,8 @@ struct EpochSim
     o.dstDevice=dstDevIndex;
     o.dstPortIndex=dstInput->getIndex();
     o.dstPortSlot=dstPortSlot;
+    o.dstDeviceId=m_devices.at(dstDevIndex).name;
+    o.dstInputName=intern(dstInput->getName());
     m_devices.at(srcDevIndex).outputs.at(srcOutput->getIndex()).push_back(o);
 					      
   }
@@ -100,11 +123,17 @@ struct EpochSim
     for(auto &dev : m_devices){
       auto init=dev.type->getInput("__init__");
       if(init){
-	fprintf(stderr, "  init device %d = %s\n", dev.index, dev.id.c_str());      
-	init->onReceive(m_graphProperties.get(), dev.properties.get(), dev.state.get(), 0, 0, 0, dev.readyToSend.get());	
+	if(logLevel>2){
+	  fprintf(stderr, "  init device %d = %s\n", dev.index, dev.id.c_str());
+	}
+
+	ReceiveOrchestratorServicesImpl receiveServices{logLevel, stderr, dev.name, "__init__"  };
+	init->onReceive(&receiveServices, m_graphProperties.get(), dev.properties.get(), dev.state.get(), 0, 0, 0, dev.readyToSend.get());	
       }
     }
   }
+
+  double m_statsSends=0;
 
   template<class TRng>
   bool step(TRng &rng)
@@ -119,17 +148,24 @@ struct EpochSim
 
       auto &src=m_devices[index];
 
-      fprintf(stderr, "  step device %d = %s\n", src.index, src.id.c_str());      
+      if(logLevel>3){
+	fprintf(stderr, "  step device %d = %s\n", src.index, src.id.c_str());
+      }
       
       // Pick a random message
       unsigned sel=pick_bit(src.type->getOutputCount(), src.readyToSend.get(), rng());
       if(sel==-1){
-	fprintf(stderr, "   not ready to send.\n");
+	if(logLevel>3){
+	  fprintf(stderr, "   not ready to send.\n");
+	}
 	continue;
       }
 
-      fprintf(stderr, "    output port %d ready\n", sel);
+      if(logLevel>3){
+	fprintf(stderr, "    output port %d ready\n", sel);
+      }
 
+      m_statsSends++;
       sent=true;
 
       src.readyToSend.get()[sel]=false; // Up to them to re-enable
@@ -138,10 +174,15 @@ struct EpochSim
       TypedDataPtr message=output->getEdgeType()->getMessageSpec()->create();
 
       bool cancel=false;
-      output->onSend(m_graphProperties.get(), src.properties.get(), src.state.get(), message.get(), src.readyToSend.get(), &cancel);
+      {
+	SendOrchestratorServicesImpl sendServices{logLevel, stderr, src.name, src.outputNames[sel]};
+	output->onSend(&sendServices, m_graphProperties.get(), src.properties.get(), src.state.get(), message.get(), src.readyToSend.get(), &cancel);
+      }
 
       if(cancel){
-	fprintf(stderr, "    send aborted.\n");
+	if(logLevel>3){
+	  fprintf(stderr, "    send aborted.\n");
+	}
 	continue;
       }
 
@@ -150,11 +191,14 @@ struct EpochSim
 	auto &in=dst.inputs.at(out.dstPortIndex);
 	auto &slot=in.at(out.dstPortSlot);
 
-	fprintf(stderr, "    sending to device %d = %s\n", dst.index, dst.id.c_str());
+	if(logLevel>3){
+	  fprintf(stderr, "    sending to device %d = %s\n", dst.index, dst.id.c_str());
+	}
 
 	auto port=dst.type->getInput(out.dstPortIndex);
 
-	port->onReceive(m_graphProperties.get(), dst.properties.get(), dst.state.get(), slot.properties.get(), slot.state.get(), message.get(), dst.readyToSend.get());
+	ReceiveOrchestratorServicesImpl receiveServices{logLevel, stderr, out.dstDeviceId, out.dstInputName};
+	port->onReceive(&receiveServices, m_graphProperties.get(), dst.properties.get(), dst.state.get(), slot.properties.get(), slot.state.get(), message.get(), dst.readyToSend.get());
       }
     }
     return sent;
@@ -167,6 +211,7 @@ struct EpochSim
 int main(int argc, char *argv[])
 {
   try{
+    
     RegistryImpl registry;
     
     xmlpp::DomParser parser;
@@ -175,7 +220,9 @@ int main(int argc, char *argv[])
     std::ifstream srcFile;
     
     if(argc>1){
-      fprintf(stderr,"Reading from '%s'\n", argv[1]);
+      if(logLevel>1){
+	fprintf(stderr,"Reading from '%s'\n", argv[1]);
+      }
       srcFile.open(argv[1]);
       if(!srcFile.is_open())
 	throw std::runtime_error(std::string("Couldn't open '")+argv[1]+"'");
@@ -183,29 +230,46 @@ int main(int argc, char *argv[])
       
     }
 
-    fprintf(stderr, "Parsing XML\n");
+    if(logLevel>1){
+      fprintf(stderr, "Parsing XML\n");
+    }
     parser.parse_stream(*src);
-    fprintf(stderr, "Parsed XML\n");
+    if(logLevel>1){
+      fprintf(stderr, "Parsed XML\n");
+    }
 
     EpochSim graph;
     
     loadGraph(&registry, parser.get_document()->get_root_node(), &graph);
 
-    fprintf(stderr, "Loaded\n");
+    if(logLevel>1){
+      fprintf(stderr, "Loaded\n");
+    }
 
     std::mt19937 rng;
 
     graph.init();
 
+    unsigned statsDelta=1;
+    unsigned nextStats=1;
+
     for(unsigned i=0; i<100; i++){
-      fprintf(stderr, "Step %u\n", i);
+      if(logLevel>2 ||  i==nextStats){
+	fprintf(stderr, "Epoch %u : sends/device/epoch = %f\n", i, graph.m_statsSends / graph.m_devices.size() / statsDelta);
+      }
+      if(i==nextStats){
+	nextStats=nextStats+statsDelta;
+	graph.m_statsSends=0;
+      }
       
       if(!graph.step(rng))
 	break;
 
     }
 
-    fprintf(stderr, "Done\n");
+    if(logLevel>1){
+      fprintf(stderr, "Done\n");
+    }
 
   }catch(std::exception &e){
     std::cerr<<"Exception : "<<e.what()<<"\n";
