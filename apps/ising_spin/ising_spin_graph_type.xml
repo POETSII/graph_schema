@@ -8,9 +8,7 @@
       <Scalar type="float" name="endTime" value="10" />
       <Scalar type="uint32_t" name="width" />
       <Scalar type="uint32_t" name="height" />
-      <Array name="probabilities" length="10">
-	<Scalar type="float" />
-      </Array>
+      <Array name="probabilities" length="10" type="float" />
     </Properties>
 
     <SharedCode><![CDATA[
@@ -35,17 +33,22 @@
     {
       return urng(state)*2.328306400e-10f;
     }
-
-    uint32_t initialNeighbourSum(uint32_t x, uint32_t y, uint32_t W, uint32_t H)
-    {
-      int32_t sum=0;
-      uint32_t seed;
       
+    void chooseNextEvent(const ising_spin_properties_t *graphProperties, cell_state_t *deviceState)
+    {
+      int sumStates=0;
+      for(unsigned i=1; i<5; i++){ // Only sum neighbours
+        sumStates+=deviceState->spins[i];
+      }
 
+      unsigned index=(sumStates+4)/2 + 5*(deviceState->spins[0]+1)/2;
+      float prob=graphProperties->probabilities[index];
 
-      return sum;
+      if( frng(deviceState->rng) < prob){
+        deviceState->spins[0] *= -1; // Flip
+      }
+      deviceState->times[0] += -log(frng(deviceState->rng));
     }
-
 
     ]]></SharedCode>
     
@@ -79,7 +82,7 @@
 	  <Scalar type="uint32_t" name="rng" />
 
 	  <!-- Track time and spins in neighbourhood. Index 0 is this device -->
-	  <Array name="spins" length="5" type="uint32_t" />
+	  <Array name="spins" length="5" type="int32_t" />
 	  <Array name="times" length="5" type="float" />
 	</State>
 
@@ -87,35 +90,35 @@
 	  <OnReceive><![CDATA[
 	  // Initialise RNG and choose random starting spin
 	  uint32_t seed;
+	  auto x=deviceProperties->x, y=deviceProperties->y;
+	  auto W=graphProperties->width, H=graphProperties->height;
 
 	  seed=rng_init( x, (y+H-1)%H );
-	  deviceState->spins[1]=rng(seed)>>31;
+	  deviceState->spins[1]=(urng(seed)>>31) ? +1 : -1;
 	  deviceState->times[1]=0;
 
 	  seed=rng_init( (x+1)%W, y );
-	  deviceState->spins[2]=rng(seed)>>31;
+	  deviceState->spins[2]=(urng(seed)>>31) ? +1 : -1;
 	  deviceState->times[2]=0;
 
 	  seed=rng_init( x, (y+1)%H );
-	  deviceState->spins[3]=rng(seed)>>31;
+	  deviceState->spins[3]=(urng(seed)>>31) ? +1 : -1;
 	  deviceState->times[3]=0;
 
 	  seed=rng_init( (x+W-1)%W, y );
-	  deviceState->spins[4]=rng(seed)>>31;
+	  deviceState->spins[4]=(urng(seed)>>31) ? +1 : -1;
 	  deviceState->times[4]=0;
 
 	  // Final one is this node
 	  seed=rng_init( x, y );
-	  deviceState->spins[0]=rng(seed)>>31;
+	  deviceState->spins[0]=(urng(seed)>>31) ? +1 : -1;
 	  deviceState->times[0]=0;
 	  deviceState->rng=seed; // Store the rng state back
 
-	  // We now have perfect knowledge of our neighbourhood
-
-	  uint32_t sumSpin
-
-	  TODO : Here
-	  
+	  // We now have perfect knowledge of our neighbourhood,
+	  // and everyone is at time 0. So we pick our first firing
+	  // time, and try to broadcast it
+	  chooseNextEvent(graphProperties, deviceState);
 
 	  requestSend_out = true;
 	  ]]>
@@ -125,16 +128,17 @@
 	<InputPort name="in" edgeTypeId="update">
 	  <OnReceive><![CDATA[
 
-	  // Update our view of neighbourhood spin. Even if packets are 
-	  if(message->spin){
-    	    deviceState->sumSpin++;
-	  }else{
-	    deviceState->sumSpin--;
+	  if(message->time >= deviceState->times[edgeProperties->direction]){
+  	    deviceState->spins[edgeProperties->direction]=message->spin;
+	    deviceState->times[edgeProperties->direction]=message->time;
 	  }
-	  handler_assert(0 <= deviceState->sumSpin && deviceState->sumSpin <= 5);
 
-	  // Update our view of neighbourhood time. We have to be very careful about
-	  // possible re-ordered packets
+	  requestSend_out = true;
+	  for(unsigned i=1; i<5; i++){
+            if(deviceState->times[i] < deviceState->times[0]){
+	      requestSend_out = false;
+	    }
+	  }
 	  
 	  ]]></OnReceive>
 	</InputPort>
@@ -144,12 +148,12 @@
 	  requestSend_out = false; // For information; this is the default
 
 	  // Check if simulation has finished. If so do nothing
-	  if(deviceState->time >= graphProperties->endTime){
+	  if(deviceState->times[0] >= graphProperties->endTime){
 	    *cancelSend=true;
 	  }
 
-	  message->spin = deviceState->spin;
-	  message->time = deviceState->time;
+	  message->spin = deviceState->spins[0];
+	  message->time = deviceState->times[0];
 	  ]]></OnSend>
 	</OutputPort>
       </DeviceType>

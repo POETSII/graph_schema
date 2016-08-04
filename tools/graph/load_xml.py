@@ -57,6 +57,14 @@ def load_typed_data_spec(dt):
             elt=load_typed_data_spec(eltNode)
             elts.append(elt)
         return TupleTypedDataSpec(name,elts)
+    elif tag=="p:Array":
+        length=int(get_attrib(dt,"length"))
+        type=get_attrib_optional(dt, "type")
+        if type:
+            type=ScalarTypedDataSpec("_",type)
+        else:
+            raise RuntimeError("Haven't implemented arrays of non-scalar types yet.")
+        return ArrayTypedDataSpec(name,length,type)
     elif tag=="p:Scalar":
         type=get_attrib(dt, "type")
         value=get_attrib_optional(dt, "value")
@@ -91,16 +99,22 @@ def load_struct_instance(spec,dt):
 def load_edge_type(parent,dt):
     id=get_attrib(dt,"id")
     try:    
-    
-        message=None
-        messageNode=dt.find("p:Message",ns)
-        if messageNode is not None:
-            message=load_struct_spec(id+"_message", messageNode)
 
-        state=None
-        stateNode=dt.find("p:State",ns)
-        if stateNode is not None:
-            state=load_struct_spec(id+"_state", stateNode)
+        try:
+            message=None
+            messageNode=dt.find("p:Message",ns)
+            if messageNode is not None:
+                message=load_struct_spec(id+"_message", messageNode)
+        except Exception as e:
+            raise XMLSyntaxError("Error while parsing message of edge {} : {}".format(id,e),dt,e)
+
+        try:
+            state=None
+            stateNode=dt.find("p:State",ns)
+            if stateNode is not None:
+                state=load_struct_spec(id+"_state", stateNode)
+        except Exception as e:
+            raise XMLSyntaxError("Error while parsing state of edge {} : {}".format(id,e),dt,e)
 
         try:
             properties=None
@@ -166,7 +180,11 @@ def load_graph_type(graphNode):
     if propertiesNode is not None:
         properties=load_struct_spec(id+"_properties", propertiesNode)
 
-    graphType=GraphType(id,dimension,properties)
+    shared_code=[]
+    for n in graphNode.findall("p:SharedCode",ns):
+        shared_code.append(n.text)
+
+    graphType=GraphType(id,dimension,properties,shared_code)
         
     for etNode in graphNode.findall("p:EdgeTypes/p:*",ns):
         et=load_edge_type(graphType,etNode)

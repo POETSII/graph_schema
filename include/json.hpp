@@ -18,6 +18,9 @@ public:
   {}
 
   virtual void onScalar(const char *name, const char *value) =0;
+
+  virtual void beginObject(const char *name);
+  virtual void endObject(const char *name);
 };
 
 class JSONEventsWriter
@@ -39,6 +42,9 @@ private:
   };
 
   std::unordered_map<std::string,binding_pair> m_bindings;
+
+  int m_depth=0;
+  std::string m_accName;
 public:
   JSONEventsWriter()
   {}
@@ -73,6 +79,27 @@ public:
       acc >> *(uint32_t*)binding.second.dst;
     }else{
       throw std::runtime_error("Unknown binding type.");
+    }
+  }
+
+  void beginObject(const char *name)
+  {
+    if(m_depth==0){
+      m_accName=name;
+    }else{
+      m_accName=m_accName+"."+name;
+    }
+    m_depth++;
+  }
+
+  void endObject(const char *name)
+  {
+    assert(m_depth>0);
+    m_depth--;
+    if(m_depth==0){
+      m_accName.clear();
+    }else{
+      m_accName=m_accName.substr(0, m_accName.size()-strlen(name)-1);
     }
   }
 };

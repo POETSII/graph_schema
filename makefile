@@ -27,6 +27,11 @@ $(JING) : external/jing-20081028.zip
 	(cd external && unzip -o jing-20081028.zip)
 	touch $@
 
+rapidjson : external/rapidjson.zip
+	(cd external && unzip -o rapidjson)
+
+CPPFLAGS += -I external/rapidjson-master/include
+
 graph_library : $(wildcard tools/graph/*.py)
 
 derived/%.rng derived/%.xsd : master/%.rnc $(TRANG)
@@ -59,6 +64,10 @@ output/%.svg output/%.dot : test/%.xml tools/render_graph_as_dot.py graph_librar
 output/%.graph.cpp : test/%.xml graph_library
 	mkdir -p $(dir output/$*)
 	$(PYTHON) tools/render_graph_as_cpp.py < test/$*.xml > output/$*.graph.cpp
+
+output/%.graph.cpp : apps/%.xml graph_library
+	mkdir -p $(dir output/$*)
+	$(PYTHON) tools/render_graph_as_cpp.py < apps/$*.xml > output/$*.graph.cpp
 
 output/%.graph.so : output/%.graph.cpp
 	g++ $(CPPFLAGS) $(SO_CPPFLAGS) $< -o $@ $(LDFLAGS)

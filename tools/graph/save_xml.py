@@ -154,6 +154,12 @@ def save_graph_type(graph):
 
     save_typed_struct_spec(gn, "p:Properties", graph.properties)
 
+    if graph.shared_code:
+        for code in graph.shared_code:
+            h=etree.Element(toNS("p:SharedCode"))
+            h.text=etree.CDATA(code)
+            gn.append(h)
+
     etn = etree.Element(toNS("p:EdgeTypes"))
     gn.append(etn)
     for et in graph.edge_types.values():

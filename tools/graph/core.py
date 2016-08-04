@@ -12,7 +12,7 @@ class ScalarTypedDataSpec(TypedDataSpec):
         if self.type=="int32_t":
             res=int(value)
             assert(-2**31 <= res < 2**31)
-        if self.type=="uint32_t":
+        elif self.type=="uint32_t":
             res=int(value)
             assert(0 <= res < 2**32)
         elif self.type=="float":
@@ -20,7 +20,7 @@ class ScalarTypedDataSpec(TypedDataSpec):
         elif self.type=="bool":
             res=bool(value)
         else:
-            assert False, "Unknown data type."
+            assert False, "Unknown data type {}.".format(self.type)
         return res
     
     def __init__(self,name,type,value=None):
@@ -91,6 +91,35 @@ class TupleTypedDataSpec(TypedDataSpec):
             return False
 
         return True
+
+
+class ArrayTypedDataSpec(TypedDataSpec):
+    def __init__(self,name,length,type):
+        TypedDataSpec.__init__(self,name)
+        self.type=type
+        self.length=length
+
+    def __str__(self):
+        
+        return "Array:{}[{}*{}]\n".format(self.name,self.types,self.length)
+
+    def is_refinement_compatible(self,inst):
+        if inst is None:
+            return True;
+        
+        if not isinstance(inst,list):
+            return False
+
+        if len(list)!=self.length:
+            return False
+
+        for v in inst:
+            if not ee.is_refinement_compatible(self.type,v):
+                return False
+
+        return True
+
+
 
 def is_refinement_compatible(proto,inst):
     if proto is None:
@@ -166,12 +195,13 @@ class DeviceType(object):
 
 
 class GraphType(object):
-    def __init__(self,id,native_dimension,properties):
+    def __init__(self,id,native_dimension,properties,shared_code):
         self.id=id
         self.native_dimension=native_dimension
         if properties:
             assert isinstance(properties,TupleTypedDataSpec), "Expected TupleTypedDataSpec, got={}".format(properties)
         self.properties=properties
+        self.shared_code=shared_code
         self.device_types={}
         self.edge_types={}
 

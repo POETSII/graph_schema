@@ -14,6 +14,9 @@ def render_typed_data_as_decl(proto,dst,indent=""):
         for elt in proto.elements_by_index:
             render_typed_data_as_decl(elt,dst,indent+"  ")
         dst.write("{}}} {};\n".format(indent,proto.name));
+    elif isinstance(proto,ArrayTypedDataSpec):
+        assert isinstance(proto.type,ScalarTypedDataSpec), "Haven't implemented arrays of non-scalars yet."
+        dst.write("{}{} {}[{}];\n".format(indent, proto.type.type, proto.name, proto.length));
     else:
         raise RuntimeError("Unknown data type {}.".format(type(proto)))
 
@@ -31,6 +34,14 @@ def render_typed_data_init(proto,dst,prefix):
     elif isinstance(proto,TupleTypedDataSpec):
         for elt in proto.elements_by_index:
             render_typed_data_init(elt,dst,prefix+proto.name+".")
+    elif isinstance(proto,ArrayTypedDataSpec):
+        assert isinstance(proto.type,ScalarTypedDataSpec), "Haven't implemented arrays of non-scalars yet."
+        for i in range(0,proto.length):
+            if proto.type.value is not None:
+                dst.write('{}{}[{}] = {};\n'.format(prefix,proto.name,i,proto.type.value))
+            else:
+                dst.write('{}{}[{}] = 0;\n'.format(prefix,proto.name,i))
+            
     else:
         raise RuntimeError("Unknown data type {}.".format(type(proto)))
 
@@ -73,6 +84,65 @@ def render_typed_data_load_v3(proto,dst,elt,prefix,indent):
         dst.write('{}  writer.bind("{}",{}{});\n'.format(indent, elt.name, prefix, elt.name))
     dst.write('{}  JSONParser(text.c_str(),writer);\n'.format(indent))
     dst.write('{}}}'.format(indent))
+
+def render_typed_data_load_v4_tuple(proto,dst,prefix,indent):
+    assert isinstance(proto,TupleTypedDataSpec)
+    for elt in proto.elements_by_index:
+        dst.write('{}if(document.HasMember("{}")){{\n'.format(indent,elt.name))
+        dst.write('{}  const rapidjson::Value &n=document["{}"];\n'.format(indent,elt.name))
+        if isinstance(elt,ScalarTypedDataSpec):
+            if elt.type=="int32_t":
+                dst.write('{}  assert(n.IsInt());\n'.format(indent))
+                dst.write('{}  {}{}=n.GetInt();\n'.format(indent, prefix, elt.name))
+            elif elt.type=="uint32_t":
+                dst.write('{}  assert(n.IsUint());\n'.format(indent))
+                dst.write('{}  {}{}=n.GetUint();\n'.format(indent, prefix, elt.name))
+            elif elt.type=="bool":
+                dst.write('{}  assert(n.IsBool());\n'.format(indent))
+                dst.write('{}  {}{}=n.GetBool();\n'.format(indent, prefix, elt.name))
+            elif elt.type=="float":
+                dst.write('{}  assert(n.IsDouble());\n'.format(indent))
+                dst.write('{}  {}{}=n.GetDouble();\n'.format(indent, prefix, elt.name))
+            else:
+                raise RuntimeError("Unknown scalar data type.")
+        elif isinstance(elt,TupleTypedDataSpec):
+            render_typed_data_load_v4_tuple(elt,dst,prefix+elt.name+".",indent+"    ")
+        elif isinstance(elt,ArrayTypedDataSpec):
+            assert isinstance(elt.type,ScalarTypedDataSpec), "Haven't implemented non-scalar arrays yet."
+            dst.write('{}  assert(n.IsArray());\n')
+            for i in range(0,elt.length):
+                if elt.type.type=="int32_t":
+                    dst.write('{}  assert(n[{}].IsInt());\n'.format(indent,i))
+                    dst.write('{}  {}{}[{}]=n[{}].GetInt();\n'.format(indent, prefix, elt.name,i,i))
+                elif elt.type.type=="uint32_t":
+                    dst.write('{}  assert(n[{}].IsUint());\n'.format(indent,i))
+                    dst.write('{}  {}{}[{}]=n[{}].GetUint();\n'.format(indent, prefix,elt.name,i,i))
+                elif elt.type.type=="bool":
+                    dst.write('{}  assert(n[{}].IsBool());\n'.format(indent,i))
+                    dst.write('{}  {}{}[{}]=n[{}].GetBool();\n'.format(indent, prefix, elt.name,i,i))
+                elif elt.type.type=="float":
+                    dst.write('{}  assert(n[{}].IsDouble());\n'.format(indent,i))
+                    dst.write('{}  {}{}[{}]=n[{}].GetDouble();\n'.format(indent, prefix,elt.name,i,i))
+                else:
+                    raise RuntimeError("Unknown scalar data type.")
+        else:
+            raise RuntimeError("Unknown data type.")
+        dst.write('{}  }}\n'.format(indent))
+    
+    
+def render_typed_data_load_v4(proto,dst,elt,prefix,indent):
+    if proto is None:
+        pass
+    if not isinstance(proto,TupleTypedDataSpec):
+        raise RuntimeError("This must be passed a tuple.")
+    dst.write('{}{{'.format(indent))
+    dst.write('{}  std::string text="{{"+{}->get_child_text()->get_content()+"}}";\n'.format(indent,elt))
+    dst.write('{}  rapidjson::Document document;\n'.format(indent))
+    dst.write('{}  document.Parse(text.c_str());\n'.format(indent))
+    dst.write('{}  assert(document.IsObject());\n'.format(indent))
+    render_typed_data_load_v4_tuple(proto,dst,prefix,indent)
+    dst.write('{}}}'.format(indent))    
+    
     
 def render_typed_data_as_spec(proto,name,elt_name,dst):
     dst.write("struct {} : typed_data_t{{\n".format(name))
@@ -108,7 +178,7 @@ def render_typed_data_as_spec(proto,name,elt_name,dst):
             for elt in proto.elements_by_index:
                 render_typed_data_load(elt, dst, "elt", "res->",  "      ")
         else:
-            render_typed_data_load_v3(proto, dst, "elt", "res->", "      ")
+            render_typed_data_load_v4(proto, dst, "elt", "res->", "      ")
         dst.write("    }\n")
         dst.write("    return res;\n")
     dst.write("  }\n")
@@ -150,6 +220,8 @@ def render_input_port_as_cpp(ip,dst):
     dst.write('    auto edgeState=cast_typed_data<{}_state_t>(gEdgeState);\n'.format( et.id ))
     dst.write('    auto message=cast_typed_properties<{}_message_t>(gMessage);\n'.format(ip.edge_type.id))
     dst.write('    HandlerLogImpl handler_log(orchestrator);\n')
+    for i in range(0,len(dt.outputs_by_index)):
+        dst.write('    bool &requestSend_{}=requestSend[{}];\n'.format(dt.outputs_by_index[i].name, i))
 
     dst.write('    // Begin custom handler\n')
     for line in ip.receive_handler.splitlines():
@@ -187,6 +259,8 @@ def render_output_port_as_cpp(op,dst):
     dst.write('    auto deviceProperties=cast_typed_properties<{}_properties_t>(gDeviceProperties);\n'.format( dt.id ))
     dst.write('    auto deviceState=cast_typed_data<{}_state_t>(gDeviceState);\n'.format( dt.id ))
     dst.write('    auto message=cast_typed_data<{}_message_t>(gMessage);\n'.format(op.edge_type.id))
+    for i in range(0,len(dt.outputs_by_index)):
+        dst.write('    bool &requestSend_{}=requestSend[{}];\n'.format(dt.outputs_by_index[i].name, i))
     dst.write('    HandlerLogImpl handler_log(orchestrator);\n')
 
     dst.write('    // Begin custom handler\n')
@@ -201,11 +275,12 @@ def render_output_port_as_cpp(op,dst):
     dst.write("  return singleton;\n")
     dst.write("}\n")
 
-def render_edge_type_as_cpp(et,dst):
+def render_edge_type_as_cpp_fwd(et,dst):
     render_typed_data_as_spec(et.properties, "{}_properties_t".format(et.id), "pp:Properties", dst)
     render_typed_data_as_spec(et.state, "{}_state_t".format(et.id), "pp:State", dst)
     render_typed_data_as_spec(et.message, "{}_message_t".format(et.id), "pp:Message", dst)
 
+def render_edge_type_as_cpp(et,dst):
     dst.write("class {}_Spec : public EdgeTypeImpl {{\n".format(et.id))
     dst.write("public:\n")
     dst.write('  {}_Spec() : EdgeTypeImpl("{}", {}_properties_t_Spec_get(), {}_state_t_Spec_get(), {}_message_t_Spec_get()) {{}}\n'.format(et.id, et.id, et.id, et.id, et.id))
@@ -216,10 +291,11 @@ def render_edge_type_as_cpp(et,dst):
     dst.write("}\n")
     registrationStatements.append('registry->registerEdgeType({}_Spec_get());'.format(et.id,et.id))
     
-def render_device_type_as_cpp(dt,dst):
+def render_device_type_as_cpp_fwd(dt,dst):
     render_typed_data_as_spec(dt.properties, "{}_properties_t".format(dt.id), "pp:Properties", dst)
     render_typed_data_as_spec(dt.state, "{}_state_t".format(dt.id), "pp:State", dst)
 
+def render_device_type_as_cpp(dt,dst):
     dst.write("DeviceTypePtr {}_Spec_get();\n".format(dt.id))
 
     for ip in dt.inputs.values():
@@ -260,12 +336,28 @@ def render_device_type_as_cpp(dt,dst):
 
 def render_graph_as_cpp(graph,dst):
     dst.write('#include "graph_impl.hpp"\n')
+    dst.write('#include "json.hpp"\n')
+    dst.write('#include "rapidjson/document.h"\n')
 
     gt=graph
 
  
     render_typed_data_as_spec(gt.properties, "{}_properties_t".format(gt.id),"pp:Properties",dst)
 
+    dst.write("/////////////////////////////////\n")
+    dst.write("// FWD\n")
+    for et in gt.edge_types.values():
+        render_edge_type_as_cpp_fwd(et,dst)
+
+    for dt in gt.device_types.values():
+        render_device_type_as_cpp_fwd(dt, dst)
+
+    if gt.shared_code:
+        for code in gt.shared_code:
+            dst.write(code)    
+
+    dst.write("/////////////////////////////////\n")
+    dst.write("// DEF\n")
     for et in gt.edge_types.values():
         render_edge_type_as_cpp(et,dst)
 
