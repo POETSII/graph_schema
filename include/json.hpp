@@ -28,7 +28,8 @@ private:
     {
       bind_float,
       bind_bool,
-      bind_int32
+      bind_int32,
+      bind_uint32
     };
   
   struct binding_pair
@@ -51,6 +52,9 @@ public:
   void bind(const char *name, int32_t &val)
   { m_bindings.insert(std::make_pair(std::string(name),binding_pair{bind_int32,&val})); }
 
+  void bind(const char *name, uint32_t &val)
+  { m_bindings.insert(std::make_pair(std::string(name),binding_pair{bind_uint32,&val})); }
+
   void onScalar(const char *name, const char *value)
   {
     auto it=m_bindings.find(name);
@@ -65,6 +69,8 @@ public:
       acc >> *(bool*)binding.second.dst;
     }else if(binding.second.type==bind_int32){
       acc >> *(int32_t*)binding.second.dst;
+    }else if(binding.second.type==bind_uint32){
+      acc >> *(uint32_t*)binding.second.dst;
     }else{
       throw std::runtime_error("Unknown binding type.");
     }

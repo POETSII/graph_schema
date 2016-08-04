@@ -11,7 +11,10 @@ class ScalarTypedDataSpec(TypedDataSpec):
     def _check_value(self,value):
         if self.type=="int32_t":
             res=int(value)
-            assert(-2**32 <= res < 2**32)
+            assert(-2**31 <= res < 2**31)
+        if self.type=="uint32_t":
+            res=int(value)
+            assert(0 <= res < 2**32)
         elif self.type=="float":
             res=float(value)
         elif self.type=="bool":

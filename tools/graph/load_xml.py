@@ -46,29 +46,6 @@ def get_child_text(node,name):
         raise XMLSyntaxError("No child text node called {}".format(name),node)
     return n.text
 
-def load_typed_data(dt):
-    name=get_attrib(dt,"name")
-    
-    tag=deNS(dt.tag)
-    if tag=="p:Tuple":
-        elts=[]
-        for eltNode in dt.findall("p:*",ns): # Anything from this namespace must be a member
-            elt=load_typed_data(eltNode)
-            elts.append(elt)
-        return TupleData(name,elts)
-
-    # Must be a scalar
-    value=get_attrib_optional(dt,"value")
-    
-    if tag=="p:Int32":
-        return Int32Data(name,value)
-    elif tag=="p:Float32":
-        return Float32Data(name,value)
-    elif tag=="p:Bool":
-        return BoolData(name,value)
-    else:
-        raise XMLSyntaxError("Unknown data type.",dt)
-
 
 def load_typed_data_spec(dt):
     name=get_attrib(dt,"name")
