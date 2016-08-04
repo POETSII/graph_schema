@@ -6,7 +6,8 @@ grammar {
 
   start = element Graph{
     ( graphType | graphTypeReference )*,
-    graphInstance*
+    graphInstance*,
+    graphSnapshot*
   }
 
   graphType =
@@ -20,7 +21,7 @@ grammar {
 
       ## Global properties that are shared with all nodes at run-time. read-only.
       element Properties {
-        typedData *
+        typedDataSpec *
       } ? ,
 
       ## Establishes the different types of edges that could exist in the graph,
@@ -54,7 +55,7 @@ grammar {
       attribute graphTypeId { string },
 
       element Properties {
-      	typedData *
+      	typedDataValue
       } ?,
 
       element DeviceInstances {
@@ -74,14 +75,14 @@ grammar {
       ## The type of messages that are sent over this edge. This may not exist
       ## (e.g. if it is only a pulse)
       element Message {
-        typedData *
+        typedDataSpec *
       } ?,
 
       ## Indicates read-only properties associated with each edge. This will be
       ## delivered along-side messages which arrive along that edge
       ## An edge may have no properties, in which case this element will not exist
       element Properties {
-        typedData *
+        typedDataSpec *
       } ?,
 
       ## Indicates mutable properties associated with an edge.
@@ -89,7 +90,7 @@ grammar {
       ##        When is the state modifiable, is it _only_ when a message arrives over
       ##        that edge? Should there be state associated with outgoing edges?
       element State {
-        typedData
+        typedDataSpec *
       } ?
     }
 
@@ -115,12 +116,12 @@ grammar {
       ## Read-only properties that could be specified on the device. This element
       ## may not appear if the device has no properties. There may be default
       ## values specified for some or all components of the properties.
-      element Properties { typedData * } ?,
+      element Properties { typedDataSpec } ?,
 
       ## Mutable properties attached to the device. In principle this element might
       ## not appear, if the device has no state (I suppose all the mutable state could
       ## be in the edge properties).
-      element State { typedData * } ?,
+      element State { typedDataSpec * } ?,
 
       ## Zero or more input ports that appear on the device type.
       element InputPort {
@@ -187,12 +188,12 @@ grammar {
     }
 
   deviceInstance =
-    element DeviceInstance {
+    element DevI {
       ## A unique string
       attribute id { string },
 
       ## Links to a previously declared device type
-      attribute deviceTypeId { string },
+      attribute type { string },
 
       ## If the device has a natural location (e.g. in the problem space), then this gives it.
       ## The format is decimal values seperated by commas. The number of values should follow
@@ -202,82 +203,102 @@ grammar {
       ## Read-only properties associated with this device instance.
       ## This element must not exist if the device type has no properties
       ## This element may not exist if the property has a (complete) default value
-      element Properties { typedData } ?
+      element P { typedDataValue } ?
     }
 
   edgeInstance =
     ## The edgeTypeId can be inferred from the types of the ports,
     ## and it is worth explicitly checking they have the same port on
     ## load, so it is not included here.
-    element EdgeInstance {
-      attribute dstDeviceId   { xsd:string },
-      attribute dstPortName   { xsd:string },
-      attribute srcDeviceId   { xsd:string },
-      attribute srcPortName   { xsd:string },
+    element EdgeI {
+      ((
+        attribute dstDeviceId   { xsd:string },
+        attribute dstPortName   { xsd:string },
+        attribute srcDeviceId   { xsd:string },
+        attribute srcPortName   { xsd:string }
+      )
+      |
+      (
+	## A string of the form "dstDeviceId:dstPortName-srcDeviceId:srcPortName"
+      	attribute path { xsd:string }
+      )),
 
       ## Read-only properties associated with this edge instance
       ## This element can only exist if the edge has properties.
       ## This edge may not exist if all properties have a default
-      element Properties { typedData } ?,
+      element P { typedDataValue } ?,
 
       ## Mutable properties associated with this edge instance.
       ## This element can only exist if the edge has state
       ## This edge may not exist if all parts of the state have a default.
-      element State { typedData } ?
+      element S { typedDataValue } ?
     }
 
-  typedData =
-  ## This represents either a prototype for a typed piece of data, or
-  ## as an instance of the data itself.
-  ## As a prototype, each typedData spec also has a 64-bit typeHash
-  ## for sanity checking purposes (e.g. checking that a dynamic
-  ## configuration matches a compiled static provider).
-  ##
-  ## Hashes are done using FNV1a in 64-bit mode.
-  ##
-  ## Positive integers are hashed from least-significant byte
-  ## to most significant, until there are no more non-zero bytes.
-  ## Negative integers are hashed as 0xCC followed by the hash of
-  ## the value+1 (to avoid twos-complement overflow problems):
-  ##
-  ## def hash_int(hash, x):
-  ##   if x<0: return hash_int(hash_byte(0xCC), -(x+1))
-  ##   while True:
-  ##      hash=hash_byte(hash,x&0xFF)
-  ##      x=x>>8
-  ##      if x==0: break
-  ##   return hash
-  ##
-  ## Strings are hashed as their ascii values from first to last character.
-  ##
-  ## Hashes are combined by hashing each octet of the the LHS into the RHS,
-  ## from LSO to MSO
+  ## A typed data specification consists of one or more elements
+  typedDataSpec = typedDataSpecElement +
+
+  typedDataSpecElement = 
+  ## This represents the prototype for a typed piece of data, along with
+  ## the default values
   (
-    element Int32 {
-      ## typeHash is name -> "Int32"
+    element Scalar {
+      attribute type { "int32_t" | "float" | "bool" },
       attribute name { string },
-      attribute value { xsd:integer } ?
-    }
-    |
-    element Float32 {
-      ## typeHash is name -> "Float32"
-      attribute name { string },
-      attribute value { xsd:float } ?
-    }
-    |
-    element Bool {
-      ## typeHash is name -> "Bool"
-      attribute name { string },
-      attribute value { text } ?
+      attribute value { string } ?
     }
     |
     element Tuple {
-      ## typeHash is name -> "Tuple" -> typeHash(elt1) -> typeHash(elt2) -> ...
         attribute name { text },
-        typedData *
+        typedDataSpecElement +
     }
   )
 
+  ## Typed data is encoded in plain text, rather than using XML in order
+  ## to keep ADB happy.
+  ## The encoding is simply "name":value, with name-value pairs seperated by commas.
+  ##
+  ## Tuples are encoded as "name":{ "sub-name":value, ... }
+  ## Arrays are encoded as "name":[value,value,...]
+  ##
+  ## Any relationship to JSON is entirely intentional. I realise there is an irony
+  ## in using XML on the outside and JSON on the inside - personally I (DBT) prefer the
+  ## self-checking structure of XML at the large scale.
+  typedDataValue = 
+    text
+  
+  graphSnapshot = element GraphSnapshot {
+    attribute graphId  { string },
 
+    ## The id of the overall run that the snapshot comes from
+    attribute sequenceId  { string },
+
+    ## The integer sequence number within the run
+    attribute sequenceNumber  { xsd:integer },
+
+    ## The "world-time" of the simulator
+    attribute worldTime { xsd:float },
+
+    element DeviceSnapshot {
+    	    attribute id  { string },
+
+	    element S { typedDataValue } ?
+    },
+
+    element EdgeSnapshot {
+    	    # id of the form:  "dstDeviceId:dstPortName-srcDeviceId:srcPortName"
+    	    attribute id  { string },
+
+	    # How many times has this edge fired?
+	    attribute firedCount { xsd:integer } ? , 
+
+	    element S { typedDataValue } ? ,
+
+	    ## Any messages that are in flight
+	    element InFlight {
+	    	    element Message { typedDataValue } *
+	    } ?
+    }
+
+  }
 
 }

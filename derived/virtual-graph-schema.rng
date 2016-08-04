@@ -11,6 +11,9 @@
       <zeroOrMore>
         <ref name="graphInstance"/>
       </zeroOrMore>
+      <zeroOrMore>
+        <ref name="graphSnapshot"/>
+      </zeroOrMore>
     </element>
   </start>
   <define name="graphType">
@@ -30,7 +33,7 @@ For example in a 2D heat equation this would be 2.</a:documentation>
         <element name="Properties">
           <a:documentation>Global properties that are shared with all nodes at run-time. read-only.</a:documentation>
           <zeroOrMore>
-            <ref name="typedData"/>
+            <ref name="typedDataSpec"/>
           </zeroOrMore>
         </element>
       </optional>
@@ -76,9 +79,7 @@ connect it up</a:documentation>
       </attribute>
       <optional>
         <element name="Properties">
-          <zeroOrMore>
-            <ref name="typedData"/>
-          </zeroOrMore>
+          <ref name="typedDataValue"/>
         </element>
       </optional>
       <element name="DeviceInstances">
@@ -105,7 +106,7 @@ connect it up</a:documentation>
           <a:documentation>The type of messages that are sent over this edge. This may not exist
 (e.g. if it is only a pulse)</a:documentation>
           <zeroOrMore>
-            <ref name="typedData"/>
+            <ref name="typedDataSpec"/>
           </zeroOrMore>
         </element>
       </optional>
@@ -115,7 +116,7 @@ connect it up</a:documentation>
 delivered along-side messages which arrive along that edge
 An edge may have no properties, in which case this element will not exist</a:documentation>
           <zeroOrMore>
-            <ref name="typedData"/>
+            <ref name="typedDataSpec"/>
           </zeroOrMore>
         </element>
       </optional>
@@ -125,7 +126,9 @@ An edge may have no properties, in which case this element will not exist</a:doc
 TODO : This has unclear semantics (which is why I (DBT) was hesitant about it).
        When is the state modifiable, is it _only_ when a message arrives over
        that edge? Should there be state associated with outgoing edges?</a:documentation>
-          <ref name="typedData"/>
+          <zeroOrMore>
+            <ref name="typedDataSpec"/>
+          </zeroOrMore>
         </element>
       </optional>
     </element>
@@ -155,9 +158,7 @@ achieved on a particular port.</a:documentation>
           <a:documentation>Read-only properties that could be specified on the device. This element
 may not appear if the device has no properties. There may be default
 values specified for some or all components of the properties.</a:documentation>
-          <zeroOrMore>
-            <ref name="typedData"/>
-          </zeroOrMore>
+          <ref name="typedDataSpec"/>
         </element>
       </optional>
       <optional>
@@ -166,7 +167,7 @@ values specified for some or all components of the properties.</a:documentation>
 not appear, if the device has no state (I suppose all the mutable state could
 be in the edge properties).</a:documentation>
           <zeroOrMore>
-            <ref name="typedData"/>
+            <ref name="typedDataSpec"/>
           </zeroOrMore>
         </element>
       </optional>
@@ -244,12 +245,12 @@ executes, but the handler can set it high again if it wants.</a:documentation>
     </element>
   </define>
   <define name="deviceInstance">
-    <element name="DeviceInstance">
+    <element name="DevI">
       <attribute name="id">
         <a:documentation>A unique string</a:documentation>
         <data type="string" datatypeLibrary=""/>
       </attribute>
-      <attribute name="deviceTypeId">
+      <attribute name="type">
         <a:documentation>Links to a previously declared device type</a:documentation>
         <data type="string" datatypeLibrary=""/>
       </attribute>
@@ -262,116 +263,160 @@ the native dimension of the graph type.</a:documentation>
         </attribute>
       </optional>
       <optional>
-        <element name="Properties">
+        <element name="P">
           <a:documentation>Read-only properties associated with this device instance.
 This element must not exist if the device type has no properties
 This element may not exist if the property has a (complete) default value</a:documentation>
-          <ref name="typedData"/>
+          <ref name="typedDataValue"/>
         </element>
       </optional>
     </element>
   </define>
   <define name="edgeInstance">
-    <element name="EdgeInstance">
+    <element name="EdgeI">
       <a:documentation>The edgeTypeId can be inferred from the types of the ports,
 and it is worth explicitly checking they have the same port on
 load, so it is not included here.</a:documentation>
-      <attribute name="dstDeviceId">
-        <data type="string"/>
-      </attribute>
-      <attribute name="dstPortName">
-        <data type="string"/>
-      </attribute>
-      <attribute name="srcDeviceId">
-        <data type="string"/>
-      </attribute>
-      <attribute name="srcPortName">
-        <data type="string"/>
-      </attribute>
+      <choice>
+        <group>
+          <attribute name="dstDeviceId">
+            <data type="string"/>
+          </attribute>
+          <attribute name="dstPortName">
+            <data type="string"/>
+          </attribute>
+          <attribute name="srcDeviceId">
+            <data type="string"/>
+          </attribute>
+          <attribute name="srcPortName">
+            <data type="string"/>
+          </attribute>
+        </group>
+        <attribute name="path">
+          <a:documentation>A string of the form "dstDeviceId:dstPortName-srcDeviceId:srcPortName"</a:documentation>
+          <data type="string"/>
+        </attribute>
+      </choice>
       <optional>
-        <element name="Properties">
+        <element name="P">
           <a:documentation>Read-only properties associated with this edge instance
 This element can only exist if the edge has properties.
 This edge may not exist if all properties have a default</a:documentation>
-          <ref name="typedData"/>
+          <ref name="typedDataValue"/>
         </element>
       </optional>
       <optional>
-        <element name="State">
+        <element name="S">
           <a:documentation>Mutable properties associated with this edge instance.
 This element can only exist if the edge has state
 This edge may not exist if all parts of the state have a default.</a:documentation>
-          <ref name="typedData"/>
+          <ref name="typedDataValue"/>
         </element>
       </optional>
     </element>
   </define>
-  <define name="typedData">
+  <define name="typedDataSpec">
+    <a:documentation>A typed data specification consists of one or more elements</a:documentation>
+    <oneOrMore>
+      <ref name="typedDataSpecElement"/>
+    </oneOrMore>
+  </define>
+  <define name="typedDataSpecElement">
     <choice>
-      <a:documentation>This represents either a prototype for a typed piece of data, or
-as an instance of the data itself.
-As a prototype, each typedData spec also has a 64-bit typeHash
-for sanity checking purposes (e.g. checking that a dynamic
-configuration matches a compiled static provider).
-
-Hashes are done using FNV1a in 64-bit mode.
-
-Positive integers are hashed from least-significant byte
-to most significant, until there are no more non-zero bytes.
-Negative integers are hashed as 0xCC followed by the hash of
-the value+1 (to avoid twos-complement overflow problems):
-
-def hash_int(hash, x):
-  if x&lt;0: return hash_int(hash_byte(0xCC), -(x+1))
-  while True:
-     hash=hash_byte(hash,x&amp;0xFF)
-     x=x&gt;&gt;8
-     if x==0: break
-  return hash
-
-Strings are hashed as their ascii values from first to last character.
-
-Hashes are combined by hashing each octet of the the LHS into the RHS,
-from LSO to MSO</a:documentation>
-      <element name="Int32">
+      <a:documentation>This represents the prototype for a typed piece of data, along with
+the default values</a:documentation>
+      <element name="Scalar">
+        <attribute name="type">
+          <choice>
+            <value>int32_t</value>
+            <value>float</value>
+            <value>bool</value>
+          </choice>
+        </attribute>
         <attribute name="name">
-          <a:documentation>typeHash is name -&gt; "Int32"</a:documentation>
           <data type="string" datatypeLibrary=""/>
         </attribute>
         <optional>
           <attribute name="value">
-            <data type="integer"/>
+            <data type="string" datatypeLibrary=""/>
           </attribute>
-        </optional>
-      </element>
-      <element name="Float32">
-        <attribute name="name">
-          <a:documentation>typeHash is name -&gt; "Float32"</a:documentation>
-          <data type="string" datatypeLibrary=""/>
-        </attribute>
-        <optional>
-          <attribute name="value">
-            <data type="float"/>
-          </attribute>
-        </optional>
-      </element>
-      <element name="Bool">
-        <attribute name="name">
-          <a:documentation>typeHash is name -&gt; "Bool"</a:documentation>
-          <data type="string" datatypeLibrary=""/>
-        </attribute>
-        <optional>
-          <attribute name="value"/>
         </optional>
       </element>
       <element name="Tuple">
-        <attribute name="name">
-          <a:documentation>typeHash is name -&gt; "Tuple" -&gt; typeHash(elt1) -&gt; typeHash(elt2) -&gt; ...</a:documentation>
-        </attribute>
-        <zeroOrMore>
-          <ref name="typedData"/>
-        </zeroOrMore>
+        <attribute name="name"/>
+        <oneOrMore>
+          <ref name="typedDataSpecElement"/>
+        </oneOrMore>
       </element>
     </choice>
+  </define>
+  <define name="typedDataValue">
+    <a:documentation>Typed data is encoded in plain text, rather than using XML in order
+to keep ADB happy.
+The encoding is simply "name":value, with name-value pairs seperated by commas.
+
+Tuples are encoded as "name":{ "sub-name":value, ... }
+Arrays are encoded as "name":[value,value,...]
+
+Any relationship to JSON is entirely intentional. I realise there is an irony
+in using XML on the outside and JSON on the inside - personally I (DBT) prefer the
+self-checking structure of XML at the large scale.</a:documentation>
+    <text/>
+  </define>
+  <define name="graphSnapshot">
+    <element name="GraphSnapshot">
+      <attribute name="graphId">
+        <data type="string" datatypeLibrary=""/>
+      </attribute>
+      <attribute name="sequenceId">
+        <a:documentation>The id of the overall run that the snapshot comes from</a:documentation>
+        <data type="string" datatypeLibrary=""/>
+      </attribute>
+      <attribute name="sequenceNumber">
+        <a:documentation>The integer sequence number within the run</a:documentation>
+        <data type="integer"/>
+      </attribute>
+      <attribute name="worldTime">
+        <a:documentation>The "world-time" of the simulator</a:documentation>
+        <data type="float"/>
+      </attribute>
+      <element name="DeviceSnapshot">
+        <attribute name="id">
+          <data type="string" datatypeLibrary=""/>
+        </attribute>
+        <optional>
+          <element name="S">
+            <ref name="typedDataValue"/>
+          </element>
+        </optional>
+      </element>
+      <element name="EdgeSnapshot">
+        <!-- id of the form:  "dstDeviceId:dstPortName-srcDeviceId:srcPortName" -->
+        <attribute name="id">
+          <data type="string" datatypeLibrary=""/>
+        </attribute>
+        <optional>
+          <!-- How many times has this edge fired? -->
+          <attribute name="firedCount">
+            <data type="integer"/>
+          </attribute>
+        </optional>
+        <optional>
+          <element name="S">
+            <ref name="typedDataValue"/>
+          </element>
+        </optional>
+        <optional>
+          <element name="InFlight">
+            <a:documentation>Any messages that are in flight</a:documentation>
+            <zeroOrMore>
+              <element name="Message">
+                <ref name="typedDataValue"/>
+              </element>
+            </zeroOrMore>
+          </element>
+        </optional>
+      </element>
+    </element>
   </define>
 </grammar>

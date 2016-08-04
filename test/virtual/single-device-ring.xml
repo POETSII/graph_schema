@@ -2,13 +2,13 @@
 <Graph xmlns="http://TODO.org/POETS/virtual-graph-schema-v0">
   <GraphType id="single_device_ring">
     <Properties>
-      <Int32 name="maxCount" value="10" />
+      <Scalar type="int32_t" name="maxCount" value="10" />
     </Properties>
     
     <EdgeTypes>
       <EdgeType id="et1">
 	<Message>
-	  <Int32 name="value" />
+	  <Scalar type="int32_t" name="value" />
 	</Message>      
       </EdgeType>
     </EdgeTypes>
@@ -16,7 +16,7 @@
     <DeviceTypes>
       <DeviceType id="node">
 	<State>
-	  <Int32 name="counter" value="0" />
+	  <Scalar type="int32_t" name="counter" value="0" />
 	</State>
 	
 	<InputPort name="in" edgeTypeId="et1">
@@ -40,13 +40,13 @@
 
   <GraphInstance id="single_device_ring" graphTypeId="single_device_ring">
     <DeviceInstances>
-      <DeviceInstance id="d1" deviceTypeId="node" />
-      <DeviceInstance id="d2" deviceTypeId="node" />
+      <DevI id="d1" type="node" />
+      <DevI id="d2" type="node" />
     </DeviceInstances>
     
     <EdgeInstances>
-      <EdgeInstance dstDeviceId="d1" dstPortName="in" srcDeviceId="d2" srcPortName="out" />
-      <EdgeInstance dstDeviceId="d2" dstPortName="in" srcDeviceId="d1" srcPortName="out" />    
+      <EdgeI dstDeviceId="d1" dstPortName="in" srcDeviceId="d2" srcPortName="out" />
+      <EdgeI dstDeviceId="d2" dstPortName="in" srcDeviceId="d1" srcPortName="out" />    
     </EdgeInstances>
   </GraphInstance>
 </Graph>

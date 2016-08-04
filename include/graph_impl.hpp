@@ -8,106 +8,160 @@
 #include <cstdint>
 #include <iostream>
 #include <string>
+#include <ctype.h>
 
 #include <dlfcn.h>
 
 #include <sys/types.h>
 #include <dirent.h>
 
-template<class T>
-const char *typed_data_attribute_node_type();
 
-template<>
-const char *typed_data_attribute_node_type<int32_t>()
-{ return "Int32"; }
-
-template<>
-const char *typed_data_attribute_node_type<float>()
-{ return "Float32"; }
-
-template<>
-const char *typed_data_attribute_node_type<bool>()
-{ return "Bool"; }
-
-const uint64_t FNV64_PRIME=1099511628211ull;
-const uint64_t FNV64_OFFSET=14695981039346656037ull;
-
-uint64_t fnv64_hash_byte(uint64_t hash, uint8_t data)
+class JSONEvents
 {
-  // This is FNV-1a : http://www.isthe.com/chongo/tech/comp/fnv/index.html
-  return (hash^data)*FNV64_PRIME;
-}
+public:
+  virtual ~JSONEvents()
+  {}
 
-uint64_t fnv64_hash_uint64(uint64_t hash, uint64_t data)
+  virtual void onScalar(const char *name, const char *value) =0;
+};
+
+class JSONEventsWriter
+  : public JSONEvents
 {
-  for(unsigned i=0;i<8;i++){
-    hash=(hash^(data&0xFF))*FNV64_PRIME;
-    data=data>>8;
-  }
-  return hash;
-}
-
-template<class TNum>
-uint64_t fnv64_hash_int(uint64_t hash, TNum data)
-{
-  // Handle the case where data is zero so that...
-  if(data==0){
-    return hash*FNV64_PRIME;
-  }
-
-  // ...we can use this (otherwise the compiler will whinge for unsigned types)
-  if(data <= 0){
-    return fnv64_hash_num(fnv64_hash_byte(hash, 0xCC), -(data+1));
-  }
+private:
+  enum bind_type
+    {
+      bind_float,
+      bind_bool,
+      bind_int32
+    };
   
-  while(data > 0){
-    hash=fnv64_hash_byte(hash, data&0xFF);
-    data=data>>8;
-  }
-  return hash;
-}
+  struct binding_pair
+  {
+    bind_type type;
+    void *dst;
+  };
 
-uint64_t fnv64_hash_string(uint64_t hash, const char *data)
+  std::unordered_map<std::string,binding_pair> m_bindings;
+public:
+  JSONEventsWriter()
+  {}
+  
+  void bind(const char *name, float &val)
+  { m_bindings.insert(std::make_pair(std::string(name),binding_pair{bind_float,&val})); }
+
+  void bind(const char *name, bool &val)
+  { m_bindings.insert(std::make_pair(std::string(name),binding_pair{bind_bool,&val})); }
+
+  void bind(const char *name, int32_t &val)
+  { m_bindings.insert(std::make_pair(std::string(name),binding_pair{bind_int32,&val})); }
+
+  void onScalar(const char *name, const char *value)
+  {
+    auto it=m_bindings.find(name);
+    if(it==m_bindings.end())
+      throw std::runtime_error(std::string("Unknown element ")+name);
+    auto &binding=*it;
+
+    std::stringstream acc(value);
+    if(binding.second.type==bind_float){
+      acc >> *(float*)binding.second.dst;
+    }else if(binding.second.type==bind_bool){
+      acc >> *(bool*)binding.second.dst;
+    }else if(binding.second.type==bind_int32){
+      acc >> *(int32_t*)binding.second.dst;
+    }else{
+      throw std::runtime_error("Unknown binding type.");
+    }
+  }
+};
+
+std::string JSONParseKey(const char *&str)
 {
-  while(*data){
-    hash=fnv64_hash_byte(hash, (uint8_t)*data);
-    data++;
-  }
-  return hash;
+  fprintf(stderr, "JSONParseKey(%s)\n", str);
+  
+  while(std::isspace(*str))
+    str++;
+  
+  if(*str!='"')
+    throw std::runtime_error("Malformed key");
+  str++;
+
+  const char *keyStart=str;
+
+  while(*str && *str!='"')
+    str++;
+
+  if(!*str)
+    throw std::runtime_error("Malformed key");
+
+  const char *keyEnd=str;
+  str++;
+
+  return std::string(keyStart,keyEnd);
 }
 
-uint64_t fnv64_hash_combine(uint64_t hash, uint64_t data)
+void JSONParsePair(const char *&str, JSONEvents &events)
 {
-  for(unsigned i=0;i<8;i++){
-    hash=fnv64_hash_byte(hash, data&0xFF);
-    data=data>>8;
-  }
-  return hash;
+  std::string key=JSONParseKey(str);
+
+  fprintf(stderr, "JSONParsePair/post(%s)\n", str);
+
+  while(*str && isspace(*str))
+    str++;
+  if(!*str || *str!=':')
+    throw std::runtime_error("Malformed pair");
+  str++;
+
+  while(*str && isspace(*str))
+    str++;
+  if(!*str)
+    throw std::runtime_error("Missing value");
+
+  if(*str=='[')
+    throw std::runtime_error("Arrays not supported.");
+  if(*str=='{')
+    throw std::runtime_error("Sub-tuples not supported.");
+  str++;
+
+  const char *valueStart=str;
+  while(*str && *str!=',' && !isspace(*str))
+    str++;
+  const char *valueEnd=str;
+
+  std::string value(valueStart, valueEnd);
+
+  events.onScalar(key.c_str(), value.c_str());
+
+  fprintf(stderr, "Post\n");
 }
 
-
-
-
-template<class T>
-void load_typed_data_attribute(T &dst, xmlpp::Element *parent, const char *name, const xmlpp::Node::PrefixNsMap &ns=xmlpp::Node::PrefixNsMap())
+void JSONParser(const char *str, JSONEvents &events)
 {
-  auto all=parent->find(std::string("./*[@name='")+name+"']", ns);
-  if(all.size()==0)
-    return;
-  if(all.size()>1)
-    throw std::runtime_error("More than one property.");
-  auto got=(xmlpp::Element*)all[0];
-  if(got->get_name()!=typed_data_attribute_node_type<T>()){
-    std::stringstream tmp;
-    tmp<<"Wrong XML node type for "<<name<<", expected "<<typed_data_attribute_node_type<T>()<<", got "<<got->get_name();
-    throw std::runtime_error(tmp.str());
+  fprintf(stderr, "JSONParser(%s)\n", str);
+  
+  while(1){
+    while(*str && isspace(*str))
+      ++str;
+
+    if(!*str){
+      fprintf(stderr, "Done\n");
+      return;
+    }
+    
+    JSONParsePair(str, events);
+
+    while(*str && isspace(*str))
+      ++str;
+    if(!*str)
+      break;
+    if(*str!=',')
+      throw std::runtime_error("Expected comma");
+    ++str;
   }
-  xmlpp::Attribute *a=got->get_attribute("value");
-  if(!a)
-    return;
-  std::stringstream tmp(a->get_value());
-  tmp>>dst;
 }
+
+
 
 xmlpp::Element *find_single(xmlpp::Element *parent, const std::string &name, const xmlpp::Node::PrefixNsMap &ns=xmlpp::Node::PrefixNsMap())
 {
@@ -136,7 +190,7 @@ std::string get_attribute_required(xmlpp::Element *eParent, const char *name)
   return a->get_value();
 }
 
-std::string get_attribute(xmlpp::Element *eParent, const char *name)
+std::string get_attribute_optional(xmlpp::Element *eParent, const char *name)
 {
   auto a=eParent->get_attribute(name);
   if(a==0)
@@ -408,23 +462,36 @@ class ReceiveOrchestratorServicesImpl
 private:
   unsigned m_logLevel;
   FILE *m_dst;
+  std::string m_prefix;
   const char *m_device;
   const char *m_input;
 public:
   ReceiveOrchestratorServicesImpl(unsigned logLevel, FILE *dst, const char *device, const char *input)
     : m_logLevel(logLevel)
     , m_dst(dst)
+    , m_prefix("Send: ")
     , m_device(device)
     , m_input(input)
   {}
   
   virtual unsigned getLogLevel() const override
   { return m_logLevel; }
+
+  void setPrefix(const char *prefix)
+  {
+    m_prefix=prefix;
+  }
+
+  void setReceiver(const char *device, const char *input)
+  {
+    m_device=device;
+    m_input=input;
+  }
   
   virtual void vlog(unsigned level, const char *msg, va_list args) override
   {
     if(m_logLevel >= level){
-      fprintf(m_dst, "device:%s, input:%s : ", m_device, m_input);
+      fprintf(m_dst, "%sdevice:%s, input:%s : ", m_prefix.c_str(), m_device, m_input);
       vfprintf(m_dst, msg, args);
       fprintf(m_dst, "\n");
     }
@@ -437,14 +504,28 @@ class SendOrchestratorServicesImpl
 private:
   unsigned m_logLevel;
   FILE *m_dst;
+  std::string m_prefix;
   const char *m_device;
   const char *m_output;
 public:
   SendOrchestratorServicesImpl(unsigned logLevel, FILE *dst, const char *device, const char *output)
     : m_logLevel(logLevel)
     , m_dst(dst)
+    , m_prefix("Send: ")
+    , m_device(device)
     , m_output(output)
   {}
+
+  void setPrefix(const std::string &prefix)
+  {
+    m_prefix=m_prefix;
+  }
+
+  void setSender(const char *device, const char *output)
+  {
+    m_device=device;
+    m_output=output;
+  }
   
   virtual unsigned getLogLevel() const override
   { return m_logLevel; }
@@ -452,7 +533,7 @@ public:
   virtual void vlog(unsigned level, const char *msg, va_list args) override
   {
     if(m_logLevel >= level){
-      fprintf(m_dst, "device:%s, output:%s : ", m_device, m_output);
+      fprintf(m_dst, "%sdevice:%s, output:%s : ", m_prefix.c_str(), m_device, m_output);
       vfprintf(m_dst, msg, args);
       fprintf(m_dst, "\n");
     }
@@ -530,7 +611,7 @@ public:
       throw std::runtime_error("Couldn't load provider '"+path+"'");
 
     // Mangled name of the export. TODO : A bit fragile.
-    void *entry=dlsym(lib, "_Z18registerGraphTypesP8Registry");
+    void *entry=dlsym(lib, "registerGraphTypes");
     if(entry==0)
       throw std::runtime_error("Couldn't find registerGraphTypes entry point.");
 
@@ -547,7 +628,17 @@ public:
   }
   
   virtual GraphTypePtr lookupGraphType(const std::string &id) const override
-  { return m_graphs.at(id); }
+  {
+    auto it=m_graphs.find(id);
+    if(it==m_graphs.end()){
+      fprintf(stderr, "Couldn't find provide for '%s'", id.c_str());
+      for(auto i : m_graphs){
+	std::cerr<<"  "<<i.first<<" : "<<i.second<<"\n";
+      }
+      exit(1);
+    }
+    return it->second;
+  }
   
   virtual void registerEdgeType(EdgeTypePtr edge) override 
   {  m_edges.insert(std::make_pair(edge->getId(), edge)); }
@@ -562,6 +653,20 @@ public:
   { return m_devices.at(id); }
 };
 
+void split_path(const std::string &src, std::string &dstDevice, std::string &dstPort, std::string &srcDevice, std::string &srcPort)
+{
+  int colon1=src.find(':');
+  int arrow=src.find('-',colon1+1);
+  int colon2=src.find(':',arrow+1);
+
+  if(colon1==-1 || arrow==-1 || colon2==-1)
+    throw std::runtime_error("malformed path");
+
+  dstDevice=src.substr(0,colon1);
+  dstPort=src.substr(colon1+1,arrow-colon1-1);
+  srcDevice=src.substr(arrow+1,colon2-arrow-1);
+  srcPort=src.substr(colon2+1);
+}
 
 
 void loadGraph(Registry *registry, xmlpp::Element *parent, GraphLoadEvents *events)
@@ -604,25 +709,28 @@ void loadGraph(Registry *registry, xmlpp::Element *parent, GraphLoadEvents *even
   if(!eDeviceInstances)
     throw std::runtime_error("No DeviceInstances element");
   
-  for(auto *nDevice : eDeviceInstances->find("./g:DeviceInstance", ns)){
+  for(auto *nDevice : eDeviceInstances->find("./g:DevI", ns)){
     auto *eDevice=(xmlpp::Element *)nDevice;
 
     std::string id=get_attribute_required(eDevice, "id");
-    std::string deviceTypeId=get_attribute_required(eDevice, "deviceTypeId");
+    std::string deviceTypeId=get_attribute_required(eDevice, "type");
 
     std::vector<double> nativeLocation;
     const double *nativeLocationPtr = 0;
-    std::string nativeLocationStr=get_attribute(eDevice, "nativeLocation");
+    std::string nativeLocationStr=get_attribute_optional(eDevice, "nativeLocation");
     if(!nativeLocationStr.empty()){
       size_t start=0;
-      while(start!=std::string::npos){
+      while(start<nativeLocationStr.size()){
 	size_t end=nativeLocationStr.find(',',start);
 	std::string part=nativeLocationStr.substr(start, end==std::string::npos ? end : end-start);
-
 	nativeLocation.push_back(std::stod(part));
+	if(end==std::string::npos)
+	  break;
 
 	start=end+1;
       }
+
+      fprintf(stderr, "Out\n");
 
       if(nativeLocation.size()!=graphType->getNativeDimension()){
 	throw std::runtime_error("Device instance location does not match dimension of problem.");
@@ -634,7 +742,7 @@ void loadGraph(Registry *registry, xmlpp::Element *parent, GraphLoadEvents *even
     auto dt=graphType->getDeviceType(deviceTypeId);
 
     TypedDataPtr deviceProperties;
-    auto *eProperties=find_single(eDevice, "./g:Properties", ns);
+    auto *eProperties=find_single(eDevice, "./g:P", ns);
     if(eProperties){
       deviceProperties=dt->getPropertiesSpec()->load(eProperties);
     }else{
@@ -655,13 +763,20 @@ void loadGraph(Registry *registry, xmlpp::Element *parent, GraphLoadEvents *even
     auto *eEdge=dynamic_cast<xmlpp::Element *>(nEdge);
     if(!eEdge)
       continue;
-    if(eEdge->get_name()!="EdgeInstance")
+    if(eEdge->get_name()!="EdgeI")
       continue;
 
-    std::string srcDeviceId=get_attribute_required(eEdge, "srcDeviceId");
-    std::string srcPortName=get_attribute_required(eEdge, "srcPortName");
-    std::string dstDeviceId=get_attribute_required(eEdge, "dstDeviceId");
-    std::string dstPortName=get_attribute_required(eEdge, "dstPortName");
+    std::string srcDeviceId, srcPortName, dstDeviceId, dstPortName;
+    std::string path=get_attribute_optional(eEdge, "path");
+    if(path.c_str()){
+      split_path(path, dstDeviceId, dstPortName, srcDeviceId, srcPortName);
+      std::cerr<<srcDeviceId<<" "<<srcPortName<<" "<<dstDeviceId<<" "<<dstPortName<<"\n";
+    }else{
+      srcDeviceId=get_attribute_required(eEdge, "srcDeviceId");
+      srcPortName=get_attribute_required(eEdge, "srcPortName");
+      dstDeviceId=get_attribute_required(eEdge, "dstDeviceId");
+      dstPortName=get_attribute_required(eEdge, "dstPortName");
+    }
 
     auto &srcDevice=devices.at(srcDeviceId);
     auto &dstDevice=devices.at(dstDeviceId);
@@ -683,13 +798,13 @@ void loadGraph(Registry *registry, xmlpp::Element *parent, GraphLoadEvents *even
 	for(const auto &nChild : children){
 	  assert(nChild->getName().is_ascii());
 	  
-	  if(!strcmp(nChild->get_name().c_str(),"Properties")){
+	  if(!strcmp(nChild->get_name().c_str(),"P")){
 	    eProperties=(xmlpp::Element*)nChild;
 	    break;
 	  }
 	}
       }else{
-	eProperties=find_single(eEdge, "./g:Properties", ns);
+	eProperties=find_single(eEdge, "./g:P", ns);
       }
     }
     if(eProperties){

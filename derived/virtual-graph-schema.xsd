@@ -8,6 +8,7 @@
           <xs:element ref="v:GraphTypeReference"/>
         </xs:choice>
         <xs:element minOccurs="0" maxOccurs="unbounded" ref="v:GraphInstance"/>
+        <xs:element minOccurs="0" maxOccurs="unbounded" ref="v:GraphSnapshot"/>
       </xs:sequence>
     </xs:complexType>
   </xs:element>
@@ -19,9 +20,7 @@
             <xs:documentation>Global properties that are shared with all nodes at run-time. read-only.</xs:documentation>
           </xs:annotation>
           <xs:complexType>
-            <xs:sequence>
-              <xs:element minOccurs="0" maxOccurs="unbounded" ref="v:typedData"/>
-            </xs:sequence>
+            <xs:group minOccurs="0" maxOccurs="unbounded" ref="v:typedDataSpec"/>
           </xs:complexType>
         </xs:element>
         <xs:element ref="v:EdgeTypes"/>
@@ -79,13 +78,7 @@ connect it up</xs:documentation>
   <xs:element name="GraphInstance">
     <xs:complexType>
       <xs:sequence>
-        <xs:element minOccurs="0" name="Properties">
-          <xs:complexType>
-            <xs:sequence>
-              <xs:element minOccurs="0" maxOccurs="unbounded" ref="v:typedData"/>
-            </xs:sequence>
-          </xs:complexType>
-        </xs:element>
+        <xs:element minOccurs="0" name="Properties" type="xs:string"/>
         <xs:element ref="v:DeviceInstances"/>
         <xs:element ref="v:EdgeInstances"/>
       </xs:sequence>
@@ -100,14 +93,14 @@ connect it up</xs:documentation>
   <xs:element name="DeviceInstances">
     <xs:complexType>
       <xs:sequence>
-        <xs:element minOccurs="0" maxOccurs="unbounded" ref="v:DeviceInstance"/>
+        <xs:element minOccurs="0" maxOccurs="unbounded" ref="v:DevI"/>
       </xs:sequence>
     </xs:complexType>
   </xs:element>
   <xs:element name="EdgeInstances">
     <xs:complexType>
       <xs:sequence>
-        <xs:element minOccurs="0" maxOccurs="unbounded" ref="v:EdgeInstance"/>
+        <xs:element minOccurs="0" maxOccurs="unbounded" ref="v:EdgeI"/>
       </xs:sequence>
     </xs:complexType>
   </xs:element>
@@ -117,7 +110,15 @@ connect it up</xs:documentation>
     </xs:annotation>
     <xs:complexType>
       <xs:sequence>
-        <xs:element minOccurs="0" ref="v:Message"/>
+        <xs:element minOccurs="0" name="Message">
+          <xs:annotation>
+            <xs:documentation>The type of messages that are sent over this edge. This may not exist
+(e.g. if it is only a pulse)</xs:documentation>
+          </xs:annotation>
+          <xs:complexType>
+            <xs:group minOccurs="0" maxOccurs="unbounded" ref="v:typedDataSpec"/>
+          </xs:complexType>
+        </xs:element>
         <xs:element minOccurs="0" name="Properties">
           <xs:annotation>
             <xs:documentation>Indicates read-only properties associated with each edge. This will be
@@ -125,9 +126,7 @@ delivered along-side messages which arrive along that edge
 An edge may have no properties, in which case this element will not exist</xs:documentation>
           </xs:annotation>
           <xs:complexType>
-            <xs:sequence>
-              <xs:element minOccurs="0" maxOccurs="unbounded" ref="v:typedData"/>
-            </xs:sequence>
+            <xs:group minOccurs="0" maxOccurs="unbounded" ref="v:typedDataSpec"/>
           </xs:complexType>
         </xs:element>
         <xs:element minOccurs="0" name="State">
@@ -138,9 +137,7 @@ TODO : This has unclear semantics (which is why I (DBT) was hesitant about it).
        that edge? Should there be state associated with outgoing edges?</xs:documentation>
           </xs:annotation>
           <xs:complexType>
-            <xs:sequence>
-              <xs:element ref="v:typedData"/>
-            </xs:sequence>
+            <xs:group minOccurs="0" maxOccurs="unbounded" ref="v:typedDataSpec"/>
           </xs:complexType>
         </xs:element>
       </xs:sequence>
@@ -149,17 +146,6 @@ TODO : This has unclear semantics (which is why I (DBT) was hesitant about it).
           <xs:documentation>Must be unique amongst all edge types</xs:documentation>
         </xs:annotation>
       </xs:attribute>
-    </xs:complexType>
-  </xs:element>
-  <xs:element name="Message">
-    <xs:annotation>
-      <xs:documentation>The type of messages that are sent over this edge. This may not exist
-(e.g. if it is only a pulse)</xs:documentation>
-    </xs:annotation>
-    <xs:complexType>
-      <xs:sequence>
-        <xs:element minOccurs="0" maxOccurs="unbounded" ref="v:typedData"/>
-      </xs:sequence>
     </xs:complexType>
   </xs:element>
   <xs:element name="DeviceType">
@@ -188,9 +174,7 @@ may not appear if the device has no properties. There may be default
 values specified for some or all components of the properties.</xs:documentation>
           </xs:annotation>
           <xs:complexType>
-            <xs:sequence>
-              <xs:element minOccurs="0" maxOccurs="unbounded" ref="v:typedData"/>
-            </xs:sequence>
+            <xs:group ref="v:typedDataSpec"/>
           </xs:complexType>
         </xs:element>
         <xs:element minOccurs="0" name="State">
@@ -200,9 +184,7 @@ not appear, if the device has no state (I suppose all the mutable state could
 be in the edge properties).</xs:documentation>
           </xs:annotation>
           <xs:complexType>
-            <xs:sequence>
-              <xs:element minOccurs="0" maxOccurs="unbounded" ref="v:typedData"/>
-            </xs:sequence>
+            <xs:group minOccurs="0" maxOccurs="unbounded" ref="v:typedDataSpec"/>
           </xs:complexType>
         </xs:element>
         <xs:element minOccurs="0" maxOccurs="unbounded" ref="v:InputPort"/>
@@ -302,20 +284,15 @@ executed. By default, requestSend[index] will be set low before the handler
 executes, but the handler can set it high again if it wants.</xs:documentation>
     </xs:annotation>
   </xs:element>
-  <xs:element name="DeviceInstance">
+  <xs:element name="DevI">
     <xs:complexType>
       <xs:sequence>
-        <xs:element minOccurs="0" name="Properties">
+        <xs:element minOccurs="0" name="P" type="xs:string">
           <xs:annotation>
             <xs:documentation>Read-only properties associated with this device instance.
 This element must not exist if the device type has no properties
 This element may not exist if the property has a (complete) default value</xs:documentation>
           </xs:annotation>
-          <xs:complexType>
-            <xs:sequence>
-              <xs:element ref="v:typedData"/>
-            </xs:sequence>
-          </xs:complexType>
         </xs:element>
       </xs:sequence>
       <xs:attribute name="id" use="required" type="xs:string">
@@ -323,7 +300,7 @@ This element may not exist if the property has a (complete) default value</xs:do
           <xs:documentation>A unique string</xs:documentation>
         </xs:annotation>
       </xs:attribute>
-      <xs:attribute name="deviceTypeId" use="required" type="xs:string">
+      <xs:attribute name="type" use="required" type="xs:string">
         <xs:annotation>
           <xs:documentation>Links to a previously declared device type</xs:documentation>
         </xs:annotation>
@@ -337,7 +314,7 @@ the native dimension of the graph type.</xs:documentation>
       </xs:attribute>
     </xs:complexType>
   </xs:element>
-  <xs:element name="EdgeInstance">
+  <xs:element name="EdgeI">
     <xs:annotation>
       <xs:documentation>The edgeTypeId can be inferred from the types of the ports,
 and it is worth explicitly checking they have the same port on
@@ -345,78 +322,114 @@ load, so it is not included here.</xs:documentation>
     </xs:annotation>
     <xs:complexType>
       <xs:sequence>
-        <xs:element minOccurs="0" name="Properties">
+        <xs:element minOccurs="0" name="P" type="xs:string">
           <xs:annotation>
             <xs:documentation>Read-only properties associated with this edge instance
 This element can only exist if the edge has properties.
 This edge may not exist if all properties have a default</xs:documentation>
           </xs:annotation>
-          <xs:complexType>
-            <xs:sequence>
-              <xs:element ref="v:typedData"/>
-            </xs:sequence>
-          </xs:complexType>
         </xs:element>
-        <xs:element minOccurs="0" name="State">
+        <xs:element minOccurs="0" name="S" type="xs:string">
           <xs:annotation>
             <xs:documentation>Mutable properties associated with this edge instance.
 This element can only exist if the edge has state
 This edge may not exist if all parts of the state have a default.</xs:documentation>
           </xs:annotation>
-          <xs:complexType>
-            <xs:sequence>
-              <xs:element ref="v:typedData"/>
-            </xs:sequence>
-          </xs:complexType>
         </xs:element>
       </xs:sequence>
-      <xs:attribute name="dstDeviceId" use="required" type="xs:string"/>
-      <xs:attribute name="dstPortName" use="required" type="xs:string"/>
-      <xs:attribute name="srcDeviceId" use="required" type="xs:string"/>
-      <xs:attribute name="srcPortName" use="required" type="xs:string"/>
-    </xs:complexType>
-  </xs:element>
-  <xs:element name="typedData" abstract="true"/>
-  <xs:element name="Int32" substitutionGroup="v:typedData">
-    <xs:complexType>
-      <xs:attribute name="name" use="required" type="xs:string">
+      <xs:attribute name="dstDeviceId" type="xs:string"/>
+      <xs:attribute name="dstPortName" type="xs:string"/>
+      <xs:attribute name="srcDeviceId" type="xs:string"/>
+      <xs:attribute name="srcPortName" type="xs:string"/>
+      <xs:attribute name="path" type="xs:string">
         <xs:annotation>
-          <xs:documentation>typeHash is name -&gt; "Int32"</xs:documentation>
+          <xs:documentation>A string of the form "dstDeviceId:dstPortName-srcDeviceId:srcPortName"</xs:documentation>
         </xs:annotation>
       </xs:attribute>
-      <xs:attribute name="value" type="xs:integer"/>
     </xs:complexType>
   </xs:element>
-  <xs:element name="Float32" substitutionGroup="v:typedData">
+  <xs:group name="typedDataSpec">
+    <xs:annotation>
+      <xs:documentation>A typed data specification consists of one or more elements</xs:documentation>
+    </xs:annotation>
+    <xs:sequence>
+      <xs:element maxOccurs="unbounded" ref="v:typedDataSpecElement"/>
+    </xs:sequence>
+  </xs:group>
+  <xs:element name="typedDataSpecElement" abstract="true"/>
+  <xs:element name="Scalar" substitutionGroup="v:typedDataSpecElement">
     <xs:complexType>
-      <xs:attribute name="name" use="required" type="xs:string">
-        <xs:annotation>
-          <xs:documentation>typeHash is name -&gt; "Float32"</xs:documentation>
-        </xs:annotation>
+      <xs:attribute name="type" use="required">
+        <xs:simpleType>
+          <xs:restriction base="xs:token">
+            <xs:enumeration value="int32_t"/>
+            <xs:enumeration value="float"/>
+            <xs:enumeration value="bool"/>
+          </xs:restriction>
+        </xs:simpleType>
       </xs:attribute>
-      <xs:attribute name="value" type="xs:float"/>
+      <xs:attribute name="name" use="required" type="xs:string"/>
+      <xs:attribute name="value" type="xs:string"/>
     </xs:complexType>
   </xs:element>
-  <xs:element name="Bool" substitutionGroup="v:typedData">
-    <xs:complexType>
-      <xs:attribute name="name" use="required" type="xs:string">
-        <xs:annotation>
-          <xs:documentation>typeHash is name -&gt; "Bool"</xs:documentation>
-        </xs:annotation>
-      </xs:attribute>
-      <xs:attribute name="value"/>
-    </xs:complexType>
-  </xs:element>
-  <xs:element name="Tuple" substitutionGroup="v:typedData">
+  <xs:element name="Tuple" substitutionGroup="v:typedDataSpecElement">
     <xs:complexType>
       <xs:sequence>
-        <xs:element minOccurs="0" maxOccurs="unbounded" ref="v:typedData"/>
+        <xs:element maxOccurs="unbounded" ref="v:typedDataSpecElement"/>
       </xs:sequence>
-      <xs:attribute name="name" use="required">
+      <xs:attribute name="name" use="required"/>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="GraphSnapshot">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element ref="v:DeviceSnapshot"/>
+        <xs:element ref="v:EdgeSnapshot"/>
+      </xs:sequence>
+      <xs:attribute name="graphId" use="required" type="xs:string"/>
+      <xs:attribute name="sequenceId" use="required" type="xs:string">
         <xs:annotation>
-          <xs:documentation>typeHash is name -&gt; "Tuple" -&gt; typeHash(elt1) -&gt; typeHash(elt2) -&gt; ...</xs:documentation>
+          <xs:documentation>The id of the overall run that the snapshot comes from</xs:documentation>
         </xs:annotation>
       </xs:attribute>
+      <xs:attribute name="sequenceNumber" use="required" type="xs:integer">
+        <xs:annotation>
+          <xs:documentation>The integer sequence number within the run</xs:documentation>
+        </xs:annotation>
+      </xs:attribute>
+      <xs:attribute name="worldTime" use="required" type="xs:float">
+        <xs:annotation>
+          <xs:documentation>The "world-time" of the simulator</xs:documentation>
+        </xs:annotation>
+      </xs:attribute>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="DeviceSnapshot">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element minOccurs="0" name="S" type="xs:string"/>
+      </xs:sequence>
+      <xs:attribute name="id" use="required" type="xs:string"/>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="EdgeSnapshot">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element minOccurs="0" name="S" type="xs:string"/>
+        <xs:element minOccurs="0" ref="v:InFlight"/>
+      </xs:sequence>
+      <xs:attribute name="id" use="required" type="xs:string"/>
+      <xs:attribute name="firedCount" type="xs:integer"/>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="InFlight">
+    <xs:annotation>
+      <xs:documentation>Any messages that are in flight</xs:documentation>
+    </xs:annotation>
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element minOccurs="0" maxOccurs="unbounded" name="Message" type="xs:string"/>
+      </xs:sequence>
     </xs:complexType>
   </xs:element>
 </xs:schema>

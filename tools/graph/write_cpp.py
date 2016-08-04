@@ -2,20 +2,14 @@ from graph.core import *
 
 import sys
 
-_typed_data_to_typename={
-    Int32Data: "int32_t",
-    Float32Data: "float",
-    BoolData:"bool"
-    }
-
 registrationStatements=[]
 
 def render_typed_data_as_decl(proto,dst,indent=""):
     if proto is None:
         pass
-    elif isinstance(proto,ScalarData):
-        dst.write("{}{} {};\n".format(indent, _typed_data_to_typename[type(proto)], proto.name))
-    elif isinstance(proto,TupleData):
+    elif isinstance(proto,ScalarTypedDataSpec):
+        dst.write("{}{} {};\n".format(indent, proto.type, proto.name))
+    elif isinstance(proto,TupleTypedDataSpec):
         dst.write("{}struct {{\n".format(indent))
         for elt in proto.elements_by_index:
             render_typed_data_as_decl(elt,dst,indent+"  ")
@@ -26,44 +20,26 @@ def render_typed_data_as_decl(proto,dst,indent=""):
 def render_typed_data_init(proto,dst,prefix):
     if proto is None:
         pass
-    elif isinstance(proto,ScalarData):
+    elif isinstance(proto,ScalarTypedDataSpec):
         if proto.value:
             value=proto.value
-            dst.write("// {}\n".format(proto.value))
-            if isinstance(proto,BoolData):
+            if proto.type=="bool":
                 value = 1 if value else 0
             dst.write('{}{} = {};\n'.format(prefix,proto.name,value))
         else:
             dst.write('{}{} = 0;\n'.format(prefix,proto.name))
-    elif isinstance(proto,TupleData):
+    elif isinstance(proto,TupleTypedDataSpec):
         for elt in proto.elements_by_index:
             render_typed_data_init(elt,dst,prefix+proto.name+".")
     else:
         raise RuntimeError("Unknown data type {}.".format(type(proto)))
-
-def render_typed_data_load(proto,dst,elt,prefix, indent):
-    if proto is None:
-        pass
-    elif isinstance(proto,ScalarData):
-        dst.write('{}load_typed_data_attribute({}{}, {}, "{}");\n'.format(indent,prefix,proto.name,elt,proto.name))
-    elif isinstance(proto,TupleData):
-        dst.write('{}{{'.format(indent))
-        dst.write('{}  xmlpp::Element *{}=load_typed_data_tuple({}, "{}");\n'.format(indent,proto.name, elt,proto.name))
-        dst.write('{}  if({}){{'.format(indent,proto.name))
-        for elt in proto.elements_by_index:
-            render_typed_data_load(elt,dst,proto.name,prefix+proto.name+".",indent+"    ")
-        dst.write('{}  }}\n'.format(indent))
-        dst.write('{}}}\n'.format(indent))
-    else:
-        raise RuntimeError("Unknown data type {}".format(type(proto)))
-                           
 
 def render_typed_data_load_v2(proto,dst,elt,prefix,indent):
     """This version walks over the xml and puts things in the right place,
        rather than searching for each thing, as it is much more efficient."""
     if proto is None:
         pass
-    if isinstance(proto,ScalarData):
+    if not isinstance(proto,TupleTypedDataSpec):
         raise RuntimeError("This must be passed a tuple.")
 
     dst.write('{}{{'.format(indent))
@@ -75,7 +51,7 @@ def render_typed_data_load_v2(proto,dst,elt,prefix,indent):
     dst.write('{}    assert(name.is_ascii());\n'.format(indent))
     for child in proto.elements_by_index:
         dst.write('{}    if(!strcmp(name.c_str(),"{}")){{\n'.format(indent, child.name))
-        if isinstance(child,ScalarData):
+        if isinstance(child,ScalarTypedDataSpec):
             dst.write('{}      std::stringstream value(childPtr->get_attribute_value("value"));\n'.format(indent))
             dst.write('{}      value>>{}{};\n'.format(indent, prefix, child.name))
         else:
@@ -83,12 +59,25 @@ def render_typed_data_load_v2(proto,dst,elt,prefix,indent):
         dst.write('{}    }}'.format(indent))
     dst.write('{}  }}\n'.format(indent))
     dst.write('{}}}'.format(indent))
-        
+
+def render_typed_data_load_v3(proto,dst,elt,prefix,indent):
+    """Now we are loading JSON fragments... badly"""
+    if proto is None:
+        pass
+    if not isinstance(proto,TupleTypedDataSpec):
+        raise RuntimeError("This must be passed a tuple.")
+    dst.write('{}{{'.format(indent))
+    dst.write('{}  auto text=elt->get_child_text()->get_content();\n'.format(indent))
+    dst.write('{}  JSONEventsWriter writer;\n'.format(indent))
+    for elt in proto.elements_by_index:
+        dst.write('{}  writer.bind("{}",{}{});\n'.format(indent, elt.name, prefix, elt.name))
+    dst.write('{}  JSONParser(text.c_str(),writer);\n'.format(indent))
+    dst.write('{}}}'.format(indent))
     
 def render_typed_data_as_spec(proto,name,elt_name,dst):
     dst.write("struct {} : typed_data_t{{\n".format(name))
     if proto:
-        assert isinstance(proto, TupleData)
+        assert isinstance(proto, TupleTypedDataSpec)
         for elt in proto.elements_by_index:
             render_typed_data_as_decl(elt,dst,"  ")
     else:
@@ -119,7 +108,7 @@ def render_typed_data_as_spec(proto,name,elt_name,dst):
             for elt in proto.elements_by_index:
                 render_typed_data_load(elt, dst, "elt", "res->",  "      ")
         else:
-            render_typed_data_load_v2(proto, dst, "elt", "res->", "      ")
+            render_typed_data_load_v3(proto, dst, "elt", "res->", "      ")
         dst.write("    }\n")
         dst.write("    return res;\n")
     dst.write("  }\n")
@@ -300,7 +289,7 @@ def render_graph_as_cpp(graph,dst):
     registrationStatements.append('registry->registerGraphType({}_Spec_get());'.format(gt.id))
     
 
-    dst.write("extern void registerGraphTypes(Registry *registry){\n")
+    dst.write('extern "C" void registerGraphTypes(Registry *registry){\n')
     for r in registrationStatements:
         dst.write("  {}\n".format(r))
     dst.write("}\n");

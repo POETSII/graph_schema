@@ -5,20 +5,26 @@ import sys
 import os
 import random
 
-nEdgeTypes=5
-nDeviceTypes=5
-nDeviceInstances=80
-nEdgeInstances=400
+n=1
+if len(sys.argv)>1:
+    n=int(sys.argv[1])
+
+nEdgeTypes=n
+nDeviceTypes=n
+nDeviceInstances=n*10
+nEdgeInstances=n*40
+
+
 
 urng=random.random
 
 def make_random_string(prefix):
     return "{}_{}".format(prefix,random.randint(0,2**32))
 
-def make_void(name=None):
+def make_void_spec(name=None):
     return None
 
-def make_random_int32(name=None,pEmpty=0.5):
+def make_random_int32_spec(name=None,pEmpty=0.5):
     if name==None:
         name=make_random_string("v")
     
@@ -26,9 +32,9 @@ def make_random_int32(name=None,pEmpty=0.5):
     if urng()<pEmpty:
         value=random.randint(-2**31,2**31-1)
         
-    return Int32Data(name, value)
+    return ScalarTypedDataSpec(name, "int32_t", value)
 
-def make_random_float32(name=None,pEmpty=0.5):
+def make_random_float32_spec(name=None,pEmpty=0.5):
     if name==None:
         name=make_random_string("v")
     
@@ -36,9 +42,9 @@ def make_random_float32(name=None,pEmpty=0.5):
     if urng()<pEmpty:
         value=random.random()*2-1
         
-    return Float32Data(name, value)
+    return ScalarTypedDataSpec(name, "float", value)
 
-def make_random_bool(name=None,pEmpty=0.5):
+def make_random_bool_spec(name=None,pEmpty=0.5):
     if name==None:
         name=make_random_string("v")
     
@@ -46,21 +52,24 @@ def make_random_bool(name=None,pEmpty=0.5):
     if urng()<pEmpty:
         value=bool(random.randint(0,1))
         
-    return BoolData(name, value)
+    return ScalarTypedDataSpec(name, "bool", value)
 
-def make_random_tuple(name=None,pEmpty=0.5):
+def make_random_tuple_spec(name=None,pEmpty=0.5):
+    if urng() < 0.25:
+        return None
+    
     if name==None:
         name=make_random_string("v")
     
     elts=[]
     while urng()<pEmpty or len(elts)<1:
-        e=make_random_data()
+        e=make_random_data_spec()
         if e is not None:
             elts.append(e)
-    return TupleData(name, elts)
+    return TupleTypedDataSpec(name, elts)
 
-def make_random_data(name=None):
-    creators=[make_void,make_random_int32,make_random_float32,make_random_bool,make_random_tuple]
+def make_random_data_spec(name=None):
+    creators=[make_void_spec,make_random_int32_spec,make_random_float32_spec,make_random_bool_spec,make_random_tuple_spec]
     return random.choice(creators)(name)
 
 
@@ -68,39 +77,47 @@ def make_random_data(name=None):
 def make_random_instance(proto):
     if proto is None:
         return None
-    if proto.is_complete and urng()<0.3:
+    if urng()<0.3:
         return None
-    if isinstance(proto,ScalarData):
-        _map={Int32Data:make_random_int32,Float32Data:make_random_float32,BoolData:make_random_bool}
-        return _map[type(proto)](proto.name)
-    elif isinstance(proto,TupleData):
-        elts=[]
+    if isinstance(proto,ScalarTypedDataSpec):
+        value=None
+        if proto.type=="int32_t":
+            value=random.randint(-2**31,2**31-1)
+        elif proto.type=="float":
+            value=random.random()*2-1
+        elif proto.type=="bool":
+            value=bool(random.randint(0,1))
+        else:
+            assert False, "Unknown type"
+        return value
+    elif isinstance(proto,TupleTypedDataSpec):
+        elts={}
         for e in proto.elements_by_index:
             if urng()<0.6:
                 ee=make_random_instance(e)
                 if ee:
-                    elts.append(ee)
-        return TupleData(proto.name, elts)
+                    elts[e.name]=ee
+        return elts
     else:
         raise RuntimeError("Unknown data type.")
 
-graphType=GraphType("random", make_random_data())
-
+graphType=GraphType("random", 0, make_random_tuple_spec())
+graphProperties=make_random_instance(graphType.properties)
 graphInstance=GraphInstance("random", graphType)
 
 edge_types=[]
 for i in range(nEdgeTypes):
-    message=make_random_data()
-    state=make_random_data()
-    properties=make_random_data()
+    message=make_random_tuple_spec()
+    state=make_random_tuple_spec()
+    properties=make_random_tuple_spec()
     et=EdgeType(graphType,"et{}".format(i),message,state,properties )
     graphType.add_edge_type(et)
     edge_types.append(et)
 
 device_types=[]
 for i in range(nDeviceTypes):
-    state=make_random_data()
-    properties=make_random_data()
+    state=make_random_tuple_spec()
+    properties=make_random_tuple_spec()
     dt=DeviceType(graphType,"dt{}".format(i),state,properties )
     device_types.append(dt)
     
@@ -123,7 +140,7 @@ for i in range(nDeviceInstances):
     dt=random.choice(device_types)
     properties=make_random_instance(dt.properties)
     #sys.stderr.write("proto={}, properties={}".format(dt.properties,properties))
-    di=DeviceInstance(graphInstance, make_random_string("di"), dt, properties)
+    di=DeviceInstance(graphInstance, make_random_string("di"), dt, None, properties)
     device_instances.append(di)
 
     graphInstance.add_device_instance(di)

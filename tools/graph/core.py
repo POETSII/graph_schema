@@ -2,152 +2,54 @@ class GraphDescriptionError(Exception):
     def __init__(self,msg):
         Exception.__init__(self,msg)
 
-FNV64_PRIME=1099511628211;
-FNV64_OFFSET=14695981039346656037;
-
-def fnv64_hash_byte(hash,data):
-    assert(isinstance(data,int) and 0<=data<256)
-    assert(isinstance(hash,int) and 0<=hash<2**64)
-    return ((hash^data)*FNV64_PRIME) % 2**64
-
-def fnv64_hash_uint64(hash, data):
-    assert(isinstance(data,int) and 0<=data<2**64)
-    assert(isinstance(hash,int) and 0<=hash<2**64)
-    for i in range(0,8):
-        v=data&0xFF
-        hash((hash^v)*FNV64_PRIME) % 2**64
-        data=data>>8
-    return data
-
-
-def fnv64_hash_int(hash, data):
-    assert(isinstance(data,int))
-    assert(isinstance(hash,int))
-    print(hash);
-    assert(0<=hash<2**64)
-
-    if data<0:
-        return fnv64_hash_int(fnv64_hash_byte(hash, 0xCC), -(data+1))
-
-    while data:
-        hash=fnv64_hash_byte(hash, data & 0xFF)
-        data=data >> 8
-
-    return data
-
-def fnv64_hash_combine(*hashes):
-    res=hashes[0]
-    for i in range(1,len(hashes)):
-        res=fnv64_hash_uint64(res, hashes[i])
-    return res
-    
-
-def fnv64_hash_string(hash, data):
-    assert(isinstance(data,str))
-    assert(isinstance(hash,int) and 0<=hash<2**64)
-
-    for c in data:
-        co=ord(c)
-        assert(0<co<256)
-        hash=((hash^data)*FNV64_PRIME) % 2**64
-
-    return hash
-
-class TypedData(object):
+class TypedDataSpec(object):
     def __init__(self,name):
         self.name=name
 
-    def calc_hash(self):
-        raise NotImplementedError()
 
-
-class ScalarData(TypedData):
-    def __init__(self,name,value):
-        TypedData.__init__(self,name)
+class ScalarTypedDataSpec(TypedDataSpec):
+    def _check_value(self,value):
+        if self.type=="int32_t":
+            res=int(value)
+            assert(-2**32 <= res < 2**32)
+        elif self.type=="float":
+            res=float(value)
+        elif self.type=="bool":
+            res=bool(value)
+        else:
+            assert False, "Unknown data type."
+        return res
+    
+    def __init__(self,name,type,value=None):
+        TypedDataSpec.__init__(self,name)
+        self.type=type
         if value is not None:
             self.value=self._check_value(value)
         else:
-            self.value=None
-        self.is_complete=value is not None
-        self._print_name=None
-
-    def _check_value(self,value):
-        raise NotImplementedError()
+            self.value=0
 
     def is_refinement_compatible(self,inst):
         if inst is None:
             return True
-        if not isinstance(inst,type(self)):
-            return False # We are strict, it must be exactly the same type
-        if inst.name!=self.name:
+        try:
+            self._check_value(inst)
+        except:
             return False
         return True
 
     def __str__(self):
-        if self.value:
-            return "{}:{}={},complete={}".format(self._print_name,self.name,self.value,self.is_complete)
-        else:
-            return "{}:{}".format(self._print_name,self.name)
+        return "{}:{}".format(self.type,self.name,self.value)
 
-    
-class Int32Data(ScalarData):
-    def __init__(self,name,value):
-        ScalarData.__init__(self,name,value)
-        self._print_name="Int32"
-        
-    def _check_value(self,value):
-        return int(value)
-
-    def calc_hash(self):
-        return fnv64_hash_combine(fnv64_hash_string("Int32"),fnv64_hash_string(name))
-
-
-class Float32Data(ScalarData):
-    def __init__(self,name,value):
-        ScalarData.__init__(self,name,value)
-        self._print_name="Float32"
-        
-    def _check_value(self,value):
-        return float(value)
-
-    def calc_hash(self):
-        return fnv64_hash_combine(fnv64_hash_string("Float32"),fnv64_hash_string(name))
-
-
-class BoolData(ScalarData):
-    def __init__(self,name,value):
-        ScalarData.__init__(self,name,value)
-        self._print_name="Bool"
-        
-    def _check_value(self,value):
-        if isinstance(value,bool):
-            return value
-        if isinstance(value,str):
-            if value in ['True','true','Yes','yes','1']:
-                return True
-            if value in ['False','false','No','no','0']:
-                return False
-            raise GraphDescriptionError("Couldn't convert '{}' to a boolean".format(value))
-        if isinstance(value,int):
-            return value!=0
-        raise GraphDescriptionError("Don't know how to convert value to boolean.")
-
-    def calc_hash(self):
-        return fnv64_hash_combine(fnv64_hash_string("Bool"),fnv64_hash_string(name))
-
-
-class TupleData(TypedData):
+class TupleTypedDataSpec(TypedDataSpec):
     def __init__(self,name,elements):
-        TypedData.__init__(self,name)
+        TypedDataSpec.__init__(self,name)
         self._elts_by_name={}
         self._elts_by_index=[]
-        self.is_complete=True
         for e in elements:
             if e.name in self._elts_by_name:
                 raise GraphDescriptionError("Tuple element name appears twice.")
             self._elts_by_name[e.name]=e
             self._elts_by_index.append(e)
-            self.is_complete=self.is_complete and e.is_complete
 
     @property
     def elements_by_name(self):
@@ -158,6 +60,7 @@ class TupleData(TypedData):
         return self._elts_by_index
 
     def __str__(self):
+        
         acc="Tuple:{}[\n".format(self.name)
         for i in range(len(self._elts_by_index)):
             if i!=0:
@@ -166,32 +69,31 @@ class TupleData(TypedData):
             acc=acc+"\n"
         return acc+"]"
 
-    def calc_hash(self):
-        hash=fnv64_hash_combine(fnv64_hash_string("Tuple"),fnv64_hash_string(name))
-        for e in self.elements_by_index:
-            hash=fnv64_hash_combine(hash, e.calc_hash())
-        return hash
-
     def is_refinement_compatible(self,inst):
-        if not isinstance(inst,TupleData):
+        if inst is None:
+            return True;
+        
+        if not isinstance(inst,dict):
             return False
 
+        count=0
         for ee in self._elts_by_index:
-            if ee.name in inst._elts_by_name:
-                if not ee.is_refinement_compatible(inst._elts_by_name[ee.name]):
+            if ee.name in inst:
+                count=count+1
+                if not ee.is_refinement_compatible(inst[ee.name]):
                     return False
 
-        # Check that everything in the instance is known
-        for ee in inst._elts_by_index:
-            if ee.name not in self._elts_by_name:
-                return False
+        # There is something in the dict that we don't know about
+        if count!=len(inst):
+            return False
+
         return True
 
 def is_refinement_compatible(proto,inst):
     if proto is None:
         return inst is None
     if inst is None:
-        return True
+        return True;
     return proto.is_refinement_compatible(inst)
     
 
@@ -264,6 +166,8 @@ class GraphType(object):
     def __init__(self,id,native_dimension,properties):
         self.id=id
         self.native_dimension=native_dimension
+        if properties:
+            assert isinstance(properties,TupleTypedDataSpec), "Expected TupleTypedDataSpec, got={}".format(properties)
         self.properties=properties
         self.device_types={}
         self.edge_types={}
@@ -356,7 +260,7 @@ class GraphInstance:
     def __init__(self,id,graph_type,properties=None):
         self.id=id
         self.graph_type=graph_type
-        assert(is_refinement_compatible(graph_type.properties,properties))
+        assert is_refinement_compatible(graph_type.properties,properties), "value {} is not a refinement of {}".format(properties,graph_type.properties)
         self.properties=properties
         self.device_instances={}
         self.edge_instances={}

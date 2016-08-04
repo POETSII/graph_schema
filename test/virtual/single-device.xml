@@ -14,7 +14,7 @@
   <GraphInstance id="single_device" graphTypeId="single_device">
 
     <DeviceInstances>
-      <DeviceInstance id="n1" deviceTypeId="node" />
+      <DevI id="n1" type="node" />
     </DeviceInstances>
     
     <EdgeInstances>

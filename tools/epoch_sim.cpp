@@ -8,7 +8,7 @@
 #include <random>
 #include <unordered_set>
 
-static unsigned  logLevel=1;
+static unsigned  logLevel=3;
 
 struct EpochSim
   : public GraphLoadEvents
@@ -75,6 +75,7 @@ struct EpochSim
     device d;
     d.index=m_devices.size();
     d.id=id;
+    d.name=intern(id);
     d.type=dt;
     d.properties=deviceProperties;
     d.state=state;
@@ -134,11 +135,28 @@ struct EpochSim
   }
 
   double m_statsSends=0;
+  unsigned m_epoch=0;
 
   template<class TRng>
   bool step(TRng &rng)
   {
     // Within each step every object gets the chance to send exactly one message.
+
+    ReceiveOrchestratorServicesImpl receiveServices{logLevel, stderr, 0, 0};
+    {
+      std::stringstream tmp;
+      tmp<<"Epoch "<<m_epoch<<", Send: ";
+      receiveServices.setPrefix(tmp.str().c_str());
+    }
+    
+    SendOrchestratorServicesImpl sendServices{logLevel, stderr, 0, 0};
+    {
+      std::stringstream tmp;
+      tmp<<"Epoch "<<m_epoch<<", Recv: ";
+      receiveServices.setPrefix(tmp.str().c_str());
+    }
+
+    
 
     bool sent=false;
     
@@ -175,7 +193,7 @@ struct EpochSim
 
       bool cancel=false;
       {
-	SendOrchestratorServicesImpl sendServices{logLevel, stderr, src.name, src.outputNames[sel]};
+	sendServices.setSender(src.name, src.outputNames[sel]);
 	output->onSend(&sendServices, m_graphProperties.get(), src.properties.get(), src.state.get(), message.get(), src.readyToSend.get(), &cancel);
       }
 
@@ -197,10 +215,12 @@ struct EpochSim
 
 	auto port=dst.type->getInput(out.dstPortIndex);
 
-	ReceiveOrchestratorServicesImpl receiveServices{logLevel, stderr, out.dstDeviceId, out.dstInputName};
+	receiveServices.setReceiver(out.dstDeviceId, out.dstInputName);
 	port->onReceive(&receiveServices, m_graphProperties.get(), dst.properties.get(), dst.state.get(), slot.properties.get(), slot.state.get(), message.get(), dst.readyToSend.get());
       }
     }
+
+    ++m_epoch;
     return sent;
   }
 
@@ -253,7 +273,7 @@ int main(int argc, char *argv[])
     unsigned statsDelta=1;
     unsigned nextStats=1;
 
-    for(unsigned i=0; i<100; i++){
+    for(unsigned i=0; i<10; i++){
       if(logLevel>2 ||  i==nextStats){
 	fprintf(stderr, "Epoch %u : sends/device/epoch = %f\n", i, graph.m_statsSends / graph.m_devices.size() / statsDelta);
       }

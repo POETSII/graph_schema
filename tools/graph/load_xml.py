@@ -5,6 +5,7 @@ from lxml import etree
 
 import os
 import sys
+import json
 
 ns={"p":"http://TODO.org/POETS/virtual-graph-schema-v0"}
 
@@ -45,7 +46,6 @@ def get_child_text(node,name):
         raise XMLSyntaxError("No child text node called {}".format(name),node)
     return n.text
 
-
 def load_typed_data(dt):
     name=get_attrib(dt,"name")
     
@@ -69,13 +69,47 @@ def load_typed_data(dt):
     else:
         raise XMLSyntaxError("Unknown data type.",dt)
 
-def load_struct(name, members):
+
+def load_typed_data_spec(dt):
+    name=get_attrib(dt,"name")
+
+    tag=deNS(dt.tag)
+    if tag=="p:Tuple":
+        elts=[]
+        for eltNode in dt.findall("p:*",ns): # Anything from this namespace must be a member
+            elt=load_typed_data_spec(eltNode)
+            elts.append(elt)
+        return TupleTypedDataSpec(name,elts)
+    elif tag=="p:Scalar":
+        type=get_attrib(dt, "type")
+        value=get_attrib_optional(dt, "value")
+        return ScalarTypedDataSpec(name,type,value)
+    else:
+        raise XMLSyntaxError("Unknown data type '{}'.".format(tag), dt)
+
+def load_typed_data_instance(dt,spec):
+    if dt is None:
+        return None
+    value=json.loads(dt.text)
+    assert(spec.is_refinement_compatible(value))
+    return value
+    
+    
+def load_struct_spec(name, members):
     elts=[]
     for eltNode in members.findall("p:*",ns): # Anything from this namespace must be a member
-        elt=load_typed_data(eltNode)
+        elt=load_typed_data_spec(eltNode)
         elts.append(elt)
-    return TupleData(name, elts)
-        
+    return TupleTypedDataSpec(name, elts)
+
+def load_struct_instance(spec,dt):
+    if dt is None:
+        return None
+    # Content is just a JSON dictionary, without the surrounding brackets
+    text="{"+dt.text+"}"
+    value=json.loads(text)
+    assert(spec.is_refinement_compatible(value))
+    return value
     
 def load_edge_type(parent,dt):
     id=get_attrib(dt,"id")
@@ -84,19 +118,24 @@ def load_edge_type(parent,dt):
         message=None
         messageNode=dt.find("p:Message",ns)
         if messageNode is not None:
-            message=load_struct(id+"_message", messageNode)
+            message=load_struct_spec(id+"_message", messageNode)
 
         state=None
         stateNode=dt.find("p:State",ns)
         if stateNode is not None:
-            state=load_struct(id+"_state", stateNode)
+            state=load_struct_spec(id+"_state", stateNode)
 
-        properties=None
-        propertiesNode=dt.find("p:Properties",ns)
-        if propertiesNode is not None:
-            properties=load_struct(id+"_properties", propertiesNode)
-            
+        try:
+            properties=None
+            propertiesNode=dt.find("p:Properties",ns)
+            if propertiesNode is not None:
+                properties=load_struct_spec(id+"_properties", propertiesNode)
+        except Exception as e:
+            raise XMLSyntaxError("Error while parsing properties of edge {} : {}".format(id,e),dt,e)
+                
         return EdgeType(parent,id,message,state,properties)
+    except XMLSyntaxError:
+            raise
     except Exception as e:
         raise XMLSyntaxError("Error while parsing edge {}".format(id),dt,e)
 
@@ -107,12 +146,12 @@ def load_device_type(graph,dtNode):
     state=None
     stateNode=dtNode.find("p:State",ns)
     if stateNode is not None:
-        state=load_struct(id+"_state", stateNode)
+        state=load_struct_spec(id+"_state", stateNode)
 
     properties=None
     propertiesNode=dtNode.find("p:Properties",ns)
     if propertiesNode is not None:
-        properties=load_struct(id+"_properties", propertiesNode)
+        properties=load_struct_spec(id+"_properties", propertiesNode)
 
     dt=DeviceType(graph,id,state,properties)
         
@@ -148,7 +187,7 @@ def load_graph_type(graphNode):
     properties=None
     propertiesNode=graphNode.find("p:Properties",ns)
     if propertiesNode is not None:
-        properties=load_struct(id+"_properties", propertiesNode)
+        properties=load_struct_spec(id+"_properties", propertiesNode)
 
     graphType=GraphType(id,dimension,properties)
         
@@ -189,13 +228,13 @@ def load_device_instance(graph,diNode):
 
     nativeLocationStr=get_attrib_optional(diNode,"nativeLocation")
     if(nativeLocationStr):
-        nativeLocation=[real(p) for p in nativeLocationStr.split(',')]
+        nativeLocation=[float(p) for p in nativeLocationStr.split(',')]
         if len(nativeLocation) != graph.graph_type.native_dimension:
-            raise XMLSyntaxError("native location does not match graph dimension.")
+            raise XMLSyntaxError("native location '{}' does not match graph dimension {}.".format(nativeLocationStr,graph.graph_type.native_dimension), diNode)
     else:
         nativeLocation=None
     
-    device_type_id=get_attrib(diNode,"deviceTypeId")
+    device_type_id=get_attrib(diNode,"type")
     if device_type_id not in graph.graph_type.device_types:
         raise XMLSyntaxError("Unknown device type id {}".format(device_type_id))
     device_type=graph.graph_type.device_types[device_type_id]
@@ -203,16 +242,33 @@ def load_device_instance(graph,diNode):
     properties=None
     propertiesNode=diNode.find("p:Properties",ns)
     if propertiesNode is not None:
-        properties=load_struct(id+"_properties", propertiesNode)
+        properties=load_struct_instance(device_type.properties, propertiesNode)
 
     return DeviceInstance(graph,id,device_type,nativeLocation,properties)
+
+def split_endpoint(endpoint,node):
+    parts=endpoint.split(':')
+    if len(parts)!=2:
+        raise XMLSyntaxError("Path does not contain exactly two elements",node)
+    return (parts[0],parts[1])
     
 
+def split_path(path,node):
+    """Splits a path up into (dstDevice,dstPort,srcDevice,srcPort)"""
+    parts=endpoint.split('<-')
+    if len(parts)!=2:
+        raise XMLSyntaxError("Path does not contain exactly two endpoints",node)
+    return split_endpoint(parts[0])+split_endpoint(parts[1])
+
 def load_edge_instance(graph,eiNode):
-    dst_device_id=get_attrib(eiNode,"dstDeviceId")
-    dst_port_name=get_attrib(eiNode,"dstPortName")
-    src_device_id=get_attrib(eiNode,"srcDeviceId")
-    src_port_name=get_attrib(eiNode,"srcPortName")
+    path=get_attrib_optional(eiNode,"path")
+    if path:
+        (dst_device_id,dst_port_name,src_device_id,src_port_name)=split_path(path)
+    else:
+        dst_device_id=get_attrib(eiNode,"dstDeviceId")
+        dst_port_name=get_attrib(eiNode,"dstPortName")
+        src_device_id=get_attrib(eiNode,"srcDeviceId")
+        src_port_name=get_attrib(eiNode,"srcPortName")
 
     dst_device=graph.device_instances[dst_device_id]
     src_device=graph.device_instances[src_device_id]
@@ -220,8 +276,8 @@ def load_edge_instance(graph,eiNode):
     properties=None
     propertiesNode=eiNode.find("p:Properties",ns)
     if propertiesNode is not None:
-        assert(len(propertiesNode)==1)
-        properties=load_struct(None, propertiesNode[0])
+        spec=dst_device.device_type.inputs[dst_port_name].properties
+        properties=load_struct_instance(spec, propertiesNode[0])
 
     return EdgeInstance(graph,dst_device,dst_port_name,src_device,src_port_name,properties)
 
@@ -235,13 +291,13 @@ def load_graph_instance(graphTypes, graphNode):
     propertiesNode=graphNode.find("p:Properties",ns)
     if propertiesNode is not None:
         assert(len(propertiesNode)==1)
-        properties=load_typed_data(propertiesNode[0])
+        properties=load_struct_instance(graph.properties, propertiesNode[0])
 
-    for diNode in graphNode.findall("p:DeviceInstances/p:*",ns):
+    for diNode in graphNode.findall("p:DevI/p:*",ns):
         di=load_device_instance(graph,diNode)
         graph.add_device_instance(di)
 
-    for eiNode in graphNode.findall("p:EdgeInstances/p:*",ns):
+    for eiNode in graphNode.findall("p:EdgeI/p:*",ns):
         ei=load_edge_instance(graph,eiNode)
         graph.add_edge_instance(ei)
 

@@ -228,7 +228,7 @@ public:
 /*! This is an entry-point exposed by graph shared objects that allows them
   to register their various types.
 */
-extern void registerGraphTypes(Registry *registry);
+extern "C" void registerGraphTypes(Registry *registry);
 
 
 class GraphLoadEvents
@@ -274,6 +274,6 @@ public:
   ) =0;
 };
 
-void loadGraph(Registry *registry, xmlpp::Element *elt, GraphLoadEvents *events);
+extern "C" void loadGraph(Registry *registry, xmlpp::Element *elt, GraphLoadEvents *events);
 
 #endif

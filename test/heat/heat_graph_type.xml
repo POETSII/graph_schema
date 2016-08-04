@@ -1,8 +1,8 @@
 <?xml version="1.0"?>
 <Graph xmlns="http://TODO.org/POETS/virtual-graph-schema-v0">
-  <GraphType id="heat">   <!--TODO : Should be a unique id-->
+  <GraphType id="heat" nativeDimension="2">   <!--TODO : Should be a unique id-->
     <Properties>
-      <Float32 name="fireThreshold" value="0.1" />
+      <Scalar type="float" name="fireThreshold" value="0.1" />
     </Properties>
     
     <EdgeTypes>
@@ -12,13 +12,13 @@
       
       <EdgeType id="conductor">
 	<Properties>
-	  <Float32 name="conductance" value="0.5" />
+	  <Scalar type="float" name="conductance" value="0.5" />
 	</Properties>
 	<State>
-	  <Float32 name="ghost" value="0.0" />
+	  <Scalar type="float" name="ghost" value="0.0" />
 	</State>
 	<Message>
-	  <Float32 name="temperature" />
+	  <Scalar type="float" name="temperature" />
 	</Message>      
       </EdgeType>
     </EdgeTypes>
@@ -26,19 +26,19 @@
     <DeviceTypes>
       <DeviceType id="region">
 	<Properties>
-	  <Bool name="isFixed" value="0" />
-	  <Float32 name="initialTemp" value="0" />
+	  <Scalar type="bool" name="isFixed" value="0" />
+	  <Scalar type="float" name="initialTemp" value="0" />
 	</Properties>
 	
 	<State>
-	  <Float32 name="currTemp" value="0" />
-	  <Float32 name="lastFiredTemp" value="0" />
+	  <Scalar type="float" name="currTemp" value="0" />
+	  <Scalar type="float" name="lastFiredTemp" value="0" />
 	</State>
 
 	<InputPort name="__init__" edgeTypeId="__init__">
 	  <OnReceive><![CDATA[
-	  handler_log(2, "fireThreshold = %f\n", graphProperties->fireThreshold);
-	  handler_log(2,"fixed = %d, initialTemperature = %f\n", deviceProperties->isFixed, deviceProperties->initialTemp);
+	  handler_log(2, "fireThreshold = %f", graphProperties->fireThreshold);
+	  handler_log(2,"fixed = %d, initialTemperature = %f", deviceProperties->isFixed, deviceProperties->initialTemp);
 	  
 	  deviceState->currTemp = deviceProperties->initialTemp;
 
@@ -47,7 +47,7 @@
 	  // TODO : this is a hack
 	  deviceState->lastFiredTemp = deviceState->currTemp + graphProperties->fireThreshold * 1000000;
 
-	  handler_log(2,"currTemp=%f, lastFiredTemp=%f\n", deviceState->currTemp, deviceState->lastFiredTemp);
+	  handler_log(2,"currTemp=%f, lastFiredTemp=%f", deviceState->currTemp, deviceState->lastFiredTemp);
 
 	  // TODO : Bind by name
 	  requestSend[0] = true;
@@ -61,7 +61,7 @@
 	    handler_log(2,"fixed, no change.\n");
 	    requestSend[0] = false;
 	  }else{
-	    handler_log(2,"conductance = %f, ghost = %f\n", edgeProperties->conductance, edgeState->ghost);
+	    handler_log(2,"conductance = %f, ghost = %f", edgeProperties->conductance, edgeState->ghost);
 	    
 	    float oldTemp=deviceState->currTemp;
 	    float newTemp=deviceState->currTemp;
@@ -70,13 +70,13 @@
 	    newTemp += edgeProperties->conductance * edgeState->ghost;
 	    deviceState->currTemp=newTemp;
 
-	    handler_log(2, "incoming = %f, oldTemp = %f, newTemp = %f\n", message->temperature, oldTemp, newTemp);
+	    handler_log(2, "incoming = %f, oldTemp = %f, newTemp = %f", message->temperature, oldTemp, newTemp);
 
 	    float delta=(deviceState->currTemp - deviceState->lastFiredTemp);
 	    if(delta<0){
 	      delta=-delta;
 	      }
-	    handler_log(2, "delta = %f, fireThreshold = %f\n", delta, graphProperties->fireThreshold);
+	    handler_log(2, "delta = %f, fireThreshold = %g", delta, graphProperties->fireThreshold);
 
 	    // TODO : This should be bound by name, not index
 	    requestSend[0] = (delta >= graphProperties->fireThreshold);

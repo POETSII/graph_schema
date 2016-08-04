@@ -5,13 +5,13 @@
     <EdgeTypes>
       <EdgeType id="et1">
 	<Message>
-	  <Int32 name="value" />
+	  <Scalar type="int32_t" name="value" />
 	</Message>
       </EdgeType>
       
       <EdgeType id="et2">
 	<Message>
-	  <Float32 name="bobble" />
+	  <Scalar type="float" name="bobble" />
 	</Message>
       </EdgeType>
     </EdgeTypes>
@@ -19,7 +19,7 @@
     <DeviceTypes>
       <DeviceType id="dtA">
 	<Properties>
-          <Int32 name="xxx" />
+          <Scalar type="int32_t" name="xxx" />
 	</Properties>
 	
 	<InputPort name="in" edgeTypeId="et1">
@@ -33,7 +33,7 @@
       
       <DeviceType id="dtB">
 	<State>
-          <Int32 name="yyy" />
+          <Scalar type="int32_t" name="yyy" />
 	</State>
 	
 	<InputPort name="in" edgeTypeId="et2">
@@ -51,18 +51,18 @@
     <GraphInstance id="two_device_box_inst" graphTypeId="two_device_box">
 
       <DeviceInstances>
-	<DeviceInstance id="dA0" deviceTypeId="dtA" />
-	<DeviceInstance id="dA1" deviceTypeId="dtA" />
-	<DeviceInstance id="dB0" deviceTypeId="dtB" />
-	<DeviceInstance id="dB1" deviceTypeId="dtB" />
+	<DevI id="dA0" type="dtA" />
+	<DevI id="dA1" type="dtA" />
+	<DevI id="dB0" type="dtB" />
+	<DevI id="dB1" type="dtB" />
       </DeviceInstances>
       
       <EdgeInstances>
-	<EdgeInstance dstDeviceId="dA0" dstPortName="in" srcDeviceId="dB0" srcPortName="out" />
-	<EdgeInstance dstDeviceId="dB1" dstPortName="in" srcDeviceId="dA0" srcPortName="out" />
-	<EdgeInstance dstDeviceId="dB1" dstPortName="in" srcDeviceId="dA1" srcPortName="out" />
-	<EdgeInstance dstDeviceId="dA0" dstPortName="in" srcDeviceId="dB1" srcPortName="out" />
-	<EdgeInstance dstDeviceId="dB0" dstPortName="in" srcDeviceId="dA1" srcPortName="out" />
+	<EdgeI dstDeviceId="dA0" dstPortName="in" srcDeviceId="dB0" srcPortName="out" />
+	<EdgeI dstDeviceId="dB1" dstPortName="in" srcDeviceId="dA0" srcPortName="out" />
+	<EdgeI dstDeviceId="dB1" dstPortName="in" srcDeviceId="dA1" srcPortName="out" />
+	<EdgeI dstDeviceId="dA0" dstPortName="in" srcDeviceId="dB1" srcPortName="out" />
+	<EdgeI dstDeviceId="dB0" dstPortName="in" srcDeviceId="dA1" srcPortName="out" />
       </EdgeInstances>
     </GraphInstance>
 </Graph>

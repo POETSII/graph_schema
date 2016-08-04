@@ -35,6 +35,12 @@ derived/%.rng derived/%.xsd : master/%.rnc $(TRANG)
 
 build-virtual-schema : derived/virtual-graph-schema.rng derived/virtual-graph-schema.xsd
 
+regenerate-random :
+	python3.4 tools/create_random_graph.py 1 > test/virtual/random1.xml
+	python3.4 tools/create_random_graph.py 2 > test/virtual/random2.xml
+	python3.4 tools/create_random_graph.py 4 > test/virtual/random3.xml
+	python3.4 tools/create_random_graph.py 8 > test/virtual/random4.xml
+
 
 output/%.checked : test/virtual/%.xml $(JING) master/virtual-graph-schema.rnc derived/virtual-graph-schema.xsd
 	java -jar $(JING) -c master/virtual-graph-schema.rnc test/virtual/$*.xml

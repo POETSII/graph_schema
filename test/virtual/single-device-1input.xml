@@ -4,7 +4,7 @@
     <EdgeTypes>
       <EdgeType id="e1">
 	<Properties>
-	  <Int32 name="value" />
+	  <Scalar type="int32_t" name="value" />
 	</Properties>      
       </EdgeType>
     </EdgeTypes>
