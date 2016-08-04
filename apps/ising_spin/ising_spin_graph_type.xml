@@ -1,0 +1,158 @@
+<?xml version="1.0"?>
+<Graph xmlns="http://TODO.org/POETS/virtual-graph-schema-v0">
+  <GraphType id="ising_spin" nativeDimension="2">
+    <!-- This is supposed to implement the method from [lubachevsky-87-asynchronous-ising-spin-models]:
+	 "Efficient Parallel Simulations of Asynchronous Cellular Arrays", 1987, Boris D. Lubachevsky -->
+    
+    <Properties>
+      <Scalar type="float" name="endTime" value="10" />
+      <Scalar type="uint32_t" name="width" />
+      <Scalar type="uint32_t" name="height" />
+      <Array name="probabilities" length="10">
+	<Scalar type="float" />
+      </Array>
+    </Properties>
+
+    <SharedCode><![CDATA[
+    
+    
+    uint32_t urng(uint32_t &state)
+    {
+      state = state*1664525+1013904223;
+      return state;
+    }
+
+    uint32_t rng_init(uint32_t x, uint32_t y)
+    {
+      uint32_t seed=100003*x + 17*y;
+      for(int i=0; i<10; i++){
+        urng(seed);
+      }
+      return seed;
+    }
+
+    float frng(uint32_t &state)
+    {
+      return urng(state)*2.328306400e-10f;
+    }
+
+    uint32_t initialNeighbourSum(uint32_t x, uint32_t y, uint32_t W, uint32_t H)
+    {
+      int32_t sum=0;
+      uint32_t seed;
+      
+
+
+      return sum;
+    }
+
+
+    ]]></SharedCode>
+    
+    <EdgeTypes>
+      <EdgeType id="__init__">
+	<!-- This doesn't have any properties -->
+      </EdgeType>
+      
+      <EdgeType id="update">
+	<Properties>
+	  <Scalar type="uint32_t" name="direction" /> <!-- 1=Up, 2=Right, 3=Down, 4=Left -->
+	</Properties>
+	<State>
+	  <Scalar type="float" name="time" value="0" /> <!-- We need this in case a message arrives out of order. Time can't go backwards -->
+	</State>
+	<Message>
+	  <Scalar type="float" name="time" value="0" />
+	  <Scalar type="uint32_t" name="spin" /> <!-- By implication, it had the opposite spin before-hand -->
+	</Message>      
+      </EdgeType>
+    </EdgeTypes>
+  
+    <DeviceTypes>
+      <DeviceType id="cell">
+	<Properties>
+	  <Scalar type="uint32_t" name="x" value="0" />
+	  <Scalar type="uint32_t" name="y" value="0" />
+	</Properties>
+	
+	<State>
+	  <Scalar type="uint32_t" name="rng" />
+
+	  <!-- Track time and spins in neighbourhood. Index 0 is this device -->
+	  <Array name="spins" length="5" type="uint32_t" />
+	  <Array name="times" length="5" type="float" />
+	</State>
+
+	<InputPort name="__init__" edgeTypeId="__init__">
+	  <OnReceive><![CDATA[
+	  // Initialise RNG and choose random starting spin
+	  uint32_t seed;
+
+	  seed=rng_init( x, (y+H-1)%H );
+	  deviceState->spins[1]=rng(seed)>>31;
+	  deviceState->times[1]=0;
+
+	  seed=rng_init( (x+1)%W, y );
+	  deviceState->spins[2]=rng(seed)>>31;
+	  deviceState->times[2]=0;
+
+	  seed=rng_init( x, (y+1)%H );
+	  deviceState->spins[3]=rng(seed)>>31;
+	  deviceState->times[3]=0;
+
+	  seed=rng_init( (x+W-1)%W, y );
+	  deviceState->spins[4]=rng(seed)>>31;
+	  deviceState->times[4]=0;
+
+	  // Final one is this node
+	  seed=rng_init( x, y );
+	  deviceState->spins[0]=rng(seed)>>31;
+	  deviceState->times[0]=0;
+	  deviceState->rng=seed; // Store the rng state back
+
+	  // We now have perfect knowledge of our neighbourhood
+
+	  uint32_t sumSpin
+
+	  TODO : Here
+	  
+
+	  requestSend_out = true;
+	  ]]>
+	  </OnReceive>
+	</InputPort>
+	
+	<InputPort name="in" edgeTypeId="update">
+	  <OnReceive><![CDATA[
+
+	  // Update our view of neighbourhood spin. Even if packets are 
+	  if(message->spin){
+    	    deviceState->sumSpin++;
+	  }else{
+	    deviceState->sumSpin--;
+	  }
+	  handler_assert(0 <= deviceState->sumSpin && deviceState->sumSpin <= 5);
+
+	  // Update our view of neighbourhood time. We have to be very careful about
+	  // possible re-ordered packets
+	  
+	  ]]></OnReceive>
+	</InputPort>
+
+	<OutputPort name="out" edgeTypeId="update">
+	  <OnSend><![CDATA[
+	  requestSend_out = false; // For information; this is the default
+
+	  // Check if simulation has finished. If so do nothing
+	  if(deviceState->time >= graphProperties->endTime){
+	    *cancelSend=true;
+	  }
+
+	  message->spin = deviceState->spin;
+	  message->time = deviceState->time;
+	  ]]></OnSend>
+	</OutputPort>
+      </DeviceType>
+    </DeviceTypes>
+  </GraphType>
+</Graph>
