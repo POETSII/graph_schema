@@ -64,10 +64,12 @@ def save_typed_struct_instance(node,childTagName,type,inst):
     if inst is None:
         return
     assert type.is_refinement_compatible(inst)
+    if len(inst) is 0:
+        return
     text=json.dumps(inst)
     assert text.startswith('{') and text.endswith('}')
     r=etree.Element(toNS(childTagName))
-    r.text=text.strip('{}')
+    r.text=text[1:-1] # Get rid of brackets
     node.append(r)
     return r
     
@@ -184,7 +186,8 @@ def save_graph_instance(graph):
     return gn
 
 def save_graph(graph,dst):
-    root=etree.Element(toNS("p:Graph"))
+    nsmap = { None : "http://TODO.org/POETS/virtual-graph-schema-v0" }
+    root=etree.Element(toNS("p:Graph"), nsmap=nsmap)
     
     root.append(save_graph_type(graph.graph_type))
     root.append(save_graph_instance(graph))

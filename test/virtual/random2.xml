@@ -1,230 +1,85 @@
 <?xml version='1.0' encoding='ASCII'?>
-<ns0:Graph xmlns:ns0="http://TODO.org/POETS/virtual-graph-schema-v0">
-  <ns0:GraphType id="random">
-    <ns0:Properties>
-      <ns0:Scalar name="v_1985403428" type="float" value="-0.6587774480881006"/>
-    </ns0:Properties>
-    <ns0:EdgeTypes>
-      <ns0:EdgeType id="et1">
-        <ns0:Message>
-          <ns0:Scalar name="v_4115526544" type="bool"/>
-          <ns0:Tuple name="v_2150380242">
-            <ns0:Tuple name="v_3997104130">
-              <ns0:Tuple name="v_299348703">
-                <ns0:Scalar name="v_2583484929" type="int32_t" value="636034228"/>
-              </ns0:Tuple>
-              <ns0:Scalar name="v_2530276424" type="bool" value="True"/>
-            </ns0:Tuple>
-          </ns0:Tuple>
-          <ns0:Scalar name="v_1413877606" type="float"/>
-          <ns0:Tuple name="v_71862849">
-            <ns0:Scalar name="v_713016281" type="int32_t" value="-328434973"/>
-          </ns0:Tuple>
-        </ns0:Message>
-      </ns0:EdgeType>
-      <ns0:EdgeType id="et0">
-        <ns0:Message>
-          <ns0:Scalar name="v_4173899887" type="float" value="0.8586385338278706"/>
-        </ns0:Message>
-        <ns0:Properties>
-          <ns0:Tuple name="v_3056263209">
-            <ns0:Tuple name="v_265813756">
-              <ns0:Tuple name="v_898380876">
-                <ns0:Scalar name="v_4152797452" type="int32_t" value="793739726"/>
-              </ns0:Tuple>
-            </ns0:Tuple>
-            <ns0:Scalar name="v_1939578106" type="bool"/>
-          </ns0:Tuple>
-        </ns0:Properties>
-      </ns0:EdgeType>
-    </ns0:EdgeTypes>
-    <ns0:DeviceTypes>
-      <ns0:DeviceType id="dt0">
-        <ns0:Properties>
-          <ns0:Scalar name="v_1438800274" type="bool" value="False"/>
-          <ns0:Tuple name="v_1825933877">
-            <ns0:Scalar name="v_3282769028" type="int32_t" value="-1933178429"/>
-            <ns0:Scalar name="v_2010403162" type="float" value="-0.6186831244904345"/>
-          </ns0:Tuple>
-        </ns0:Properties>
-        <ns0:OutputPort name="p_817380788" edgeTypeId="et1">
-          <ns0:OnSend><![CDATA[assert(0);]]></ns0:OnSend>
-        </ns0:OutputPort>
-        <ns0:OutputPort name="p_2506977770" edgeTypeId="et0">
-          <ns0:OnSend><![CDATA[assert(0);]]></ns0:OnSend>
-        </ns0:OutputPort>
-      </ns0:DeviceType>
-      <ns0:DeviceType id="dt1">
-        <ns0:InputPort name="p_1524670624" edgeTypeId="et0">
-          <ns0:OnReceive><![CDATA[assert(0);]]></ns0:OnReceive>
-        </ns0:InputPort>
-        <ns0:InputPort name="p_2670428997" edgeTypeId="et1">
-          <ns0:OnReceive><![CDATA[assert(0);]]></ns0:OnReceive>
-        </ns0:InputPort>
-        <ns0:OutputPort name="p_1819579965" edgeTypeId="et0">
-          <ns0:OnSend><![CDATA[assert(0);]]></ns0:OnSend>
-        </ns0:OutputPort>
-      </ns0:DeviceType>
-    </ns0:DeviceTypes>
-  </ns0:GraphType>
-  <ns0:GraphInstance id="random" graphTypeId="random">
-    <ns0:DeviceInstances>
-      <ns0:DevI id="di_2909905496" type="dt0">
-        <ns0:P></ns0:P>
-      </ns0:DevI>
-      <ns0:DevI id="di_2422168223" type="dt0"/>
-      <ns0:DevI id="di_125524358" type="dt0"/>
-      <ns0:DevI id="di_3709072534" type="dt0">
-        <ns0:P>"v_1825933877": {"v_3282769028": 678203289</ns0:P>
-      </ns0:DevI>
-      <ns0:DevI id="di_1905367286" type="dt0">
-        <ns0:P></ns0:P>
-      </ns0:DevI>
-      <ns0:DevI id="di_1986729900" type="dt0">
-        <ns0:P></ns0:P>
-      </ns0:DevI>
-      <ns0:DevI id="di_721201103" type="dt1"/>
-      <ns0:DevI id="di_708898384" type="dt1"/>
-      <ns0:DevI id="di_591235574" type="dt1"/>
-      <ns0:DevI id="di_921800703" type="dt1"/>
-      <ns0:DevI id="di_814028427" type="dt0">
-        <ns0:P></ns0:P>
-      </ns0:DevI>
-      <ns0:DevI id="di_3070947175" type="dt1"/>
-      <ns0:DevI id="di_384623050" type="dt0"/>
-      <ns0:DevI id="di_74233216" type="dt1"/>
-      <ns0:DevI id="di_2564469691" type="dt1"/>
-      <ns0:DevI id="di_2126046370" type="dt0"/>
-      <ns0:DevI id="di_1868525890" type="dt1"/>
-      <ns0:DevI id="di_555390403" type="dt0">
-        <ns0:P></ns0:P>
-      </ns0:DevI>
-      <ns0:DevI id="di_2094398394" type="dt1"/>
-      <ns0:DevI id="di_1602177444" type="dt0">
-        <ns0:P></ns0:P>
-      </ns0:DevI>
-    </ns0:DeviceInstances>
-    <ns0:EdgeInstances>
-      <ns0:EdgeI path="di_708898384:p_1524670624-di_125524358:p_2506977770">
-        <ns0:P></ns0:P>
-      </ns0:EdgeI>
-      <ns0:EdgeI path="di_2564469691:p_1524670624-di_708898384:p_1819579965"/>
-      <ns0:EdgeI path="di_921800703:p_2670428997-di_555390403:p_817380788"/>
-      <ns0:EdgeI path="di_74233216:p_2670428997-di_125524358:p_817380788"/>
-      <ns0:EdgeI path="di_591235574:p_1524670624-di_2909905496:p_2506977770"/>
-      <ns0:EdgeI path="di_3070947175:p_1524670624-di_1905367286:p_2506977770"/>
-      <ns0:EdgeI path="di_2564469691:p_1524670624-di_721201103:p_1819579965">
-        <ns0:P></ns0:P>
-      </ns0:EdgeI>
-      <ns0:EdgeI path="di_921800703:p_1524670624-di_921800703:p_1819579965">
-        <ns0:P></ns0:P>
-      </ns0:EdgeI>
-      <ns0:EdgeI path="di_591235574:p_2670428997-di_2126046370:p_817380788"/>
-      <ns0:EdgeI path="di_591235574:p_2670428997-di_1602177444:p_817380788"/>
-      <ns0:EdgeI path="di_2564469691:p_1524670624-di_555390403:p_2506977770">
-        <ns0:P></ns0:P>
-      </ns0:EdgeI>
-      <ns0:EdgeI path="di_591235574:p_1524670624-di_1986729900:p_2506977770">
-        <ns0:P></ns0:P>
-      </ns0:EdgeI>
-      <ns0:EdgeI path="di_2094398394:p_1524670624-di_1602177444:p_2506977770"/>
-      <ns0:EdgeI path="di_74233216:p_1524670624-di_2909905496:p_2506977770">
-        <ns0:P></ns0:P>
-      </ns0:EdgeI>
-      <ns0:EdgeI path="di_74233216:p_1524670624-di_1868525890:p_1819579965"/>
-      <ns0:EdgeI path="di_3070947175:p_1524670624-di_708898384:p_1819579965">
-        <ns0:P>"v_3056263209": {"v_1939578106": true</ns0:P>
-      </ns0:EdgeI>
-      <ns0:EdgeI path="di_3070947175:p_1524670624-di_921800703:p_1819579965">
-        <ns0:P>"v_3056263209": {"v_1939578106": true</ns0:P>
-      </ns0:EdgeI>
-      <ns0:EdgeI path="di_591235574:p_1524670624-di_3070947175:p_1819579965"/>
-      <ns0:EdgeI path="di_3070947175:p_2670428997-di_814028427:p_817380788"/>
-      <ns0:EdgeI path="di_3070947175:p_1524670624-di_2564469691:p_1819579965"/>
-      <ns0:EdgeI path="di_1868525890:p_1524670624-di_921800703:p_1819579965">
-        <ns0:P></ns0:P>
-      </ns0:EdgeI>
-      <ns0:EdgeI path="di_3070947175:p_1524670624-di_555390403:p_2506977770">
-        <ns0:P></ns0:P>
-      </ns0:EdgeI>
-      <ns0:EdgeI path="di_1868525890:p_2670428997-di_2909905496:p_817380788"/>
-      <ns0:EdgeI path="di_2564469691:p_1524670624-di_3070947175:p_1819579965"/>
-      <ns0:EdgeI path="di_921800703:p_2670428997-di_384623050:p_817380788"/>
-      <ns0:EdgeI path="di_708898384:p_1524670624-di_1868525890:p_1819579965"/>
-      <ns0:EdgeI path="di_708898384:p_1524670624-di_2564469691:p_1819579965">
-        <ns0:P></ns0:P>
-      </ns0:EdgeI>
-      <ns0:EdgeI path="di_2094398394:p_2670428997-di_555390403:p_817380788"/>
-      <ns0:EdgeI path="di_2564469691:p_1524670624-di_2126046370:p_2506977770"/>
-      <ns0:EdgeI path="di_591235574:p_2670428997-di_125524358:p_817380788"/>
-      <ns0:EdgeI path="di_591235574:p_1524670624-di_708898384:p_1819579965">
-        <ns0:P></ns0:P>
-      </ns0:EdgeI>
-      <ns0:EdgeI path="di_2564469691:p_2670428997-di_2422168223:p_817380788"/>
-      <ns0:EdgeI path="di_591235574:p_2670428997-di_2909905496:p_817380788"/>
-      <ns0:EdgeI path="di_1868525890:p_1524670624-di_3070947175:p_1819579965"/>
-      <ns0:EdgeI path="di_2564469691:p_1524670624-di_74233216:p_1819579965"/>
-      <ns0:EdgeI path="di_74233216:p_1524670624-di_2564469691:p_1819579965">
-        <ns0:P></ns0:P>
-      </ns0:EdgeI>
-      <ns0:EdgeI path="di_921800703:p_1524670624-di_708898384:p_1819579965">
-        <ns0:P></ns0:P>
-      </ns0:EdgeI>
-      <ns0:EdgeI path="di_2094398394:p_1524670624-di_3070947175:p_1819579965"/>
-      <ns0:EdgeI path="di_921800703:p_1524670624-di_1905367286:p_2506977770"/>
-      <ns0:EdgeI path="di_721201103:p_1524670624-di_3070947175:p_1819579965"/>
-      <ns0:EdgeI path="di_921800703:p_1524670624-di_555390403:p_2506977770">
-        <ns0:P></ns0:P>
-      </ns0:EdgeI>
-      <ns0:EdgeI path="di_1868525890:p_2670428997-di_2126046370:p_817380788"/>
-      <ns0:EdgeI path="di_2564469691:p_1524670624-di_1868525890:p_1819579965"/>
-      <ns0:EdgeI path="di_2564469691:p_1524670624-di_2564469691:p_1819579965">
-        <ns0:P></ns0:P>
-      </ns0:EdgeI>
-      <ns0:EdgeI path="di_3070947175:p_1524670624-di_2094398394:p_1819579965">
-        <ns0:P></ns0:P>
-      </ns0:EdgeI>
-      <ns0:EdgeI path="di_2094398394:p_2670428997-di_2126046370:p_817380788"/>
-      <ns0:EdgeI path="di_1868525890:p_1524670624-di_384623050:p_2506977770">
-        <ns0:P>"v_3056263209": {"v_1939578106": true</ns0:P>
-      </ns0:EdgeI>
-      <ns0:EdgeI path="di_2094398394:p_1524670624-di_74233216:p_1819579965"/>
-      <ns0:EdgeI path="di_708898384:p_2670428997-di_555390403:p_817380788"/>
-      <ns0:EdgeI path="di_708898384:p_1524670624-di_555390403:p_2506977770">
-        <ns0:P></ns0:P>
-      </ns0:EdgeI>
-      <ns0:EdgeI path="di_721201103:p_1524670624-di_3709072534:p_2506977770">
-        <ns0:P></ns0:P>
-      </ns0:EdgeI>
-      <ns0:EdgeI path="di_2094398394:p_2670428997-di_384623050:p_817380788"/>
-      <ns0:EdgeI path="di_921800703:p_1524670624-di_2909905496:p_2506977770">
-        <ns0:P>"v_3056263209": {"v_1939578106": true</ns0:P>
-      </ns0:EdgeI>
-      <ns0:EdgeI path="di_708898384:p_2670428997-di_2126046370:p_817380788"/>
-      <ns0:EdgeI path="di_921800703:p_1524670624-di_74233216:p_1819579965"/>
-      <ns0:EdgeI path="di_591235574:p_2670428997-di_2422168223:p_817380788"/>
-      <ns0:EdgeI path="di_708898384:p_1524670624-di_3070947175:p_1819579965">
-        <ns0:P>"v_3056263209": {"v_1939578106": true</ns0:P>
-      </ns0:EdgeI>
-      <ns0:EdgeI path="di_74233216:p_1524670624-di_591235574:p_1819579965">
-        <ns0:P></ns0:P>
-      </ns0:EdgeI>
-      <ns0:EdgeI path="di_921800703:p_1524670624-di_125524358:p_2506977770"/>
-      <ns0:EdgeI path="di_591235574:p_1524670624-di_555390403:p_2506977770">
-        <ns0:P></ns0:P>
-      </ns0:EdgeI>
-      <ns0:EdgeI path="di_1868525890:p_1524670624-di_125524358:p_2506977770"/>
-      <ns0:EdgeI path="di_1868525890:p_1524670624-di_74233216:p_1819579965"/>
-      <ns0:EdgeI path="di_921800703:p_2670428997-di_3709072534:p_817380788"/>
-      <ns0:EdgeI path="di_921800703:p_1524670624-di_1868525890:p_1819579965"/>
-      <ns0:EdgeI path="di_1868525890:p_1524670624-di_721201103:p_1819579965">
-        <ns0:P></ns0:P>
-      </ns0:EdgeI>
-      <ns0:EdgeI path="di_1868525890:p_1524670624-di_2094398394:p_1819579965"/>
-      <ns0:EdgeI path="di_1868525890:p_1524670624-di_708898384:p_1819579965"/>
-      <ns0:EdgeI path="di_721201103:p_1524670624-di_708898384:p_1819579965">
-        <ns0:P></ns0:P>
-      </ns0:EdgeI>
-    </ns0:EdgeInstances>
-  </ns0:GraphInstance>
-</ns0:Graph>
+<Graph xmlns="http://TODO.org/POETS/virtual-graph-schema-v0">
+  <GraphType id="random">
+    <Properties>
+      <Scalar name="v_3715494464" type="float"/>
+    </Properties>
+    <EdgeTypes>
+      <EdgeType id="et1">
+        <Message>
+          <Scalar name="v_816190352" type="int32_t"/>
+        </Message>
+        <Properties>
+          <Scalar name="v_494832305" type="int32_t" value="-1022963811"/>
+        </Properties>
+        <State>
+          <Scalar name="v_3140299725" type="int32_t" value="2040973644"/>
+        </State>
+      </EdgeType>
+      <EdgeType id="et0">
+        <State>
+          <Scalar name="v_3388168831" type="bool" value="True"/>
+          <Scalar name="v_991716408" type="int32_t"/>
+        </State>
+      </EdgeType>
+    </EdgeTypes>
+    <DeviceTypes>
+      <DeviceType id="dt1">
+        <State>
+          <Scalar name="v_766046347" type="int32_t"/>
+        </State>
+      </DeviceType>
+      <DeviceType id="dt0">
+        <Properties>
+          <Scalar name="v_1931282308" type="int32_t"/>
+        </Properties>
+        <State>
+          <Tuple name="v_1890217285">
+            <Scalar name="v_2247670937" type="float"/>
+          </Tuple>
+          <Scalar name="v_1583005977" type="bool"/>
+        </State>
+        <InputPort name="p_2503532375" edgeTypeId="et1">
+          <OnReceive><![CDATA[assert(0);]]></OnReceive>
+        </InputPort>
+        <OutputPort name="p_3022185211" edgeTypeId="et0">
+          <OnSend><![CDATA[assert(0);]]></OnSend>
+        </OutputPort>
+        <OutputPort name="p_1732930425" edgeTypeId="et0">
+          <OnSend><![CDATA[assert(0);]]></OnSend>
+        </OutputPort>
+      </DeviceType>
+    </DeviceTypes>
+  </GraphType>
+  <GraphInstance id="random" graphTypeId="random">
+    <DeviceInstances>
+      <DevI id="di_1303628798" type="dt0"/>
+      <DevI id="di_57694543" type="dt0">
+        <P>"v_1931282308": -1271707692</P>
+      </DevI>
+      <DevI id="di_2193708901" type="dt1"/>
+      <DevI id="di_3016916191" type="dt0"/>
+      <DevI id="di_3231971289" type="dt0"/>
+      <DevI id="di_1841213820" type="dt0"/>
+      <DevI id="di_1041544447" type="dt0"/>
+      <DevI id="di_1990717912" type="dt1"/>
+      <DevI id="di_3854558772" type="dt1"/>
+      <DevI id="di_3154131107" type="dt0"/>
+      <DevI id="di_2259183815" type="dt1"/>
+      <DevI id="di_4007963636" type="dt0">
+        <P>"v_1931282308": -924745342</P>
+      </DevI>
+      <DevI id="di_3500158142" type="dt1"/>
+      <DevI id="di_3137847583" type="dt0"/>
+      <DevI id="di_3851714088" type="dt0">
+        <P>"v_1931282308": -290568003</P>
+      </DevI>
+      <DevI id="di_4149872032" type="dt0"/>
+      <DevI id="di_427843021" type="dt1"/>
+      <DevI id="di_2147214331" type="dt0"/>
+      <DevI id="di_2845967714" type="dt1"/>
+      <DevI id="di_1962433074" type="dt1"/>
+    </DeviceInstances>
+    <EdgeInstances/>
+  </GraphInstance>
+</Graph>
