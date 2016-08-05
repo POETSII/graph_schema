@@ -583,8 +583,6 @@ void loadGraph(Registry *registry, xmlpp::Element *parent, GraphLoadEvents *even
 	start=end+1;
       }
 
-      fprintf(stderr, "Out\n");
-
       if(nativeLocation.size()!=graphType->getNativeDimension()){
 	throw std::runtime_error("Device instance location does not match dimension of problem.");
       }
@@ -623,7 +621,7 @@ void loadGraph(Registry *registry, xmlpp::Element *parent, GraphLoadEvents *even
     std::string path=get_attribute_optional(eEdge, "path");
     if(path.c_str()){
       split_path(path, dstDeviceId, dstPortName, srcDeviceId, srcPortName);
-      std::cerr<<srcDeviceId<<" "<<srcPortName<<" "<<dstDeviceId<<" "<<dstPortName<<"\n";
+      //std::cerr<<srcDeviceId<<" "<<srcPortName<<" "<<dstDeviceId<<" "<<dstPortName<<"\n";
     }else{
       srcDeviceId=get_attribute_required(eEdge, "srcDeviceId");
       srcPortName=get_attribute_required(eEdge, "srcPortName");

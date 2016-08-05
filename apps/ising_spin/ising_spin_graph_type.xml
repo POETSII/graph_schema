@@ -80,6 +80,7 @@
 	
 	<State>
 	  <Scalar type="uint32_t" name="rng" />
+	  <Scalar type="bool" name="firstSend" />
 
 	  <!-- Track time and spins in neighbourhood. Index 0 is this device -->
 	  <Array name="spins" length="5" type="int32_t" />
@@ -120,6 +121,10 @@
 	  // time, and try to broadcast it
 	  chooseNextEvent(graphProperties, deviceState);
 
+	  deviceState->firstSend=true;
+
+	  handler_log(3, "next_t = %g, next_spin = %d", deviceState->times[0], deviceState->spins[0]);
+
 	  requestSend_out = true;
 	  ]]>
 	  </OnReceive>
@@ -131,13 +136,20 @@
 	  if(message->time >= deviceState->times[edgeProperties->direction]){
   	    deviceState->spins[edgeProperties->direction]=message->spin;
 	    deviceState->times[edgeProperties->direction]=message->time;
+
+	    handler_log(4, "from %d, new_time = %g, new_spin  %d", edgeProperties->direction, message->time, message->spin);
 	  }
 
 	  requestSend_out = true;
-	  for(unsigned i=1; i<5; i++){
-            if(deviceState->times[i] < deviceState->times[0]){
-	      requestSend_out = false;
-	    }
+	  if(deviceState->firstSend){
+	    // We must send, as neighbours don't know our state yet
+	  }else{
+	    for(unsigned i=1; i<5; i++){
+              if(deviceState->times[i] < deviceState->times[0]){
+	        handler_log(4, "  time[%d] = %g < time[0] = %g", i, deviceState->times[i], deviceState->times[0]);
+	        requestSend_out = false;
+              }
+	    }	
 	  }
 	  
 	  ]]></OnReceive>
@@ -152,8 +164,25 @@
 	    *cancelSend=true;
 	  }
 
-	  message->spin = deviceState->spins[0];
-	  message->time = deviceState->times[0];
+	  if(deviceState->firstSend){
+             deviceState->firstSend=false;
+	     message->spin = deviceState->spins[0];
+             message->time = deviceState->times[0];
+	  }else{
+	    float prevTime=deviceState->times[0];
+            chooseNextEvent(graphProperties, deviceState);
+            message->spin = deviceState->spins[0];
+	    message->time = deviceState->times[0];
+	    
+            handler_log(3, "prev_t = %g, next_t = %g, next_spin = %d", prevTime, deviceState->times[0], deviceState->spins[0]);
+            requestSend_out = true;
+	    for(unsigned i=1; i<5; i++){
+              if(deviceState->times[i] < deviceState->times[0]){
+	        handler_log(4, "  time[%d] = %g < time[0] = %g", i, deviceState->times[i], deviceState->times[0]);
+	        requestSend_out = false;
+              }
+	    }	
+	  }
 	  ]]></OnSend>
 	</OutputPort>
       </DeviceType>

@@ -8,7 +8,7 @@
 #include <random>
 #include <unordered_set>
 
-static unsigned  logLevel=3;
+static unsigned  logLevel=2;
 
 struct EpochSim
   : public GraphLoadEvents
@@ -273,9 +273,9 @@ int main(int argc, char *argv[])
     unsigned statsDelta=1;
     unsigned nextStats=1;
 
-    for(unsigned i=0; i<10; i++){
+    for(unsigned i=0; i<100; i++){
       if(logLevel>2 ||  i==nextStats){
-	fprintf(stderr, "Epoch %u : sends/device/epoch = %f\n", i, graph.m_statsSends / graph.m_devices.size() / statsDelta);
+	fprintf(stderr, "Epoch %u : sends/device/epoch = %f (%f / %u)\n", i, graph.m_statsSends / graph.m_devices.size() / statsDelta, graph.m_statsSends/statsDelta, (unsigned)graph.m_devices.size());
       }
       if(i==nextStats){
 	nextStats=nextStats+statsDelta;

@@ -110,11 +110,11 @@ class ArrayTypedDataSpec(TypedDataSpec):
         if not isinstance(inst,list):
             return False
 
-        if len(list)!=self.length:
+        if len(inst)!=self.length:
             return False
 
         for v in inst:
-            if not ee.is_refinement_compatible(self.type,v):
+            if not self.type.is_refinement_compatible(v):
                 return False
 
         return True

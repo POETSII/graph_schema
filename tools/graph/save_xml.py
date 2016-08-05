@@ -41,6 +41,11 @@ def save_typed_data_spec(dt):
 
         if dt.value is not None and dt.value is not 0:
             n.attrib["value"]=str(dt.value)
+    elif isinstance(dt,ArrayTypedDataSpec):
+        n=etree.Element(toNS("p:Array"))
+        n.attrib["name"]=dt.name
+        assert isinstance(dt.type,ScalarTypedDataSpec)
+        n.attrib["type"]=dt.type.type
     else:
         raise RuntimeError("Unknown data type.")
 
