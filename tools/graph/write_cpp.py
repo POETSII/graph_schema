@@ -20,71 +20,6 @@ def render_typed_data_as_decl(proto,dst,indent=""):
     else:
         raise RuntimeError("Unknown data type {}.".format(type(proto)))
 
-def render_typed_data_init(proto,dst,prefix):
-    if proto is None:
-        pass
-    elif isinstance(proto,ScalarTypedDataSpec):
-        if proto.value:
-            value=proto.value
-            if proto.type=="bool":
-                value = 1 if value else 0
-            dst.write('{}{} = {};\n'.format(prefix,proto.name,value))
-        else:
-            dst.write('{}{} = 0;\n'.format(prefix,proto.name))
-    elif isinstance(proto,TupleTypedDataSpec):
-        for elt in proto.elements_by_index:
-            render_typed_data_init(elt,dst,prefix+proto.name+".")
-    elif isinstance(proto,ArrayTypedDataSpec):
-        assert isinstance(proto.type,ScalarTypedDataSpec), "Haven't implemented arrays of non-scalars yet."
-        for i in range(0,proto.length):
-            if proto.type.value is not None:
-                dst.write('{}{}[{}] = {};\n'.format(prefix,proto.name,i,proto.type.value))
-            else:
-                dst.write('{}{}[{}] = 0;\n'.format(prefix,proto.name,i))
-            
-    else:
-        raise RuntimeError("Unknown data type {}.".format(type(proto)))
-
-def render_typed_data_load_v2(proto,dst,elt,prefix,indent):
-    """This version walks over the xml and puts things in the right place,
-       rather than searching for each thing, as it is much more efficient."""
-    if proto is None:
-        pass
-    if not isinstance(proto,TupleTypedDataSpec):
-        raise RuntimeError("This must be passed a tuple.")
-
-    dst.write('{}{{'.format(indent))
-    dst.write('{}  auto nodes={}->get_children();\n'.format(indent, elt))
-    dst.write('{}  for(auto &child : nodes){{\n'.format(indent))
-    dst.write('{}    xmlpp::Element *childPtr=(xmlpp::Element*)child;\n'.format(indent))
-    dst.write('{}    auto name=childPtr->get_attribute_value("name");\n'.format(indent))
-    # If all names are ascii, we can use much faster strcmp. This helps quite a bit on loading
-    dst.write('{}    assert(name.is_ascii());\n'.format(indent))
-    for child in proto.elements_by_index:
-        dst.write('{}    if(!strcmp(name.c_str(),"{}")){{\n'.format(indent, child.name))
-        if isinstance(child,ScalarTypedDataSpec):
-            dst.write('{}      std::stringstream value(childPtr->get_attribute_value("value"));\n'.format(indent))
-            dst.write('{}      value>>{}{};\n'.format(indent, prefix, child.name))
-        else:
-            render_typed_data_load_v2(child, dst, "childPtr", prefix+child.name+".", indent+"      ")
-        dst.write('{}    }}'.format(indent))
-    dst.write('{}  }}\n'.format(indent))
-    dst.write('{}}}'.format(indent))
-
-def render_typed_data_load_v3(proto,dst,elt,prefix,indent):
-    """Now we are loading JSON fragments... badly"""
-    if proto is None:
-        pass
-    if not isinstance(proto,TupleTypedDataSpec):
-        raise RuntimeError("This must be passed a tuple.")
-    dst.write('{}{{'.format(indent))
-    dst.write('{}  auto text=elt->get_child_text()->get_content();\n'.format(indent))
-    dst.write('{}  JSONEventsWriter writer;\n'.format(indent))
-    for elt in proto.elements_by_index:
-        dst.write('{}  writer.bind("{}",{}{});\n'.format(indent, elt.name, prefix, elt.name))
-    dst.write('{}  JSONParser(text.c_str(),writer);\n'.format(indent))
-    dst.write('{}}}'.format(indent))
-
 def render_typed_data_load_v4_tuple(proto,dst,prefix,indent):
     assert isinstance(proto,TupleTypedDataSpec)
     for elt in proto.elements_by_index:
@@ -128,8 +63,8 @@ def render_typed_data_load_v4_tuple(proto,dst,prefix,indent):
         else:
             raise RuntimeError("Unknown data type.")
         dst.write('{}  }}\n'.format(indent))
-    
-    
+
+
 def render_typed_data_load_v4(proto,dst,elt,prefix,indent):
     if proto is None:
         pass
@@ -141,9 +76,9 @@ def render_typed_data_load_v4(proto,dst,elt,prefix,indent):
     dst.write('{}  document.Parse(text.c_str());\n'.format(indent))
     dst.write('{}  assert(document.IsObject());\n'.format(indent))
     render_typed_data_load_v4_tuple(proto,dst,prefix,indent)
-    dst.write('{}}}'.format(indent))    
-    
-    
+    dst.write('{}}}'.format(indent))
+
+
 def render_typed_data_as_spec(proto,name,elt_name,dst):
     dst.write("struct {} : typed_data_t{{\n".format(name))
     if proto:
@@ -200,7 +135,7 @@ def render_input_port_as_cpp(ip,dst):
             break
 
     dst.write('EdgeTypePtr {}_Spec_get();\n\n'.format(ip.edge_type.id))
-        
+
     dst.write("class {}_{}_Spec : public InputPortImpl {{\n".format(dt.id,ip.name))
     dst.write('  public: {}_{}_Spec() : InputPortImpl({}_Spec_get, "{}", {}, {}_Spec_get()) {{}} \n'.format(dt.id,ip.name, dt.id, ip.name, index, ip.edge_type.id))
     dst.write("""  virtual void onReceive(
@@ -227,7 +162,7 @@ def render_input_port_as_cpp(ip,dst):
     for line in ip.receive_handler.splitlines():
         dst.write('    {}\n'.format(line))
     dst.write('    // End custom handler\n')
-    
+
     dst.write('  }\n')
     dst.write("};\n")
     dst.write("InputPortPtr {}_{}_Spec_get(){{\n".format(dt.id,ip.name))
@@ -243,7 +178,7 @@ def render_output_port_as_cpp(op,dst):
             break
 
     dst.write('EdgeTypePtr {}_Spec_get();\n\n'.format(op.edge_type.id))
-        
+
     dst.write("class {}_{}_Spec : public OutputPortImpl {{\n".format(dt.id,op.name))
     dst.write('  public: {}_{}_Spec() : OutputPortImpl({}_Spec_get, "{}", {}, {}_Spec_get()) {{}} \n'.format(dt.id,op.name, dt.id, op.name, index, op.edge_type.id))
     dst.write("""    virtual void onSend(
@@ -267,7 +202,7 @@ def render_output_port_as_cpp(op,dst):
     for line in op.send_handler.splitlines():
         dst.write('    {}\n'.format(line))
     dst.write('    // End custom handler\n')
-    
+
     dst.write('  }\n')
     dst.write("};\n")
     dst.write("OutputPortPtr {}_{}_Spec_get(){{\n".format(dt.id,op.name))
@@ -290,7 +225,7 @@ def render_edge_type_as_cpp(et,dst):
     dst.write("  return singleton;\n")
     dst.write("}\n")
     registrationStatements.append('registry->registerEdgeType({}_Spec_get());'.format(et.id,et.id))
-    
+
 def render_device_type_as_cpp_fwd(dt,dst):
     render_typed_data_as_spec(dt.properties, "{}_properties_t".format(dt.id), "pp:Properties", dst)
     render_typed_data_as_spec(dt.state, "{}_state_t".format(dt.id), "pp:State", dst)
@@ -303,7 +238,7 @@ def render_device_type_as_cpp(dt,dst):
 
     for op in dt.outputs.values():
         render_output_port_as_cpp(op,dst)
-    
+
     dst.write("class {}_Spec : public DeviceTypeImpl {{\n".format(dt.id))
     dst.write("public:\n")
     dst.write("  {}_Spec()\n".format(dt.id))
@@ -332,7 +267,7 @@ def render_device_type_as_cpp(dt,dst):
     dst.write("  static DeviceTypePtr singleton(new {}_Spec);\n".format(dt.id))
     dst.write("  return singleton;\n")
     dst.write("}\n")
-    registrationStatements.append('registry->registerDeviceType({}_Spec_get());'.format(dt.id,dt.id))    
+    registrationStatements.append('registry->registerDeviceType({}_Spec_get());'.format(dt.id,dt.id))
 
 def render_graph_as_cpp(graph,dst):
     dst.write('#include "graph_impl.hpp"\n')
@@ -341,7 +276,7 @@ def render_graph_as_cpp(graph,dst):
 
     gt=graph
 
- 
+
     render_typed_data_as_spec(gt.properties, "{}_properties_t".format(gt.id),"pp:Properties",dst)
 
     dst.write("/////////////////////////////////\n")
@@ -354,7 +289,7 @@ def render_graph_as_cpp(graph,dst):
 
     if gt.shared_code:
         for code in gt.shared_code:
-            dst.write(code)    
+            dst.write(code)
 
     dst.write("/////////////////////////////////\n")
     dst.write("// DEF\n")
@@ -376,10 +311,10 @@ def render_graph_as_cpp(graph,dst):
     dst.write("  static GraphTypePtr singleton(new {}_Spec);\n".format(gt.id))
     dst.write("  return singleton;\n")
     dst.write("}\n")
-    
+
 
     registrationStatements.append('registry->registerGraphType({}_Spec_get());'.format(gt.id))
-    
+
 
     dst.write('extern "C" void registerGraphTypes(Registry *registry){\n')
     for r in registrationStatements:
