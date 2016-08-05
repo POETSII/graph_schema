@@ -1,54 +1,68 @@
 <?xml version="1.0"?>
-<Graph xmlns="TODO/POETS/virtual-graph-schema-v0" id="two-device-box">
-  
-  <EdgeTypes>
-    <EdgeType id="et1">
-      <Message>
-	<Int32 name="value" />
-      </Message>      
-    </EdgeType>
+<Graph xmlns="http://TODO.org/POETS/virtual-graph-schema-v0">
+  <GraphType id="two_device_box">
     
-    <EdgeType id="et2">
-      <Message>
-	<Float32 name="bobble" />
-      </Message>      
-    </EdgeType>
-  </EdgeTypes>
-  
-  <DeviceTypes>
-    <DeviceType id="dtA">
-      <InputPort name="in" edgeTypeId="et1">
-	<OnReceive />
+    <EdgeTypes>
+      <EdgeType id="et1">
+	<Message>
+	  <Scalar type="int32_t" name="value" />
+	</Message>
+      </EdgeType>
+      
+      <EdgeType id="et2">
+	<Message>
+	  <Scalar type="float" name="bobble" />
+	</Message>
+      </EdgeType>
+    </EdgeTypes>
+    
+    <DeviceTypes>
+      <DeviceType id="dtA">
+	<Properties>
+          <Scalar type="int32_t" name="xxx" />
+	</Properties>
+	
+	<InputPort name="in" edgeTypeId="et1">
+          <OnReceive >assert(0);</OnReceive>
+	</InputPort>
+
+	<OutputPort name="out" edgeTypeId="et2">
+          <OnSend>assert(0);</OnSend>
+	</OutputPort>
+      </DeviceType>
+      
+      <DeviceType id="dtB">
+	<State>
+          <Scalar type="int32_t" name="yyy" />
+	</State>
+	
+	<InputPort name="in" edgeTypeId="et2">
+          <OnReceive >assert(0);</OnReceive>
       </InputPort>
-
-      <OutputPort name="out" edgeTypeId="et2">
-	<OnSend></OnSend>
-      </OutputPort>
-    </DeviceType>
-
-    <DeviceType id="dtB">
-      <InputPort name="in" edgeTypeId="et2">
-	<OnReceive />
-      </InputPort>
-
+      
       <OutputPort name="out" edgeTypeId="et1">
-	<OnSend></OnSend>
+        <OnSend>assert(0);</OnSend>
       </OutputPort>
-    </DeviceType>
-  </DeviceTypes>
+      </DeviceType>
+    </DeviceTypes>
 
-  <DeviceInstances>
-    <DeviceInstance id="dA0" deviceTypeId="dtA" />
-    <DeviceInstance id="dA1" deviceTypeId="dtA" />
-    <DeviceInstance id="dB0" deviceTypeId="dtB" />
-    <DeviceInstance id="dB1" deviceTypeId="dtB" />
-  </DeviceInstances>
+  </GraphType>
 
-  <EdgeInstances>
-    <EdgeInstance dstDeviceId="dA0" dstPortName="in" srcDeviceId="dB0" srcPortName="out" />
-    <EdgeInstance dstDeviceId="dB1" dstPortName="in" srcDeviceId="dA0" srcPortName="out" />
-    <EdgeInstance dstDeviceId="dB1" dstPortName="in" srcDeviceId="dA1" srcPortName="out" />
-    <EdgeInstance dstDeviceId="dA0" dstPortName="in" srcDeviceId="dB1" srcPortName="out" />
-    <EdgeInstance dstDeviceId="dB0" dstPortName="in" srcDeviceId="dA1" srcPortName="out" />
-  </EdgeInstances>
+    <GraphInstance id="two_device_box_inst" graphTypeId="two_device_box">
+
+      <DeviceInstances>
+	<DevI id="dA0" type="dtA" />
+	<DevI id="dA1" type="dtA" />
+	<DevI id="dB0" type="dtB" />
+	<DevI id="dB1" type="dtB" />
+      </DeviceInstances>
+      
+      <EdgeInstances>
+	<EdgeI dstDeviceId="dA0" dstPortName="in" srcDeviceId="dB0" srcPortName="out" />
+	<EdgeI dstDeviceId="dB1" dstPortName="in" srcDeviceId="dA0" srcPortName="out" />
+	<EdgeI dstDeviceId="dB1" dstPortName="in" srcDeviceId="dA1" srcPortName="out" />
+	<EdgeI dstDeviceId="dA0" dstPortName="in" srcDeviceId="dB1" srcPortName="out" />
+	<EdgeI dstDeviceId="dB0" dstPortName="in" srcDeviceId="dA1" srcPortName="out" />
+      </EdgeInstances>
+    </GraphInstance>
 </Graph>

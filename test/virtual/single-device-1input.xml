@@ -1,26 +1,30 @@
 <?xml version="1.0"?>
-<Graph xmlns="TODO/POETS/virtual-graph-schema-v0" id="single-device-1input">
-  <EdgeTypes>
-    <EdgeType id="e1">
-      <Properties>
-	<Int32 name="value" />
-      </Properties>      
-    </EdgeType>
-  </EdgeTypes>
+<Graph xmlns="http://TODO.org/POETS/virtual-graph-schema-v0">
+  <GraphType id="single_device_1input_type">
+    <EdgeTypes>
+      <EdgeType id="e1">
+	<Properties>
+	  <Scalar type="int32_t" name="value" />
+	</Properties>      
+      </EdgeType>
+    </EdgeTypes>
   
-  <DeviceTypes>
-    <DeviceType id="node">
-      <InputPort name="in" edgeTypeId="e1">
-	<OnReceive><![CDATA[
+    <DeviceTypes>
+      <DeviceType id="node">
+	<InputPort name="in" edgeTypeId="e1">
+	  <OnReceive><![CDATA[
 	  // Do nothing
-	]]></OnReceive>
-      </InputPort>
-    </DeviceType>
-  </DeviceTypes>
+	  ]]></OnReceive>
+	</InputPort>
+      </DeviceType>
+    </DeviceTypes>
+  </GraphType>
 
-  <DeviceInstances>
-  </DeviceInstances>
-
-  <EdgeInstances>
-  </EdgeInstances>
+  <GraphInstance id="single_device_1input" graphTypeId="single_device_1input_type">
+    <DeviceInstances>
+    </DeviceInstances>
+  
+    <EdgeInstances>
+    </EdgeInstances>
+  </GraphInstance>
 </Graph>

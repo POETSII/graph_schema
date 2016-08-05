@@ -1,16 +1,22 @@
 <?xml version="1.0"?>
-<Graph xmlns="TODO/POETS/virtual-graph-schema-v0" id="single-device-empty">
-  <EdgeTypes>
-  </EdgeTypes>
+<Graph xmlns="http://TODO.org/POETS/virtual-graph-schema-v0">
+  <GraphType id="single_device_empty">
+    
+    <EdgeTypes>
+    </EdgeTypes>
   
-  <DeviceTypes>
-    <DeviceType id="node">
-    </DeviceType>
-  </DeviceTypes>
+    <DeviceTypes>
+      <DeviceType id="node">
+      </DeviceType>
+    </DeviceTypes>
 
-  <DeviceInstances>
-  </DeviceInstances>
+  </GraphType>
 
-  <EdgeInstances>
-  </EdgeInstances>
+  <GraphInstance id="single_device_empty" graphTypeId="single_device_empty">
+    <DeviceInstances>
+    </DeviceInstances>
+    
+    <EdgeInstances>
+    </EdgeInstances>
+  </GraphInstance>
 </Graph>

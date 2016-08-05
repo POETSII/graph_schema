@@ -1,0 +1,191 @@
+<?xml version="1.0"?>
+<Graph xmlns="http://TODO.org/POETS/virtual-graph-schema-v0">
+  <GraphType id="ising_spin" nativeDimension="2">
+    <!-- This is supposed to implement the method from [lubachevsky-87-asynchronous-ising-spin-models]:
+	 "Efficient Parallel Simulations of Asynchronous Cellular Arrays", 1987, Boris D. Lubachevsky -->
+    
+    <Properties>
+      <Scalar type="float" name="endTime" value="10" />
+      <Scalar type="uint32_t" name="width" />
+      <Scalar type="uint32_t" name="height" />
+      <Array name="probabilities" length="10" type="float" />
+    </Properties>
+
+    <SharedCode><![CDATA[
+    
+    
+    uint32_t urng(uint32_t &state)
+    {
+      state = state*1664525+1013904223;
+      return state;
+    }
+
+    uint32_t rng_init(uint32_t x, uint32_t y)
+    {
+      uint32_t seed=100003*x + 17*y;
+      for(int i=0; i<10; i++){
+        urng(seed);
+      }
+      return seed;
+    }
+
+    float frng(uint32_t &state)
+    {
+      return urng(state)*2.328306400e-10f;
+    }
+      
+    void chooseNextEvent(const ising_spin_properties_t *graphProperties, cell_state_t *deviceState)
+    {
+      int sumStates=0;
+      for(unsigned i=1; i<5; i++){ // Only sum neighbours
+        sumStates+=deviceState->spins[i];
+      }
+
+      unsigned index=(sumStates+4)/2 + 5*(deviceState->spins[0]+1)/2;
+      float prob=graphProperties->probabilities[index];
+
+      if( frng(deviceState->rng) < prob){
+        deviceState->spins[0] *= -1; // Flip
+      }
+      deviceState->times[0] += -log(frng(deviceState->rng));
+    }
+
+    ]]></SharedCode>
+    
+    <EdgeTypes>
+      <EdgeType id="__init__">
+	<!-- This doesn't have any properties -->
+      </EdgeType>
+      
+      <EdgeType id="update">
+	<Properties>
+	  <Scalar type="uint32_t" name="direction" /> <!-- 1=Up, 2=Right, 3=Down, 4=Left -->
+	</Properties>
+	<State>
+	  <Scalar type="float" name="time" value="0" /> <!-- We need this in case a message arrives out of order. Time can't go backwards -->
+	</State>
+	<Message>
+	  <Scalar type="float" name="time" value="0" />
+	  <Scalar type="uint32_t" name="spin" /> <!-- By implication, it had the opposite spin before-hand -->
+	</Message>      
+      </EdgeType>
+    </EdgeTypes>
+  
+    <DeviceTypes>
+      <DeviceType id="cell">
+	<Properties>
+	  <Scalar type="uint32_t" name="x" value="0" />
+	  <Scalar type="uint32_t" name="y" value="0" />
+	</Properties>
+	
+	<State>
+	  <Scalar type="uint32_t" name="rng" />
+	  <Scalar type="bool" name="firstSend" />
+
+	  <!-- Track time and spins in neighbourhood. Index 0 is this device -->
+	  <Array name="spins" length="5" type="int32_t" />
+	  <Array name="times" length="5" type="float" />
+	</State>
+
+	<InputPort name="__init__" edgeTypeId="__init__">
+	  <OnReceive><![CDATA[
+	  // Initialise RNG and choose random starting spin
+	  uint32_t seed;
+	  auto x=deviceProperties->x, y=deviceProperties->y;
+	  auto W=graphProperties->width, H=graphProperties->height;
+
+	  seed=rng_init( x, (y+H-1)%H );
+	  deviceState->spins[1]=(urng(seed)>>31) ? +1 : -1;
+	  deviceState->times[1]=0;
+
+	  seed=rng_init( (x+1)%W, y );
+	  deviceState->spins[2]=(urng(seed)>>31) ? +1 : -1;
+	  deviceState->times[2]=0;
+
+	  seed=rng_init( x, (y+1)%H );
+	  deviceState->spins[3]=(urng(seed)>>31) ? +1 : -1;
+	  deviceState->times[3]=0;
+
+	  seed=rng_init( (x+W-1)%W, y );
+	  deviceState->spins[4]=(urng(seed)>>31) ? +1 : -1;
+	  deviceState->times[4]=0;
+
+	  // Final one is this node
+	  seed=rng_init( x, y );
+	  deviceState->spins[0]=(urng(seed)>>31) ? +1 : -1;
+	  deviceState->times[0]=0;
+	  deviceState->rng=seed; // Store the rng state back
+
+	  // We now have perfect knowledge of our neighbourhood,
+	  // and everyone is at time 0. So we pick our first firing
+	  // time, and try to broadcast it
+	  chooseNextEvent(graphProperties, deviceState);
+
+	  deviceState->firstSend=true;
+
+	  handler_log(3, "next_t = %g, next_spin = %d", deviceState->times[0], deviceState->spins[0]);
+
+	  requestSend_out = true;
+	  ]]>
+	  </OnReceive>
+	</InputPort>
+	
+	<InputPort name="in" edgeTypeId="update">
+	  <OnReceive><![CDATA[
+
+	  if(message->time >= deviceState->times[edgeProperties->direction]){
+  	    deviceState->spins[edgeProperties->direction]=message->spin;
+	    deviceState->times[edgeProperties->direction]=message->time;
+
+	    handler_log(4, "from %d, new_time = %g, new_spin  %d", edgeProperties->direction, message->time, message->spin);
+	  }
+
+	  requestSend_out = true;
+	  if(deviceState->firstSend){
+	    // We must send, as neighbours don't know our state yet
+	  }else{
+	    for(unsigned i=1; i<5; i++){
+              if(deviceState->times[i] < deviceState->times[0]){
+	        handler_log(4, "  time[%d] = %g < time[0] = %g", i, deviceState->times[i], deviceState->times[0]);
+	        requestSend_out = false;
+              }
+	    }	
+	  }
+	  
+	  ]]></OnReceive>
+	</InputPort>
+
+	<OutputPort name="out" edgeTypeId="update">
+	  <OnSend><![CDATA[
+	  requestSend_out = false; // For information; this is the default
+
+	  // Check if simulation has finished. If so do nothing
+	  if(deviceState->times[0] >= graphProperties->endTime){
+	    *cancelSend=true;
+	  }
+
+	  if(deviceState->firstSend){
+             deviceState->firstSend=false;
+	     message->spin = deviceState->spins[0];
+             message->time = deviceState->times[0];
+	  }else{
+	    float prevTime=deviceState->times[0];
+            chooseNextEvent(graphProperties, deviceState);
+            message->spin = deviceState->spins[0];
+	    message->time = deviceState->times[0];
+	    
+            handler_log(3, "prev_t = %g, next_t = %g, next_spin = %d", prevTime, deviceState->times[0], deviceState->spins[0]);
+            requestSend_out = true;
+	    for(unsigned i=1; i<5; i++){
+              if(deviceState->times[i] < deviceState->times[0]){
+	        handler_log(4, "  time[%d] = %g < time[0] = %g", i, deviceState->times[i], deviceState->times[0]);
+	        requestSend_out = false;
+              }
+	    }	
+	  }
+	  ]]></OnSend>
+	</OutputPort>
+      </DeviceType>
+    </DeviceTypes>
+  </GraphType>
+</Graph>

@@ -1,331 +1,85 @@
-<ns0:Graph xmlns:ns0="TODO/POETS/virtual-graph-schema-v0" id="random">
-  <ns0:EdgeTypes>
-    <ns0:EdgeType id="et3">
-      <ns0:Message>
-        <ns0:Float32 name="v_4133066212"/>
-      </ns0:Message>
-      <ns0:Properties>
-        <ns0:Float32 name="v_4222883413"/>
-      </ns0:Properties>
-      <ns0:State>
-        <ns0:Int32 name="v_233357861"/>
-      </ns0:State>
-    </ns0:EdgeType>
-    <ns0:EdgeType id="et0">
-      <ns0:Message>
-        <ns0:Tuple name="v_1489825317">
-          <ns0:Float32 name="v_76161192"/>
-        </ns0:Tuple>
-      </ns0:Message>
-      <ns0:Properties>
-        <ns0:Int32 name="v_655645954"/>
-      </ns0:Properties>
-    </ns0:EdgeType>
-    <ns0:EdgeType id="et2">
-      <ns0:Message>
-        <ns0:Tuple name="v_481526316">
-          <ns0:Float32 name="v_4114082534" value="0.5534166134541705"/>
-        </ns0:Tuple>
-      </ns0:Message>
-      <ns0:Properties>
-        <ns0:Float32 name="v_8908522" value="0.8394873043451336"/>
-      </ns0:Properties>
-      <ns0:State>
-        <ns0:Int32 name="v_3907334671" value="1980936409"/>
-      </ns0:State>
-    </ns0:EdgeType>
-    <ns0:EdgeType id="et1">
-      <ns0:Message>
-        <ns0:Float32 name="v_165477809"/>
-      </ns0:Message>
-      <ns0:Properties>
-        <ns0:Tuple name="v_3011995068">
-          <ns0:Bool name="v_1272270601"/>
-          <ns0:Bool name="v_2020256277"/>
-        </ns0:Tuple>
-      </ns0:Properties>
-      <ns0:State>
-        <ns0:Int32 name="v_3349516490"/>
-      </ns0:State>
-    </ns0:EdgeType>
-  </ns0:EdgeTypes>
-  <ns0:DeviceTypes>
-    <ns0:DeviceType id="dt1">
-      <ns0:Properties>
-        <ns0:Tuple name="v_978608426">
-          <ns0:Int32 name="v_1531155797"/>
-        </ns0:Tuple>
-      </ns0:Properties>
-      <ns0:State>
-        <ns0:Int32 name="v_3475917184"/>
-      </ns0:State>
-      <ns0:InputPort name="p_2099879665" edgeTypeId="et1">
-        <ns0:OnReceive><![CDATA[assert(0);]]></ns0:OnReceive>
-      </ns0:InputPort>
-      <ns0:InputPort name="p_2643032257" edgeTypeId="et3">
-        <ns0:OnReceive><![CDATA[assert(0);]]></ns0:OnReceive>
-      </ns0:InputPort>
-    </ns0:DeviceType>
-    <ns0:DeviceType id="dt0">
-      <ns0:Properties>
-        <ns0:Bool name="v_515488122" value="False"/>
-      </ns0:Properties>
-      <ns0:State>
-        <ns0:Float32 name="v_2263235179"/>
-      </ns0:State>
-      <ns0:InputPort name="p_968269364" edgeTypeId="et0">
-        <ns0:OnReceive><![CDATA[assert(0);]]></ns0:OnReceive>
-      </ns0:InputPort>
-      <ns0:InputPort name="p_1633626312" edgeTypeId="et2">
-        <ns0:OnReceive><![CDATA[assert(0);]]></ns0:OnReceive>
-      </ns0:InputPort>
-      <ns0:OutputPort name="p_3335581210" edgeTypeId="et1">
-        <ns0:OnSend><![CDATA[assert(0);]]></ns0:OnSend>
-      </ns0:OutputPort>
-      <ns0:OutputPort name="p_2346959675" edgeTypeId="et3">
-        <ns0:OnSend><![CDATA[assert(0);]]></ns0:OnSend>
-      </ns0:OutputPort>
-    </ns0:DeviceType>
-    <ns0:DeviceType id="dt3">
-      <ns0:Properties>
-        <ns0:Tuple name="v_342348374">
-          <ns0:Float32 name="v_672836245"/>
-        </ns0:Tuple>
-      </ns0:Properties>
-      <ns0:State>
-        <ns0:Bool name="v_3345339316"/>
-      </ns0:State>
-      <ns0:InputPort name="p_4278975575" edgeTypeId="et3">
-        <ns0:OnReceive><![CDATA[assert(0);]]></ns0:OnReceive>
-      </ns0:InputPort>
-      <ns0:InputPort name="p_4238797420" edgeTypeId="et0">
-        <ns0:OnReceive><![CDATA[assert(0);]]></ns0:OnReceive>
-      </ns0:InputPort>
-      <ns0:OutputPort name="p_3042742820" edgeTypeId="et1">
-        <ns0:OnSend><![CDATA[assert(0);]]></ns0:OnSend>
-      </ns0:OutputPort>
-      <ns0:OutputPort name="p_3425977993" edgeTypeId="et3">
-        <ns0:OnSend><![CDATA[assert(0);]]></ns0:OnSend>
-      </ns0:OutputPort>
-      <ns0:OutputPort name="p_3585125412" edgeTypeId="et2">
-        <ns0:OnSend><![CDATA[assert(0);]]></ns0:OnSend>
-      </ns0:OutputPort>
-    </ns0:DeviceType>
-    <ns0:DeviceType id="dt2">
-      <ns0:Properties>
-        <ns0:Int32 name="v_53359365" value="-547661530"/>
-      </ns0:Properties>
-      <ns0:InputPort name="p_4103062962" edgeTypeId="et0">
-        <ns0:OnReceive><![CDATA[assert(0);]]></ns0:OnReceive>
-      </ns0:InputPort>
-      <ns0:InputPort name="p_3457776262" edgeTypeId="et2">
-        <ns0:OnReceive><![CDATA[assert(0);]]></ns0:OnReceive>
-      </ns0:InputPort>
-      <ns0:InputPort name="p_3611193458" edgeTypeId="et3">
-        <ns0:OnReceive><![CDATA[assert(0);]]></ns0:OnReceive>
-      </ns0:InputPort>
-    </ns0:DeviceType>
-  </ns0:DeviceTypes>
-  <ns0:DeviceInstances>
-    <ns0:DeviceInstance id="di_3574022771" deviceTypeId="dt0">
-      <ns0:Properties>
-        <ns0:Bool name="v_515488122"/>
-      </ns0:Properties>
-    </ns0:DeviceInstance>
-    <ns0:DeviceInstance id="di_2963281176" deviceTypeId="dt3">
-      <ns0:Properties>
-        <ns0:Tuple name="v_342348374"/>
-      </ns0:Properties>
-    </ns0:DeviceInstance>
-    <ns0:DeviceInstance id="di_2227815114" deviceTypeId="dt3">
-      <ns0:Properties>
-        <ns0:Tuple name="v_342348374"/>
-      </ns0:Properties>
-    </ns0:DeviceInstance>
-    <ns0:DeviceInstance id="di_3179053877" deviceTypeId="dt3">
-      <ns0:Properties>
-        <ns0:Tuple name="v_342348374">
-          <ns0:Float32 name="v_672836245"/>
-        </ns0:Tuple>
-      </ns0:Properties>
-    </ns0:DeviceInstance>
-    <ns0:DeviceInstance id="di_2111263497" deviceTypeId="dt0">
-      <ns0:Properties>
-        <ns0:Bool name="v_515488122" value="True"/>
-      </ns0:Properties>
-    </ns0:DeviceInstance>
-    <ns0:DeviceInstance id="di_3186574330" deviceTypeId="dt0">
-      <ns0:Properties>
-        <ns0:Bool name="v_515488122"/>
-      </ns0:Properties>
-    </ns0:DeviceInstance>
-    <ns0:DeviceInstance id="di_3260397633" deviceTypeId="dt0"/>
-    <ns0:DeviceInstance id="di_210365750" deviceTypeId="dt2"/>
-    <ns0:DeviceInstance id="di_3989368209" deviceTypeId="dt0">
-      <ns0:Properties>
-        <ns0:Bool name="v_515488122" value="False"/>
-      </ns0:Properties>
-    </ns0:DeviceInstance>
-    <ns0:DeviceInstance id="di_1468375999" deviceTypeId="dt2"/>
-    <ns0:DeviceInstance id="di_3868024819" deviceTypeId="dt2">
-      <ns0:Properties>
-        <ns0:Int32 name="v_53359365"/>
-      </ns0:Properties>
-    </ns0:DeviceInstance>
-    <ns0:DeviceInstance id="di_3388903442" deviceTypeId="dt0">
-      <ns0:Properties>
-        <ns0:Bool name="v_515488122" value="True"/>
-      </ns0:Properties>
-    </ns0:DeviceInstance>
-    <ns0:DeviceInstance id="di_13389896" deviceTypeId="dt3">
-      <ns0:Properties>
-        <ns0:Tuple name="v_342348374">
-          <ns0:Float32 name="v_672836245" value="0.6801294716257695"/>
-        </ns0:Tuple>
-      </ns0:Properties>
-    </ns0:DeviceInstance>
-    <ns0:DeviceInstance id="di_254860772" deviceTypeId="dt3">
-      <ns0:Properties>
-        <ns0:Tuple name="v_342348374">
-          <ns0:Float32 name="v_672836245"/>
-        </ns0:Tuple>
-      </ns0:Properties>
-    </ns0:DeviceInstance>
-    <ns0:DeviceInstance id="di_1795131941" deviceTypeId="dt3">
-      <ns0:Properties>
-        <ns0:Tuple name="v_342348374"/>
-      </ns0:Properties>
-    </ns0:DeviceInstance>
-    <ns0:DeviceInstance id="di_3704864769" deviceTypeId="dt0"/>
-    <ns0:DeviceInstance id="di_4226962553" deviceTypeId="dt3">
-      <ns0:Properties>
-        <ns0:Tuple name="v_342348374">
-          <ns0:Float32 name="v_672836245"/>
-        </ns0:Tuple>
-      </ns0:Properties>
-    </ns0:DeviceInstance>
-    <ns0:DeviceInstance id="di_3941041819" deviceTypeId="dt0"/>
-    <ns0:DeviceInstance id="di_236656689" deviceTypeId="dt3">
-      <ns0:Properties>
-        <ns0:Tuple name="v_342348374">
-          <ns0:Float32 name="v_672836245" value="-0.27268897815597626"/>
-        </ns0:Tuple>
-      </ns0:Properties>
-    </ns0:DeviceInstance>
-    <ns0:DeviceInstance id="di_1202592314" deviceTypeId="dt3">
-      <ns0:Properties>
-        <ns0:Tuple name="v_342348374">
-          <ns0:Float32 name="v_672836245"/>
-        </ns0:Tuple>
-      </ns0:Properties>
-    </ns0:DeviceInstance>
-  </ns0:DeviceInstances>
-  <ns0:EdgeInstances>
-    <ns0:EdgeInstance dstDeviceId="di_2963281176" dstPortName="p_4278975575" srcDeviceId="di_2111263497" srcPortName="p_2346959675">
-      <ns0:Properties>
-        <ns0:Float32 name="v_4222883413" value="0.8528363448126357"/>
-      </ns0:Properties>
-    </ns0:EdgeInstance>
-    <ns0:EdgeInstance dstDeviceId="di_3388903442" dstPortName="p_1633626312" srcDeviceId="di_13389896" srcPortName="p_3585125412">
-      <ns0:Properties>
-        <ns0:Float32 name="v_8908522" value="0.23858153490012723"/>
-      </ns0:Properties>
-    </ns0:EdgeInstance>
-    <ns0:EdgeInstance dstDeviceId="di_2963281176" dstPortName="p_4278975575" srcDeviceId="di_3574022771" srcPortName="p_2346959675">
-      <ns0:Properties>
-        <ns0:Float32 name="v_4222883413" value="0.21374930726820018"/>
-      </ns0:Properties>
-    </ns0:EdgeInstance>
-    <ns0:EdgeInstance dstDeviceId="di_3179053877" dstPortName="p_4278975575" srcDeviceId="di_4226962553" srcPortName="p_3425977993">
-      <ns0:Properties>
-        <ns0:Float32 name="v_4222883413"/>
-      </ns0:Properties>
-    </ns0:EdgeInstance>
-    <ns0:EdgeInstance dstDeviceId="di_1795131941" dstPortName="p_4278975575" srcDeviceId="di_1202592314" srcPortName="p_3425977993">
-      <ns0:Properties>
-        <ns0:Float32 name="v_4222883413" value="0.18097038336899796"/>
-      </ns0:Properties>
-    </ns0:EdgeInstance>
-    <ns0:EdgeInstance dstDeviceId="di_1468375999" dstPortName="p_3611193458" srcDeviceId="di_2111263497" srcPortName="p_2346959675">
-      <ns0:Properties>
-        <ns0:Float32 name="v_4222883413"/>
-      </ns0:Properties>
-    </ns0:EdgeInstance>
-    <ns0:EdgeInstance dstDeviceId="di_1202592314" dstPortName="p_4278975575" srcDeviceId="di_3574022771" srcPortName="p_2346959675">
-      <ns0:Properties>
-        <ns0:Float32 name="v_4222883413"/>
-      </ns0:Properties>
-    </ns0:EdgeInstance>
-    <ns0:EdgeInstance dstDeviceId="di_210365750" dstPortName="p_3611193458" srcDeviceId="di_3388903442" srcPortName="p_2346959675">
-      <ns0:Properties>
-        <ns0:Float32 name="v_4222883413"/>
-      </ns0:Properties>
-    </ns0:EdgeInstance>
-    <ns0:EdgeInstance dstDeviceId="di_2963281176" dstPortName="p_4278975575" srcDeviceId="di_3989368209" srcPortName="p_2346959675">
-      <ns0:Properties>
-        <ns0:Float32 name="v_4222883413"/>
-      </ns0:Properties>
-    </ns0:EdgeInstance>
-    <ns0:EdgeInstance dstDeviceId="di_3868024819" dstPortName="p_3611193458" srcDeviceId="di_2111263497" srcPortName="p_2346959675">
-      <ns0:Properties>
-        <ns0:Float32 name="v_4222883413" value="0.602097946757572"/>
-      </ns0:Properties>
-    </ns0:EdgeInstance>
-    <ns0:EdgeInstance dstDeviceId="di_3574022771" dstPortName="p_1633626312" srcDeviceId="di_4226962553" srcPortName="p_3585125412"/>
-    <ns0:EdgeInstance dstDeviceId="di_1468375999" dstPortName="p_3611193458" srcDeviceId="di_13389896" srcPortName="p_3425977993">
-      <ns0:Properties>
-        <ns0:Float32 name="v_4222883413"/>
-      </ns0:Properties>
-    </ns0:EdgeInstance>
-    <ns0:EdgeInstance dstDeviceId="di_254860772" dstPortName="p_4278975575" srcDeviceId="di_3388903442" srcPortName="p_2346959675">
-      <ns0:Properties>
-        <ns0:Float32 name="v_4222883413"/>
-      </ns0:Properties>
-    </ns0:EdgeInstance>
-    <ns0:EdgeInstance dstDeviceId="di_3989368209" dstPortName="p_1633626312" srcDeviceId="di_3179053877" srcPortName="p_3585125412">
-      <ns0:Properties>
-        <ns0:Float32 name="v_8908522"/>
-      </ns0:Properties>
-    </ns0:EdgeInstance>
-    <ns0:EdgeInstance dstDeviceId="di_254860772" dstPortName="p_4278975575" srcDeviceId="di_2227815114" srcPortName="p_3425977993">
-      <ns0:Properties>
-        <ns0:Float32 name="v_4222883413"/>
-      </ns0:Properties>
-    </ns0:EdgeInstance>
-    <ns0:EdgeInstance dstDeviceId="di_3179053877" dstPortName="p_4278975575" srcDeviceId="di_3574022771" srcPortName="p_2346959675">
-      <ns0:Properties>
-        <ns0:Float32 name="v_4222883413" value="-0.4414169906462124"/>
-      </ns0:Properties>
-    </ns0:EdgeInstance>
-    <ns0:EdgeInstance dstDeviceId="di_3186574330" dstPortName="p_1633626312" srcDeviceId="di_254860772" srcPortName="p_3585125412">
-      <ns0:Properties>
-        <ns0:Float32 name="v_8908522"/>
-      </ns0:Properties>
-    </ns0:EdgeInstance>
-    <ns0:EdgeInstance dstDeviceId="di_13389896" dstPortName="p_4278975575" srcDeviceId="di_254860772" srcPortName="p_3425977993">
-      <ns0:Properties>
-        <ns0:Float32 name="v_4222883413"/>
-      </ns0:Properties>
-    </ns0:EdgeInstance>
-    <ns0:EdgeInstance dstDeviceId="di_1468375999" dstPortName="p_3611193458" srcDeviceId="di_254860772" srcPortName="p_3425977993">
-      <ns0:Properties>
-        <ns0:Float32 name="v_4222883413"/>
-      </ns0:Properties>
-    </ns0:EdgeInstance>
-    <ns0:EdgeInstance dstDeviceId="di_3574022771" dstPortName="p_1633626312" srcDeviceId="di_254860772" srcPortName="p_3585125412">
-      <ns0:Properties>
-        <ns0:Float32 name="v_8908522" value="-0.5123109089212337"/>
-      </ns0:Properties>
-    </ns0:EdgeInstance>
-    <ns0:EdgeInstance dstDeviceId="di_2963281176" dstPortName="p_4278975575" srcDeviceId="di_236656689" srcPortName="p_3425977993">
-      <ns0:Properties>
-        <ns0:Float32 name="v_4222883413" value="0.6202535477966638"/>
-      </ns0:Properties>
-    </ns0:EdgeInstance>
-    <ns0:EdgeInstance dstDeviceId="di_13389896" dstPortName="p_4278975575" srcDeviceId="di_3704864769" srcPortName="p_2346959675">
-      <ns0:Properties>
-        <ns0:Float32 name="v_4222883413" value="-0.15379308390071889"/>
-      </ns0:Properties>
-    </ns0:EdgeInstance>
-  </ns0:EdgeInstances>
-</ns0:Graph>
+<?xml version='1.0' encoding='ASCII'?>
+<Graph xmlns="http://TODO.org/POETS/virtual-graph-schema-v0">
+  <GraphType id="random">
+    <Properties>
+      <Scalar name="v_3715494464" type="float"/>
+    </Properties>
+    <EdgeTypes>
+      <EdgeType id="et1">
+        <Message>
+          <Scalar name="v_816190352" type="int32_t"/>
+        </Message>
+        <Properties>
+          <Scalar name="v_494832305" type="int32_t" value="-1022963811"/>
+        </Properties>
+        <State>
+          <Scalar name="v_3140299725" type="int32_t" value="2040973644"/>
+        </State>
+      </EdgeType>
+      <EdgeType id="et0">
+        <State>
+          <Scalar name="v_3388168831" type="bool" value="True"/>
+          <Scalar name="v_991716408" type="int32_t"/>
+        </State>
+      </EdgeType>
+    </EdgeTypes>
+    <DeviceTypes>
+      <DeviceType id="dt1">
+        <State>
+          <Scalar name="v_766046347" type="int32_t"/>
+        </State>
+      </DeviceType>
+      <DeviceType id="dt0">
+        <Properties>
+          <Scalar name="v_1931282308" type="int32_t"/>
+        </Properties>
+        <State>
+          <Tuple name="v_1890217285">
+            <Scalar name="v_2247670937" type="float"/>
+          </Tuple>
+          <Scalar name="v_1583005977" type="bool"/>
+        </State>
+        <InputPort name="p_2503532375" edgeTypeId="et1">
+          <OnReceive><![CDATA[assert(0);]]></OnReceive>
+        </InputPort>
+        <OutputPort name="p_3022185211" edgeTypeId="et0">
+          <OnSend><![CDATA[assert(0);]]></OnSend>
+        </OutputPort>
+        <OutputPort name="p_1732930425" edgeTypeId="et0">
+          <OnSend><![CDATA[assert(0);]]></OnSend>
+        </OutputPort>
+      </DeviceType>
+    </DeviceTypes>
+  </GraphType>
+  <GraphInstance id="random" graphTypeId="random">
+    <DeviceInstances>
+      <DevI id="di_1303628798" type="dt0"/>
+      <DevI id="di_57694543" type="dt0">
+        <P>"v_1931282308": -1271707692</P>
+      </DevI>
+      <DevI id="di_2193708901" type="dt1"/>
+      <DevI id="di_3016916191" type="dt0"/>
+      <DevI id="di_3231971289" type="dt0"/>
+      <DevI id="di_1841213820" type="dt0"/>
+      <DevI id="di_1041544447" type="dt0"/>
+      <DevI id="di_1990717912" type="dt1"/>
+      <DevI id="di_3854558772" type="dt1"/>
+      <DevI id="di_3154131107" type="dt0"/>
+      <DevI id="di_2259183815" type="dt1"/>
+      <DevI id="di_4007963636" type="dt0">
+        <P>"v_1931282308": -924745342</P>
+      </DevI>
+      <DevI id="di_3500158142" type="dt1"/>
+      <DevI id="di_3137847583" type="dt0"/>
+      <DevI id="di_3851714088" type="dt0">
+        <P>"v_1931282308": -290568003</P>
+      </DevI>
+      <DevI id="di_4149872032" type="dt0"/>
+      <DevI id="di_427843021" type="dt1"/>
+      <DevI id="di_2147214331" type="dt0"/>
+      <DevI id="di_2845967714" type="dt1"/>
+      <DevI id="di_1962433074" type="dt1"/>
+    </DeviceInstances>
+    <EdgeInstances/>
+  </GraphInstance>
+</Graph>

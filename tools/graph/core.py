@@ -1,77 +1,58 @@
 class GraphDescriptionError(Exception):
     def __init__(self,msg):
         Exception.__init__(self,msg)
-        
 
-class TypedData(object):
+class TypedDataSpec(object):
     def __init__(self,name):
         self.name=name
 
 
-class ScalarData(TypedData):
-    def __init__(self,elt,value):
-        TypedData.__init__(self,elt)
+class ScalarTypedDataSpec(TypedDataSpec):
+    def _check_value(self,value):
+        if self.type=="int32_t":
+            res=int(value)
+            assert(-2**31 <= res < 2**31)
+        elif self.type=="uint32_t":
+            res=int(value)
+            assert(0 <= res < 2**32)
+        elif self.type=="float":
+            res=float(value)
+        elif self.type=="bool":
+            res=bool(value)
+        else:
+            assert False, "Unknown data type {}.".format(self.type)
+        return res
+    
+    def __init__(self,name,type,value=None):
+        TypedDataSpec.__init__(self,name)
+        self.type=type
         if value is not None:
             self.value=self._check_value(value)
         else:
-            self.value=None
-        self.is_complete=value is not None
-
-    def _check_value(self,value):
-        raise NotImplementedError()
+            self.value=0
 
     def is_refinement_compatible(self,inst):
         if inst is None:
             return True
-        if not isinstance(inst,type(self)):
-            return False # We are strict, it must be exactly the same type
-        if inst.name!=self.name:
+        try:
+            self._check_value(inst)
+        except:
             return False
         return True
 
     def __str__(self):
-        if self.value:
-            return "Int32:{}={},complete={}".format(self.name,self.value,self.is_complete)
-        else:
-            return "Int32:{}".format(self.name)
+        return "{}:{}".format(self.type,self.name,self.value)
 
-    
-class Int32Data(ScalarData):
-    def __init__(self,name,value):
-        ScalarData.__init__(self,name,value)
-        
-    def _check_value(self,value):
-        return int(value)
-
-
-class Float32Data(ScalarData):
-    def __init__(self,name,value):
-        ScalarData.__init__(self,name,value)
-        
-    def _check_value(self,value):
-        return float(value)
-
-
-class BoolData(ScalarData):
-    def __init__(self,name,value):
-        ScalarData.__init__(self,name,value)
-        
-    def _check_value(self,value):
-        return bool(value)
-
-
-class TupleData(TypedData):
+class TupleTypedDataSpec(TypedDataSpec):
     def __init__(self,name,elements):
-        TypedData.__init__(self,name)
+        TypedDataSpec.__init__(self,name)
         self._elts_by_name={}
         self._elts_by_index=[]
-        self.is_complete=True
         for e in elements:
             if e.name in self._elts_by_name:
                 raise GraphDescriptionError("Tuple element name appears twice.")
             self._elts_by_name[e.name]=e
             self._elts_by_index.append(e)
-            self.is_complete=self.is_complete and e.is_complete
 
     @property
     def elements_by_name(self):
@@ -82,6 +63,7 @@ class TupleData(TypedData):
         return self._elts_by_index
 
     def __str__(self):
+        
         acc="Tuple:{}[\n".format(self.name)
         for i in range(len(self._elts_by_index)):
             if i!=0:
@@ -91,25 +73,59 @@ class TupleData(TypedData):
         return acc+"]"
 
     def is_refinement_compatible(self,inst):
-        if not isinstance(inst,TupleData):
+        if inst is None:
+            return True;
+        
+        if not isinstance(inst,dict):
             return False
 
+        count=0
         for ee in self._elts_by_index:
-            if ee.name in inst._elts_by_name:
-                if not ee.is_refinement_compatible(inst._elts_by_name[ee.name]):
+            if ee.name in inst:
+                count=count+1
+                if not ee.is_refinement_compatible(inst[ee.name]):
                     return False
 
-        # Check that everything in the instance is known
-        for ee in inst._elts_by_index:
-            if ee.name not in self._elts_by_name:
-                return False
+        # There is something in the dict that we don't know about
+        if count!=len(inst):
+            return False
+
         return True
+
+
+class ArrayTypedDataSpec(TypedDataSpec):
+    def __init__(self,name,length,type):
+        TypedDataSpec.__init__(self,name)
+        self.type=type
+        self.length=length
+
+    def __str__(self):
+        
+        return "Array:{}[{}*{}]\n".format(self.name,self.types,self.length)
+
+    def is_refinement_compatible(self,inst):
+        if inst is None:
+            return True;
+        
+        if not isinstance(inst,list):
+            return False
+
+        if len(inst)!=self.length:
+            return False
+
+        for v in inst:
+            if not self.type.is_refinement_compatible(v):
+                return False
+
+        return True
+
+
 
 def is_refinement_compatible(proto,inst):
     if proto is None:
         return inst is None
     if inst is None:
-        return True
+        return True;
     return proto.is_refinement_compatible(inst)
     
 
@@ -177,15 +193,70 @@ class DeviceType(object):
         self.outputs_by_index.append(p)
         self.ports[name]=p
 
+
+class GraphType(object):
+    def __init__(self,id,native_dimension,properties,shared_code):
+        self.id=id
+        self.native_dimension=native_dimension
+        if properties:
+            assert isinstance(properties,TupleTypedDataSpec), "Expected TupleTypedDataSpec, got={}".format(properties)
+        self.properties=properties
+        self.shared_code=shared_code
+        self.device_types={}
+        self.edge_types={}
+
+    def add_edge_type(self,edge_type):
+        if edge_type.id in self.edge_types:
+            raise GraphDescriptionError("Edge type already exists.")
+        self.edge_types[edge_type.id]=edge_type
+
+    def add_device_type(self,device_type):
+        if device_type.id in self.device_types:
+            raise GraphDescriptionError("Device type already exists.")
+        self.device_types[device_type.id]=device_type
+        
+class GraphTypeReference(object):
+    def __init__(self,id,src):
+        self.id=id
+        self.src=src
+        
+        self.native_dimension=native_dimension
+        self.properties=properties
+        self.device_types={}
+        self.edge_types={}
+
+    @property
+    def native_dimension(self):
+        raise RuntimeError("Cannot get dimension of unresolved GraphTypeReference.")
+
+    @property
+    def properties(self):
+        raise RuntimeError("Cannot get properties of unresolved GraphTypeReference.")
+
+    @property
+    def device_types(self):
+        raise RuntimeError("Cannot get device_types of unresolved GraphTypeReference.")
+
+    @property
+    def edge_types(self):
+        raise RuntimeError("Cannot get edge_types of unresolved GraphTypeReference.")
+
+    def add_edge_type(self,edge_type):
+        raise RuntimeError("Cannot add to unresolved GraphTypeReference.")
+
+    def add_device_type(self,device_type):
+        raise RuntimeError("Cannot add to unresolved GraphTypeReference.")
+
         
 class DeviceInstance(object):
-    def __init__(self,parent,id,device_type,properties):
+    def __init__(self,parent,id,device_type,native_location,properties):
         if not is_refinement_compatible(device_type.properties,properties):
             raise GraphDescriptionError("Properties not compatible with device type properties: proto={}, value={}".format(device_type.properties, properties))
 
         self.parent=parent
         self.id=id
         self.device_type=device_type
+        self.native_location=native_location
         self.properties=properties
 
         
@@ -218,11 +289,12 @@ class EdgeInstance(object):
         self.properties=properties
         
 
-class Graph:
-    def __init__(self,id):
+class GraphInstance:
+    def __init__(self,id,graph_type,properties=None):
         self.id=id
-        self.edge_types={}
-        self.device_types={}
+        self.graph_type=graph_type
+        assert is_refinement_compatible(graph_type.properties,properties), "value {} is not a refinement of {}".format(properties,graph_type.properties)
+        self.properties=properties
         self.device_instances={}
         self.edge_instances={}
         self._validated=True
@@ -232,15 +304,15 @@ class Graph:
 
     def _validate_device_type(self,dt):
         for p in dt.ports.values():
-            if p.edge_type.id not in self.edge_types:
+            if p.edge_type.id not in self.graph_type.edge_types:
                 raise GraphDescriptionError("DeviceType uses an edge type that is uknown.")
-            if p.edge_type != self.edge_types[p.edge_type.id]:
+            if p.edge_type != self.graph_type.edge_types[p.edge_type.id]:
                 raise GraphDescriptionError("DeviceType uses an edge type object that is not part of this graph.")
 
     def _validate_device_instance(self,di):
-        if di.device_type.id not in self.device_types:
+        if di.device_type.id not in self.graph_type.device_types:
             raise GraphDescriptionError("DeviceInstance refers to unknown device type.")
-        if di.device_type != self.device_types[di.device_type.id]:
+        if di.device_type != self.graph_type.device_types[di.device_type.id]:
             raise GraphDescriptionError("DeviceInstance refers to a device tye object that is not part of this graph.")
 
         if not is_refinement_compatible(di.device_type.properties,di.properties):
@@ -251,28 +323,6 @@ class Graph:
         pass
 
             
-    def add_edge_type(self,et,validate=True):
-        if et.id in self.edge_types:
-            raise GraphDescriptionError("Duplicate edgeType id {}".format(id))
-
-        if validate:
-            self._validate_edge_type(et)
-        else:
-            self._validated=False
-        
-        self.edge_types[et.id]=et
-
-    def add_device_type(self,dt,validate=True):
-        if dt.id in self.edge_types:
-            raise GraphDescriptionError("Duplicate deviceType id {}".format(id))
-
-        if validate:
-            self._validate_device_type(dt)
-        else:
-            self._validated=False
-        
-        self.device_types[dt.id]=dt
-
     def add_device_instance(self,di,validate=True):
         if di.id in self.device_instances:
             raise GraphDescriptionError("Duplicate deviceInstance id {}".format(id))
