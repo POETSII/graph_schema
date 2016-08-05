@@ -20,6 +20,32 @@ def render_typed_data_as_decl(proto,dst,indent=""):
     else:
         raise RuntimeError("Unknown data type {}.".format(type(proto)))
 
+def render_typed_data_init(proto,dst,prefix):
+    if proto is None:
+        pass
+    elif isinstance(proto,ScalarTypedDataSpec):
+        if proto.value:
+            value=proto.value
+            if proto.type=="bool":
+                value = 1 if value else 0
+            dst.write('{}{} = {};\n'.format(prefix,proto.name,value))
+        else:
+            dst.write('{}{} = 0;\n'.format(prefix,proto.name))
+    elif isinstance(proto,TupleTypedDataSpec):
+        for elt in proto.elements_by_index:
+            render_typed_data_init(elt,dst,prefix+proto.name+".")
+    elif isinstance(proto,ArrayTypedDataSpec):
+        assert isinstance(proto.type,ScalarTypedDataSpec), "Haven't implemented arrays of non-scalars yet."
+        for i in range(0,proto.length):
+            if proto.type.value is not None:
+                dst.write('{}{}[{}] = {};\n'.format(prefix,proto.name,i,proto.type.value))
+            else:
+                dst.write('{}{}[{}] = 0;\n'.format(prefix,proto.name,i))
+
+    else:
+        raise RuntimeError("Unknown data type {}.".format(type(proto)))
+
+
 def render_typed_data_load_v4_tuple(proto,dst,prefix,indent):
     assert isinstance(proto,TupleTypedDataSpec)
     for elt in proto.elements_by_index:
@@ -78,6 +104,17 @@ def render_typed_data_load_v4(proto,dst,elt,prefix,indent):
     render_typed_data_load_v4_tuple(proto,dst,prefix,indent)
     dst.write('{}}}'.format(indent))
 
+def render_typed_data_save_v4(proto,dst,elt,prefix,indent):
+    if proto is None:
+        pass
+    if not isinstance(proto,TupleTypedDataSpec):
+        raise RuntimeError("This must be passed a tuple.")
+    dst.write('{}{{'.format(indent))
+    dst.write('{}  rapidjson::Document document;\n'.format(indent))
+    dst.write('{}  auto& alloc = d.GetAllocator();'.format(indent))
+    render_typed_data_save_v4_tuple(proto,dst,prefix,indent)
+    dst.write('{}}}'.format(indent))
+
 
 def render_typed_data_as_spec(proto,name,elt_name,dst):
     dst.write("struct {} : typed_data_t{{\n".format(name))
@@ -107,18 +144,16 @@ def render_typed_data_as_spec(proto,name,elt_name,dst):
         dst.write("    std::shared_ptr<{}> res(new {});\n".format(name,name))
         for elt in proto.elements_by_index:
             render_typed_data_init(elt,dst,"    res->")
-        #dst.write('    fprintf(stderr, "   Loading {}_Spec, elt=%p\\n",elt);'.format(name))
         dst.write("    if(elt){\n")
-        if False:
-            for elt in proto.elements_by_index:
-                render_typed_data_load(elt, dst, "elt", "res->",  "      ")
-        else:
-            render_typed_data_load_v4(proto, dst, "elt", "res->", "      ")
+        render_typed_data_load_v4(proto, dst, "elt", "res->", "      ")
         dst.write("    }\n")
         dst.write("    return res;\n")
     dst.write("  }\n")
     dst.write("  void save(xmlpp::Element *parent, const TypedDataPtr &data) const override {\n")
     dst.write('    throw std::runtime_error("Not implemented.");\n')
+    dst.write("  }\n")
+    dst.write("  void save(xmlTextWriter *parent, const TypedDataPtr &data) const override {\n")
+
     dst.write("  }\n")
     dst.write("};\n")
     dst.write("TypedDataSpecPtr {}_Spec_get(){{\n".format(name))

@@ -237,7 +237,7 @@ grammar {
   ## A typed data specification consists of one or more elements
   typedDataSpec = typedDataSpecElement +
 
-  typedDataSpecElement = 
+  typedDataSpecElement =
   ## This represents the prototype for a typed piece of data, along with
   ## the default values
   (
@@ -263,9 +263,9 @@ grammar {
   ## Any relationship to JSON is entirely intentional. I realise there is an irony
   ## in using XML on the outside and JSON on the inside - personally I (DBT) prefer the
   ## self-checking structure of XML at the large scale.
-  typedDataValue = 
+  typedDataValue =
     text
-  
+
   graphSnapshot = element GraphSnapshot {
     attribute graphId  { string },
 
@@ -275,27 +275,34 @@ grammar {
     ## The integer sequence number within the run
     attribute sequenceNumber  { xsd:integer },
 
-    ## The "world-time" of the simulator
+    ## The "world-time" of the simulator, whatever that may mean
     attribute worldTime { xsd:float },
 
-    element DeviceSnapshot {
+    element DevS {
     	    attribute id  { string },
 
-	    element S { typedDataValue } ?
+            ## A hexadecimal value that encodes whether each port is ready to send.
+            ## The LSB encodes the port with index 0, and so on
+            attribute rts { string },
+
+
+          element S { typedDataValue } ?
     },
 
-    element EdgeSnapshot {
+    element EdgeS {
     	    # id of the form:  "dstDeviceId:dstPortName-srcDeviceId:srcPortName"
     	    attribute id  { string },
 
 	    # How many times has this edge fired?
-	    attribute firedCount { xsd:integer } ? , 
+	    attribute firings { xsd:integer } ? ,
 
 	    element S { typedDataValue } ? ,
 
 	    ## Any messages that are in flight
-	    element InFlight {
-	    	    element Message { typedDataValue } *
+	    element Q {
+	    	    element M {
+                  typedDataValue
+                } +
 	    } ?
     }
 
