@@ -2,6 +2,7 @@
 #define graph_hpp
 
 #include <libxml++/nodes/element.h>
+#include "libxml/xmlwriter.h"
 #include <cstdarg>
 
 /* What is the point of all this?
@@ -67,7 +68,7 @@ public:
 
   virtual void save(xmlpp::Element *parent, const TypedDataPtr &data) const=0;
 
-  virtual void save(xmlTextWriterPtr *dst, const TypedDataPtr &data) const=0;
+  virtual void save(xmlTextWriterPtr dst, const TypedDataPtr &data) const=0;
 
 
 

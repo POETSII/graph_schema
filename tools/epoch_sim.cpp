@@ -2,6 +2,8 @@
 
 #include <libxml++/parsers/domparser.h>
 
+#include "snapshots.hpp"
+
 #include <iostream>
 #include <fstream>
 #include <memory>
@@ -238,6 +240,8 @@ int main(int argc, char *argv[])
     
     std::istream *src=&std::cin;
     std::ifstream srcFile;
+
+    std::string m_snapshotSink;
     
     if(argc>1){
       if(logLevel>1){
