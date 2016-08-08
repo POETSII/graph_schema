@@ -115,6 +115,27 @@ def render_typed_data_save_v4(proto,dst,elt,prefix,indent):
     render_typed_data_save_v4_tuple(proto,dst,prefix,indent)
     dst.write('{}}}'.format(indent))
 
+def render_typed_data_save(proto, dst, prefix, indent):
+    if isinstance(proto,ScalarTypedDataSpec):
+        dst.write('{}if({}{} != {}){{ if(sep){{ dst<<","; }}; dst<<"\\"{}\\":"<<{}{}; sep=true; }}\n'.format(indent, prefix, proto.name, proto.value, proto.name, prefix, proto.name))
+    elif isinstance(proto,ArrayTypedDataSpec):
+        assert isinstance(proto.type,ScalarTypedDataSpec), "Haven't implemented non-scalar arrays yet."
+        dst.write('{}if(sep){{ dst<<","; }}; dst<<"\\"{}\\":[";'.format(indent,proto.name))
+        for i in range(proto.length):
+            if i>0:
+                dst.write('{}  dst<<",";\n'.format(indent))
+            dst.write('{}  dst<<{}{}[{}];\n'.format(indent, prefix, proto.name, i))
+        dst.write('{}dst<<"]"; sep=true;\n'.format(indent))
+    elif isinstance(proto,TupleTypedDataSpec):
+        dst.write('{}if(sep){ dst<<","; } sep=true;\n'.format(indent))
+        dst.write('{}{{ bool sep=false;\n'.format(indent))
+        dst.write('{}dst<<"\\"{}\\"":{{"'.format(indent,proto.name))
+        for elt in proto.elements_by_index:
+            render_typed_data_save(elt, dst, prefix+"."+proto.name, indent+"  ")
+        dst.write('{}dst<<"}}"'.format(indent))
+        dst.write('{}}}'.format(indent))
+    else:
+        assert False, "Unknown data-type"
 
 def render_typed_data_as_spec(proto,name,elt_name,dst):
     dst.write("struct {} : typed_data_t{{\n".format(name))
@@ -152,9 +173,20 @@ def render_typed_data_as_spec(proto,name,elt_name,dst):
     dst.write("  void save(xmlpp::Element *parent, const TypedDataPtr &data) const override {\n")
     dst.write('    throw std::runtime_error("Not implemented.");\n')
     dst.write("  }\n")
-    dst.write("  void save(xmlTextWriter *parent, const TypedDataPtr &data) const override {\n")
-
-    dst.write("  }\n")
+    dst.write("  std::string toJSON(const TypedDataPtr &data) const override {\n")
+    if proto is None:
+        dst.write('    return std::string();\n')
+    else:
+        dst.write("    const {0} *src=(const {0} *)data.get();\n".format(name));
+        dst.write("    if(!src){ return std::string(); }\n")
+        dst.write("    std::stringstream dst;\n")
+        dst.write("    bool sep=false;\n")
+        dst.write('    dst<<"{";\n')
+        for elt in proto.elements_by_index:
+            render_typed_data_save(elt, dst, "src->", "    ")
+        dst.write('    dst<<"}";\n')
+        dst.write("    return dst.str();\n")
+    dst.write('  }\n')
     dst.write("};\n")
     dst.write("TypedDataSpecPtr {}_Spec_get(){{\n".format(name))
     dst.write("  static TypedDataSpecPtr singleton(new {}_Spec);\n".format(name))

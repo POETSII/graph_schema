@@ -10,6 +10,9 @@
 #include <random>
 #include <unordered_set>
 
+#include <cstring>
+#include <cstdlib>
+
 static unsigned  logLevel=2;
 
 struct EpochSim
@@ -24,7 +27,7 @@ struct EpochSim
     auto it=m_interned.insert(name);
     return it.first->c_str();
   }
-  
+
   struct output
   {
     unsigned dstDevice;
@@ -39,7 +42,7 @@ struct EpochSim
     TypedDataPtr properties;
     TypedDataPtr state;
   };
-  
+
   struct device
   {
     unsigned index;
@@ -52,7 +55,7 @@ struct EpochSim
     std::shared_ptr<bool> readyToSend; // Grrr, std::vector<bool> !
 
     std::vector<const char *> outputNames; // interned names
-    
+
     std::vector<std::vector<output> > outputs;
     std::vector<std::vector<input> > inputs;
   };
@@ -61,7 +64,7 @@ struct EpochSim
   std::string m_id;
   TypedDataPtr m_graphProperties;
   std::vector<device> m_devices;
-  
+
 
   virtual uint64_t onGraphInstance(const GraphTypePtr &graphType, const std::string &id, const TypedDataPtr &graphProperties) override
   {
@@ -91,7 +94,7 @@ struct EpochSim
     return d.index;
   }
 
-  void onEdgeInstance(uint64_t gId, uint64_t dstDevIndex, const DeviceTypePtr &dstDevType, const InputPortPtr &dstInput, uint64_t srcDevIndex, const DeviceTypePtr &srcDevType, const OutputPortPtr &srcOutput, const TypedDataPtr &properties) override 
+  void onEdgeInstance(uint64_t gId, uint64_t dstDevIndex, const DeviceTypePtr &dstDevType, const InputPortPtr &dstInput, uint64_t srcDevIndex, const DeviceTypePtr &srcDevType, const OutputPortPtr &srcOutput, const TypedDataPtr &properties) override
   {
     input i;
     i.properties=properties;
@@ -107,9 +110,9 @@ struct EpochSim
     o.dstDeviceId=m_devices.at(dstDevIndex).name;
     o.dstInputName=intern(dstInput->getName());
     m_devices.at(srcDevIndex).outputs.at(srcOutput->getIndex()).push_back(o);
-					      
+
   }
-  
+
 
   unsigned pick_bit(unsigned n, const bool *bits, unsigned rot)
   {
@@ -119,6 +122,17 @@ struct EpochSim
 	return s;
     }
     return (unsigned)-1;
+  }
+
+  void writeSnapshot(SnapshotWriter *dst, double orchestratorTime, unsigned sequenceNumber)
+  {
+    dst->startSnapshot(m_graphType, m_id.c_str(), orchestratorTime, sequenceNumber);
+
+    for(const auto &dev : m_devices){
+        dst->writeDeviceInstance(dev.type, dev.name, dev.state, dev.readyToSend.get());
+    }
+
+    dst->endSnapshot();
   }
 
   void init()
@@ -131,7 +145,7 @@ struct EpochSim
 	}
 
 	ReceiveOrchestratorServicesImpl receiveServices{logLevel, stderr, dev.name, "__init__"  };
-	init->onReceive(&receiveServices, m_graphProperties.get(), dev.properties.get(), dev.state.get(), 0, 0, 0, dev.readyToSend.get());	
+	init->onReceive(&receiveServices, m_graphProperties.get(), dev.properties.get(), dev.state.get(), 0, 0, 0, dev.readyToSend.get());
       }
     }
   }
@@ -150,7 +164,7 @@ struct EpochSim
       tmp<<"Epoch "<<m_epoch<<", Send: ";
       receiveServices.setPrefix(tmp.str().c_str());
     }
-    
+
     SendOrchestratorServicesImpl sendServices{logLevel, stderr, 0, 0};
     {
       std::stringstream tmp;
@@ -158,10 +172,10 @@ struct EpochSim
       receiveServices.setPrefix(tmp.str().c_str());
     }
 
-    
+
 
     bool sent=false;
-    
+
     unsigned rot=rng();
     for(unsigned i=0;i<m_devices.size();i++){
       unsigned index=(i+rot)%m_devices.size();
@@ -171,7 +185,7 @@ struct EpochSim
       if(logLevel>3){
 	fprintf(stderr, "  step device %d = %s\n", src.index, src.id.c_str());
       }
-      
+
       // Pick a random message
       unsigned sel=pick_bit(src.type->getOutputCount(), src.readyToSend.get(), rng());
       if(sel==-1){
@@ -226,33 +240,71 @@ struct EpochSim
     return sent;
   }
 
-  
+
 };
 
+
+void usage()
+{
+  fprintf(stderr, "epoch_sim [options] sourceFile?\n");
+  fprintf(stderr, "\n");
+  fprintf(stderr, "  --max-steps n\n");
+  fprintf(stderr, "  --snapshots interval destFile\n");
+  exit(1);
+}
 
 int main(int argc, char *argv[])
 {
   try{
-    
+
     RegistryImpl registry;
-    
-    xmlpp::DomParser parser;
-    
+
+    std::string srcFilePath="-";
+
+    std::string snapshotSinkName;
+    unsigned snapshotDelta=0;
+
+    unsigned statsDelta=1;
+
+    unsigned maxSteps=INT_MAX;
+
+    int ia=1;
+    while(ia < argc){
+      if(!strcmp("--max-steps",argv[ia])){
+        if(ia+1 >= argc){
+          fprintf(stderr, "Missing argument to --max-steps\n");
+          usage();
+        }
+        maxSteps=strtoul(argv[ia+1], 0, 0);
+        ia+=2;
+      }else if(!strcmp("--snapshots",argv[ia])){
+        if(ia+2 >= argc){
+          fprintf(stderr, "Missing two arguments to --snapshots interval destination \n");
+          usage();
+        }
+        snapshotDelta=strtoul(argv[ia+1], 0, 0);
+        snapshotSinkName=argv[ia+2];
+        ia+=3;
+      }else{
+        srcFilePath=argv[ia];
+        ia++;
+      }
+    }
+
     std::istream *src=&std::cin;
     std::ifstream srcFile;
 
-    std::string m_snapshotSink;
-    
-    if(argc>1){
+    if(srcFilePath!="-"){
       if(logLevel>1){
-	fprintf(stderr,"Reading from '%s'\n", argv[1]);
+        fprintf(stderr,"Reading from '%s'\n", srcFilePath.c_str());
       }
-      srcFile.open(argv[1]);
+      srcFile.open(srcFilePath.c_str());
       if(!srcFile.is_open())
-	throw std::runtime_error(std::string("Couldn't open '")+argv[1]+"'");
+        throw std::runtime_error(std::string("Couldn't open '")+srcFilePath+"'");
       src=&srcFile;
-      
     }
+
+    xmlpp::DomParser parser;
 
     if(logLevel>1){
       fprintf(stderr, "Parsing XML\n");
@@ -263,32 +315,48 @@ int main(int argc, char *argv[])
     }
 
     EpochSim graph;
-    
-    loadGraph(&registry, parser.get_document()->get_root_node(), &graph);
 
+    loadGraph(&registry, parser.get_document()->get_root_node(), &graph);
     if(logLevel>1){
       fprintf(stderr, "Loaded\n");
+    }
+
+    std::unique_ptr<SnapshotWriter> snapshotWriter;
+    if(snapshotDelta!=0){
+      snapshotWriter.reset(new SnapshotWriterToFile(snapshotSinkName.c_str()));
     }
 
     std::mt19937 rng;
 
     graph.init();
 
-    unsigned statsDelta=1;
-    unsigned nextStats=1;
+    if(snapshotWriter){
+      graph.writeSnapshot(snapshotWriter.get(), 0.0, 0);
+    }
+    int nextStats=0;
+    int nextSnapshot=snapshotDelta ? snapshotDelta-1 : -1;
+    unsigned snapshotSequenceNum=1;
 
-    for(unsigned i=0; i<100; i++){
-      if(logLevel>2 ||  i==nextStats){
-	fprintf(stderr, "Epoch %u : sends/device/epoch = %f (%f / %u)\n", i, graph.m_statsSends / graph.m_devices.size() / statsDelta, graph.m_statsSends/statsDelta, (unsigned)graph.m_devices.size());
+    for(unsigned i=0; i<maxSteps; i++){
+      bool running = graph.step(rng);
+
+      if(logLevel>2 || i==nextStats){
+        fprintf(stderr, "Epoch %u : sends/device/epoch = %f (%f / %u)\n", i, graph.m_statsSends / graph.m_devices.size() / statsDelta, graph.m_statsSends/statsDelta, (unsigned)graph.m_devices.size());
       }
       if(i==nextStats){
-	nextStats=nextStats+statsDelta;
-	graph.m_statsSends=0;
+        nextStats=nextStats+statsDelta;
+        graph.m_statsSends=0;
       }
-      
-      if(!graph.step(rng))
-	break;
 
+      if(snapshotWriter && i==nextSnapshot){
+        graph.writeSnapshot(snapshotWriter.get(), i, snapshotSequenceNum);
+        nextSnapshot += snapshotDelta;
+        snapshotSequenceNum++;
+      }
+
+      if(!running){
+        break;
+      }
     }
 
     if(logLevel>1){

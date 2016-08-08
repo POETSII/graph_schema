@@ -3,7 +3,7 @@
   <GraphType id="ising_spin" nativeDimension="2">
     <!-- This is supposed to implement the method from [lubachevsky-87-asynchronous-ising-spin-models]:
 	 "Efficient Parallel Simulations of Asynchronous Cellular Arrays", 1987, Boris D. Lubachevsky -->
-    
+
     <Properties>
       <Scalar type="float" name="endTime" value="10" />
       <Scalar type="uint32_t" name="width" />
@@ -12,8 +12,10 @@
     </Properties>
 
     <SharedCode><![CDATA[
-    
-    
+
+	#include <cmath>
+
+
     uint32_t urng(uint32_t &state)
     {
       state = state*1664525+1013904223;
@@ -34,7 +36,7 @@
 
     float erng(uint32_t &state)
     { return -log(frng(state)); }
-      
+
     void chooseNextEvent(const ising_spin_properties_t *graphProperties, cell_state_t *deviceState)
     {
       int sumStates=0;
@@ -52,12 +54,12 @@
     }
 
     ]]></SharedCode>
-    
+
     <EdgeTypes>
       <EdgeType id="__init__">
 	<!-- This doesn't have any properties -->
       </EdgeType>
-      
+
       <EdgeType id="update">
 	<Properties>
 	  <Scalar type="uint32_t" name="direction" /> <!-- 1=Up, 2=Right, 3=Down, 4=Left -->
@@ -68,17 +70,17 @@
 	<Message>
 	  <Scalar type="float" name="time" value="0" />
 	  <Scalar type="uint32_t" name="spin" /> <!-- By implication, it had the opposite spin before-hand -->
-	</Message>      
+	</Message>
       </EdgeType>
     </EdgeTypes>
-  
+
     <DeviceTypes>
       <DeviceType id="cell">
 	<Properties>
 	  <Scalar type="uint32_t" name="x" value="0" />
 	  <Scalar type="uint32_t" name="y" value="0" />
 	</Properties>
-	
+
 	<State>
 	  <Scalar type="uint32_t" name="rng" />
 
@@ -130,7 +132,7 @@
 	  ]]>
 	  </OnReceive>
 	</InputPort>
-	
+
 	<InputPort name="in" edgeTypeId="update">
 	  <OnReceive><![CDATA[
 
@@ -147,9 +149,9 @@
             if(deviceState->times[i] < deviceState->times[0]){
 	      handler_log(4, "  time[%d] = %g < time[0] = %g", i, deviceState->times[i], deviceState->times[0]);
 	      requestSend_out = false;
-	    }	
+	    }
 	  }
-	  
+
 	  ]]></OnReceive>
 	</InputPort>
 
@@ -166,7 +168,7 @@
           chooseNextEvent(graphProperties, deviceState);
           message->spin = deviceState->spins[0];
 	  message->time = deviceState->times[0];
-	    
+
           handler_log(3, "prev_t = %g, next_t = %g, curr_spin = %d", prevTime, deviceState->times[0], deviceState->spins[0]);
 
 	  requestSend_out = true;

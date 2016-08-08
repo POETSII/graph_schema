@@ -8,8 +8,9 @@
       <Array name="probabilities" type="float"/>
     </Properties>
     <SharedCode><![CDATA[
-    
-    
+
+    #include <cmath>
+
     uint32_t urng(uint32_t &state)
     {
       state = state*1664525+1013904223;
@@ -30,7 +31,7 @@
 
     float erng(uint32_t &state)
     { return -log(frng(state)); }
-      
+
     void chooseNextEvent(const ising_spin_properties_t *graphProperties, cell_state_t *deviceState)
     {
       int sumStates=0;
@@ -114,7 +115,7 @@
               requestSend_out = false; // We are not the earliest cell in neighbourhood
 	    }
 	  }
-	  
+
 	  ]]></OnReceive>
         </InputPort>
         <InputPort name="in" edgeTypeId="update">
@@ -133,9 +134,9 @@
             if(deviceState->times[i] < deviceState->times[0]){
 	      handler_log(4, "  time[%d] = %g < time[0] = %g", i, deviceState->times[i], deviceState->times[0]);
 	      requestSend_out = false;
-	    }	
+	    }
 	  }
-	  
+
 	  ]]></OnReceive>
         </InputPort>
         <OutputPort name="out" edgeTypeId="update">
@@ -151,7 +152,7 @@
           chooseNextEvent(graphProperties, deviceState);
           message->spin = deviceState->spins[0];
 	  message->time = deviceState->times[0];
-	    
+
           handler_log(3, "prev_t = %g, next_t = %g, curr_spin = %d", prevTime, deviceState->times[0], deviceState->spins[0]);
 
 	  requestSend_out = true;

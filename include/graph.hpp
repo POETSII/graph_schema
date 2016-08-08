@@ -5,6 +5,9 @@
 #include "libxml/xmlwriter.h"
 #include <cstdarg>
 
+#include <memory>
+#include <cstring>
+
 /* What is the point of all this?
 
    - C/C++ doesn't support introspection, so there is no way of getting at data-structures
@@ -68,7 +71,7 @@ public:
 
   virtual void save(xmlpp::Element *parent, const TypedDataPtr &data) const=0;
 
-  virtual void save(xmlTextWriterPtr dst, const TypedDataPtr &data) const=0;
+  virtual std::string toJSON(const TypedDataPtr &data) const=0;
 
 
 

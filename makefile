@@ -7,7 +7,11 @@ CPPFLAGS += $(shell pkg-config --cflags libxml++-2.6)
 
 LDFLAGS += $(shell pkg-config --libs libxml++-2.6)
 
+ifeq ($(OS),Windows_NT)
+SO_CPPFLAGS += -shared
+else
 SO_CPPFLAGS += -dynamiclib -fPIC
+endif
 
 CPPFLAGS += -std=c++11 -g
 
@@ -27,8 +31,8 @@ $(JING) : external/jing-20081028.zip
 	(cd external && unzip -o jing-20081028.zip)
 	touch $@
 
-rapidjson : external/rapidjson.zip
-	(cd external && unzip -o rapidjson)
+rapidjson : external/rapidjson-master.zip
+	(cd external && unzip -o rapidjson-master)
 
 CPPFLAGS += -I external/rapidjson-master/include
 

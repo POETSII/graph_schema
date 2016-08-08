@@ -14,7 +14,8 @@ public:
     virtual void startSnapshot(
         const GraphTypePtr &graph,
         const char *id,
-	const TypedDataPtr &state
+        double orchestratorTime,
+        unsigned sequenceNumber
     ) =0;
 
     virtual void endSnapshot() =0;
@@ -47,13 +48,14 @@ private:
 
   std::shared_ptr<xmlChar> toXmlStr(const char *v)
   { return std::shared_ptr<xmlChar>(xmlCharStrdup(v), free); }
-  
+
   xmlTextWriterPtr m_dst;
 public:
     SnapshotWriterToFile(const char *dst)
       : m_dst(0)
   {
     m_dst=xmlNewTextWriterFilename(dst, 0);
+      xmlTextWriterSetIndent(m_dst, 1);
   }
 
 
@@ -68,11 +70,24 @@ public:
     virtual void startSnapshot(
         const GraphTypePtr &graph,
         const char *id,
-        const TypedDataPtr &properties
+        double orchestratorTime,
+        unsigned sequence
     ) override
     {
         xmlTextWriterStartDocument(m_dst, NULL, NULL, NULL);
         xmlTextWriterStartElementNS(m_dst, NULL, (const xmlChar*)"GraphSnapshot", m_ns);
+        xmlTextWriterWriteAttribute(m_dst, (const xmlChar *)"graphInstId", (const xmlChar *)id);
+        xmlTextWriterWriteAttribute(m_dst, (const xmlChar *)"graphTypeid", (const xmlChar *)graph->getId().c_str());
+        {
+            std::stringstream tmp;
+            tmp<<sequence;
+            xmlTextWriterWriteAttribute(m_dst, (const xmlChar *)"sequenceNumber", (const xmlChar *)tmp.str().c_str());
+        }
+        {
+            std::stringstream tmp;
+            tmp<<orchestratorTime;
+            xmlTextWriterWriteAttribute(m_dst, (const xmlChar *)"orchestratorTime", (const xmlChar *)tmp.str().c_str());
+        }
     }
 
     virtual void endSnapshot() override
@@ -82,6 +97,32 @@ public:
         xmlTextWriterFlush(m_dst);
     }
 
+private:
+    void writeTypedData(const TypedDataSpecPtr &spec, const TypedDataPtr &data, const char *eltName, bool writeIfEmpty)
+    {
+        if(!data){
+            if(writeIfEmpty){
+                xmlTextWriterWriteElement(m_dst, (const xmlChar *)eltName, (const xmlChar *)"");
+            }
+        }else{
+            std::string json=spec->toJSON(data);
+            if(json.empty() || json=="{}"){
+                if(writeIfEmpty){
+                    xmlTextWriterWriteElement(m_dst, (const xmlChar *)eltName, (const xmlChar *)"");
+                }
+            }else{
+                assert(json.size()>2);
+                json.erase(json.begin()); // get rid of {
+                json.erase(json.end()-1); // get rid of }
+
+                xmlTextWriterStartElement(m_dst, (const xmlChar*)eltName);
+                xmlTextWriterWriteRaw(m_dst, (const xmlChar *)json.c_str());
+                xmlTextWriterEndElement(m_dst);
+            }
+        }
+    }
+public:
+
     virtual void writeDeviceInstance
     (
      const DeviceTypePtr &dt,
@@ -90,7 +131,7 @@ public:
      const bool *readyToSendFlags
      ) override
     {
-      xmlTextWriterStartElementNS(m_dst, NULL, (const xmlChar *)"DevS", m_ns);
+      xmlTextWriterStartElementNS(m_dst, NULL, (const xmlChar *)"DevS", NULL);
 
       xmlTextWriterWriteAttribute(m_dst, (const xmlChar *)"id", (const xmlChar *)id);
 
@@ -103,21 +144,17 @@ public:
                 flags |= (1ul << i);
         }
         if(flags!=0){
-	  xmlTextWriterWriteFormatAttribute(m_dst, (const xmlChar *)"rts", "%x", flags);
+            xmlTextWriterWriteFormatAttribute(m_dst, (const xmlChar *)"rts", "%x", flags);
         }
 
-        if(state){
-	  xmlTextWriterStartElementNS(m_dst,  NULL, (const xmlChar *)"S", m_ns);
-            dt->getPropertiesSpec()->save(m_dst, state);
-            xmlTextWriterEndElement(m_dst);
-        }
+        writeTypedData(dt->getStateSpec(), state, "S", false);
 
         xmlTextWriterEndElement(m_dst);
     }
 
     virtual void writeEdgeInstance
     (
-     const EdgeTypePtr &dt,
+     const EdgeTypePtr &et,
      const char *id,
      const TypedDataPtr &state,
      uint64_t firings,
@@ -133,18 +170,13 @@ public:
 	  xmlTextWriterWriteFormatAttribute(m_dst, (const xmlChar *)"firings", "%llx", firings);
         }
 
-        if(state){
-	  xmlTextWriterStartElementNS(m_dst,  NULL, (const xmlChar *)"S", m_ns);
-            dt->getPropertiesSpec()->save(m_dst, state);
-            xmlTextWriterEndElement(m_dst);
-        }
+        writeTypedData(et->getStateSpec(), state, "S", false);
 
         if(nMessagesInFlight>0){
-	  xmlTextWriterStartElementNS(m_dst, NULL, (const xmlChar *)"Q", m_ns);
+            xmlTextWriterStartElementNS(m_dst, NULL, (const xmlChar *)"Q", m_ns);
             for(unsigned i=0; i<nMessagesInFlight; i++){
-	      xmlTextWriterStartElementNS(m_dst, NULL, (const xmlChar *)"M", m_ns);
-                dt->getMessageSpec()->save(m_dst, pMessagesInFlight[i]);
-                xmlTextWriterEndElement(m_dst);
+                auto message=pMessagesInFlight[i];
+                writeTypedData(et->getMessageSpec(), state, "M", true);
             }
             xmlTextWriterEndElement(m_dst);
         }
