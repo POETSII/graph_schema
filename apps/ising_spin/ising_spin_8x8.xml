@@ -26,9 +26,10 @@
     }
 
     float frng(uint32_t &state)
-    {
-      return urng(state)*2.328306400e-10f;
-    }
+    { return urng(state)*2.328306400e-10f; }
+
+    float erng(uint32_t &state)
+    { return -log(frng(state)); }
       
     void chooseNextEvent(const ising_spin_properties_t *graphProperties, cell_state_t *deviceState)
     {
@@ -43,12 +44,11 @@
       if( frng(deviceState->rng) < prob){
         deviceState->spins[0] *= -1; // Flip
       }
-      deviceState->times[0] += -log(frng(deviceState->rng));
+      deviceState->times[0] += erng(deviceState->rng);
     }
 
     ]]></SharedCode>
     <EdgeTypes>
-      <EdgeType id="__init__"/>
       <EdgeType id="update">
         <Message>
           <Scalar name="time" type="float" value="0.0"/>
@@ -61,6 +61,7 @@
           <Scalar name="time" type="float" value="0.0"/>
         </State>
       </EdgeType>
+      <EdgeType id="__init__"/>
     </EdgeTypes>
     <DeviceTypes>
       <DeviceType id="cell">
@@ -70,7 +71,6 @@
         </Properties>
         <State>
           <Scalar name="rng" type="uint32_t"/>
-          <Scalar name="firstSend" type="bool"/>
           <Array name="spins" type="int32_t"/>
           <Array name="times" type="float"/>
         </State>
@@ -83,36 +83,37 @@
 
 	  seed=rng_init( x, (y+H-1)%H );
 	  deviceState->spins[1]=(urng(seed)>>31) ? +1 : -1;
-	  deviceState->times[1]=0;
+	  deviceState->times[1]=erng(seed);
 
 	  seed=rng_init( (x+1)%W, y );
 	  deviceState->spins[2]=(urng(seed)>>31) ? +1 : -1;
-	  deviceState->times[2]=0;
+	  deviceState->times[2]=erng(seed);
 
 	  seed=rng_init( x, (y+1)%H );
 	  deviceState->spins[3]=(urng(seed)>>31) ? +1 : -1;
-	  deviceState->times[3]=0;
+	  deviceState->times[3]=erng(seed);
 
 	  seed=rng_init( (x+W-1)%W, y );
 	  deviceState->spins[4]=(urng(seed)>>31) ? +1 : -1;
-	  deviceState->times[4]=0;
+	  deviceState->times[4]=erng(seed);
 
 	  // Final one is this node
 	  seed=rng_init( x, y );
 	  deviceState->spins[0]=(urng(seed)>>31) ? +1 : -1;
-	  deviceState->times[0]=0;
+	  deviceState->times[0]=erng(seed);
 	  deviceState->rng=seed; // Store the rng state back
 
-	  // We now have perfect knowledge of our neighbourhood,
-	  // and everyone is at time 0. So we pick our first firing
-	  // time, and try to broadcast it
-	  chooseNextEvent(graphProperties, deviceState);
-
-	  deviceState->firstSend=true;
+	  // We now have perfect knowledge of our neighbourhood, and
+	  // when they are planning to fire.
 
 	  handler_log(3, "next_t = %g, next_spin = %d", deviceState->times[0], deviceState->spins[0]);
 
 	  requestSend_out = true;
+	  for(unsigned i=1; i<4; i++){
+	    if(deviceState->times[0] >= deviceState->times[i]){
+              requestSend_out = false; // We are not the earliest cell in neighbourhood
+	    }
+	  }
 	  
 	  ]]></OnReceive>
         </InputPort>
@@ -127,14 +128,11 @@
 	  }
 
 	  requestSend_out = true;
-	  if(deviceState->firstSend){
-	    // We must send, as neighbours don't know our state yet
-	  }else{
-	    for(unsigned i=1; i<5; i++){
-              if(deviceState->times[i] < deviceState->times[0]){
-	        handler_log(4, "  time[%d] = %g < time[0] = %g", i, deviceState->times[i], deviceState->times[0]);
-	        requestSend_out = false;
-              }
+
+	  for(unsigned i=1; i<5; i++){
+            if(deviceState->times[i] < deviceState->times[0]){
+	      handler_log(4, "  time[%d] = %g < time[0] = %g", i, deviceState->times[i], deviceState->times[0]);
+	      requestSend_out = false;
 	    }	
 	  }
 	  
@@ -149,24 +147,19 @@
 	    *cancelSend=true;
 	  }
 
-	  if(deviceState->firstSend){
-             deviceState->firstSend=false;
-	     message->spin = deviceState->spins[0];
-             message->time = deviceState->times[0];
-	  }else{
-	    float prevTime=deviceState->times[0];
-            chooseNextEvent(graphProperties, deviceState);
-            message->spin = deviceState->spins[0];
-	    message->time = deviceState->times[0];
+	  float prevTime=deviceState->times[0];
+          chooseNextEvent(graphProperties, deviceState);
+          message->spin = deviceState->spins[0];
+	  message->time = deviceState->times[0];
 	    
-            handler_log(3, "prev_t = %g, next_t = %g, next_spin = %d", prevTime, deviceState->times[0], deviceState->spins[0]);
-            requestSend_out = true;
-	    for(unsigned i=1; i<5; i++){
-              if(deviceState->times[i] < deviceState->times[0]){
-	        handler_log(4, "  time[%d] = %g < time[0] = %g", i, deviceState->times[i], deviceState->times[0]);
-	        requestSend_out = false;
-              }
-	    }	
+          handler_log(3, "prev_t = %g, next_t = %g, curr_spin = %d", prevTime, deviceState->times[0], deviceState->spins[0]);
+
+	  requestSend_out = true;
+	  for(unsigned i=1; i<5; i++){
+            if(deviceState->times[0] > deviceState->times[i]){
+	      handler_log(4, "  time[%d] = %g < time[0] = %g", i, deviceState->times[i], deviceState->times[0]);
+	      requestSend_out = false;
+            }
 	  }
 	  ]]></OnSend>
         </OutputPort>
@@ -174,968 +167,968 @@
     </DeviceTypes>
   </GraphType>
   <GraphInstance id="heat_8_8" graphTypeId="ising_spin">
-    <Properties>"probabilities": [0.00033535013046647816, 0.017986209962091555, 0.5, 0.9820137900379085, 0.9996646498695335, 0.9996646498695335, 0.9820137900379085, 0.5, 0.017986209962091555, 0.00033535013046647816], "height": 8, "width": 8, "endTime": 100</Properties>
+    <Properties>"probabilities": [0.00033535013046647816, 0.017986209962091555, 0.5, 0.9820137900379085, 0.9996646498695335, 0.9996646498695335, 0.9820137900379085, 0.5, 0.017986209962091555, 0.00033535013046647816], "endTime": 100, "height": 8, "width": 8</Properties>
     <DeviceInstances>
-      <DevI id="n_5_4" type="cell" nativeLocation="5,4">
-        <P>"y": 4, "x": 5</P>
-      </DevI>
-      <DevI id="n_1_1" type="cell" nativeLocation="1,1">
-        <P>"y": 1, "x": 1</P>
-      </DevI>
-      <DevI id="n_5_3" type="cell" nativeLocation="5,3">
-        <P>"y": 3, "x": 5</P>
-      </DevI>
-      <DevI id="n_0_3" type="cell" nativeLocation="0,3">
-        <P>"y": 3, "x": 0</P>
-      </DevI>
-      <DevI id="n_2_1" type="cell" nativeLocation="2,1">
-        <P>"y": 1, "x": 2</P>
-      </DevI>
-      <DevI id="n_4_2" type="cell" nativeLocation="4,2">
-        <P>"y": 2, "x": 4</P>
-      </DevI>
-      <DevI id="n_7_6" type="cell" nativeLocation="7,6">
-        <P>"y": 6, "x": 7</P>
-      </DevI>
-      <DevI id="n_3_1" type="cell" nativeLocation="3,1">
-        <P>"y": 1, "x": 3</P>
-      </DevI>
-      <DevI id="n_0_1" type="cell" nativeLocation="0,1">
-        <P>"y": 1, "x": 0</P>
-      </DevI>
-      <DevI id="n_3_7" type="cell" nativeLocation="3,7">
-        <P>"y": 7, "x": 3</P>
-      </DevI>
-      <DevI id="n_2_3" type="cell" nativeLocation="2,3">
-        <P>"y": 3, "x": 2</P>
-      </DevI>
-      <DevI id="n_7_4" type="cell" nativeLocation="7,4">
-        <P>"y": 4, "x": 7</P>
-      </DevI>
-      <DevI id="n_6_6" type="cell" nativeLocation="6,6">
-        <P>"y": 6, "x": 6</P>
-      </DevI>
-      <DevI id="n_3_3" type="cell" nativeLocation="3,3">
-        <P>"y": 3, "x": 3</P>
-      </DevI>
-      <DevI id="n_0_2" type="cell" nativeLocation="0,2">
-        <P>"y": 2, "x": 0</P>
-      </DevI>
-      <DevI id="n_1_4" type="cell" nativeLocation="1,4">
-        <P>"y": 4, "x": 1</P>
-      </DevI>
       <DevI id="n_6_1" type="cell" nativeLocation="6,1">
-        <P>"y": 1, "x": 6</P>
-      </DevI>
-      <DevI id="n_4_6" type="cell" nativeLocation="4,6">
-        <P>"y": 6, "x": 4</P>
-      </DevI>
-      <DevI id="n_1_5" type="cell" nativeLocation="1,5">
-        <P>"y": 5, "x": 1</P>
-      </DevI>
-      <DevI id="n_6_5" type="cell" nativeLocation="6,5">
-        <P>"y": 5, "x": 6</P>
-      </DevI>
-      <DevI id="n_2_6" type="cell" nativeLocation="2,6">
-        <P>"y": 6, "x": 2</P>
-      </DevI>
-      <DevI id="n_7_7" type="cell" nativeLocation="7,7">
-        <P>"y": 7, "x": 7</P>
-      </DevI>
-      <DevI id="n_1_2" type="cell" nativeLocation="1,2">
-        <P>"y": 2, "x": 1</P>
-      </DevI>
-      <DevI id="n_3_2" type="cell" nativeLocation="3,2">
-        <P>"y": 2, "x": 3</P>
-      </DevI>
-      <DevI id="n_4_5" type="cell" nativeLocation="4,5">
-        <P>"y": 5, "x": 4</P>
-      </DevI>
-      <DevI id="n_4_0" type="cell" nativeLocation="4,0">
-        <P>"y": 0, "x": 4</P>
-      </DevI>
-      <DevI id="n_0_0" type="cell" nativeLocation="0,0">
-        <P>"y": 0, "x": 0</P>
-      </DevI>
-      <DevI id="n_2_4" type="cell" nativeLocation="2,4">
-        <P>"y": 4, "x": 2</P>
-      </DevI>
-      <DevI id="n_0_5" type="cell" nativeLocation="0,5">
-        <P>"y": 5, "x": 0</P>
-      </DevI>
-      <DevI id="n_0_6" type="cell" nativeLocation="0,6">
-        <P>"y": 6, "x": 0</P>
-      </DevI>
-      <DevI id="n_5_6" type="cell" nativeLocation="5,6">
-        <P>"y": 6, "x": 5</P>
+        <P>"x": 6, "y": 1</P>
       </DevI>
       <DevI id="n_4_7" type="cell" nativeLocation="4,7">
-        <P>"y": 7, "x": 4</P>
-      </DevI>
-      <DevI id="n_4_1" type="cell" nativeLocation="4,1">
-        <P>"y": 1, "x": 4</P>
-      </DevI>
-      <DevI id="n_3_6" type="cell" nativeLocation="3,6">
-        <P>"y": 6, "x": 3</P>
-      </DevI>
-      <DevI id="n_7_2" type="cell" nativeLocation="7,2">
-        <P>"y": 2, "x": 7</P>
-      </DevI>
-      <DevI id="n_5_0" type="cell" nativeLocation="5,0">
-        <P>"y": 0, "x": 5</P>
-      </DevI>
-      <DevI id="n_6_0" type="cell" nativeLocation="6,0">
-        <P>"y": 0, "x": 6</P>
-      </DevI>
-      <DevI id="n_7_0" type="cell" nativeLocation="7,0">
-        <P>"y": 0, "x": 7</P>
-      </DevI>
-      <DevI id="n_2_2" type="cell" nativeLocation="2,2">
-        <P>"y": 2, "x": 2</P>
-      </DevI>
-      <DevI id="n_2_7" type="cell" nativeLocation="2,7">
-        <P>"y": 7, "x": 2</P>
-      </DevI>
-      <DevI id="n_2_0" type="cell" nativeLocation="2,0">
-        <P>"y": 0, "x": 2</P>
-      </DevI>
-      <DevI id="n_5_5" type="cell" nativeLocation="5,5">
-        <P>"y": 5, "x": 5</P>
-      </DevI>
-      <DevI id="n_6_4" type="cell" nativeLocation="6,4">
-        <P>"y": 4, "x": 6</P>
-      </DevI>
-      <DevI id="n_1_3" type="cell" nativeLocation="1,3">
-        <P>"y": 3, "x": 1</P>
-      </DevI>
-      <DevI id="n_3_0" type="cell" nativeLocation="3,0">
-        <P>"y": 0, "x": 3</P>
-      </DevI>
-      <DevI id="n_1_6" type="cell" nativeLocation="1,6">
-        <P>"y": 6, "x": 1</P>
-      </DevI>
-      <DevI id="n_6_3" type="cell" nativeLocation="6,3">
-        <P>"y": 3, "x": 6</P>
-      </DevI>
-      <DevI id="n_1_0" type="cell" nativeLocation="1,0">
-        <P>"y": 0, "x": 1</P>
-      </DevI>
-      <DevI id="n_7_3" type="cell" nativeLocation="7,3">
-        <P>"y": 3, "x": 7</P>
-      </DevI>
-      <DevI id="n_1_7" type="cell" nativeLocation="1,7">
-        <P>"y": 7, "x": 1</P>
-      </DevI>
-      <DevI id="n_2_5" type="cell" nativeLocation="2,5">
-        <P>"y": 5, "x": 2</P>
-      </DevI>
-      <DevI id="n_5_2" type="cell" nativeLocation="5,2">
-        <P>"y": 2, "x": 5</P>
-      </DevI>
-      <DevI id="n_0_7" type="cell" nativeLocation="0,7">
-        <P>"y": 7, "x": 0</P>
-      </DevI>
-      <DevI id="n_6_7" type="cell" nativeLocation="6,7">
-        <P>"y": 7, "x": 6</P>
-      </DevI>
-      <DevI id="n_0_4" type="cell" nativeLocation="0,4">
-        <P>"y": 4, "x": 0</P>
-      </DevI>
-      <DevI id="n_5_7" type="cell" nativeLocation="5,7">
-        <P>"y": 7, "x": 5</P>
-      </DevI>
-      <DevI id="n_7_5" type="cell" nativeLocation="7,5">
-        <P>"y": 5, "x": 7</P>
-      </DevI>
-      <DevI id="n_3_5" type="cell" nativeLocation="3,5">
-        <P>"y": 5, "x": 3</P>
-      </DevI>
-      <DevI id="n_6_2" type="cell" nativeLocation="6,2">
-        <P>"y": 2, "x": 6</P>
+        <P>"x": 4, "y": 7</P>
       </DevI>
       <DevI id="n_4_4" type="cell" nativeLocation="4,4">
-        <P>"y": 4, "x": 4</P>
+        <P>"x": 4, "y": 4</P>
       </DevI>
-      <DevI id="n_3_4" type="cell" nativeLocation="3,4">
-        <P>"y": 4, "x": 3</P>
+      <DevI id="n_5_7" type="cell" nativeLocation="5,7">
+        <P>"x": 5, "y": 7</P>
+      </DevI>
+      <DevI id="n_2_5" type="cell" nativeLocation="2,5">
+        <P>"x": 2, "y": 5</P>
+      </DevI>
+      <DevI id="n_4_5" type="cell" nativeLocation="4,5">
+        <P>"x": 4, "y": 5</P>
+      </DevI>
+      <DevI id="n_0_6" type="cell" nativeLocation="0,6">
+        <P>"x": 0, "y": 6</P>
+      </DevI>
+      <DevI id="n_1_1" type="cell" nativeLocation="1,1">
+        <P>"x": 1, "y": 1</P>
+      </DevI>
+      <DevI id="n_2_3" type="cell" nativeLocation="2,3">
+        <P>"x": 2, "y": 3</P>
+      </DevI>
+      <DevI id="n_3_7" type="cell" nativeLocation="3,7">
+        <P>"x": 3, "y": 7</P>
+      </DevI>
+      <DevI id="n_3_1" type="cell" nativeLocation="3,1">
+        <P>"x": 3, "y": 1</P>
+      </DevI>
+      <DevI id="n_7_6" type="cell" nativeLocation="7,6">
+        <P>"x": 7, "y": 6</P>
+      </DevI>
+      <DevI id="n_4_1" type="cell" nativeLocation="4,1">
+        <P>"x": 4, "y": 1</P>
+      </DevI>
+      <DevI id="n_0_7" type="cell" nativeLocation="0,7">
+        <P>"x": 0, "y": 7</P>
+      </DevI>
+      <DevI id="n_6_6" type="cell" nativeLocation="6,6">
+        <P>"x": 6, "y": 6</P>
+      </DevI>
+      <DevI id="n_2_7" type="cell" nativeLocation="2,7">
+        <P>"x": 2, "y": 7</P>
+      </DevI>
+      <DevI id="n_2_6" type="cell" nativeLocation="2,6">
+        <P>"x": 2, "y": 6</P>
       </DevI>
       <DevI id="n_5_1" type="cell" nativeLocation="5,1">
-        <P>"y": 1, "x": 5</P>
+        <P>"x": 5, "y": 1</P>
+      </DevI>
+      <DevI id="n_2_2" type="cell" nativeLocation="2,2">
+        <P>"x": 2, "y": 2</P>
+      </DevI>
+      <DevI id="n_1_0" type="cell" nativeLocation="1,0">
+        <P>"x": 1, "y": 0</P>
+      </DevI>
+      <DevI id="n_6_5" type="cell" nativeLocation="6,5">
+        <P>"x": 6, "y": 5</P>
+      </DevI>
+      <DevI id="n_5_6" type="cell" nativeLocation="5,6">
+        <P>"x": 5, "y": 6</P>
+      </DevI>
+      <DevI id="n_5_5" type="cell" nativeLocation="5,5">
+        <P>"x": 5, "y": 5</P>
+      </DevI>
+      <DevI id="n_3_5" type="cell" nativeLocation="3,5">
+        <P>"x": 3, "y": 5</P>
+      </DevI>
+      <DevI id="n_7_7" type="cell" nativeLocation="7,7">
+        <P>"x": 7, "y": 7</P>
+      </DevI>
+      <DevI id="n_5_3" type="cell" nativeLocation="5,3">
+        <P>"x": 5, "y": 3</P>
+      </DevI>
+      <DevI id="n_5_2" type="cell" nativeLocation="5,2">
+        <P>"x": 5, "y": 2</P>
+      </DevI>
+      <DevI id="n_2_4" type="cell" nativeLocation="2,4">
+        <P>"x": 2, "y": 4</P>
+      </DevI>
+      <DevI id="n_6_4" type="cell" nativeLocation="6,4">
+        <P>"x": 6, "y": 4</P>
+      </DevI>
+      <DevI id="n_3_6" type="cell" nativeLocation="3,6">
+        <P>"x": 3, "y": 6</P>
+      </DevI>
+      <DevI id="n_1_2" type="cell" nativeLocation="1,2">
+        <P>"x": 1, "y": 2</P>
+      </DevI>
+      <DevI id="n_0_4" type="cell" nativeLocation="0,4">
+        <P>"x": 0, "y": 4</P>
+      </DevI>
+      <DevI id="n_4_6" type="cell" nativeLocation="4,6">
+        <P>"x": 4, "y": 6</P>
+      </DevI>
+      <DevI id="n_7_5" type="cell" nativeLocation="7,5">
+        <P>"x": 7, "y": 5</P>
+      </DevI>
+      <DevI id="n_3_2" type="cell" nativeLocation="3,2">
+        <P>"x": 3, "y": 2</P>
+      </DevI>
+      <DevI id="n_5_4" type="cell" nativeLocation="5,4">
+        <P>"x": 5, "y": 4</P>
+      </DevI>
+      <DevI id="n_4_2" type="cell" nativeLocation="4,2">
+        <P>"x": 4, "y": 2</P>
+      </DevI>
+      <DevI id="n_1_6" type="cell" nativeLocation="1,6">
+        <P>"x": 1, "y": 6</P>
+      </DevI>
+      <DevI id="n_6_2" type="cell" nativeLocation="6,2">
+        <P>"x": 6, "y": 2</P>
+      </DevI>
+      <DevI id="n_3_3" type="cell" nativeLocation="3,3">
+        <P>"x": 3, "y": 3</P>
+      </DevI>
+      <DevI id="n_7_3" type="cell" nativeLocation="7,3">
+        <P>"x": 7, "y": 3</P>
+      </DevI>
+      <DevI id="n_7_4" type="cell" nativeLocation="7,4">
+        <P>"x": 7, "y": 4</P>
+      </DevI>
+      <DevI id="n_7_2" type="cell" nativeLocation="7,2">
+        <P>"x": 7, "y": 2</P>
       </DevI>
       <DevI id="n_4_3" type="cell" nativeLocation="4,3">
-        <P>"y": 3, "x": 4</P>
+        <P>"x": 4, "y": 3</P>
+      </DevI>
+      <DevI id="n_2_1" type="cell" nativeLocation="2,1">
+        <P>"x": 2, "y": 1</P>
+      </DevI>
+      <DevI id="n_6_7" type="cell" nativeLocation="6,7">
+        <P>"x": 6, "y": 7</P>
+      </DevI>
+      <DevI id="n_1_3" type="cell" nativeLocation="1,3">
+        <P>"x": 1, "y": 3</P>
+      </DevI>
+      <DevI id="n_3_4" type="cell" nativeLocation="3,4">
+        <P>"x": 3, "y": 4</P>
+      </DevI>
+      <DevI id="n_1_7" type="cell" nativeLocation="1,7">
+        <P>"x": 1, "y": 7</P>
+      </DevI>
+      <DevI id="n_0_0" type="cell" nativeLocation="0,0">
+        <P>"x": 0, "y": 0</P>
+      </DevI>
+      <DevI id="n_5_0" type="cell" nativeLocation="5,0">
+        <P>"x": 5, "y": 0</P>
+      </DevI>
+      <DevI id="n_2_0" type="cell" nativeLocation="2,0">
+        <P>"x": 2, "y": 0</P>
+      </DevI>
+      <DevI id="n_0_2" type="cell" nativeLocation="0,2">
+        <P>"x": 0, "y": 2</P>
+      </DevI>
+      <DevI id="n_1_5" type="cell" nativeLocation="1,5">
+        <P>"x": 1, "y": 5</P>
+      </DevI>
+      <DevI id="n_6_0" type="cell" nativeLocation="6,0">
+        <P>"x": 6, "y": 0</P>
+      </DevI>
+      <DevI id="n_0_1" type="cell" nativeLocation="0,1">
+        <P>"x": 0, "y": 1</P>
+      </DevI>
+      <DevI id="n_4_0" type="cell" nativeLocation="4,0">
+        <P>"x": 4, "y": 0</P>
+      </DevI>
+      <DevI id="n_6_3" type="cell" nativeLocation="6,3">
+        <P>"x": 6, "y": 3</P>
+      </DevI>
+      <DevI id="n_0_5" type="cell" nativeLocation="0,5">
+        <P>"x": 0, "y": 5</P>
+      </DevI>
+      <DevI id="n_7_0" type="cell" nativeLocation="7,0">
+        <P>"x": 7, "y": 0</P>
       </DevI>
       <DevI id="n_7_1" type="cell" nativeLocation="7,1">
-        <P>"y": 1, "x": 7</P>
+        <P>"x": 7, "y": 1</P>
+      </DevI>
+      <DevI id="n_0_3" type="cell" nativeLocation="0,3">
+        <P>"x": 0, "y": 3</P>
+      </DevI>
+      <DevI id="n_3_0" type="cell" nativeLocation="3,0">
+        <P>"x": 3, "y": 0</P>
+      </DevI>
+      <DevI id="n_1_4" type="cell" nativeLocation="1,4">
+        <P>"x": 1, "y": 4</P>
       </DevI>
     </DeviceInstances>
     <EdgeInstances>
-      <EdgeI path="n_3_0:in-n_4_0:out">
-        <P>"direction": 2</P>
-      </EdgeI>
-      <EdgeI path="n_3_1:in-n_4_1:out">
-        <P>"direction": 2</P>
-      </EdgeI>
-      <EdgeI path="n_5_0:in-n_5_7:out">
-        <P>"direction": 1</P>
-      </EdgeI>
-      <EdgeI path="n_3_3:in-n_2_3:out">
-        <P>"direction": 4</P>
-      </EdgeI>
-      <EdgeI path="n_7_4:in-n_6_4:out">
-        <P>"direction": 4</P>
-      </EdgeI>
-      <EdgeI path="n_1_0:in-n_1_7:out">
-        <P>"direction": 1</P>
-      </EdgeI>
-      <EdgeI path="n_6_2:in-n_5_2:out">
-        <P>"direction": 4</P>
-      </EdgeI>
-      <EdgeI path="n_7_5:in-n_6_5:out">
-        <P>"direction": 4</P>
-      </EdgeI>
-      <EdgeI path="n_4_6:in-n_4_7:out">
-        <P>"direction": 3</P>
-      </EdgeI>
-      <EdgeI path="n_2_1:in-n_3_1:out">
-        <P>"direction": 2</P>
-      </EdgeI>
-      <EdgeI path="n_1_4:in-n_0_4:out">
-        <P>"direction": 4</P>
-      </EdgeI>
-      <EdgeI path="n_7_3:in-n_0_3:out">
-        <P>"direction": 2</P>
-      </EdgeI>
-      <EdgeI path="n_7_5:in-n_7_6:out">
-        <P>"direction": 3</P>
-      </EdgeI>
-      <EdgeI path="n_0_6:in-n_0_5:out">
-        <P>"direction": 1</P>
-      </EdgeI>
-      <EdgeI path="n_5_5:in-n_5_4:out">
-        <P>"direction": 1</P>
-      </EdgeI>
-      <EdgeI path="n_0_2:in-n_0_3:out">
-        <P>"direction": 3</P>
-      </EdgeI>
-      <EdgeI path="n_5_7:in-n_4_7:out">
-        <P>"direction": 4</P>
-      </EdgeI>
-      <EdgeI path="n_3_0:in-n_3_7:out">
-        <P>"direction": 1</P>
-      </EdgeI>
-      <EdgeI path="n_4_7:in-n_3_7:out">
-        <P>"direction": 4</P>
-      </EdgeI>
-      <EdgeI path="n_4_7:in-n_4_6:out">
-        <P>"direction": 1</P>
-      </EdgeI>
-      <EdgeI path="n_0_7:in-n_1_7:out">
-        <P>"direction": 2</P>
-      </EdgeI>
-      <EdgeI path="n_6_1:in-n_7_1:out">
-        <P>"direction": 2</P>
-      </EdgeI>
-      <EdgeI path="n_5_4:in-n_4_4:out">
-        <P>"direction": 4</P>
-      </EdgeI>
-      <EdgeI path="n_1_6:in-n_1_7:out">
-        <P>"direction": 3</P>
-      </EdgeI>
-      <EdgeI path="n_0_5:in-n_0_4:out">
-        <P>"direction": 1</P>
-      </EdgeI>
-      <EdgeI path="n_7_0:in-n_7_7:out">
-        <P>"direction": 1</P>
-      </EdgeI>
-      <EdgeI path="n_1_5:in-n_0_5:out">
-        <P>"direction": 4</P>
-      </EdgeI>
-      <EdgeI path="n_4_6:in-n_4_5:out">
-        <P>"direction": 1</P>
-      </EdgeI>
       <EdgeI path="n_1_7:in-n_1_0:out">
         <P>"direction": 3</P>
       </EdgeI>
-      <EdgeI path="n_5_7:in-n_6_7:out">
+      <EdgeI path="n_1_7:in-n_2_7:out">
         <P>"direction": 2</P>
-      </EdgeI>
-      <EdgeI path="n_0_7:in-n_0_6:out">
-        <P>"direction": 1</P>
-      </EdgeI>
-      <EdgeI path="n_1_2:in-n_1_1:out">
-        <P>"direction": 1</P>
-      </EdgeI>
-      <EdgeI path="n_7_1:in-n_6_1:out">
-        <P>"direction": 4</P>
-      </EdgeI>
-      <EdgeI path="n_6_5:in-n_7_5:out">
-        <P>"direction": 2</P>
-      </EdgeI>
-      <EdgeI path="n_1_0:in-n_2_0:out">
-        <P>"direction": 2</P>
-      </EdgeI>
-      <EdgeI path="n_4_4:in-n_5_4:out">
-        <P>"direction": 2</P>
-      </EdgeI>
-      <EdgeI path="n_1_3:in-n_0_3:out">
-        <P>"direction": 4</P>
-      </EdgeI>
-      <EdgeI path="n_0_4:in-n_0_5:out">
-        <P>"direction": 3</P>
-      </EdgeI>
-      <EdgeI path="n_4_4:in-n_4_5:out">
-        <P>"direction": 3</P>
-      </EdgeI>
-      <EdgeI path="n_0_2:in-n_7_2:out">
-        <P>"direction": 4</P>
-      </EdgeI>
-      <EdgeI path="n_7_0:in-n_6_0:out">
-        <P>"direction": 4</P>
-      </EdgeI>
-      <EdgeI path="n_2_0:in-n_1_0:out">
-        <P>"direction": 4</P>
-      </EdgeI>
-      <EdgeI path="n_5_3:in-n_5_4:out">
-        <P>"direction": 3</P>
-      </EdgeI>
-      <EdgeI path="n_2_2:in-n_2_3:out">
-        <P>"direction": 3</P>
-      </EdgeI>
-      <EdgeI path="n_1_0:in-n_0_0:out">
-        <P>"direction": 4</P>
-      </EdgeI>
-      <EdgeI path="n_0_1:in-n_7_1:out">
-        <P>"direction": 4</P>
-      </EdgeI>
-      <EdgeI path="n_0_3:in-n_1_3:out">
-        <P>"direction": 2</P>
-      </EdgeI>
-      <EdgeI path="n_6_0:in-n_6_7:out">
-        <P>"direction": 1</P>
-      </EdgeI>
-      <EdgeI path="n_4_6:in-n_3_6:out">
-        <P>"direction": 4</P>
-      </EdgeI>
-      <EdgeI path="n_1_7:in-n_1_6:out">
-        <P>"direction": 1</P>
-      </EdgeI>
-      <EdgeI path="n_3_5:in-n_4_5:out">
-        <P>"direction": 2</P>
-      </EdgeI>
-      <EdgeI path="n_0_1:in-n_1_1:out">
-        <P>"direction": 2</P>
-      </EdgeI>
-      <EdgeI path="n_4_0:in-n_4_1:out">
-        <P>"direction": 3</P>
-      </EdgeI>
-      <EdgeI path="n_7_4:in-n_0_4:out">
-        <P>"direction": 2</P>
-      </EdgeI>
-      <EdgeI path="n_3_4:in-n_2_4:out">
-        <P>"direction": 4</P>
       </EdgeI>
       <EdgeI path="n_7_2:in-n_7_1:out">
         <P>"direction": 1</P>
       </EdgeI>
-      <EdgeI path="n_1_3:in-n_1_2:out">
+      <EdgeI path="n_5_7:in-n_5_6:out">
         <P>"direction": 1</P>
       </EdgeI>
-      <EdgeI path="n_6_2:in-n_6_3:out">
-        <P>"direction": 3</P>
-      </EdgeI>
-      <EdgeI path="n_7_4:in-n_7_5:out">
-        <P>"direction": 3</P>
-      </EdgeI>
-      <EdgeI path="n_4_6:in-n_5_6:out">
-        <P>"direction": 2</P>
-      </EdgeI>
-      <EdgeI path="n_5_4:in-n_5_3:out">
-        <P>"direction": 1</P>
-      </EdgeI>
-      <EdgeI path="n_3_5:in-n_3_6:out">
-        <P>"direction": 3</P>
-      </EdgeI>
-      <EdgeI path="n_5_2:in-n_5_1:out">
-        <P>"direction": 1</P>
-      </EdgeI>
-      <EdgeI path="n_6_1:in-n_6_2:out">
-        <P>"direction": 3</P>
-      </EdgeI>
-      <EdgeI path="n_3_1:in-n_2_1:out">
-        <P>"direction": 4</P>
-      </EdgeI>
-      <EdgeI path="n_7_0:in-n_7_1:out">
-        <P>"direction": 3</P>
-      </EdgeI>
-      <EdgeI path="n_2_1:in-n_2_0:out">
-        <P>"direction": 1</P>
-      </EdgeI>
-      <EdgeI path="n_7_6:in-n_0_6:out">
-        <P>"direction": 2</P>
-      </EdgeI>
-      <EdgeI path="n_3_6:in-n_4_6:out">
-        <P>"direction": 2</P>
-      </EdgeI>
-      <EdgeI path="n_4_5:in-n_3_5:out">
-        <P>"direction": 4</P>
-      </EdgeI>
-      <EdgeI path="n_2_5:in-n_3_5:out">
-        <P>"direction": 2</P>
-      </EdgeI>
-      <EdgeI path="n_2_4:in-n_2_5:out">
-        <P>"direction": 3</P>
-      </EdgeI>
-      <EdgeI path="n_7_0:in-n_0_0:out">
-        <P>"direction": 2</P>
-      </EdgeI>
-      <EdgeI path="n_2_3:in-n_3_3:out">
-        <P>"direction": 2</P>
-      </EdgeI>
-      <EdgeI path="n_5_4:in-n_6_4:out">
-        <P>"direction": 2</P>
-      </EdgeI>
-      <EdgeI path="n_7_1:in-n_7_2:out">
-        <P>"direction": 3</P>
-      </EdgeI>
-      <EdgeI path="n_5_1:in-n_5_2:out">
-        <P>"direction": 3</P>
-      </EdgeI>
-      <EdgeI path="n_2_1:in-n_2_2:out">
-        <P>"direction": 3</P>
-      </EdgeI>
-      <EdgeI path="n_1_1:in-n_1_0:out">
-        <P>"direction": 1</P>
-      </EdgeI>
-      <EdgeI path="n_4_5:in-n_5_5:out">
-        <P>"direction": 2</P>
-      </EdgeI>
-      <EdgeI path="n_0_4:in-n_7_4:out">
-        <P>"direction": 4</P>
-      </EdgeI>
-      <EdgeI path="n_0_6:in-n_7_6:out">
-        <P>"direction": 4</P>
-      </EdgeI>
-      <EdgeI path="n_7_6:in-n_6_6:out">
-        <P>"direction": 4</P>
-      </EdgeI>
-      <EdgeI path="n_1_4:in-n_2_4:out">
-        <P>"direction": 2</P>
-      </EdgeI>
-      <EdgeI path="n_1_6:in-n_2_6:out">
-        <P>"direction": 2</P>
-      </EdgeI>
-      <EdgeI path="n_4_3:in-n_4_4:out">
-        <P>"direction": 3</P>
-      </EdgeI>
-      <EdgeI path="n_5_0:in-n_4_0:out">
-        <P>"direction": 4</P>
-      </EdgeI>
-      <EdgeI path="n_3_2:in-n_3_3:out">
-        <P>"direction": 3</P>
-      </EdgeI>
-      <EdgeI path="n_7_1:in-n_7_0:out">
-        <P>"direction": 1</P>
-      </EdgeI>
-      <EdgeI path="n_3_7:in-n_3_0:out">
-        <P>"direction": 3</P>
-      </EdgeI>
-      <EdgeI path="n_0_0:in-n_0_7:out">
-        <P>"direction": 1</P>
-      </EdgeI>
-      <EdgeI path="n_4_5:in-n_4_4:out">
-        <P>"direction": 1</P>
-      </EdgeI>
-      <EdgeI path="n_1_1:in-n_2_1:out">
-        <P>"direction": 2</P>
-      </EdgeI>
-      <EdgeI path="n_4_2:in-n_4_3:out">
-        <P>"direction": 3</P>
-      </EdgeI>
-      <EdgeI path="n_2_6:in-n_2_7:out">
-        <P>"direction": 3</P>
-      </EdgeI>
-      <EdgeI path="n_1_5:in-n_1_4:out">
-        <P>"direction": 1</P>
-      </EdgeI>
-      <EdgeI path="n_3_2:in-n_4_2:out">
-        <P>"direction": 2</P>
-      </EdgeI>
-      <EdgeI path="n_5_2:in-n_6_2:out">
-        <P>"direction": 2</P>
-      </EdgeI>
-      <EdgeI path="n_4_7:in-n_4_0:out">
-        <P>"direction": 3</P>
-      </EdgeI>
-      <EdgeI path="n_2_4:in-n_1_4:out">
-        <P>"direction": 4</P>
-      </EdgeI>
-      <EdgeI path="n_1_3:in-n_2_3:out">
-        <P>"direction": 2</P>
-      </EdgeI>
-      <EdgeI path="n_2_4:in-n_3_4:out">
-        <P>"direction": 2</P>
-      </EdgeI>
-      <EdgeI path="n_5_6:in-n_5_7:out">
-        <P>"direction": 3</P>
-      </EdgeI>
-      <EdgeI path="n_7_2:in-n_7_3:out">
-        <P>"direction": 3</P>
-      </EdgeI>
-      <EdgeI path="n_2_6:in-n_1_6:out">
-        <P>"direction": 4</P>
-      </EdgeI>
-      <EdgeI path="n_2_7:in-n_1_7:out">
-        <P>"direction": 4</P>
-      </EdgeI>
-      <EdgeI path="n_6_7:in-n_5_7:out">
-        <P>"direction": 4</P>
-      </EdgeI>
-      <EdgeI path="n_3_1:in-n_3_2:out">
-        <P>"direction": 3</P>
-      </EdgeI>
-      <EdgeI path="n_0_4:in-n_0_3:out">
-        <P>"direction": 1</P>
-      </EdgeI>
-      <EdgeI path="n_5_1:in-n_6_1:out">
-        <P>"direction": 2</P>
-      </EdgeI>
-      <EdgeI path="n_5_2:in-n_5_3:out">
-        <P>"direction": 3</P>
-      </EdgeI>
-      <EdgeI path="n_0_4:in-n_1_4:out">
-        <P>"direction": 2</P>
-      </EdgeI>
-      <EdgeI path="n_0_6:in-n_1_6:out">
-        <P>"direction": 2</P>
-      </EdgeI>
-      <EdgeI path="n_4_4:in-n_3_4:out">
-        <P>"direction": 4</P>
-      </EdgeI>
-      <EdgeI path="n_4_3:in-n_5_3:out">
-        <P>"direction": 2</P>
-      </EdgeI>
-      <EdgeI path="n_0_7:in-n_7_7:out">
-        <P>"direction": 4</P>
-      </EdgeI>
-      <EdgeI path="n_0_3:in-n_0_4:out">
-        <P>"direction": 3</P>
-      </EdgeI>
-      <EdgeI path="n_1_2:in-n_1_3:out">
-        <P>"direction": 3</P>
-      </EdgeI>
-      <EdgeI path="n_3_6:in-n_2_6:out">
-        <P>"direction": 4</P>
-      </EdgeI>
-      <EdgeI path="n_7_5:in-n_0_5:out">
-        <P>"direction": 2</P>
-      </EdgeI>
-      <EdgeI path="n_2_6:in-n_2_5:out">
-        <P>"direction": 1</P>
-      </EdgeI>
-      <EdgeI path="n_4_1:in-n_4_0:out">
-        <P>"direction": 1</P>
-      </EdgeI>
-      <EdgeI path="n_5_1:in-n_4_1:out">
-        <P>"direction": 4</P>
-      </EdgeI>
-      <EdgeI path="n_0_6:in-n_0_7:out">
-        <P>"direction": 3</P>
-      </EdgeI>
-      <EdgeI path="n_2_1:in-n_1_1:out">
-        <P>"direction": 4</P>
-      </EdgeI>
-      <EdgeI path="n_5_1:in-n_5_0:out">
-        <P>"direction": 1</P>
-      </EdgeI>
-      <EdgeI path="n_6_3:in-n_6_2:out">
-        <P>"direction": 1</P>
-      </EdgeI>
-      <EdgeI path="n_3_0:in-n_2_0:out">
-        <P>"direction": 4</P>
-      </EdgeI>
-      <EdgeI path="n_2_7:in-n_2_6:out">
-        <P>"direction": 1</P>
-      </EdgeI>
-      <EdgeI path="n_2_3:in-n_2_4:out">
-        <P>"direction": 3</P>
-      </EdgeI>
-      <EdgeI path="n_5_5:in-n_6_5:out">
-        <P>"direction": 2</P>
-      </EdgeI>
-      <EdgeI path="n_3_5:in-n_2_5:out">
-        <P>"direction": 4</P>
-      </EdgeI>
-      <EdgeI path="n_2_4:in-n_2_3:out">
-        <P>"direction": 1</P>
-      </EdgeI>
-      <EdgeI path="n_5_6:in-n_4_6:out">
-        <P>"direction": 4</P>
-      </EdgeI>
-      <EdgeI path="n_6_7:in-n_7_7:out">
-        <P>"direction": 2</P>
-      </EdgeI>
-      <EdgeI path="n_2_2:in-n_1_2:out">
-        <P>"direction": 4</P>
-      </EdgeI>
-      <EdgeI path="n_1_2:in-n_0_2:out">
-        <P>"direction": 4</P>
-      </EdgeI>
-      <EdgeI path="n_0_5:in-n_0_6:out">
-        <P>"direction": 3</P>
-      </EdgeI>
-      <EdgeI path="n_4_0:in-n_5_0:out">
-        <P>"direction": 2</P>
-      </EdgeI>
-      <EdgeI path="n_7_6:in-n_7_5:out">
-        <P>"direction": 1</P>
-      </EdgeI>
-      <EdgeI path="n_7_3:in-n_7_2:out">
-        <P>"direction": 1</P>
-      </EdgeI>
-      <EdgeI path="n_0_0:in-n_0_1:out">
-        <P>"direction": 3</P>
-      </EdgeI>
-      <EdgeI path="n_4_2:in-n_3_2:out">
-        <P>"direction": 4</P>
-      </EdgeI>
-      <EdgeI path="n_2_3:in-n_2_2:out">
-        <P>"direction": 1</P>
-      </EdgeI>
-      <EdgeI path="n_1_4:in-n_1_3:out">
-        <P>"direction": 1</P>
-      </EdgeI>
-      <EdgeI path="n_5_3:in-n_6_3:out">
-        <P>"direction": 2</P>
-      </EdgeI>
-      <EdgeI path="n_0_2:in-n_0_1:out">
-        <P>"direction": 1</P>
-      </EdgeI>
-      <EdgeI path="n_5_0:in-n_6_0:out">
-        <P>"direction": 2</P>
-      </EdgeI>
-      <EdgeI path="n_6_2:in-n_7_2:out">
-        <P>"direction": 2</P>
-      </EdgeI>
-      <EdgeI path="n_5_4:in-n_5_5:out">
-        <P>"direction": 3</P>
-      </EdgeI>
-      <EdgeI path="n_4_2:in-n_5_2:out">
-        <P>"direction": 2</P>
-      </EdgeI>
-      <EdgeI path="n_6_4:in-n_6_3:out">
-        <P>"direction": 1</P>
-      </EdgeI>
-      <EdgeI path="n_1_3:in-n_1_4:out">
-        <P>"direction": 3</P>
-      </EdgeI>
-      <EdgeI path="n_6_0:in-n_5_0:out">
-        <P>"direction": 4</P>
-      </EdgeI>
-      <EdgeI path="n_2_5:in-n_1_5:out">
-        <P>"direction": 4</P>
-      </EdgeI>
-      <EdgeI path="n_1_1:in-n_1_2:out">
-        <P>"direction": 3</P>
-      </EdgeI>
-      <EdgeI path="n_0_0:in-n_7_0:out">
-        <P>"direction": 4</P>
-      </EdgeI>
-      <EdgeI path="n_3_7:in-n_2_7:out">
-        <P>"direction": 4</P>
-      </EdgeI>
-      <EdgeI path="n_7_2:in-n_6_2:out">
-        <P>"direction": 4</P>
-      </EdgeI>
-      <EdgeI path="n_6_3:in-n_5_3:out">
-        <P>"direction": 4</P>
-      </EdgeI>
-      <EdgeI path="n_7_2:in-n_0_2:out">
-        <P>"direction": 2</P>
-      </EdgeI>
-      <EdgeI path="n_2_0:in-n_2_1:out">
-        <P>"direction": 3</P>
-      </EdgeI>
-      <EdgeI path="n_7_6:in-n_7_7:out">
-        <P>"direction": 3</P>
-      </EdgeI>
-      <EdgeI path="n_3_3:in-n_3_4:out">
-        <P>"direction": 3</P>
-      </EdgeI>
-      <EdgeI path="n_4_1:in-n_5_1:out">
-        <P>"direction": 2</P>
-      </EdgeI>
-      <EdgeI path="n_0_1:in-n_0_2:out">
-        <P>"direction": 3</P>
-      </EdgeI>
-      <EdgeI path="n_1_2:in-n_2_2:out">
-        <P>"direction": 2</P>
-      </EdgeI>
-      <EdgeI path="n_3_5:in-n_3_4:out">
-        <P>"direction": 1</P>
-      </EdgeI>
-      <EdgeI path="n_1_6:in-n_0_6:out">
-        <P>"direction": 4</P>
-      </EdgeI>
-      <EdgeI path="n_6_3:in-n_6_4:out">
-        <P>"direction": 3</P>
-      </EdgeI>
-      <EdgeI path="n_7_4:in-n_7_3:out">
-        <P>"direction": 1</P>
-      </EdgeI>
-      <EdgeI path="n_4_0:in-n_4_7:out">
+      <EdgeI path="n_3_1:in-n_3_0:out">
         <P>"direction": 1</P>
       </EdgeI>
       <EdgeI path="n_0_5:in-n_1_5:out">
         <P>"direction": 2</P>
       </EdgeI>
-      <EdgeI path="n_1_5:in-n_2_5:out">
-        <P>"direction": 2</P>
-      </EdgeI>
-      <EdgeI path="n_3_4:in-n_4_4:out">
-        <P>"direction": 2</P>
-      </EdgeI>
-      <EdgeI path="n_6_5:in-n_6_6:out">
-        <P>"direction": 3</P>
-      </EdgeI>
-      <EdgeI path="n_4_0:in-n_3_0:out">
+      <EdgeI path="n_1_0:in-n_0_0:out">
         <P>"direction": 4</P>
       </EdgeI>
-      <EdgeI path="n_5_5:in-n_5_6:out">
-        <P>"direction": 3</P>
-      </EdgeI>
-      <EdgeI path="n_1_7:in-n_0_7:out">
-        <P>"direction": 4</P>
-      </EdgeI>
-      <EdgeI path="n_5_7:in-n_5_0:out">
-        <P>"direction": 3</P>
-      </EdgeI>
-      <EdgeI path="n_6_6:in-n_6_5:out">
-        <P>"direction": 1</P>
-      </EdgeI>
-      <EdgeI path="n_5_6:in-n_5_5:out">
-        <P>"direction": 1</P>
-      </EdgeI>
-      <EdgeI path="n_5_3:in-n_5_2:out">
-        <P>"direction": 1</P>
-      </EdgeI>
-      <EdgeI path="n_0_2:in-n_1_2:out">
-        <P>"direction": 2</P>
-      </EdgeI>
-      <EdgeI path="n_4_1:in-n_3_1:out">
-        <P>"direction": 4</P>
-      </EdgeI>
-      <EdgeI path="n_6_4:in-n_7_4:out">
-        <P>"direction": 2</P>
-      </EdgeI>
-      <EdgeI path="n_7_7:in-n_6_7:out">
-        <P>"direction": 4</P>
-      </EdgeI>
-      <EdgeI path="n_1_7:in-n_2_7:out">
-        <P>"direction": 2</P>
-      </EdgeI>
-      <EdgeI path="n_4_5:in-n_4_6:out">
-        <P>"direction": 3</P>
-      </EdgeI>
-      <EdgeI path="n_3_6:in-n_3_5:out">
-        <P>"direction": 1</P>
-      </EdgeI>
-      <EdgeI path="n_7_1:in-n_0_1:out">
-        <P>"direction": 2</P>
-      </EdgeI>
-      <EdgeI path="n_7_7:in-n_7_6:out">
-        <P>"direction": 1</P>
-      </EdgeI>
-      <EdgeI path="n_3_2:in-n_2_2:out">
-        <P>"direction": 4</P>
-      </EdgeI>
-      <EdgeI path="n_6_7:in-n_6_6:out">
-        <P>"direction": 1</P>
-      </EdgeI>
-      <EdgeI path="n_6_1:in-n_6_0:out">
-        <P>"direction": 1</P>
-      </EdgeI>
-      <EdgeI path="n_4_2:in-n_4_1:out">
-        <P>"direction": 1</P>
-      </EdgeI>
-      <EdgeI path="n_0_0:in-n_1_0:out">
-        <P>"direction": 2</P>
-      </EdgeI>
-      <EdgeI path="n_0_1:in-n_0_0:out">
-        <P>"direction": 1</P>
-      </EdgeI>
-      <EdgeI path="n_6_3:in-n_7_3:out">
-        <P>"direction": 2</P>
-      </EdgeI>
-      <EdgeI path="n_1_1:in-n_0_1:out">
-        <P>"direction": 4</P>
-      </EdgeI>
-      <EdgeI path="n_1_0:in-n_1_1:out">
-        <P>"direction": 3</P>
-      </EdgeI>
-      <EdgeI path="n_7_3:in-n_7_4:out">
-        <P>"direction": 3</P>
-      </EdgeI>
-      <EdgeI path="n_6_2:in-n_6_1:out">
-        <P>"direction": 1</P>
-      </EdgeI>
-      <EdgeI path="n_3_4:in-n_3_5:out">
-        <P>"direction": 3</P>
-      </EdgeI>
-      <EdgeI path="n_2_6:in-n_3_6:out">
+      <EdgeI path="n_1_2:in-n_2_2:out">
         <P>"direction": 2</P>
       </EdgeI>
       <EdgeI path="n_1_6:in-n_1_5:out">
         <P>"direction": 1</P>
       </EdgeI>
-      <EdgeI path="n_0_5:in-n_7_5:out">
-        <P>"direction": 4</P>
-      </EdgeI>
-      <EdgeI path="n_6_4:in-n_5_4:out">
-        <P>"direction": 4</P>
-      </EdgeI>
-      <EdgeI path="n_6_6:in-n_5_6:out">
-        <P>"direction": 4</P>
-      </EdgeI>
-      <EdgeI path="n_2_7:in-n_2_0:out">
-        <P>"direction": 3</P>
-      </EdgeI>
-      <EdgeI path="n_3_3:in-n_4_3:out">
+      <EdgeI path="n_2_1:in-n_3_1:out">
         <P>"direction": 2</P>
       </EdgeI>
-      <EdgeI path="n_6_6:in-n_6_7:out">
-        <P>"direction": 3</P>
-      </EdgeI>
-      <EdgeI path="n_3_1:in-n_3_0:out">
-        <P>"direction": 1</P>
-      </EdgeI>
-      <EdgeI path="n_2_5:in-n_2_6:out">
-        <P>"direction": 3</P>
-      </EdgeI>
-      <EdgeI path="n_2_3:in-n_1_3:out">
+      <EdgeI path="n_5_1:in-n_4_1:out">
         <P>"direction": 4</P>
       </EdgeI>
-      <EdgeI path="n_5_5:in-n_4_5:out">
-        <P>"direction": 4</P>
-      </EdgeI>
-      <EdgeI path="n_6_7:in-n_6_0:out">
-        <P>"direction": 3</P>
-      </EdgeI>
-      <EdgeI path="n_7_7:in-n_0_7:out">
+      <EdgeI path="n_0_1:in-n_1_1:out">
         <P>"direction": 2</P>
       </EdgeI>
-      <EdgeI path="n_3_6:in-n_3_7:out">
-        <P>"direction": 3</P>
+      <EdgeI path="n_6_5:in-n_7_5:out">
+        <P>"direction": 2</P>
       </EdgeI>
-      <EdgeI path="n_7_5:in-n_7_4:out">
+      <EdgeI path="n_3_2:in-n_4_2:out">
+        <P>"direction": 2</P>
+      </EdgeI>
+      <EdgeI path="n_7_4:in-n_7_3:out">
         <P>"direction": 1</P>
       </EdgeI>
-      <EdgeI path="n_5_0:in-n_5_1:out">
+      <EdgeI path="n_6_0:in-n_7_0:out">
+        <P>"direction": 2</P>
+      </EdgeI>
+      <EdgeI path="n_0_4:in-n_0_3:out">
+        <P>"direction": 1</P>
+      </EdgeI>
+      <EdgeI path="n_4_6:in-n_3_6:out">
+        <P>"direction": 4</P>
+      </EdgeI>
+      <EdgeI path="n_4_7:in-n_3_7:out">
+        <P>"direction": 4</P>
+      </EdgeI>
+      <EdgeI path="n_0_6:in-n_0_7:out">
         <P>"direction": 3</P>
       </EdgeI>
       <EdgeI path="n_3_4:in-n_3_3:out">
         <P>"direction": 1</P>
       </EdgeI>
-      <EdgeI path="n_6_4:in-n_6_5:out">
+      <EdgeI path="n_7_1:in-n_0_1:out">
+        <P>"direction": 2</P>
+      </EdgeI>
+      <EdgeI path="n_3_5:in-n_3_6:out">
         <P>"direction": 3</P>
       </EdgeI>
-      <EdgeI path="n_3_0:in-n_3_1:out">
+      <EdgeI path="n_3_0:in-n_3_7:out">
+        <P>"direction": 1</P>
+      </EdgeI>
+      <EdgeI path="n_0_6:in-n_7_6:out">
+        <P>"direction": 4</P>
+      </EdgeI>
+      <EdgeI path="n_5_4:in-n_6_4:out">
+        <P>"direction": 2</P>
+      </EdgeI>
+      <EdgeI path="n_3_4:in-n_4_4:out">
+        <P>"direction": 2</P>
+      </EdgeI>
+      <EdgeI path="n_4_7:in-n_4_0:out">
         <P>"direction": 3</P>
       </EdgeI>
-      <EdgeI path="n_3_2:in-n_3_1:out">
-        <P>"direction": 1</P>
-      </EdgeI>
-      <EdgeI path="n_7_7:in-n_7_0:out">
+      <EdgeI path="n_2_5:in-n_2_6:out">
         <P>"direction": 3</P>
       </EdgeI>
-      <EdgeI path="n_3_3:in-n_3_2:out">
-        <P>"direction": 1</P>
-      </EdgeI>
-      <EdgeI path="n_6_5:in-n_6_4:out">
-        <P>"direction": 1</P>
-      </EdgeI>
-      <EdgeI path="n_4_4:in-n_4_3:out">
+      <EdgeI path="n_1_1:in-n_1_0:out">
         <P>"direction": 1</P>
       </EdgeI>
       <EdgeI path="n_6_0:in-n_6_1:out">
         <P>"direction": 3</P>
       </EdgeI>
-      <EdgeI path="n_5_2:in-n_4_2:out">
+      <EdgeI path="n_1_7:in-n_0_7:out">
         <P>"direction": 4</P>
       </EdgeI>
-      <EdgeI path="n_4_3:in-n_4_2:out">
-        <P>"direction": 1</P>
-      </EdgeI>
-      <EdgeI path="n_2_0:in-n_3_0:out">
-        <P>"direction": 2</P>
-      </EdgeI>
-      <EdgeI path="n_3_7:in-n_3_6:out">
-        <P>"direction": 1</P>
-      </EdgeI>
-      <EdgeI path="n_2_5:in-n_2_4:out">
-        <P>"direction": 1</P>
-      </EdgeI>
-      <EdgeI path="n_6_1:in-n_5_1:out">
-        <P>"direction": 4</P>
-      </EdgeI>
-      <EdgeI path="n_2_7:in-n_3_7:out">
-        <P>"direction": 2</P>
-      </EdgeI>
-      <EdgeI path="n_5_6:in-n_6_6:out">
-        <P>"direction": 2</P>
-      </EdgeI>
-      <EdgeI path="n_7_3:in-n_6_3:out">
-        <P>"direction": 4</P>
-      </EdgeI>
-      <EdgeI path="n_4_1:in-n_4_2:out">
-        <P>"direction": 3</P>
-      </EdgeI>
-      <EdgeI path="n_2_2:in-n_3_2:out">
-        <P>"direction": 2</P>
-      </EdgeI>
-      <EdgeI path="n_2_0:in-n_2_7:out">
-        <P>"direction": 1</P>
-      </EdgeI>
-      <EdgeI path="n_5_3:in-n_4_3:out">
-        <P>"direction": 4</P>
-      </EdgeI>
-      <EdgeI path="n_1_4:in-n_1_5:out">
-        <P>"direction": 3</P>
-      </EdgeI>
-      <EdgeI path="n_6_6:in-n_7_6:out">
-        <P>"direction": 2</P>
-      </EdgeI>
-      <EdgeI path="n_6_0:in-n_7_0:out">
-        <P>"direction": 2</P>
-      </EdgeI>
-      <EdgeI path="n_5_7:in-n_5_6:out">
-        <P>"direction": 1</P>
-      </EdgeI>
-      <EdgeI path="n_4_7:in-n_5_7:out">
-        <P>"direction": 2</P>
-      </EdgeI>
-      <EdgeI path="n_0_7:in-n_0_0:out">
-        <P>"direction": 3</P>
-      </EdgeI>
-      <EdgeI path="n_3_7:in-n_4_7:out">
-        <P>"direction": 2</P>
-      </EdgeI>
-      <EdgeI path="n_1_5:in-n_1_6:out">
-        <P>"direction": 3</P>
-      </EdgeI>
-      <EdgeI path="n_2_2:in-n_2_1:out">
-        <P>"direction": 1</P>
-      </EdgeI>
-      <EdgeI path="n_0_3:in-n_0_2:out">
+      <EdgeI path="n_4_4:in-n_4_3:out">
         <P>"direction": 1</P>
       </EdgeI>
       <EdgeI path="n_6_5:in-n_5_5:out">
         <P>"direction": 4</P>
       </EdgeI>
+      <EdgeI path="n_2_2:in-n_3_2:out">
+        <P>"direction": 2</P>
+      </EdgeI>
+      <EdgeI path="n_3_3:in-n_2_3:out">
+        <P>"direction": 4</P>
+      </EdgeI>
+      <EdgeI path="n_2_7:in-n_1_7:out">
+        <P>"direction": 4</P>
+      </EdgeI>
+      <EdgeI path="n_1_6:in-n_1_7:out">
+        <P>"direction": 3</P>
+      </EdgeI>
+      <EdgeI path="n_6_7:in-n_5_7:out">
+        <P>"direction": 4</P>
+      </EdgeI>
+      <EdgeI path="n_5_2:in-n_6_2:out">
+        <P>"direction": 2</P>
+      </EdgeI>
+      <EdgeI path="n_3_5:in-n_2_5:out">
+        <P>"direction": 4</P>
+      </EdgeI>
+      <EdgeI path="n_7_6:in-n_6_6:out">
+        <P>"direction": 4</P>
+      </EdgeI>
+      <EdgeI path="n_3_6:in-n_2_6:out">
+        <P>"direction": 4</P>
+      </EdgeI>
+      <EdgeI path="n_3_2:in-n_3_1:out">
+        <P>"direction": 1</P>
+      </EdgeI>
+      <EdgeI path="n_7_2:in-n_0_2:out">
+        <P>"direction": 2</P>
+      </EdgeI>
+      <EdgeI path="n_7_3:in-n_6_3:out">
+        <P>"direction": 4</P>
+      </EdgeI>
+      <EdgeI path="n_0_1:in-n_7_1:out">
+        <P>"direction": 4</P>
+      </EdgeI>
+      <EdgeI path="n_3_1:in-n_3_2:out">
+        <P>"direction": 3</P>
+      </EdgeI>
+      <EdgeI path="n_2_0:in-n_1_0:out">
+        <P>"direction": 4</P>
+      </EdgeI>
+      <EdgeI path="n_5_1:in-n_5_2:out">
+        <P>"direction": 3</P>
+      </EdgeI>
+      <EdgeI path="n_2_7:in-n_2_6:out">
+        <P>"direction": 1</P>
+      </EdgeI>
+      <EdgeI path="n_6_1:in-n_5_1:out">
+        <P>"direction": 4</P>
+      </EdgeI>
+      <EdgeI path="n_5_4:in-n_5_5:out">
+        <P>"direction": 3</P>
+      </EdgeI>
+      <EdgeI path="n_5_6:in-n_5_5:out">
+        <P>"direction": 1</P>
+      </EdgeI>
+      <EdgeI path="n_7_7:in-n_7_6:out">
+        <P>"direction": 1</P>
+      </EdgeI>
+      <EdgeI path="n_2_3:in-n_2_4:out">
+        <P>"direction": 3</P>
+      </EdgeI>
+      <EdgeI path="n_1_7:in-n_1_6:out">
+        <P>"direction": 1</P>
+      </EdgeI>
+      <EdgeI path="n_6_1:in-n_6_2:out">
+        <P>"direction": 3</P>
+      </EdgeI>
+      <EdgeI path="n_3_1:in-n_4_1:out">
+        <P>"direction": 2</P>
+      </EdgeI>
+      <EdgeI path="n_1_2:in-n_1_1:out">
+        <P>"direction": 1</P>
+      </EdgeI>
+      <EdgeI path="n_1_0:in-n_1_7:out">
+        <P>"direction": 1</P>
+      </EdgeI>
+      <EdgeI path="n_7_7:in-n_0_7:out">
+        <P>"direction": 2</P>
+      </EdgeI>
+      <EdgeI path="n_1_5:in-n_0_5:out">
+        <P>"direction": 4</P>
+      </EdgeI>
+      <EdgeI path="n_5_5:in-n_5_4:out">
+        <P>"direction": 1</P>
+      </EdgeI>
+      <EdgeI path="n_3_2:in-n_2_2:out">
+        <P>"direction": 4</P>
+      </EdgeI>
+      <EdgeI path="n_5_5:in-n_5_6:out">
+        <P>"direction": 3</P>
+      </EdgeI>
+      <EdgeI path="n_6_6:in-n_6_5:out">
+        <P>"direction": 1</P>
+      </EdgeI>
+      <EdgeI path="n_4_0:in-n_4_1:out">
+        <P>"direction": 3</P>
+      </EdgeI>
+      <EdgeI path="n_5_3:in-n_6_3:out">
+        <P>"direction": 2</P>
+      </EdgeI>
+      <EdgeI path="n_7_4:in-n_0_4:out">
+        <P>"direction": 2</P>
+      </EdgeI>
+      <EdgeI path="n_6_6:in-n_7_6:out">
+        <P>"direction": 2</P>
+      </EdgeI>
+      <EdgeI path="n_6_4:in-n_7_4:out">
+        <P>"direction": 2</P>
+      </EdgeI>
+      <EdgeI path="n_4_2:in-n_4_1:out">
+        <P>"direction": 1</P>
+      </EdgeI>
+      <EdgeI path="n_5_0:in-n_5_7:out">
+        <P>"direction": 1</P>
+      </EdgeI>
+      <EdgeI path="n_1_4:in-n_1_3:out">
+        <P>"direction": 1</P>
+      </EdgeI>
+      <EdgeI path="n_6_5:in-n_6_6:out">
+        <P>"direction": 3</P>
+      </EdgeI>
+      <EdgeI path="n_7_5:in-n_7_6:out">
+        <P>"direction": 3</P>
+      </EdgeI>
+      <EdgeI path="n_5_0:in-n_5_1:out">
+        <P>"direction": 3</P>
+      </EdgeI>
+      <EdgeI path="n_0_2:in-n_1_2:out">
+        <P>"direction": 2</P>
+      </EdgeI>
+      <EdgeI path="n_2_1:in-n_1_1:out">
+        <P>"direction": 4</P>
+      </EdgeI>
+      <EdgeI path="n_4_5:in-n_4_6:out">
+        <P>"direction": 3</P>
+      </EdgeI>
+      <EdgeI path="n_7_6:in-n_7_7:out">
+        <P>"direction": 3</P>
+      </EdgeI>
+      <EdgeI path="n_1_4:in-n_1_5:out">
+        <P>"direction": 3</P>
+      </EdgeI>
+      <EdgeI path="n_5_3:in-n_5_4:out">
+        <P>"direction": 3</P>
+      </EdgeI>
+      <EdgeI path="n_7_1:in-n_7_2:out">
+        <P>"direction": 3</P>
+      </EdgeI>
+      <EdgeI path="n_7_1:in-n_6_1:out">
+        <P>"direction": 4</P>
+      </EdgeI>
       <EdgeI path="n_4_3:in-n_3_3:out">
         <P>"direction": 4</P>
       </EdgeI>
+      <EdgeI path="n_0_4:in-n_7_4:out">
+        <P>"direction": 4</P>
+      </EdgeI>
+      <EdgeI path="n_6_0:in-n_6_7:out">
+        <P>"direction": 1</P>
+      </EdgeI>
+      <EdgeI path="n_7_0:in-n_6_0:out">
+        <P>"direction": 4</P>
+      </EdgeI>
+      <EdgeI path="n_7_1:in-n_7_0:out">
+        <P>"direction": 1</P>
+      </EdgeI>
+      <EdgeI path="n_7_3:in-n_0_3:out">
+        <P>"direction": 2</P>
+      </EdgeI>
+      <EdgeI path="n_1_4:in-n_0_4:out">
+        <P>"direction": 4</P>
+      </EdgeI>
+      <EdgeI path="n_6_7:in-n_6_0:out">
+        <P>"direction": 3</P>
+      </EdgeI>
+      <EdgeI path="n_6_3:in-n_5_3:out">
+        <P>"direction": 4</P>
+      </EdgeI>
+      <EdgeI path="n_3_6:in-n_3_5:out">
+        <P>"direction": 1</P>
+      </EdgeI>
+      <EdgeI path="n_0_3:in-n_0_4:out">
+        <P>"direction": 3</P>
+      </EdgeI>
+      <EdgeI path="n_4_0:in-n_4_7:out">
+        <P>"direction": 1</P>
+      </EdgeI>
+      <EdgeI path="n_4_3:in-n_4_2:out">
+        <P>"direction": 1</P>
+      </EdgeI>
+      <EdgeI path="n_4_2:in-n_5_2:out">
+        <P>"direction": 2</P>
+      </EdgeI>
+      <EdgeI path="n_0_1:in-n_0_0:out">
+        <P>"direction": 1</P>
+      </EdgeI>
+      <EdgeI path="n_2_5:in-n_2_4:out">
+        <P>"direction": 1</P>
+      </EdgeI>
+      <EdgeI path="n_7_6:in-n_7_5:out">
+        <P>"direction": 1</P>
+      </EdgeI>
+      <EdgeI path="n_0_7:in-n_7_7:out">
+        <P>"direction": 4</P>
+      </EdgeI>
+      <EdgeI path="n_5_0:in-n_4_0:out">
+        <P>"direction": 4</P>
+      </EdgeI>
+      <EdgeI path="n_2_2:in-n_1_2:out">
+        <P>"direction": 4</P>
+      </EdgeI>
+      <EdgeI path="n_4_5:in-n_3_5:out">
+        <P>"direction": 4</P>
+      </EdgeI>
+      <EdgeI path="n_4_4:in-n_4_5:out">
+        <P>"direction": 3</P>
+      </EdgeI>
+      <EdgeI path="n_4_0:in-n_3_0:out">
+        <P>"direction": 4</P>
+      </EdgeI>
+      <EdgeI path="n_4_6:in-n_5_6:out">
+        <P>"direction": 2</P>
+      </EdgeI>
+      <EdgeI path="n_2_7:in-n_2_0:out">
+        <P>"direction": 3</P>
+      </EdgeI>
+      <EdgeI path="n_1_0:in-n_1_1:out">
+        <P>"direction": 3</P>
+      </EdgeI>
+      <EdgeI path="n_0_5:in-n_7_5:out">
+        <P>"direction": 4</P>
+      </EdgeI>
+      <EdgeI path="n_1_0:in-n_2_0:out">
+        <P>"direction": 2</P>
+      </EdgeI>
+      <EdgeI path="n_2_4:in-n_2_5:out">
+        <P>"direction": 3</P>
+      </EdgeI>
+      <EdgeI path="n_1_1:in-n_0_1:out">
+        <P>"direction": 4</P>
+      </EdgeI>
+      <EdgeI path="n_1_3:in-n_2_3:out">
+        <P>"direction": 2</P>
+      </EdgeI>
+      <EdgeI path="n_1_2:in-n_0_2:out">
+        <P>"direction": 4</P>
+      </EdgeI>
+      <EdgeI path="n_5_6:in-n_4_6:out">
+        <P>"direction": 4</P>
+      </EdgeI>
+      <EdgeI path="n_6_2:in-n_6_3:out">
+        <P>"direction": 3</P>
+      </EdgeI>
+      <EdgeI path="n_6_6:in-n_6_7:out">
+        <P>"direction": 3</P>
+      </EdgeI>
+      <EdgeI path="n_2_5:in-n_3_5:out">
+        <P>"direction": 2</P>
+      </EdgeI>
+      <EdgeI path="n_0_7:in-n_0_6:out">
+        <P>"direction": 1</P>
+      </EdgeI>
+      <EdgeI path="n_6_1:in-n_7_1:out">
+        <P>"direction": 2</P>
+      </EdgeI>
+      <EdgeI path="n_7_0:in-n_7_7:out">
+        <P>"direction": 1</P>
+      </EdgeI>
+      <EdgeI path="n_1_3:in-n_1_2:out">
+        <P>"direction": 1</P>
+      </EdgeI>
+      <EdgeI path="n_5_5:in-n_6_5:out">
+        <P>"direction": 2</P>
+      </EdgeI>
+      <EdgeI path="n_6_2:in-n_7_2:out">
+        <P>"direction": 2</P>
+      </EdgeI>
+      <EdgeI path="n_7_0:in-n_7_1:out">
+        <P>"direction": 3</P>
+      </EdgeI>
+      <EdgeI path="n_4_1:in-n_4_2:out">
+        <P>"direction": 3</P>
+      </EdgeI>
+      <EdgeI path="n_1_6:in-n_0_6:out">
+        <P>"direction": 4</P>
+      </EdgeI>
+      <EdgeI path="n_7_5:in-n_6_5:out">
+        <P>"direction": 4</P>
+      </EdgeI>
+      <EdgeI path="n_5_7:in-n_5_0:out">
+        <P>"direction": 3</P>
+      </EdgeI>
+      <EdgeI path="n_1_1:in-n_1_2:out">
+        <P>"direction": 3</P>
+      </EdgeI>
+      <EdgeI path="n_1_5:in-n_2_5:out">
+        <P>"direction": 2</P>
+      </EdgeI>
+      <EdgeI path="n_7_7:in-n_6_7:out">
+        <P>"direction": 4</P>
+      </EdgeI>
+      <EdgeI path="n_0_2:in-n_0_3:out">
+        <P>"direction": 3</P>
+      </EdgeI>
+      <EdgeI path="n_2_1:in-n_2_0:out">
+        <P>"direction": 1</P>
+      </EdgeI>
+      <EdgeI path="n_4_4:in-n_3_4:out">
+        <P>"direction": 4</P>
+      </EdgeI>
+      <EdgeI path="n_7_3:in-n_7_2:out">
+        <P>"direction": 1</P>
+      </EdgeI>
+      <EdgeI path="n_7_3:in-n_7_4:out">
+        <P>"direction": 3</P>
+      </EdgeI>
+      <EdgeI path="n_0_3:in-n_0_2:out">
+        <P>"direction": 1</P>
+      </EdgeI>
+      <EdgeI path="n_6_1:in-n_6_0:out">
+        <P>"direction": 1</P>
+      </EdgeI>
+      <EdgeI path="n_1_4:in-n_2_4:out">
+        <P>"direction": 2</P>
+      </EdgeI>
+      <EdgeI path="n_4_1:in-n_5_1:out">
+        <P>"direction": 2</P>
+      </EdgeI>
+      <EdgeI path="n_6_3:in-n_7_3:out">
+        <P>"direction": 2</P>
+      </EdgeI>
+      <EdgeI path="n_2_6:in-n_3_6:out">
+        <P>"direction": 2</P>
+      </EdgeI>
+      <EdgeI path="n_6_7:in-n_7_7:out">
+        <P>"direction": 2</P>
+      </EdgeI>
+      <EdgeI path="n_5_0:in-n_6_0:out">
+        <P>"direction": 2</P>
+      </EdgeI>
+      <EdgeI path="n_0_6:in-n_0_5:out">
+        <P>"direction": 1</P>
+      </EdgeI>
+      <EdgeI path="n_4_3:in-n_4_4:out">
+        <P>"direction": 3</P>
+      </EdgeI>
+      <EdgeI path="n_5_5:in-n_4_5:out">
+        <P>"direction": 4</P>
+      </EdgeI>
+      <EdgeI path="n_5_7:in-n_6_7:out">
+        <P>"direction": 2</P>
+      </EdgeI>
+      <EdgeI path="n_3_6:in-n_4_6:out">
+        <P>"direction": 2</P>
+      </EdgeI>
+      <EdgeI path="n_5_2:in-n_5_3:out">
+        <P>"direction": 3</P>
+      </EdgeI>
+      <EdgeI path="n_5_1:in-n_6_1:out">
+        <P>"direction": 2</P>
+      </EdgeI>
+      <EdgeI path="n_2_6:in-n_1_6:out">
+        <P>"direction": 4</P>
+      </EdgeI>
+      <EdgeI path="n_4_0:in-n_5_0:out">
+        <P>"direction": 2</P>
+      </EdgeI>
+      <EdgeI path="n_6_2:in-n_5_2:out">
+        <P>"direction": 4</P>
+      </EdgeI>
+      <EdgeI path="n_0_5:in-n_0_4:out">
+        <P>"direction": 1</P>
+      </EdgeI>
+      <EdgeI path="n_3_0:in-n_4_0:out">
+        <P>"direction": 2</P>
+      </EdgeI>
+      <EdgeI path="n_3_3:in-n_3_2:out">
+        <P>"direction": 1</P>
+      </EdgeI>
+      <EdgeI path="n_1_2:in-n_1_3:out">
+        <P>"direction": 3</P>
+      </EdgeI>
+      <EdgeI path="n_6_4:in-n_6_3:out">
+        <P>"direction": 1</P>
+      </EdgeI>
+      <EdgeI path="n_2_5:in-n_1_5:out">
+        <P>"direction": 4</P>
+      </EdgeI>
+      <EdgeI path="n_3_7:in-n_3_6:out">
+        <P>"direction": 1</P>
+      </EdgeI>
+      <EdgeI path="n_2_0:in-n_3_0:out">
+        <P>"direction": 2</P>
+      </EdgeI>
+      <EdgeI path="n_3_7:in-n_2_7:out">
+        <P>"direction": 4</P>
+      </EdgeI>
+      <EdgeI path="n_5_2:in-n_5_1:out">
+        <P>"direction": 1</P>
+      </EdgeI>
+      <EdgeI path="n_3_4:in-n_3_5:out">
+        <P>"direction": 3</P>
+      </EdgeI>
       <EdgeI path="n_0_3:in-n_7_3:out">
+        <P>"direction": 4</P>
+      </EdgeI>
+      <EdgeI path="n_5_4:in-n_4_4:out">
+        <P>"direction": 4</P>
+      </EdgeI>
+      <EdgeI path="n_0_0:in-n_0_1:out">
+        <P>"direction": 3</P>
+      </EdgeI>
+      <EdgeI path="n_2_6:in-n_2_7:out">
+        <P>"direction": 3</P>
+      </EdgeI>
+      <EdgeI path="n_6_5:in-n_6_4:out">
+        <P>"direction": 1</P>
+      </EdgeI>
+      <EdgeI path="n_7_0:in-n_0_0:out">
+        <P>"direction": 2</P>
+      </EdgeI>
+      <EdgeI path="n_1_3:in-n_0_3:out">
+        <P>"direction": 4</P>
+      </EdgeI>
+      <EdgeI path="n_2_3:in-n_3_3:out">
+        <P>"direction": 2</P>
+      </EdgeI>
+      <EdgeI path="n_0_7:in-n_0_0:out">
+        <P>"direction": 3</P>
+      </EdgeI>
+      <EdgeI path="n_2_7:in-n_3_7:out">
+        <P>"direction": 2</P>
+      </EdgeI>
+      <EdgeI path="n_7_6:in-n_0_6:out">
+        <P>"direction": 2</P>
+      </EdgeI>
+      <EdgeI path="n_0_3:in-n_1_3:out">
+        <P>"direction": 2</P>
+      </EdgeI>
+      <EdgeI path="n_6_7:in-n_6_6:out">
+        <P>"direction": 1</P>
+      </EdgeI>
+      <EdgeI path="n_7_5:in-n_7_4:out">
+        <P>"direction": 1</P>
+      </EdgeI>
+      <EdgeI path="n_2_4:in-n_2_3:out">
+        <P>"direction": 1</P>
+      </EdgeI>
+      <EdgeI path="n_5_7:in-n_4_7:out">
+        <P>"direction": 4</P>
+      </EdgeI>
+      <EdgeI path="n_6_4:in-n_6_5:out">
+        <P>"direction": 3</P>
+      </EdgeI>
+      <EdgeI path="n_0_2:in-n_0_1:out">
+        <P>"direction": 1</P>
+      </EdgeI>
+      <EdgeI path="n_2_4:in-n_3_4:out">
+        <P>"direction": 2</P>
+      </EdgeI>
+      <EdgeI path="n_4_4:in-n_5_4:out">
+        <P>"direction": 2</P>
+      </EdgeI>
+      <EdgeI path="n_0_6:in-n_1_6:out">
+        <P>"direction": 2</P>
+      </EdgeI>
+      <EdgeI path="n_4_5:in-n_4_4:out">
+        <P>"direction": 1</P>
+      </EdgeI>
+      <EdgeI path="n_0_4:in-n_1_4:out">
+        <P>"direction": 2</P>
+      </EdgeI>
+      <EdgeI path="n_4_5:in-n_5_5:out">
+        <P>"direction": 2</P>
+      </EdgeI>
+      <EdgeI path="n_3_3:in-n_3_4:out">
+        <P>"direction": 3</P>
+      </EdgeI>
+      <EdgeI path="n_2_0:in-n_2_7:out">
+        <P>"direction": 1</P>
+      </EdgeI>
+      <EdgeI path="n_4_6:in-n_4_5:out">
+        <P>"direction": 1</P>
+      </EdgeI>
+      <EdgeI path="n_4_2:in-n_4_3:out">
+        <P>"direction": 3</P>
+      </EdgeI>
+      <EdgeI path="n_2_2:in-n_2_3:out">
+        <P>"direction": 3</P>
+      </EdgeI>
+      <EdgeI path="n_4_1:in-n_3_1:out">
+        <P>"direction": 4</P>
+      </EdgeI>
+      <EdgeI path="n_4_6:in-n_4_7:out">
+        <P>"direction": 3</P>
+      </EdgeI>
+      <EdgeI path="n_4_3:in-n_5_3:out">
+        <P>"direction": 2</P>
+      </EdgeI>
+      <EdgeI path="n_2_0:in-n_2_1:out">
+        <P>"direction": 3</P>
+      </EdgeI>
+      <EdgeI path="n_3_1:in-n_2_1:out">
+        <P>"direction": 4</P>
+      </EdgeI>
+      <EdgeI path="n_3_5:in-n_4_5:out">
+        <P>"direction": 2</P>
+      </EdgeI>
+      <EdgeI path="n_0_1:in-n_0_2:out">
+        <P>"direction": 3</P>
+      </EdgeI>
+      <EdgeI path="n_1_5:in-n_1_6:out">
+        <P>"direction": 3</P>
+      </EdgeI>
+      <EdgeI path="n_3_5:in-n_3_4:out">
+        <P>"direction": 1</P>
+      </EdgeI>
+      <EdgeI path="n_1_5:in-n_1_4:out">
+        <P>"direction": 1</P>
+      </EdgeI>
+      <EdgeI path="n_0_2:in-n_7_2:out">
+        <P>"direction": 4</P>
+      </EdgeI>
+      <EdgeI path="n_6_2:in-n_6_1:out">
+        <P>"direction": 1</P>
+      </EdgeI>
+      <EdgeI path="n_5_6:in-n_6_6:out">
+        <P>"direction": 2</P>
+      </EdgeI>
+      <EdgeI path="n_2_1:in-n_2_2:out">
+        <P>"direction": 3</P>
+      </EdgeI>
+      <EdgeI path="n_2_4:in-n_1_4:out">
+        <P>"direction": 4</P>
+      </EdgeI>
+      <EdgeI path="n_3_0:in-n_3_1:out">
+        <P>"direction": 3</P>
+      </EdgeI>
+      <EdgeI path="n_3_4:in-n_2_4:out">
+        <P>"direction": 4</P>
+      </EdgeI>
+      <EdgeI path="n_6_4:in-n_5_4:out">
+        <P>"direction": 4</P>
+      </EdgeI>
+      <EdgeI path="n_0_0:in-n_0_7:out">
+        <P>"direction": 1</P>
+      </EdgeI>
+      <EdgeI path="n_7_4:in-n_6_4:out">
+        <P>"direction": 4</P>
+      </EdgeI>
+      <EdgeI path="n_3_3:in-n_4_3:out">
+        <P>"direction": 2</P>
+      </EdgeI>
+      <EdgeI path="n_7_4:in-n_7_5:out">
+        <P>"direction": 3</P>
+      </EdgeI>
+      <EdgeI path="n_7_2:in-n_6_2:out">
+        <P>"direction": 4</P>
+      </EdgeI>
+      <EdgeI path="n_5_4:in-n_5_3:out">
+        <P>"direction": 1</P>
+      </EdgeI>
+      <EdgeI path="n_7_2:in-n_7_3:out">
+        <P>"direction": 3</P>
+      </EdgeI>
+      <EdgeI path="n_4_7:in-n_4_6:out">
+        <P>"direction": 1</P>
+      </EdgeI>
+      <EdgeI path="n_7_5:in-n_0_5:out">
+        <P>"direction": 2</P>
+      </EdgeI>
+      <EdgeI path="n_1_3:in-n_1_4:out">
+        <P>"direction": 3</P>
+      </EdgeI>
+      <EdgeI path="n_4_1:in-n_4_0:out">
+        <P>"direction": 1</P>
+      </EdgeI>
+      <EdgeI path="n_0_4:in-n_0_5:out">
+        <P>"direction": 3</P>
+      </EdgeI>
+      <EdgeI path="n_3_6:in-n_3_7:out">
+        <P>"direction": 3</P>
+      </EdgeI>
+      <EdgeI path="n_2_3:in-n_2_2:out">
+        <P>"direction": 1</P>
+      </EdgeI>
+      <EdgeI path="n_4_2:in-n_3_2:out">
+        <P>"direction": 4</P>
+      </EdgeI>
+      <EdgeI path="n_0_5:in-n_0_6:out">
+        <P>"direction": 3</P>
+      </EdgeI>
+      <EdgeI path="n_5_3:in-n_5_2:out">
+        <P>"direction": 1</P>
+      </EdgeI>
+      <EdgeI path="n_6_3:in-n_6_4:out">
+        <P>"direction": 3</P>
+      </EdgeI>
+      <EdgeI path="n_0_7:in-n_1_7:out">
+        <P>"direction": 2</P>
+      </EdgeI>
+      <EdgeI path="n_5_1:in-n_5_0:out">
+        <P>"direction": 1</P>
+      </EdgeI>
+      <EdgeI path="n_5_6:in-n_5_7:out">
+        <P>"direction": 3</P>
+      </EdgeI>
+      <EdgeI path="n_3_0:in-n_2_0:out">
+        <P>"direction": 4</P>
+      </EdgeI>
+      <EdgeI path="n_5_2:in-n_4_2:out">
+        <P>"direction": 4</P>
+      </EdgeI>
+      <EdgeI path="n_1_1:in-n_2_1:out">
+        <P>"direction": 2</P>
+      </EdgeI>
+      <EdgeI path="n_4_7:in-n_5_7:out">
+        <P>"direction": 2</P>
+      </EdgeI>
+      <EdgeI path="n_1_6:in-n_2_6:out">
+        <P>"direction": 2</P>
+      </EdgeI>
+      <EdgeI path="n_7_7:in-n_7_0:out">
+        <P>"direction": 3</P>
+      </EdgeI>
+      <EdgeI path="n_6_3:in-n_6_2:out">
+        <P>"direction": 1</P>
+      </EdgeI>
+      <EdgeI path="n_3_7:in-n_4_7:out">
+        <P>"direction": 2</P>
+      </EdgeI>
+      <EdgeI path="n_6_6:in-n_5_6:out">
+        <P>"direction": 4</P>
+      </EdgeI>
+      <EdgeI path="n_0_0:in-n_7_0:out">
+        <P>"direction": 4</P>
+      </EdgeI>
+      <EdgeI path="n_0_0:in-n_1_0:out">
+        <P>"direction": 2</P>
+      </EdgeI>
+      <EdgeI path="n_2_2:in-n_2_1:out">
+        <P>"direction": 1</P>
+      </EdgeI>
+      <EdgeI path="n_2_6:in-n_2_5:out">
+        <P>"direction": 1</P>
+      </EdgeI>
+      <EdgeI path="n_2_3:in-n_1_3:out">
+        <P>"direction": 4</P>
+      </EdgeI>
+      <EdgeI path="n_3_7:in-n_3_0:out">
+        <P>"direction": 3</P>
+      </EdgeI>
+      <EdgeI path="n_5_3:in-n_4_3:out">
+        <P>"direction": 4</P>
+      </EdgeI>
+      <EdgeI path="n_3_2:in-n_3_3:out">
+        <P>"direction": 3</P>
+      </EdgeI>
+      <EdgeI path="n_6_0:in-n_5_0:out">
         <P>"direction": 4</P>
       </EdgeI>
     </EdgeInstances>
