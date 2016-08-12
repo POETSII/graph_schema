@@ -80,22 +80,22 @@ protected:
     , m_edgeType(edgeType)
   {}
 public:
-  virtual const DeviceTypePtr &getDeviceType() const override 
+  virtual const DeviceTypePtr &getDeviceType() const override
   {
     if(!m_deviceType)
       m_deviceType=m_deviceTypeSrc();
     return m_deviceType;
   }
-  
+
   virtual const std::string &getName() const override
   { return m_name; }
-    
+
   virtual unsigned getIndex() const override
   { return m_index; }
 
   virtual const EdgeTypePtr &getEdgeType() const override
   { return m_edgeType; }
-  
+
 };
 
 
@@ -116,22 +116,22 @@ protected:
     , m_edgeType(edgeType)
   {}
 public:
-  virtual const DeviceTypePtr &getDeviceType() const override 
+  virtual const DeviceTypePtr &getDeviceType() const override
   {
     if(!m_deviceType)
       m_deviceType=m_deviceTypeSrc();
     return m_deviceType;
   }
-  
+
   virtual const std::string &getName() const override
   { return m_name; }
-    
+
   virtual unsigned getIndex() const override
   { return m_index; }
 
   virtual const EdgeTypePtr &getEdgeType() const override
   { return m_edgeType; }
-  
+
 };
 
 class EdgeTypeImpl
@@ -142,7 +142,7 @@ private:
   TypedDataSpecPtr m_properties;
   TypedDataSpecPtr m_state;
   TypedDataSpecPtr m_message;
-  
+
 protected:
   EdgeTypeImpl(const std::string &id, TypedDataSpecPtr properties, TypedDataSpecPtr state, TypedDataSpecPtr message)
     : m_id(id)
@@ -156,10 +156,10 @@ public:
 
   virtual const TypedDataSpecPtr &getPropertiesSpec() const override
   { return m_properties; }
-  
+
   virtual const TypedDataSpecPtr &getStateSpec() const override
   { return m_state; }
-  
+
   virtual const TypedDataSpecPtr &getMessageSpec() const override
   { return m_message; }
 };
@@ -173,13 +173,13 @@ private:
 
   TypedDataSpecPtr m_properties;
   TypedDataSpecPtr m_state;
-  
+
   std::vector<InputPortPtr> m_inputsByIndex;
   std::map<std::string,InputPortPtr> m_inputsByName;
 
   std::vector<OutputPortPtr> m_outputsByIndex;
   std::map<std::string,OutputPortPtr> m_outputsByName;
-  
+
 protected:
   DeviceTypeImpl(const std::string &id, TypedDataSpecPtr properties, TypedDataSpecPtr state, const std::vector<InputPortPtr> &inputs, const std::vector<OutputPortPtr> &outputs)
     : m_id(id)
@@ -195,23 +195,23 @@ protected:
       m_outputsByName.insert(std::make_pair(o->getName(), o));
     }
   }
-  
+
 public:
   virtual const std::string &getId() const override
   { return m_id; }
-    
+
   virtual const TypedDataSpecPtr &getPropertiesSpec() const override
   { return m_properties; }
-  
+
   virtual const TypedDataSpecPtr &getStateSpec() const override
   { return m_state; }
 
   virtual unsigned getInputCount() const override
   { return m_inputsByIndex.size(); }
-  
+
   virtual const InputPortPtr &getInput(unsigned index) const override
   { return m_inputsByIndex.at(index); }
-  
+
   virtual InputPortPtr getInput(const std::string &name) const override
   {
     auto it=m_inputsByName.find(name);
@@ -225,10 +225,10 @@ public:
 
   virtual unsigned getOutputCount() const override
   { return m_outputsByIndex.size(); }
-  
+
   virtual const OutputPortPtr &getOutput(unsigned index) const override
   { return m_outputsByIndex.at(index); }
-  
+
   virtual OutputPortPtr getOutput(const std::string &name) const override
   {
     auto it=m_outputsByName.find(name);
@@ -251,7 +251,7 @@ private:
   unsigned m_nativeDimension;
 
   TypedDataSpecPtr m_propertiesSpec;
-  
+
   std::vector<EdgeTypePtr> m_edgeTypesByIndex;
   std::unordered_map<std::string,EdgeTypePtr> m_edgeTypesById;
 
@@ -276,25 +276,25 @@ protected:
 
   virtual unsigned getDeviceTypeCount() const override
   { return m_deviceTypesByIndex.size(); }
-  
+
   virtual const DeviceTypePtr &getDeviceType(unsigned index) const override
   { return m_deviceTypesByIndex.at(index); }
-  
+
   virtual const DeviceTypePtr &getDeviceType(const std::string &name) const override
   { return m_deviceTypesById.at(name); }
-  
+
   virtual const std::vector<DeviceTypePtr> &getDeviceTypes() const override
   { return m_deviceTypesByIndex; }
-  
+
   virtual unsigned getEdgeTypeCount() const override
   { return m_edgeTypesByIndex.size(); }
-  
+
   virtual const EdgeTypePtr &getEdgeType(unsigned index) const override
   { return m_edgeTypesByIndex.at(index); }
-  
+
   virtual const EdgeTypePtr &getEdgeType(const std::string &name) const override
   { return m_edgeTypesById.at(name); }
-  
+
   virtual const std::vector<EdgeTypePtr> &getEdgeTypes() const override
   { return m_edgeTypesByIndex; }
 
@@ -328,7 +328,7 @@ public:
     , m_device(device)
     , m_input(input)
   {}
-  
+
   virtual unsigned getLogLevel() const override
   { return m_logLevel; }
 
@@ -342,7 +342,7 @@ public:
     m_device=device;
     m_input=input;
   }
-  
+
   virtual void vlog(unsigned level, const char *msg, va_list args) override
   {
     if(m_logLevel >= level){
@@ -381,10 +381,10 @@ public:
     m_device=device;
     m_output=output;
   }
-  
+
   virtual unsigned getLogLevel() const override
   { return m_logLevel; }
-  
+
   virtual void vlog(unsigned level, const char *msg, va_list args) override
   {
     if(m_logLevel >= level){
@@ -425,23 +425,23 @@ private:
 
   void recurseLoad(std::string path)
   {
-    
+
     std::shared_ptr<DIR> hDir(opendir(path.c_str()), closedir);
     if(!hDir){
       fprintf(stderr, "Warning: Couldn't open provider='%s'\n", path.c_str());
     }else{
 
 	struct dirent *de=0;
-	
+
 	while( (de=readdir(hDir.get())) ){
 	  std::string part=de->d_name;
 	  std::string fullPath=path+"/"+part;
 
 	  //fprintf(stderr, "%s\n", fullPath.c_str());
-	  
-	  if(m_soExtension.size() < part.size()){	  
+
+	  if(m_soExtension.size() < part.size()){
 	    if(m_soExtension == part.substr(part.size()-m_soExtension.size())){
-	      
+
 	      loadProvider(fullPath);
 	      continue;
 	    }
@@ -454,11 +454,11 @@ private:
 	    if(part.substr(part.size()-5)==".dSYM")
 	      continue;
 	  }
-	  
+
 	  struct stat ss;
 	  if(0!=stat(fullPath.c_str(), &ss))
 	    continue;
-	  
+
 	  if(S_ISDIR(ss.st_mode)){
 	    recurseLoad(fullPath);
 	  }
@@ -468,7 +468,7 @@ private:
 public:
   RegistryImpl()
     : m_soExtension(".graph.so")
-  {    
+  {
     const char * searchPath=getenv("POETS_PROVIDER_PATH");
     std::shared_ptr<char> cwd;
     if(searchPath==NULL){
@@ -479,7 +479,7 @@ public:
       recurseLoad(searchPath);
     }
   }
-  
+
   void loadProvider(const std::string &path)
   {
     fprintf(stderr, "Loading provider '%s'\n", path.c_str());
@@ -493,17 +493,17 @@ public:
       throw std::runtime_error("Couldn't find registerGraphTypes entry point.");
 
     typedef void (*entry_func_t)(Registry *);
-    
+
     auto entryFunc=(entry_func_t)(entry);
     entryFunc(this);
   }
-  
+
   virtual void registerGraphType(GraphTypePtr graph) override
   {
     fprintf(stderr, "  registerGraphType(%s)\n", graph->getId().c_str());
     m_graphs.insert(std::make_pair(graph->getId(), graph));
   }
-  
+
   virtual GraphTypePtr lookupGraphType(const std::string &id) const override
   {
     auto it=m_graphs.find(id);
@@ -516,16 +516,16 @@ public:
     }
     return it->second;
   }
-  
-  virtual void registerEdgeType(EdgeTypePtr edge) override 
+
+  virtual void registerEdgeType(EdgeTypePtr edge) override
   {  m_edges.insert(std::make_pair(edge->getId(), edge)); }
-  
+
   virtual EdgeTypePtr lookupEdgeType(const std::string &id) const override
   { return m_edges.at(id); }
 
-  virtual void registerDeviceType(DeviceTypePtr dev) override 
+  virtual void registerDeviceType(DeviceTypePtr dev) override
   { m_devices.insert(std::make_pair(dev->getId(), dev)); }
-  
+
   virtual DeviceTypePtr lookupDeviceType(const std::string &id) const override
   { return m_devices.at(id); }
 };
@@ -550,11 +550,11 @@ void loadGraph(Registry *registry, xmlpp::Element *parent, GraphLoadEvents *even
 {
   xmlpp::Node::PrefixNsMap ns;
   ns["g"]="http://TODO.org/POETS/virtual-graph-schema-v0";
-  
+
   auto *eGraph=find_single(parent, "./g:GraphInstance", ns);
   if(eGraph==0)
     throw std::runtime_error("No graph element.");
-  
+
   std::string graphId=get_attribute_required(eGraph, "id");
   std::string graphTypeId=get_attribute_required(eGraph, "graphTypeId");
 
@@ -585,7 +585,7 @@ void loadGraph(Registry *registry, xmlpp::Element *parent, GraphLoadEvents *even
   auto *eDeviceInstances=find_single(eGraph, "./g:DeviceInstances", ns);
   if(!eDeviceInstances)
     throw std::runtime_error("No DeviceInstances element");
-  
+
   for(auto *nDevice : eDeviceInstances->find("./g:DevI", ns)){
     auto *eDevice=(xmlpp::Element *)nDevice;
 
@@ -663,7 +663,7 @@ void loadGraph(Registry *registry, xmlpp::Element *parent, GraphLoadEvents *even
 
     auto et=srcPort->getEdgeType();
 
-    
+
 
     TypedDataPtr edgeProperties;
     xmlpp::Element *eProperties=0;
@@ -672,7 +672,7 @@ void loadGraph(Registry *registry, xmlpp::Element *parent, GraphLoadEvents *even
       if(children.size()<10){
 	for(const auto &nChild : children){
 	  assert(nChild->getName().is_ascii());
-	  
+
 	  if(!strcmp(nChild->get_name().c_str(),"P")){
 	    eProperties=(xmlpp::Element*)nChild;
 	    break;
@@ -690,7 +690,7 @@ void loadGraph(Registry *registry, xmlpp::Element *parent, GraphLoadEvents *even
 
 
     events->onEdgeInstance(gId,
-			   dstDevice.first, dstDevice.second, dstPort, 
+			   dstDevice.first, dstDevice.second, dstPort,
 			   srcDevice.first, srcDevice.second, srcPort,
 			   edgeProperties);
   }

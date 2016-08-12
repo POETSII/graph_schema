@@ -9,6 +9,7 @@
 #include <memory>
 #include <random>
 #include <unordered_set>
+#include <algorithm>
 
 #include <cstring>
 #include <cstdlib>
