@@ -1,0 +1,175 @@
+<?xml version="1.0"?>
+<Graph xmlns="http://TODO.org/POETS/virtual-graph-schema-v0">
+  <GraphType id="clocked_izhikevich" nativeDimension="2">
+
+
+    <Properties>
+    </Properties>
+
+    <SharedCode><![CDATA[
+    uint32_t urng(uint32_t &state)
+    {
+      state = state*1664525+1013904223;
+      return state;
+    }
+
+    // Worlds crappiest gaussian
+    float grng(uint32_t &state)
+    {
+      uint32_t u=urng(state);
+      int32_t acc=0;
+      for(unsigned i=0;i<8;i++){
+        acc += u&0xf;
+        u=u>>4;
+      }
+      // a four-bit uniform has mean 7.5 and variance ((15-0+1)^2-1)/12 = 85/4
+      // sum of four uniforms has mean 8*7.5=60 and variance of 8*85/4=170
+      const float scale=0.07669649888473704; // == 1/sqrt(170)
+      return (acc-60.0f) * scale;
+    }
+
+    ]]></SharedCode>
+
+    <EdgeTypes>
+      <EdgeType id="__init__">
+	<!-- This doesn't have any properties -->
+      </EdgeType>
+
+      <EdgeType id="synapse">
+	<Properties>
+	  <Scalar type="float" name="weight" />
+	</Properties>
+	<Message>
+	  <Scalar type="bool" name="fired" />
+	</Message>
+      </EdgeType>
+
+      <EdgeType id="edge">
+      </EdgeType>
+    </EdgeTypes>
+
+    <DeviceTypes>
+      <DeviceType id="neuron">
+	<Properties>
+	  <Scalar type="uint32_t" name="seed" />
+
+	  <Scalar type="float" name="a" value="0" />
+	  <Scalar type="float" name="b" value="0" />
+	  <Scalar type="float" name="c" value="0" />
+	  <Scalar type="float" name="d" value="0" />
+	  <Scalar type="float" name="Ir" />
+
+	  <Scalar type="uint32_t" name="fanin" />
+	</Properties>
+
+	<State>
+	  <Scalar type="uint32_t" name="rng" />
+
+	  <Scalar type="float" name="u" />
+	  <Scalar type="float" name="v" />
+
+	  <Scalar name="I" type="float" />
+	  <Scalar name="Icount" type="uint32_t" />
+
+	  <Scalar name="fire" type="bool" />
+	</State>
+
+	<InputPort name="__init__" edgeTypeId="__init__">
+	  <OnReceive><![CDATA[
+	  deviceState->rng = deviceProperties->seed;
+
+	  deviceState->v=-65;
+	  deviceState->u=deviceProperties->b * deviceState->v;
+
+	  deviceState->fire=false; // We don't fire in the first round
+
+	  deviceState->I=deviceProperties->Ir * grng(deviceState->rng);
+	  deviceState->Icount=0;
+
+	  requestSend_fire = true;
+	  ]]>
+	  </OnReceive>
+	</InputPort>
+
+	<OutputPort name="fire" edgeTypeId="synapse">
+	  <OnSend><![CDATA[
+	  message->fired=deviceState->fire;
+
+	  requestSend_fire=false;
+	  ]]></OnSend>
+	</OutputPort>
+
+	<InputPort name="input" edgeTypeId="synapse">
+	  <OnReceive><![CDATA[
+	  deviceState->Icount++;
+	  if(message->fired){
+	    deviceState->I += edgeProperties->weight;
+	  }
+
+	  requestSend_tock = deviceState->Icount == deviceProperties->fanin;
+	  ]]></OnReceive>
+	</InputPort>
+
+	<OutputPort name="tock" edgeTypeId="edge">
+	  <OnSend><![CDATA[
+	  float &v=deviceState->v;
+	  float &u=deviceState->u;
+	  float &I=deviceState->I;
+
+	  v=v+0.5*(0.04*v*v+5*v+140-u+I); // step 0.5 ms
+	  v=v+0.5*(0.04*v*v+5*v+140-u+I); // for numerical
+	  u=u+deviceProperties->a*(deviceProperties->b*v-u);                 // stability
+
+	  deviceState->fire = v >= 30;
+	  if(deviceState->fire){
+	    v=deviceProperties->c;
+	    u += deviceProperties->d;
+	  }
+
+	  deviceState->I=deviceProperties->Ir * grng(deviceState->rng);
+	  deviceState->Icount=0;
+
+	  requestSend_tock=false;
+	  ]]></OnSend>
+	</OutputPort>
+
+	<InputPort name="tick" edgeTypeId="edge">
+	  <OnReceive><![CDATA[
+	  requestSend_fire = true;
+	  ]]></OnReceive>
+	</InputPort>
+      </DeviceType>
+
+      <DeviceType id="clock">
+	<Properties>
+	  <Scalar type="uint32_t" name="neuronCount" />
+	</Properties>
+
+	<State>
+	  <Scalar type="uint32_t" name="waitCount" />
+	</State>
+
+	<InputPort name="__init__" edgeTypeId="__init__">
+	  <OnReceive><![CDATA[
+	  deviceState->waitCount = deviceProperties->neuronCount;
+	  ]]></OnReceive>
+	</InputPort>
+
+	<InputPort name="tock" edgeTypeId="edge">
+	  <OnReceive><![CDATA[
+	  deviceState->waitCount--;
+	  requestSend_tick = deviceState->waitCount==0;
+	  ]]></OnReceive>
+	</InputPort>
+
+	<OutputPort name="tick" edgeTypeId="edge">
+	  <OnSend><![CDATA[
+	  deviceState->waitCount=deviceProperties->neuronCount;
+	  requestSend_tick = deviceState->waitCount==0;
+	  ]]></OnSend>
+	</OutputPort>
+
+      </DeviceType>
+    </DeviceTypes>
+  </GraphType>
+</Graph>
