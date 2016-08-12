@@ -58,6 +58,9 @@ struct EpochSim
 
     std::vector<std::vector<output> > outputs;
     std::vector<std::vector<input> > inputs;
+
+    bool anyReady() const
+    { return std::any_of(readyToSend.get(),readyToSend.get()+type->getOutputCount(), [](bool b){ return b; }); }
   };
 
   GraphTypePtr m_graphType;
@@ -87,6 +90,7 @@ struct EpochSim
     d.readyToSend.reset(new bool[dt->getOutputCount()], [](bool *p){ delete[](p);} );
     d.outputs.resize(dt->getOutputCount());
     for(unsigned i=0;i<dt->getOutputCount();i++){
+      d.readyToSend.get()[i]=false;
       d.outputNames.push_back(intern(dt->getOutput(i)->getName()));
     }
     d.inputs.resize(dt->getInputCount());
@@ -175,6 +179,7 @@ struct EpochSim
 
 
     bool sent=false;
+    bool anyReady=false;
 
     unsigned rot=rng();
     for(unsigned i=0;i<m_devices.size();i++){
@@ -200,7 +205,6 @@ struct EpochSim
       }
 
       m_statsSends++;
-      sent=true;
 
       src.readyToSend.get()[sel]=false; // Up to them to re-enable
 
@@ -217,8 +221,11 @@ struct EpochSim
 	if(logLevel>3){
 	  fprintf(stderr, "    send aborted.\n");
 	}
+	anyReady = anyReady || src.anyReady();
 	continue;
       }
+
+      sent=true;
 
       for(auto &out : src.outputs.at(sel)){
 	auto &dst=m_devices.at(out.dstDevice);
@@ -233,11 +240,13 @@ struct EpochSim
 
 	receiveServices.setReceiver(out.dstDeviceId, out.dstInputName);
 	port->onReceive(&receiveServices, m_graphProperties.get(), dst.properties.get(), dst.state.get(), slot.properties.get(), slot.state.get(), message.get(), dst.readyToSend.get());
+
+	anyReady = anyReady || dst.anyReady();
       }
     }
 
     ++m_epoch;
-    return sent;
+    return sent || anyReady;
   }
 
 
@@ -257,8 +266,6 @@ int main(int argc, char *argv[])
 {
   try{
 
-    RegistryImpl registry;
-
     std::string srcFilePath="-";
 
     std::string snapshotSinkName;
@@ -270,7 +277,9 @@ int main(int argc, char *argv[])
 
     int ia=1;
     while(ia < argc){
-      if(!strcmp("--max-steps",argv[ia])){
+      if(!strcmp("--help",argv[ia])){
+	usage();
+      }else if(!strcmp("--max-steps",argv[ia])){
         if(ia+1 >= argc){
           fprintf(stderr, "Missing argument to --max-steps\n");
           usage();
@@ -290,6 +299,8 @@ int main(int argc, char *argv[])
         ia++;
       }
     }
+
+    RegistryImpl registry;
 
     std::istream *src=&std::cin;
     std::ifstream srcFile;

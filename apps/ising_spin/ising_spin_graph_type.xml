@@ -87,6 +87,8 @@
 	  <!-- Track time and spins in neighbourhood. Index 0 is this device -->
 	  <Array name="spins" length="5" type="int32_t" />
 	  <Array name="times" length="5" type="float" />
+
+	  <Scalar name="lastFlipTime" type="float" />
 	</State>
 
 	<InputPort name="__init__" edgeTypeId="__init__">
@@ -117,6 +119,8 @@
 	  deviceState->spins[0]=(urng(seed)>>31) ? +1 : -1;
 	  deviceState->times[0]=erng(seed);
 	  deviceState->rng=seed; // Store the rng state back
+
+	  deviceState->lastFlipTime=0; // Bit redundant
 
 	  // We now have perfect knowledge of our neighbourhood, and
 	  // when they are planning to fire.
@@ -165,9 +169,14 @@
 	  }
 
 	  float prevTime=deviceState->times[0];
+	  auto prevSpin=deviceState->spins[0];
           chooseNextEvent(graphProperties, deviceState);
           message->spin = deviceState->spins[0];
 	  message->time = deviceState->times[0];
+
+	  if(prevSpin != deviceState->spins[0]){
+	    deviceState->lastFlipTime = prevTime;
+	  }
 
           handler_log(3, "prev_t = %g, next_t = %g, curr_spin = %d", prevTime, deviceState->times[0], deviceState->spins[0]);
 

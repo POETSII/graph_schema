@@ -1,0 +1,115 @@
+<?xml version="1.0"?>
+<Graph xmlns="http://TODO.org/POETS/virtual-graph-schema-v0">
+  <GraphType id="clock_tree" nativeDimension="2">
+    <!-- This implements a simple clock-tree benchmark. The graph consists of
+	 a root node, branch nodes, and leaf nodes. The root node initiates
+	 clock pulses, the branch nodes fan them out, and the leaf nodes
+	 reflect them back again. -->
+
+
+    <EdgeTypes>
+      <EdgeType id="__init__">
+	<!-- This doesn't have any properties -->
+      </EdgeType>
+      
+      <EdgeType id="tick">
+      </EdgeType>
+
+      <EdgeType id="ack">
+      </EdgeType>
+    </EdgeTypes>
+    
+    <DeviceTypes>
+      <DeviceType id="root">
+	<Properties>
+	  <Scalar type="uint32_t" name="fanout"/>
+	</Properties>
+	
+	<State>
+	  <Scalar type="uint32_t" name="cycle" value="0" />
+	  <Scalar type="uint32_t" name="pending" value="0" />
+	</State>
+	
+	<InputPort name="__init__" edgeTypeId="__init__">
+	  <OnReceive><![CDATA[
+	  requestSend_tick_out=true;
+	  ]]>
+	  </OnReceive>
+	</InputPort>
+	
+	<OutputPort name="tick_out" edgeTypeId="tick">
+	  <OnSend><![CDATA[
+	  deviceState->cycle++;
+	  deviceState->pending=deviceProperties->fanout;
+	  
+	  requestSend_tick_out = deviceProperties->fanout == 0;
+	  ]]></OnSend>
+	</OutputPort>
+	
+	<InputPort name="ack_in" edgeTypeId="ack">
+	  <OnReceive><![CDATA[
+	  deviceState->pending--;
+	  
+	  requestSend_tick_out = deviceState->pending==0;
+	  ]]></OnReceive>
+	</InputPort>
+
+      </DeviceType>
+	
+	<DeviceType id="branch">
+	  <Properties>
+	    <Scalar type="uint32_t" name="fanout"/>
+	  </Properties>
+	  
+	  <State>
+	    <Scalar type="uint32_t" name="pending" value="0" />
+	  </State>
+	  
+	  <InputPort name="tick_in" edgeTypeId="tick">
+	    <OnReceive><![CDATA[
+	    deviceState->pending=deviceProperties->fanout;
+	    
+	    requestSend_tick_out = deviceProperties->fanout > 0;
+	    requestSend_ack_out = deviceProperties->fanout == 0;
+	    ]]></OnReceive>
+	  </InputPort>
+	  
+	  <OutputPort name="tick_out" edgeTypeId="tick">
+	    <OnSend><![CDATA[
+	    requestSend_tick_out = false;
+	    ]]></OnSend>
+	  </OutputPort>
+	  
+	  <InputPort name="ack_in" edgeTypeId="ack">
+	    <OnReceive><![CDATA[
+	    deviceState->pending--;
+	    
+	    requestSend_ack_out = deviceState->pending==0;
+	    ]]></OnReceive>
+	  </InputPort>
+	  
+	  <OutputPort name="ack_out" edgeTypeId="ack">
+	    <OnSend><![CDATA[
+	    requestSend_ack_out = false;
+	    ]]></OnSend>
+	  </OutputPort>
+	</DeviceType>
+	
+	<DeviceType id="leaf">
+	  <InputPort name="tick_in" edgeTypeId="tick">
+	    <OnReceive><![CDATA[
+	    requestSend_ack_out=true;
+	    ]]>
+	    </OnReceive>
+	  </InputPort>
+	  
+	  <OutputPort name="ack_out" edgeTypeId="ack">
+	    <OnSend><![CDATA[
+	    requestSend_ack_out=false;
+	    ]]></OnSend>
+	  </OutputPort>
+	</DeviceType>
+      </DeviceTypes>
+    </GraphType>
+  </Graph>
+  

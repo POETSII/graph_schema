@@ -12,6 +12,8 @@
 
 #include <dlfcn.h>
 
+#include <sys/stat.h>
+#include <unistd.h>
 #include <sys/types.h>
 #include <dirent.h>
 
@@ -418,41 +420,63 @@ private:
   std::unordered_map<std::string,GraphTypePtr> m_graphs;
   std::unordered_map<std::string,EdgeTypePtr> m_edges;
   std::unordered_map<std::string,DeviceTypePtr> m_devices;
-  
-public:
-  RegistryImpl()
+
+  std::string m_soExtension;
+
+  void recurseLoad(std::string path)
   {
-    // TODO : Do we want a better name for this?
-    std::string soExtension=".graph.so";
     
-    auto searchPath=getenv("POETS_PROVIDER_PATH");
-    if(searchPath){
-      DIR *hDir=opendir(searchPath);
-      if(!hDir){
-	fprintf(stderr, "Warning: Couldn't open POETS_PROVIDER_PATH='%s'", searchPath);
-      }else{
-	try{
-	  struct dirent *de=0;
+    std::shared_ptr<DIR> hDir(opendir(path.c_str()), closedir);
+    if(!hDir){
+      fprintf(stderr, "Warning: Couldn't open provider='%s'\n", path.c_str());
+    }else{
 
-	  while( (de=readdir(hDir)) ){
-	    std::string path=de->d_name;
-	    if(soExtension.size() > path.size())
+	struct dirent *de=0;
+	
+	while( (de=readdir(hDir.get())) ){
+	  std::string part=de->d_name;
+	  std::string fullPath=path+"/"+part;
+
+	  //fprintf(stderr, "%s\n", fullPath.c_str());
+	  
+	  if(m_soExtension.size() < part.size()){	  
+	    if(m_soExtension == part.substr(part.size()-m_soExtension.size())){
+	      
+	      loadProvider(fullPath);
 	      continue;
-	    
-	    if(soExtension != path.substr(path.size()-soExtension.size()))
+	    }
+	  }
+
+	  if(part=="." || part=="..")
+	    continue;
+
+	  if(part.size() >= 5){
+	    if(part.substr(part.size()-5)==".dSYM")
 	      continue;
-
-	    std::string fullPath=std::string(searchPath)+"/"+path;
-
-	    loadProvider(fullPath);
-	    
 	  }
 	  
-	}catch(...){
-	  closedir(hDir);
-	  throw;
+	  struct stat ss;
+	  if(0!=stat(fullPath.c_str(), &ss))
+	    continue;
+	  
+	  if(S_ISDIR(ss.st_mode)){
+	    recurseLoad(fullPath);
+	  }
 	}
-      }
+    }
+  }
+public:
+  RegistryImpl()
+    : m_soExtension(".graph.so")
+  {    
+    const char * searchPath=getenv("POETS_PROVIDER_PATH");
+    std::shared_ptr<char> cwd;
+    if(searchPath==NULL){
+      cwd.reset(getcwd(0,0), free);
+      searchPath=cwd.get();
+    }
+    if(searchPath){
+      recurseLoad(searchPath);
     }
   }
   

@@ -131,25 +131,46 @@ public:
      const bool *readyToSendFlags
      ) override
     {
+      unsigned numOutputs=dt->getOutputCount();
+      if(numOutputs>32)
+	throw std::runtime_error("Not supported.");
+      uint32_t flags=0;
+      for(unsigned i=0;i<numOutputs;i++){
+	if(readyToSendFlags[i])
+	  flags |= (1ul << i);
+      }
+
+
+      bool isStateDifferent=false;
+      std::string stateJSON;
+      
+      if(state){
+	stateJSON=dt->getStateSpec()->toJSON(state);
+	if(stateJSON.size()>0){
+	  assert(stateJSON.size() >= 2);
+	  stateJSON=stateJSON.substr(0,stateJSON.size()-1);
+	  stateJSON=stateJSON.substr(1);
+	}
+      }
+
+      if(flags==0 && stateJSON.empty())
+	return; // It has no interesting non-default properties or state
+      
       xmlTextWriterStartElementNS(m_dst, NULL, (const xmlChar *)"DevS", NULL);
+
+      if(flags!=0){
+	xmlTextWriterWriteFormatAttribute(m_dst, (const xmlChar *)"rts", "%x", flags);
+      }
 
       xmlTextWriterWriteAttribute(m_dst, (const xmlChar *)"id", (const xmlChar *)id);
 
-        unsigned numOutputs=dt->getOutputCount();
-        if(numOutputs>32)
-            throw std::runtime_error("Not supported.");
-        uint32_t flags=0;
-        for(unsigned i=0;i<numOutputs;i++){
-            if(readyToSendFlags[i])
-                flags |= (1ul << i);
-        }
-        if(flags!=0){
-            xmlTextWriterWriteFormatAttribute(m_dst, (const xmlChar *)"rts", "%x", flags);
-        }
+      if(stateJSON.size()>0 && stateJSON!="{}"){	
+	xmlTextWriterStartElement(m_dst, (const xmlChar *)"S");
+	xmlTextWriterWriteRaw(m_dst, (const xmlChar *)stateJSON.c_str());
+	xmlTextWriterEndElement(m_dst);
+      }
 
-        writeTypedData(dt->getStateSpec(), state, "S", false);
-
-        xmlTextWriterEndElement(m_dst);
+      xmlTextWriterEndElement(m_dst);
     }
 
     virtual void writeEdgeInstance

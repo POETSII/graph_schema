@@ -44,7 +44,10 @@ def get_child_text(node,name):
     n=node.find(name,ns)
     if n is None:
         raise XMLSyntaxError("No child text node called {}".format(name),node)
-    return n.text
+    text=n.text
+    sys.stderr.write("{}\n".format(n))
+    line=n.sourceline
+    return (text,line)
 
 
 def load_typed_data_spec(dt):
@@ -131,7 +134,7 @@ def load_edge_type(parent,dt):
         raise XMLSyntaxError("Error while parsing edge {}".format(id),dt,e)
 
 
-def load_device_type(graph,dtNode):
+def load_device_type(graph,dtNode,sourceFile="<unknown>"):
     id=get_attrib(dtNode,"id")
 
     state=None
@@ -152,8 +155,8 @@ def load_device_type(graph,dtNode):
         if edge_type_id not in graph.edge_types:
             raise XMLSyntaxError("Unknown edgeTypeId {}".format(edge_type_id),p)
         edge_type=graph.edge_types[edge_type_id]
-        handler=get_child_text(p,"p:OnReceive")
-        dt.add_input(name,edge_type,handler)
+        (handler,sourceLine)=get_child_text(p,"p:OnReceive")
+        dt.add_input(name,edge_type,handler,sourceFile,sourceLine)
 
     for p in dtNode.findall("p:OutputPort",ns):
         name=get_attrib(p,"name")
@@ -161,8 +164,8 @@ def load_device_type(graph,dtNode):
         if edge_type_id not in graph.edge_types:
             raise XMLSyntaxError("Unknown edgeTypeId {}".format(edge_type_id),p)
         edge_type=graph.edge_types[edge_type_id]
-        handler=get_child_text(p,"p:OnSend")
-        dt.add_output(name,edge_type,handler)
+        (handler,sourceLine)=get_child_text(p,"p:OnSend")
+        dt.add_output(name,edge_type,handler,sourceFile,sourceLine)
 
     return dt            
 

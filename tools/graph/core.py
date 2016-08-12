@@ -139,21 +139,23 @@ class EdgeType(object):
     
 
 class Port(object):
-    def __init__(self,parent,name,edge_type):
+    def __init__(self,parent,name,edge_type,source_file,source_line):
         self.parent=parent
         self.name=name
         self.edge_type=edge_type
+        self.source_file=source_file
+        self.source_line=source_line
 
     
 class InputPort(Port):
-    def __init__(self,parent,name,edge_type,receive_handler):
-        Port.__init__(self,parent,name,edge_type)
+    def __init__(self,parent,name,edge_type,receive_handler,source_file=None,source_line=None):
+        Port.__init__(self,parent,name,edge_type,source_file,source_line)
         self.receive_handler=receive_handler
 
     
 class OutputPort(Port):
-    def __init__(self,parent,name,edge_type,send_handler):
-        Port.__init__(self,parent,name,edge_type)
+    def __init__(self,parent,name,edge_type,send_handler,source_file,source_line):
+        Port.__init__(self,parent,name,edge_type,source_file,source_line)
         self.send_handler=send_handler
     
             
@@ -169,26 +171,26 @@ class DeviceType(object):
         self.outputs_by_index=[]
         self.ports={}
 
-    def add_input(self,name,edge_type,receive_handler):
+    def add_input(self,name,edge_type,receive_handler,source_file=None,source_line={}):
         if name in self.ports:
             raise GraphDescriptionError("Duplicate port {} on device type {}".format(name,self.id))
         if edge_type.id not in self.parent.edge_types:
             raise GraphDescriptionError("Unregistered edge type {} on port {} of device type {}".format(edge_type.id,name,self.id))
         if edge_type != self.parent.edge_types[edge_type.id]:
             raise GraphDescriptionError("Incorrect edge type object {} on port {} of device type {}".format(edge_type.id,name,self.id))
-        p=InputPort(self, name, self.parent.edge_types[edge_type.id], receive_handler)
+        p=InputPort(self, name, self.parent.edge_types[edge_type.id], receive_handler, source_file, source_line)
         self.inputs[name]=p
         self.inputs_by_index.append(p)
         self.ports[name]=p
 
-    def add_output(self,name,edge_type,send_handler):
+    def add_output(self,name,edge_type,send_handler,source_file=None,source_line=None):
         if name in self.ports:
             raise GraphDescriptionError("Duplicate port {} on device type {}".format(name,self.id))
         if edge_type.id not in self.parent.edge_types:
             raise GraphDescriptionError("Unregistered edge type {} on port {} of device type {}".format(edge_type.id,name,self.id))
         if edge_type != self.parent.edge_types[edge_type.id]:
             raise GraphDescriptionError("Incorrect edge type object {} on port {} of device type {}".format(edge_type.id,name,self.id))
-        p=OutputPort(self, name, self.parent.edge_types[edge_type.id], send_handler)
+        p=OutputPort(self, name, self.parent.edge_types[edge_type.id], send_handler, source_file, source_line)
         self.outputs[name]=p
         self.outputs_by_index.append(p)
         self.ports[name]=p
