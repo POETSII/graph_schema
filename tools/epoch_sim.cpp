@@ -258,6 +258,7 @@ void usage()
 {
   fprintf(stderr, "epoch_sim [options] sourceFile?\n");
   fprintf(stderr, "\n");
+  fprintf(stderr, "  --log-level n\n");
   fprintf(stderr, "  --max-steps n\n");
   fprintf(stderr, "  --snapshots interval destFile\n");
   exit(1);
@@ -280,6 +281,13 @@ int main(int argc, char *argv[])
     while(ia < argc){
       if(!strcmp("--help",argv[ia])){
 	usage();
+      }else if(!strcmp("--log-level",argv[ia])){
+        if(ia+1 >= argc){
+          fprintf(stderr, "Missing argument to --log-level\n");
+          usage();
+        }
+        logLevel=strtoul(argv[ia+1], 0, 0);
+        ia+=2;
       }else if(!strcmp("--max-steps",argv[ia])){
         if(ia+1 >= argc){
           fprintf(stderr, "Missing argument to --max-steps\n");

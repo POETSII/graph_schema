@@ -26,17 +26,13 @@ if len(sys.argv)>4:
 N=Ne+Ni
 K=min(N,K)
 
-graphType=graphTypes["clocked_izhikevich"]
+graphType=graphTypes["gals_izhikevich"]
 neuronType=graphType.device_types["neuron"]
-clockType=graphType.device_types["clock"]
 
 instName="sparse_{}_{}_{}".format(Ne,Ni,K)
 
 properties={}
 res=GraphInstance(instName, graphType, properties)
-
-clock=DeviceInstance(res, "clock", clockType, None, {"neuronCount":N})
-res.add_device_instance(clock)
 
 nodes=[None]*N
 for i in range(N):
@@ -57,9 +53,6 @@ for i in range(N):
     }
     nodes[i]=DeviceInstance(res, "n_{}".format(i), neuronType, None, props)
     res.add_device_instance(nodes[i])
-
-    res.add_edge_instance(EdgeInstance(res,nodes[i],"tick",clock,"tick",None))
-    res.add_edge_instance(EdgeInstance(res,clock,"tock",nodes[i],"tock",None))
 
 for dst in range(N):
     free=list(range(N))
