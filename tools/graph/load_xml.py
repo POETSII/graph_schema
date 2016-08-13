@@ -281,14 +281,15 @@ def load_edge_instance(graph,eiNode):
 def load_graph_instance(graphTypes, graphNode):
     id=get_attrib(graphNode,"id")
     graphTypeId=get_attrib(graphNode,"graphTypeId")
-
-    graph=GraphInstance(id,graphTypes[graphTypeId])
+    graphType=graphTypes[graphTypeId]
 
     properties=None
     propertiesNode=graphNode.find("p:Properties",ns)
     if propertiesNode is not None:
-        assert(len(propertiesNode)==1)
-        properties=load_struct_instance(graph.properties, propertiesNode[0])
+        assert graphType.properties
+        properties=load_struct_instance(graphType.properties, propertiesNode)
+
+    graph=GraphInstance(id,graphType,properties)
 
     for diNode in graphNode.findall("p:DeviceInstances/p:DevI",ns):
         di=load_device_instance(graph,diNode)

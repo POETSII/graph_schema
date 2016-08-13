@@ -88,6 +88,7 @@
 	  <Array name="spins" length="5" type="int32_t" />
 	  <Array name="times" length="5" type="float" />
 
+	  <Scalar name="spin" type="int32_t" /> <!-- This is a copy for ease of printing -->
 	  <Scalar name="lastFlipTime" type="float" />
 	</State>
 
@@ -120,6 +121,7 @@
 	  deviceState->times[0]=erng(seed);
 	  deviceState->rng=seed; // Store the rng state back
 
+	  deviceState->spin=deviceState->spins[0];
 	  deviceState->lastFlipTime=0; // Bit redundant
 
 	  // We now have perfect knowledge of our neighbourhood, and
@@ -177,6 +179,7 @@
 	  if(prevSpin != deviceState->spins[0]){
 	    deviceState->lastFlipTime = prevTime;
 	  }
+	  deviceState->spin=deviceState->spins[0];
 
           handler_log(3, "prev_t = %g, next_t = %g, curr_spin = %d", prevTime, deviceState->times[0], deviceState->spins[0]);
 

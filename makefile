@@ -84,6 +84,28 @@ bin/epoch_sim : tools/epoch_sim.cpp
 	mkdir -p bin
 	$(CXX) $(CPPFLAGS) $< -o $@ $(LDFLAGS) $(LDLIBS)
 
+
+define provider_rules_template
+
+providers/$1.graph.cpp : apps/$1/$1_graph_type.xml graph_library
+	mkdir -p providers
+	$$(PYTHON) tools/render_graph_as_cpp.py < apps/$1/$1_graph_type.xml > providers/$1.graph.cpp
+
+providers/$1.graph.so : providers/$1.graph.cpp
+	g++ $$(CPPFLAGS) $$(SO_CPPFLAGS) $$< -o $$@ $$(LDFLAGS)
+
+$1_provider : providers/$1.graph.so
+
+all_providers : clock_tree_provider
+
+endef
+
+include apps/clock_tree/makefile.inc
+include apps/ising_spin/makefile.inc
+
+demos : $(ALL_DEMOS)
+
+
 all_tools : bin/print_graph_properties bin/epoch_sim
 
 

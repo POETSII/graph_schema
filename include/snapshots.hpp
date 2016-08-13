@@ -56,12 +56,16 @@ public:
   {
     m_dst=xmlNewTextWriterFilename(dst, 0);
       xmlTextWriterSetIndent(m_dst, 1);
+      xmlTextWriterStartDocument(m_dst, NULL, NULL, NULL);
+      xmlTextWriterStartElementNS(m_dst, NULL, (const xmlChar*)"Graph", m_ns);
   }
 
 
   virtual ~SnapshotWriterToFile()
     {
         if(m_dst){
+	  xmlTextWriterEndElement(m_dst);
+	          xmlTextWriterEndDocument(m_dst);
             xmlFreeTextWriter(m_dst);
             m_dst=0;
         }
@@ -74,10 +78,10 @@ public:
         unsigned sequence
     ) override
     {
-        xmlTextWriterStartDocument(m_dst, NULL, NULL, NULL);
-        xmlTextWriterStartElementNS(m_dst, NULL, (const xmlChar*)"GraphSnapshot", m_ns);
+
+        xmlTextWriterStartElement(m_dst, (const xmlChar*)"GraphSnapshot");
         xmlTextWriterWriteAttribute(m_dst, (const xmlChar *)"graphInstId", (const xmlChar *)id);
-        xmlTextWriterWriteAttribute(m_dst, (const xmlChar *)"graphTypeid", (const xmlChar *)graph->getId().c_str());
+        xmlTextWriterWriteAttribute(m_dst, (const xmlChar *)"graphTypeId", (const xmlChar *)graph->getId().c_str());
         {
             std::stringstream tmp;
             tmp<<sequence;
@@ -93,7 +97,6 @@ public:
     virtual void endSnapshot() override
     {
         xmlTextWriterEndElement(m_dst);
-        xmlTextWriterEndDocument(m_dst);
         xmlTextWriterFlush(m_dst);
     }
 

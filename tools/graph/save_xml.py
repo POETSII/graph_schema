@@ -44,6 +44,7 @@ def save_typed_data_spec(dt):
     elif isinstance(dt,ArrayTypedDataSpec):
         n=etree.Element(toNS("p:Array"))
         n.attrib["name"]=dt.name
+        n.attrib["length"]=str(dt.length)
         assert isinstance(dt.type,ScalarTypedDataSpec)
         n.attrib["type"]=dt.type.type
     else:

@@ -1,3 +1,5 @@
+import sys
+
 class GraphDescriptionError(Exception):
     def __init__(self,msg):
         Exception.__init__(self,msg)
@@ -40,6 +42,15 @@ class ScalarTypedDataSpec(TypedDataSpec):
             return False
         return True
 
+    def create_default(self):
+        return self.value
+
+    def expand(self,inst):
+        if inst is None:
+            return self.create_default()
+        else:
+            return self._check_value(inst)
+        
     def __str__(self):
         return "{}:{}".format(self.type,self.name,self.value)
 
@@ -72,6 +83,17 @@ class TupleTypedDataSpec(TypedDataSpec):
             acc=acc+"\n"
         return acc+"]"
 
+    def create_default(self):
+        return { e.name:e.create_default() for e in self._elts_by_index  }
+
+    def expand(self,inst):
+        if inst is None:
+            return self.create_default()
+        assert isinstance(inst,dict), "Want to expand dict, got '{}'".format(inst)
+        for e in self._elts_by_index:
+            inst[e.name]=e.expand(inst.get(e.name,None))
+        return inst
+
     def is_refinement_compatible(self,inst):
         if inst is None:
             return True;
@@ -103,6 +125,18 @@ class ArrayTypedDataSpec(TypedDataSpec):
         
         return "Array:{}[{}*{}]\n".format(self.name,self.types,self.length)
 
+    def create_default(self):
+        return [self.type.create_default() for i in range(self.length)]
+
+    def expand(self,inst):
+        if inst is None:
+            return self.create_default()
+        assert isinstance(inst,list)
+        assert len(inst)==self.length
+        for i in range(self.length):
+            inst[i]=self.type.expand(inst[i])
+        return inst
+
     def is_refinement_compatible(self,inst):
         if inst is None:
             return True;
@@ -120,6 +154,18 @@ class ArrayTypedDataSpec(TypedDataSpec):
         return True
 
 
+def create_default_typed_data(proto):
+    if proto is None:
+        return None
+    else:
+        return proto.create_default()
+
+def expand_typed_data(proto,inst):
+    if proto is None:
+        assert inst is None
+        return None
+    else:
+        return proto.expand(inst)
 
 def is_refinement_compatible(proto,inst):
     if proto is None:

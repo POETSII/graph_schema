@@ -11,17 +11,22 @@ import math
 src=sys.argv[1]
 (graphTypes,graphInstances)=load_graph_types_and_instances(src)
 
-n=4
-if len(sys.argv)>2:
-    n=int(sys.argv[2])
-
-graphType=graphTypes["ising_spin"]
-devType=graphType.device_types["cell"]
-
 endTime=1000
 T=1
 J=1
 H=0
+
+n=4
+if len(sys.argv)>2:
+    n=int(sys.argv[2])
+if len(sys.argv)>3:
+    T=float(sys.argv[3])
+    
+
+graphType=graphTypes["ising_spin"]
+devType=graphType.device_types["cell"]
+
+
 
 instName="heat_{}_{}".format(n,n)
 

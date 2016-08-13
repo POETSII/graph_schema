@@ -159,10 +159,12 @@ struct EpochSim
   unsigned m_epoch=0;
 
   template<class TRng>
-  bool step(TRng &rng)
+  bool step(TRng &rng, double probSend)
   {
-    // Within each step every object gets the chance to send exactly one message.
+    // Within each step every object gets the chance to send a message with probability probSend
 
+    std::uniform_real_distribution<> udist;
+    
     ReceiveOrchestratorServicesImpl receiveServices{logLevel, stderr, 0, 0};
     {
       std::stringstream tmp;
@@ -177,6 +179,13 @@ struct EpochSim
       receiveServices.setPrefix(tmp.str().c_str());
     }
 
+    std::vector<int> sendSel(m_devices.size());
+    for(unsigned i=0;i<m_devices.size();i++){
+      auto &src=m_devices[i];
+
+      // Pick a random message
+      sendSel[i]=pick_bit(src.type->getOutputCount(), src.readyToSend.get(), rng());
+    }
 
 
     bool sent=false;
@@ -193,13 +202,20 @@ struct EpochSim
       }
 
       // Pick a random message
-      unsigned sel=pick_bit(src.type->getOutputCount(), src.readyToSend.get(), rng());
+      int sel=sendSel[index];
       if(sel==-1){
 	if(logLevel>3){
 	  fprintf(stderr, "   not ready to send.\n");
 	}
 	continue;
       }
+
+      if(udist(rng) > probSend){
+	anyReady=true;
+	continue;
+      }
+
+      assert(src.readyToSend.get()[sel]);
 
       if(logLevel>3){
 	fprintf(stderr, "    output port %d ready\n", sel);
@@ -261,6 +277,7 @@ void usage()
   fprintf(stderr, "  --log-level n\n");
   fprintf(stderr, "  --max-steps n\n");
   fprintf(stderr, "  --snapshots interval destFile\n");
+  fprintf(stderr, "  --prob-send probability\n");
   exit(1);
 }
 
@@ -276,6 +293,8 @@ int main(int argc, char *argv[])
     unsigned statsDelta=1;
 
     unsigned maxSteps=INT_MAX;
+
+    double probSend=0.9;
 
     int ia=1;
     while(ia < argc){
@@ -294,6 +313,13 @@ int main(int argc, char *argv[])
           usage();
         }
         maxSteps=strtoul(argv[ia+1], 0, 0);
+        ia+=2;
+      }else if(!strcmp("--prob-send",argv[ia])){
+        if(ia+1 >= argc){
+          fprintf(stderr, "Missing argument to --prob-send\n");
+          usage();
+        }
+        probSend=strtod(argv[ia+1], 0);
         ia+=2;
       }else if(!strcmp("--snapshots",argv[ia])){
         if(ia+2 >= argc){
@@ -358,7 +384,7 @@ int main(int argc, char *argv[])
     unsigned snapshotSequenceNum=1;
 
     for(unsigned i=0; i<maxSteps; i++){
-      bool running = graph.step(rng);
+      bool running = graph.step(rng, probSend);
 
       if(logLevel>2 || i==nextStats){
         fprintf(stderr, "Epoch %u : sends/device/epoch = %f (%f / %u)\n", i, graph.m_statsSends / graph.m_devices.size() / statsDelta, graph.m_statsSends/statsDelta, (unsigned)graph.m_devices.size());
