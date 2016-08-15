@@ -26,6 +26,35 @@ Requirements
 
 This needs python3.4 and lxml.
 
+Schema
+======
+
+The structure of the application format is captured in a relax ng xml schema, which
+checks a fair amount of the structure of the file, such as allowed/missing elements
+and attributes. The schema is available at [master/virtual-graph-schema.rnc](master/virtual-graph-schema.rnc).
+
+For checking purposes, the schema can be validated directly using `tring`, or
+is also available as an [xml schema (.xsd)](derived/virtual-graph-schema.xsd)
+which many XML parsers can handle.
+
+To validate a file `X.xml` you can ask for the file `X.checked`. This
+works for graph types:
+
+    make apps/ising_spin/ising_spin_graph_type.xml
+
+and graph instances:
+
+    make apps/ising_spin/ising_spin_16_16.xml
+
+If there is a high-level syntax error, it should point you towards it.
+
+A slightly deeper check is also available:
+
+    python3.4 tools/print_graph_properties.py apps/ising_spin/ising_spin_16x16.xml
+
+This checks some context-free aspects, such as id matching. Beyond this level
+you need to try running the graph.
+
 Usage
 =====
 
@@ -39,7 +68,7 @@ and simulating them.
 
 To look out at output, do:
 
-    make demos
+    make demo
 
 This will take longer and use more disk-space. It will
 generate some sort of animated gifs in the `apps/*` directories.
@@ -95,6 +124,16 @@ This is an epoch based orchestrator. In each epoch, each device gets a chance to
 send from one port, with probability `probSend`. The order in which devices send
 in each round is somewhat randomised. All devices are always ready to recieve, so
 there is no blocking or transmission delay.
+
+Example usage:
+
+    make ising_spin_provider
+    bin/epoch_sim apps/ising_spin/ising_spin_16x16.xml
+
+Environment variables:
+
+- `POETS_PROVIDER_PATH` : Root directory in which to search for providers matching `*.graph.so`. Default
+  is the current working directory.
 
 Parameters:
 

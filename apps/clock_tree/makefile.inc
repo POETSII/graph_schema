@@ -11,7 +11,7 @@ demos/clock_tree/clock_tree_$1.xml : apps/clock_tree/create_clock_tree_instance.
 	mkdir -p $$(dir $$@)
 	$$(PYTHON) apps/clock_tree/create_clock_tree_instance.py apps/clock_tree/clock_tree_graph_type.xml $$(subst _, ,$1) > $$@
 
-demos/clock_tree/clock_tree_$1.snap : demos/clock_tree/clock_tree_$1.xml bin/epoch_sim clock_tree_provider
+demos/clock_tree/clock_tree_$1.snap : demos/clock_tree/clock_tree_$1.xml bin/epoch_sim clock_tree_provider demos/clock_tree/clock_tree_$1.checked
 	bin/epoch_sim --max-steps $2 --snapshots 1 $$@  demos/clock_tree/clock_tree_$1.xml
 
 demos/clock_tree/clock_tree_$1.gif : demos/clock_tree/clock_tree_$1.xml demos/clock_tree/clock_tree_$1.snap clock_tree_provider
@@ -34,5 +34,3 @@ CLOCK_TREE_FILTERS = \
 $(eval $(call clock_tree_instance_template,8_2,50,$(CLOCK_TREE_FILTERS)))
 $(eval $(call clock_tree_instance_template,6_3,50,$(CLOCK_TREE_FILTERS)))
 $(eval $(call clock_tree_instance_template,4_4,50,$(CLOCK_TREE_FILTERS)))
-
-demos : $(ALL_DEMOS)

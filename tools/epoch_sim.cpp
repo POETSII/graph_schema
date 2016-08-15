@@ -227,7 +227,10 @@ struct EpochSim
 	continue;
       }
 
-      assert(src.readyToSend.get()[sel]);
+      if(!src.readyToSend.get()[sel]){
+	anyReady=true; // We don't know if it turned any others on
+	continue;
+      }
 
       if(logLevel>3){
 	fprintf(stderr, "    output port %d ready\n", sel);

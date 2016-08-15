@@ -11,7 +11,7 @@ demos/gals_heat/gals_heat_$1.xml : apps/gals_heat/create_gals_heat_instance.py a
 	mkdir -p $$(dir $$@)
 	$$(PYTHON) apps/gals_heat/create_gals_heat_instance.py  $$(subst _, ,$1) > $$@
 
-demos/gals_heat/gals_heat_$1.snap : demos/gals_heat/gals_heat_$1.xml bin/epoch_sim providers/gals_heat.graph.so
+demos/gals_heat/gals_heat_$1.snap : demos/gals_heat/gals_heat_$1.xml bin/epoch_sim providers/gals_heat.graph.so demos/gals_heat/gals_heat_$1.checked
 	bin/epoch_sim --max-steps $2 --snapshots 1 $$@  demos/gals_heat/gals_heat_$1.xml
 
 ALL_GALS_HEAT_TESTS += demos/gals_heat/gals_heat_$1.snap

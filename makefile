@@ -51,10 +51,10 @@ regenerate-random :
 	python3.4 tools/create_random_graph.py 8 > test/virtual/random4.xml
 
 
-output/%.checked : test/virtual/%.xml $(JING) master/virtual-graph-schema.rnc derived/virtual-graph-schema.xsd
-	java -jar $(JING) -c master/virtual-graph-schema.rnc test/virtual/$*.xml
-	java -jar $(JING) derived/virtual-graph-schema.xsd test/virtual/$*.xml
-	$(PYTHON) tools/print_graph_properties.py < test/virtual/$*.xml
+%.checked : %.xml $(JING) master/virtual-graph-schema.rnc derived/virtual-graph-schema.xsd
+	java -jar $(JING) -c master/virtual-graph-schema.rnc $*.xml
+	java -jar $(JING) derived/virtual-graph-schema.xsd $*.xml
+	$(PYTHON) tools/print_graph_properties.py < $*.xml
 	touch $@
 
 validate-virtual/% : output/%.checked
@@ -119,7 +119,17 @@ tt :
 
 validate-virtual : $(foreach t,$(VIRTUAL_ALL_TESTS),validate-virtual/$(t) output/virtual/$(t).svg output/virtual/$(t).graph.cpp output/virtual/$(t).graph.so)
 
+test : $(ALL_TESTS)
+
+demo : $(ALL_DEMOS)
+
 clean :
 	-find . -iname '*~' -exec rm {} ';'  # Get rid of emacs temporaries
-	-rm output/virtual/*.dot output/virtual/*.svg
+	-rm -rf output/virtual/*.dot output/virtual/*.svg
+	-rm -rf demos/*
+	-rm -rf providers/*
+	-rm -rf external/trang-20091111
+	-rm -rf external/jing-20081028
+	-rm -rf rapidjson-master
+
 
