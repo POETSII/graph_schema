@@ -45,6 +45,9 @@ $(eval $(call gals_heat_instance_template,9,1,100,$(GALS_HEAT_FILTERS_VALUE)))
 $(eval $(call gals_heat_instance_template,16,1,100,$(GALS_HEAT_FILTERS_TIME)))
 $(eval $(call gals_heat_instance_template,32,10,10000,$(GALS_HEAT_FILTERS_VALUE)))
 
+# Needs to be manually rendered with graph_to_field
+#$(eval $(call gals_heat_instance_template,128,200,50000,$(GALS_HEAT_FILTERS_VALUE)))
+
 
 
 gals_heat_tests : $(ALL_GALS_HEAT_TESTS)

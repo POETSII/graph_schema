@@ -80,15 +80,12 @@ def add_channel(x,y,dx,dy):
 for x in range(0,n):
     sys.stderr.write(" Edges : Row {} of {}\n".format( x, n))
     for y in range(0,n):
-        sys.stderr.write("   Col : {}\n".format(y))
         edgeX = x==0 or x==n-1
         edgeY = y==0 or y==n-1
         if edgeX and edgeY:
             continue
 
-        sys.stderr.write("  {},{}\n".format(x,y))
         if y!=0 and not edgeX:
-            sys.stderr.write("     0,-1\n")
             add_channel(x,y, 0, -1)
         if x!=n-1 and not edgeY:
             add_channel(x,y, +1, 0)

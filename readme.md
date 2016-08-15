@@ -1,6 +1,8 @@
 graph_schema
 ============
 
+![Heat equation](rendered/gals_heat_128.gif)
+
 This repository is intended to describe the format for graphs via:
 
 - Documentation : Overview of the graphs and how they are structured
@@ -20,11 +22,18 @@ not worry about physical implementation and layout, and only talk
 about structure, functionality, and connectivity. The schemas for
 other graphs could also be added here, but that is up for discussion.
 
+The policy is that things should not be merged to master
+unless `make test` works.
 
 Requirements
 ============
 
-This needs python3.4 and lxml.
+This needs python3.4, and python libraries lxml, and pillow.
+
+It also needs c++11, and libxml++-2.6.
+
+I haven't fully tried this on non OS X platforms, but it has worked
+in the past in both Cygwin and Linux. TODO : provisioning scripts.
 
 Schema
 ======
