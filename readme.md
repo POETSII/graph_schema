@@ -70,12 +70,12 @@ the orchestrator.
   does lots of local broadcasting (whether neurons fire or not), and it doesn't
   work correctly with an unfair orchestrator.
 
-- (apps/clocked_izhikevich)[apps/clock_ishikevich) : *Deterministic* : Also
+- [apps/clocked_izhikevich](apps/clock_ishikevich) : *Deterministic* : Also
   an izhikevich neural network, but this time with a global clock device.
   The whole thing moves forward in lock-step, but needs 1:n and n:1 communiciation
   to the clock.
 
-- (apps/clock_tree)[apps/clock_tree) : *Deterministic* : A simple benchmark, with three devices:
+- [apps/clock_tree](apps/clock_tree) : *Deterministic* : A simple benchmark, with three devices:
   root, branch, and leaf. The root node is a central clock which generates ticks.
   The ticks are fanned out by the branches to the leaves, which reflect them back
   as tocks. Once the clock has received all the tocks, it ticks again.
