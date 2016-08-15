@@ -7,11 +7,15 @@ CPPFLAGS += $(shell pkg-config --cflags libxml++-2.6)
 
 LDFLAGS += $(shell pkg-config --libs libxml++-2.6)
 
+ifeq ($(OS),Windows_NT)
+SO_CPPFLAGS += -shared
+else
 SO_CPPFLAGS += -dynamiclib -fPIC
+endif
 
 CPPFLAGS += -std=c++11 -g
 
-CPPFLAGS += -DNDEBUG=1 -O2
+CPPFLAGS += -O2
 
 TRANG = external/trang-20091111/trang.jar
 JING = external/jing-20081028/bin/jing.jar
@@ -27,8 +31,8 @@ $(JING) : external/jing-20081028.zip
 	(cd external && unzip -o jing-20081028.zip)
 	touch $@
 
-rapidjson : external/rapidjson.zip
-	(cd external && unzip -o rapidjson)
+rapidjson : external/rapidjson-master.zip
+	(cd external && unzip -o rapidjson-master)
 
 CPPFLAGS += -I external/rapidjson-master/include
 
@@ -47,10 +51,10 @@ regenerate-random :
 	python3.4 tools/create_random_graph.py 8 > test/virtual/random4.xml
 
 
-output/%.checked : test/virtual/%.xml $(JING) master/virtual-graph-schema.rnc derived/virtual-graph-schema.xsd
-	java -jar $(JING) -c master/virtual-graph-schema.rnc test/virtual/$*.xml
-	java -jar $(JING) derived/virtual-graph-schema.xsd test/virtual/$*.xml
-	$(PYTHON) tools/print_graph_properties.py < test/virtual/$*.xml
+%.checked : %.xml $(JING) master/virtual-graph-schema.rnc derived/virtual-graph-schema.xsd
+	java -jar $(JING) -c master/virtual-graph-schema.rnc $*.xml
+	java -jar $(JING) derived/virtual-graph-schema.xsd $*.xml
+	$(PYTHON) tools/print_graph_properties.py < $*.xml
 	touch $@
 
 validate-virtual/% : output/%.checked
@@ -80,6 +84,31 @@ bin/epoch_sim : tools/epoch_sim.cpp
 	mkdir -p bin
 	$(CXX) $(CPPFLAGS) $< -o $@ $(LDFLAGS) $(LDLIBS)
 
+
+define provider_rules_template
+
+providers/$1.graph.cpp : apps/$1/$1_graph_type.xml
+	mkdir -p providers
+	$$(PYTHON) tools/render_graph_as_cpp.py < apps/$1/$1_graph_type.xml > providers/$1.graph.cpp
+
+providers/$1.graph.so : providers/$1.graph.cpp
+	g++ $$(CPPFLAGS) $$(SO_CPPFLAGS) $$< -o $$@ $$(LDFLAGS)
+
+$1_provider : providers/$1.graph.so
+
+all_providers : clock_tree_provider
+
+endef
+
+include apps/clock_tree/makefile.inc
+include apps/ising_spin/makefile.inc
+include apps/clocked_izhikevich/makefile.inc
+include apps/gals_izhikevich/makefile.inc
+include apps/gals_heat/makefile.inc
+
+demos : $(ALL_DEMOS)
+
+
 all_tools : bin/print_graph_properties bin/epoch_sim
 
 
@@ -90,7 +119,17 @@ tt :
 
 validate-virtual : $(foreach t,$(VIRTUAL_ALL_TESTS),validate-virtual/$(t) output/virtual/$(t).svg output/virtual/$(t).graph.cpp output/virtual/$(t).graph.so)
 
+test : $(ALL_TESTS)
+
+demo : $(ALL_DEMOS)
+
 clean :
 	-find . -iname '*~' -exec rm {} ';'  # Get rid of emacs temporaries
-	-rm output/virtual/*.dot output/virtual/*.svg
+	-rm -rf output/virtual/*.dot output/virtual/*.svg
+	-rm -rf demos/*
+	-rm -rf providers/*
+	-rm -rf external/trang-20091111
+	-rm -rf external/jing-20081028
+	-rm -rf rapidjson-master
+
 

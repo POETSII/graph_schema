@@ -41,49 +41,10 @@ def render_typed_data_init(proto,dst,prefix):
                 dst.write('{}{}[{}] = {};\n'.format(prefix,proto.name,i,proto.type.value))
             else:
                 dst.write('{}{}[{}] = 0;\n'.format(prefix,proto.name,i))
-            
+
     else:
         raise RuntimeError("Unknown data type {}.".format(type(proto)))
 
-def render_typed_data_load_v2(proto,dst,elt,prefix,indent):
-    """This version walks over the xml and puts things in the right place,
-       rather than searching for each thing, as it is much more efficient."""
-    if proto is None:
-        pass
-    if not isinstance(proto,TupleTypedDataSpec):
-        raise RuntimeError("This must be passed a tuple.")
-
-    dst.write('{}{{'.format(indent))
-    dst.write('{}  auto nodes={}->get_children();\n'.format(indent, elt))
-    dst.write('{}  for(auto &child : nodes){{\n'.format(indent))
-    dst.write('{}    xmlpp::Element *childPtr=(xmlpp::Element*)child;\n'.format(indent))
-    dst.write('{}    auto name=childPtr->get_attribute_value("name");\n'.format(indent))
-    # If all names are ascii, we can use much faster strcmp. This helps quite a bit on loading
-    dst.write('{}    assert(name.is_ascii());\n'.format(indent))
-    for child in proto.elements_by_index:
-        dst.write('{}    if(!strcmp(name.c_str(),"{}")){{\n'.format(indent, child.name))
-        if isinstance(child,ScalarTypedDataSpec):
-            dst.write('{}      std::stringstream value(childPtr->get_attribute_value("value"));\n'.format(indent))
-            dst.write('{}      value>>{}{};\n'.format(indent, prefix, child.name))
-        else:
-            render_typed_data_load_v2(child, dst, "childPtr", prefix+child.name+".", indent+"      ")
-        dst.write('{}    }}'.format(indent))
-    dst.write('{}  }}\n'.format(indent))
-    dst.write('{}}}'.format(indent))
-
-def render_typed_data_load_v3(proto,dst,elt,prefix,indent):
-    """Now we are loading JSON fragments... badly"""
-    if proto is None:
-        pass
-    if not isinstance(proto,TupleTypedDataSpec):
-        raise RuntimeError("This must be passed a tuple.")
-    dst.write('{}{{'.format(indent))
-    dst.write('{}  auto text=elt->get_child_text()->get_content();\n'.format(indent))
-    dst.write('{}  JSONEventsWriter writer;\n'.format(indent))
-    for elt in proto.elements_by_index:
-        dst.write('{}  writer.bind("{}",{}{});\n'.format(indent, elt.name, prefix, elt.name))
-    dst.write('{}  JSONParser(text.c_str(),writer);\n'.format(indent))
-    dst.write('{}}}'.format(indent))
 
 def render_typed_data_load_v4_tuple(proto,dst,prefix,indent):
     assert isinstance(proto,TupleTypedDataSpec)
@@ -92,16 +53,12 @@ def render_typed_data_load_v4_tuple(proto,dst,prefix,indent):
         dst.write('{}  const rapidjson::Value &n=document["{}"];\n'.format(indent,elt.name))
         if isinstance(elt,ScalarTypedDataSpec):
             if elt.type=="int32_t":
-                dst.write('{}  assert(n.IsInt());\n'.format(indent))
                 dst.write('{}  {}{}=n.GetInt();\n'.format(indent, prefix, elt.name))
             elif elt.type=="uint32_t":
-                dst.write('{}  assert(n.IsUint());\n'.format(indent))
                 dst.write('{}  {}{}=n.GetUint();\n'.format(indent, prefix, elt.name))
             elif elt.type=="bool":
-                dst.write('{}  assert(n.IsBool());\n'.format(indent))
                 dst.write('{}  {}{}=n.GetBool();\n'.format(indent, prefix, elt.name))
             elif elt.type=="float":
-                dst.write('{}  assert(n.IsDouble());\n'.format(indent))
                 dst.write('{}  {}{}=n.GetDouble();\n'.format(indent, prefix, elt.name))
             else:
                 raise RuntimeError("Unknown scalar data type.")
@@ -128,8 +85,8 @@ def render_typed_data_load_v4_tuple(proto,dst,prefix,indent):
         else:
             raise RuntimeError("Unknown data type.")
         dst.write('{}  }}\n'.format(indent))
-    
-    
+
+
 def render_typed_data_load_v4(proto,dst,elt,prefix,indent):
     if proto is None:
         pass
@@ -141,9 +98,41 @@ def render_typed_data_load_v4(proto,dst,elt,prefix,indent):
     dst.write('{}  document.Parse(text.c_str());\n'.format(indent))
     dst.write('{}  assert(document.IsObject());\n'.format(indent))
     render_typed_data_load_v4_tuple(proto,dst,prefix,indent)
-    dst.write('{}}}'.format(indent))    
-    
-    
+    dst.write('{}}}'.format(indent))
+
+def render_typed_data_save_v4(proto,dst,elt,prefix,indent):
+    if proto is None:
+        pass
+    if not isinstance(proto,TupleTypedDataSpec):
+        raise RuntimeError("This must be passed a tuple.")
+    dst.write('{}{{'.format(indent))
+    dst.write('{}  rapidjson::Document document;\n'.format(indent))
+    dst.write('{}  auto& alloc = d.GetAllocator();'.format(indent))
+    render_typed_data_save_v4_tuple(proto,dst,prefix,indent)
+    dst.write('{}}}'.format(indent))
+
+def render_typed_data_save(proto, dst, prefix, indent):
+    if isinstance(proto,ScalarTypedDataSpec):
+        dst.write('{}if({}{} != {}){{ if(sep){{ dst<<","; }}; dst<<"\\"{}\\":"<<{}{}; sep=true; }}\n'.format(indent, prefix, proto.name, proto.value, proto.name, prefix, proto.name))
+    elif isinstance(proto,ArrayTypedDataSpec):
+        assert isinstance(proto.type,ScalarTypedDataSpec), "Haven't implemented non-scalar arrays yet."
+        dst.write('{}if(sep){{ dst<<","; }}; dst<<"\\"{}\\":[";'.format(indent,proto.name))
+        for i in range(proto.length):
+            if i>0:
+                dst.write('{}  dst<<",";\n'.format(indent))
+            dst.write('{}  dst<<{}{}[{}];\n'.format(indent, prefix, proto.name, i))
+        dst.write('{}dst<<"]"; sep=true;\n'.format(indent))
+    elif isinstance(proto,TupleTypedDataSpec):
+        dst.write('{}if(sep){ dst<<","; } sep=true;\n'.format(indent))
+        dst.write('{}{{ bool sep=false;\n'.format(indent))
+        dst.write('{}dst<<"\\"{}\\"":{{"'.format(indent,proto.name))
+        for elt in proto.elements_by_index:
+            render_typed_data_save(elt, dst, prefix+"."+proto.name, indent+"  ")
+        dst.write('{}dst<<"}}"'.format(indent))
+        dst.write('{}}}'.format(indent))
+    else:
+        assert False, "Unknown data-type"
+
 def render_typed_data_as_spec(proto,name,elt_name,dst):
     dst.write("struct {} : typed_data_t{{\n".format(name))
     if proto:
@@ -172,19 +161,28 @@ def render_typed_data_as_spec(proto,name,elt_name,dst):
         dst.write("    std::shared_ptr<{}> res(new {});\n".format(name,name))
         for elt in proto.elements_by_index:
             render_typed_data_init(elt,dst,"    res->")
-        #dst.write('    fprintf(stderr, "   Loading {}_Spec, elt=%p\\n",elt);'.format(name))
         dst.write("    if(elt){\n")
-        if False:
-            for elt in proto.elements_by_index:
-                render_typed_data_load(elt, dst, "elt", "res->",  "      ")
-        else:
-            render_typed_data_load_v4(proto, dst, "elt", "res->", "      ")
+        render_typed_data_load_v4(proto, dst, "elt", "res->", "      ")
         dst.write("    }\n")
         dst.write("    return res;\n")
     dst.write("  }\n")
     dst.write("  void save(xmlpp::Element *parent, const TypedDataPtr &data) const override {\n")
     dst.write('    throw std::runtime_error("Not implemented.");\n')
     dst.write("  }\n")
+    dst.write("  std::string toJSON(const TypedDataPtr &data) const override {\n")
+    if proto is None:
+        dst.write('    return std::string();\n')
+    else:
+        dst.write("    const {0} *src=(const {0} *)data.get();\n".format(name));
+        dst.write("    if(!src){ return std::string(); }\n")
+        dst.write("    std::stringstream dst;\n")
+        dst.write("    bool sep=false;\n")
+        dst.write('    dst<<"{";\n')
+        for elt in proto.elements_by_index:
+            render_typed_data_save(elt, dst, "src->", "    ")
+        dst.write('    dst<<"}";\n')
+        dst.write("    return dst.str();\n")
+    dst.write('  }\n')
     dst.write("};\n")
     dst.write("TypedDataSpecPtr {}_Spec_get(){{\n".format(name))
     dst.write("  static TypedDataSpecPtr singleton(new {}_Spec);\n".format(name))
@@ -200,7 +198,7 @@ def render_input_port_as_cpp(ip,dst):
             break
 
     dst.write('EdgeTypePtr {}_Spec_get();\n\n'.format(ip.edge_type.id))
-        
+
     dst.write("class {}_{}_Spec : public InputPortImpl {{\n".format(dt.id,ip.name))
     dst.write('  public: {}_{}_Spec() : InputPortImpl({}_Spec_get, "{}", {}, {}_Spec_get()) {{}} \n'.format(dt.id,ip.name, dt.id, ip.name, index, ip.edge_type.id))
     dst.write("""  virtual void onReceive(
@@ -224,10 +222,12 @@ def render_input_port_as_cpp(ip,dst):
         dst.write('    bool &requestSend_{}=requestSend[{}];\n'.format(dt.outputs_by_index[i].name, i))
 
     dst.write('    // Begin custom handler\n')
+    if ip.source_line and ip.source_file: 
+        dst.write('#line {} "{}"\n'.format(ip.source_line,ip.source_file))
     for line in ip.receive_handler.splitlines():
         dst.write('    {}\n'.format(line))
     dst.write('    // End custom handler\n')
-    
+
     dst.write('  }\n')
     dst.write("};\n")
     dst.write("InputPortPtr {}_{}_Spec_get(){{\n".format(dt.id,ip.name))
@@ -243,7 +243,7 @@ def render_output_port_as_cpp(op,dst):
             break
 
     dst.write('EdgeTypePtr {}_Spec_get();\n\n'.format(op.edge_type.id))
-        
+
     dst.write("class {}_{}_Spec : public OutputPortImpl {{\n".format(dt.id,op.name))
     dst.write('  public: {}_{}_Spec() : OutputPortImpl({}_Spec_get, "{}", {}, {}_Spec_get()) {{}} \n'.format(dt.id,op.name, dt.id, op.name, index, op.edge_type.id))
     dst.write("""    virtual void onSend(
@@ -264,10 +264,12 @@ def render_output_port_as_cpp(op,dst):
     dst.write('    HandlerLogImpl handler_log(orchestrator);\n')
 
     dst.write('    // Begin custom handler\n')
+    if op.source_line and op.source_file: 
+        dst.write('#line {} "{}"\n'.format(op.source_line,op.source_file))
     for line in op.send_handler.splitlines():
         dst.write('    {}\n'.format(line))
     dst.write('    // End custom handler\n')
-    
+
     dst.write('  }\n')
     dst.write("};\n")
     dst.write("OutputPortPtr {}_{}_Spec_get(){{\n".format(dt.id,op.name))
@@ -290,7 +292,7 @@ def render_edge_type_as_cpp(et,dst):
     dst.write("  return singleton;\n")
     dst.write("}\n")
     registrationStatements.append('registry->registerEdgeType({}_Spec_get());'.format(et.id,et.id))
-    
+
 def render_device_type_as_cpp_fwd(dt,dst):
     render_typed_data_as_spec(dt.properties, "{}_properties_t".format(dt.id), "pp:Properties", dst)
     render_typed_data_as_spec(dt.state, "{}_state_t".format(dt.id), "pp:State", dst)
@@ -303,7 +305,7 @@ def render_device_type_as_cpp(dt,dst):
 
     for op in dt.outputs.values():
         render_output_port_as_cpp(op,dst)
-    
+
     dst.write("class {}_Spec : public DeviceTypeImpl {{\n".format(dt.id))
     dst.write("public:\n")
     dst.write("  {}_Spec()\n".format(dt.id))
@@ -332,7 +334,7 @@ def render_device_type_as_cpp(dt,dst):
     dst.write("  static DeviceTypePtr singleton(new {}_Spec);\n".format(dt.id))
     dst.write("  return singleton;\n")
     dst.write("}\n")
-    registrationStatements.append('registry->registerDeviceType({}_Spec_get());'.format(dt.id,dt.id))    
+    registrationStatements.append('registry->registerDeviceType({}_Spec_get());'.format(dt.id,dt.id))
 
 def render_graph_as_cpp(graph,dst):
     dst.write('#include "graph_impl.hpp"\n')
@@ -341,7 +343,7 @@ def render_graph_as_cpp(graph,dst):
 
     gt=graph
 
- 
+
     render_typed_data_as_spec(gt.properties, "{}_properties_t".format(gt.id),"pp:Properties",dst)
 
     dst.write("/////////////////////////////////\n")
@@ -354,7 +356,7 @@ def render_graph_as_cpp(graph,dst):
 
     if gt.shared_code:
         for code in gt.shared_code:
-            dst.write(code)    
+            dst.write(code)
 
     dst.write("/////////////////////////////////\n")
     dst.write("// DEF\n")
@@ -376,10 +378,10 @@ def render_graph_as_cpp(graph,dst):
     dst.write("  static GraphTypePtr singleton(new {}_Spec);\n".format(gt.id))
     dst.write("  return singleton;\n")
     dst.write("}\n")
-    
+
 
     registrationStatements.append('registry->registerGraphType({}_Spec_get());'.format(gt.id))
-    
+
 
     dst.write('extern "C" void registerGraphTypes(Registry *registry){\n')
     for r in registrationStatements:

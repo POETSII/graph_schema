@@ -2,7 +2,11 @@
 #define graph_hpp
 
 #include <libxml++/nodes/element.h>
+#include "libxml/xmlwriter.h"
 #include <cstdarg>
+
+#include <memory>
+#include <cstring>
 
 /* What is the point of all this?
 
@@ -60,10 +64,16 @@ class TypedDataSpec
 public:
   virtual ~TypedDataSpec()
   {}
-  
+
   virtual TypedDataPtr create() const=0;
+
   virtual TypedDataPtr load(xmlpp::Element *parent) const=0;
+
   virtual void save(xmlpp::Element *parent, const TypedDataPtr &data) const=0;
+
+  virtual std::string toJSON(const TypedDataPtr &data) const=0;
+
+
 
   virtual uint64_t getTypeHash() const
   {
@@ -80,10 +90,10 @@ class EdgeType
 public:
   virtual ~EdgeType()
   {}
-  
+
   static void registerEdgeType(const std::string &name, EdgeTypePtr dev);
   static EdgeTypePtr lookupEdgeType(const std::string &name);
-  
+
   virtual const std::string &getId() const=0;
 
   virtual const TypedDataSpecPtr &getPropertiesSpec() const=0;
@@ -96,9 +106,9 @@ class Port
 public:
   virtual ~Port()
   {}
-  
+
   virtual const DeviceTypePtr &getDeviceType() const=0;
-  
+
   virtual const std::string &getName() const=0;
   virtual unsigned getIndex() const=0;
 
@@ -107,7 +117,7 @@ public:
 typedef std::shared_ptr<Port> PortPtr;
 
 /* This provides and OS level services to the handler that it might need,
-   such as logging. 
+   such as logging.
 
    These services should be seen as non-functional, and it is legal to
    not actually pass in an orchestrator.
@@ -121,7 +131,7 @@ class OrchestratorServices
 public:
   virtual ~OrchestratorServices()
   {}
-  
+
   // Current logging level being used by the orchestrator
   // (used to allow handler to disable logging slightly more efficiently)
   virtual unsigned getLogLevel() const =0;
@@ -167,7 +177,7 @@ class DeviceType
 public:
   virtual ~DeviceType()
   {}
-  
+
   virtual const std::string &getId() const=0;
 
   virtual const TypedDataSpecPtr &getPropertiesSpec() const=0;
@@ -189,7 +199,7 @@ class GraphType
 public:
   virtual ~GraphType()
   {}
-  
+
   virtual const std::string &getId() const=0;
 
   virtual unsigned getNativeDimension() const=0;
@@ -200,7 +210,7 @@ public:
   virtual const DeviceTypePtr &getDeviceType(unsigned index) const=0;
   virtual const DeviceTypePtr &getDeviceType(const std::string &name) const=0;
   virtual const std::vector<DeviceTypePtr> &getDeviceTypes() const=0;
-  
+
   virtual unsigned getEdgeTypeCount() const=0;
   virtual const EdgeTypePtr &getEdgeType(unsigned index) const=0;
   virtual const EdgeTypePtr &getEdgeType(const std::string &name) const=0;
@@ -214,10 +224,10 @@ class Registry
 public:
   virtual ~Registry()
   {}
-  
+
   virtual void registerGraphType(GraphTypePtr graph) =0;
   virtual GraphTypePtr lookupGraphType(const std::string &id) const=0;
-  
+
   virtual void registerEdgeType(EdgeTypePtr edge) =0;
   virtual EdgeTypePtr lookupEdgeType(const std::string &id) const=0;
 
@@ -236,10 +246,10 @@ class GraphLoadEvents
 public:
   virtual ~GraphLoadEvents()
   {}
-  
+
   virtual void onGraphType(const GraphTypePtr &graph)
   {}
-  
+
   virtual void onDeviceType(const DeviceTypePtr &device)
   {}
 
@@ -248,7 +258,7 @@ public:
 
   //! Tells the consumer that a new graph is starting
   virtual uint64_t onGraphInstance(const GraphTypePtr &graph, const std::string &id, const TypedDataPtr &properties) =0;
-  
+
   // Tells the consumer that a new instance is being added
   /*! The return value is a unique identifier that means something
     to the consumer. */

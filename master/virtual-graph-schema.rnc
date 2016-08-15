@@ -13,22 +13,37 @@ grammar {
   graphType =
     element GraphType {
       ## Identifier or name for the graph.
-      attribute id { string },
+      attribute id { string }
+
+      &
 
       ## Gives the native dimension of the problem, if there is one. Zero if not set of if not applicable.
       ## For example in a 2D heat equation this would be 2.
-      attribute native_dimension { xsd:integer } ? ,
+      attribute nativeDimension { xsd:integer } ?
+
+      &
+
+      element SharedCode {
+        text
+      } ?
+
+      &
 
       ## Global properties that are shared with all nodes at run-time. read-only.
       element Properties {
         typedDataSpec *
-      } ? ,
+      } ?
+
+      &
 
       ## Establishes the different types of edges that could exist in the graph,
       ## and any properties or state associated with each edge type
       element EdgeTypes {
         edgeType *
-      },
+      }
+
+      &
+
       ## This establishes the shapes of devices, though not the internals.
       element DeviceTypes {
         deviceType *
@@ -198,7 +213,7 @@ grammar {
       ## If the device has a natural location (e.g. in the problem space), then this gives it.
       ## The format is decimal values seperated by commas. The number of values should follow
       ## the native dimension of the graph type.
-      attribute native_location { string } ?,
+      attribute nativeLocation { string } ?,
 
       ## Read-only properties associated with this device instance.
       ## This element must not exist if the device type has no properties
@@ -237,12 +252,12 @@ grammar {
   ## A typed data specification consists of one or more elements
   typedDataSpec = typedDataSpecElement +
 
-  typedDataSpecElement = 
+  typedDataSpecElement =
   ## This represents the prototype for a typed piece of data, along with
   ## the default values
   (
     element Scalar {
-      attribute type { "int32_t" | "float" | "bool" },
+      attribute type { "int32_t" | "uint32_t" | "float" | "bool" },
       attribute name { string },
       attribute value { string } ?
     }
@@ -250,6 +265,14 @@ grammar {
     element Tuple {
         attribute name { text },
         typedDataSpecElement +
+    }
+    |
+    element Array {
+        attribute name { text },
+	attribute length { text },
+
+        ## TODO : this should be made more general. Currently only arrays of scalars are allowed
+	attribute type { "int32_t" | "uint32_t" | "float" | "bool" }
     }
   )
 
@@ -263,9 +286,9 @@ grammar {
   ## Any relationship to JSON is entirely intentional. I realise there is an irony
   ## in using XML on the outside and JSON on the inside - personally I (DBT) prefer the
   ## self-checking structure of XML at the large scale.
-  typedDataValue = 
+  typedDataValue =
     text
-  
+
   graphSnapshot = element GraphSnapshot {
     attribute graphId  { string },
 
@@ -275,27 +298,34 @@ grammar {
     ## The integer sequence number within the run
     attribute sequenceNumber  { xsd:integer },
 
-    ## The "world-time" of the simulator
+    ## The "world-time" of the simulator, whatever that may mean
     attribute worldTime { xsd:float },
 
-    element DeviceSnapshot {
+    element DevS {
     	    attribute id  { string },
 
-	    element S { typedDataValue } ?
+            ## A hexadecimal value that encodes whether each port is ready to send.
+            ## The LSB encodes the port with index 0, and so on
+            attribute rts { string },
+
+
+          element S { typedDataValue } ?
     },
 
-    element EdgeSnapshot {
+    element EdgeS {
     	    # id of the form:  "dstDeviceId:dstPortName-srcDeviceId:srcPortName"
     	    attribute id  { string },
 
 	    # How many times has this edge fired?
-	    attribute firedCount { xsd:integer } ? , 
+	    attribute firings { xsd:integer } ? ,
 
 	    element S { typedDataValue } ? ,
 
 	    ## Any messages that are in flight
-	    element InFlight {
-	    	    element Message { typedDataValue } *
+	    element Q {
+	    	    element M {
+                  typedDataValue
+                } +
 	    } ?
     }
 

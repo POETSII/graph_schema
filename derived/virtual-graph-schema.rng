@@ -18,38 +18,45 @@
   </start>
   <define name="graphType">
     <element name="GraphType">
-      <attribute name="id">
-        <a:documentation>Identifier or name for the graph.</a:documentation>
-        <data type="string" datatypeLibrary=""/>
-      </attribute>
-      <optional>
-        <attribute name="native_dimension">
-          <a:documentation>Gives the native dimension of the problem, if there is one. Zero if not set of if not applicable.
-For example in a 2D heat equation this would be 2.</a:documentation>
-          <data type="integer"/>
+      <interleave>
+        <attribute name="id">
+          <a:documentation>Identifier or name for the graph.</a:documentation>
+          <data type="string" datatypeLibrary=""/>
         </attribute>
-      </optional>
-      <optional>
-        <element name="Properties">
-          <a:documentation>Global properties that are shared with all nodes at run-time. read-only.</a:documentation>
+        <optional>
+          <attribute name="nativeDimension">
+            <a:documentation>Gives the native dimension of the problem, if there is one. Zero if not set of if not applicable.
+For example in a 2D heat equation this would be 2.</a:documentation>
+            <data type="integer"/>
+          </attribute>
+        </optional>
+        <optional>
+          <element name="SharedCode">
+            <text/>
+          </element>
+        </optional>
+        <optional>
+          <element name="Properties">
+            <a:documentation>Global properties that are shared with all nodes at run-time. read-only.</a:documentation>
+            <zeroOrMore>
+              <ref name="typedDataSpec"/>
+            </zeroOrMore>
+          </element>
+        </optional>
+        <element name="EdgeTypes">
+          <a:documentation>Establishes the different types of edges that could exist in the graph,
+and any properties or state associated with each edge type</a:documentation>
           <zeroOrMore>
-            <ref name="typedDataSpec"/>
+            <ref name="edgeType"/>
           </zeroOrMore>
         </element>
-      </optional>
-      <element name="EdgeTypes">
-        <a:documentation>Establishes the different types of edges that could exist in the graph,
-and any properties or state associated with each edge type</a:documentation>
-        <zeroOrMore>
-          <ref name="edgeType"/>
-        </zeroOrMore>
-      </element>
-      <element name="DeviceTypes">
-        <a:documentation>This establishes the shapes of devices, though not the internals.</a:documentation>
-        <zeroOrMore>
-          <ref name="deviceType"/>
-        </zeroOrMore>
-      </element>
+        <element name="DeviceTypes">
+          <a:documentation>This establishes the shapes of devices, though not the internals.</a:documentation>
+          <zeroOrMore>
+            <ref name="deviceType"/>
+          </zeroOrMore>
+        </element>
+      </interleave>
     </element>
   </define>
   <define name="graphTypeReference">
@@ -255,7 +262,7 @@ executes, but the handler can set it high again if it wants.</a:documentation>
         <data type="string" datatypeLibrary=""/>
       </attribute>
       <optional>
-        <attribute name="native_location">
+        <attribute name="nativeLocation">
           <a:documentation>If the device has a natural location (e.g. in the problem space), then this gives it.
 The format is decimal values seperated by commas. The number of values should follow
 the native dimension of the graph type.</a:documentation>
@@ -329,6 +336,7 @@ the default values</a:documentation>
         <attribute name="type">
           <choice>
             <value>int32_t</value>
+            <value>uint32_t</value>
             <value>float</value>
             <value>bool</value>
           </choice>
@@ -347,6 +355,19 @@ the default values</a:documentation>
         <oneOrMore>
           <ref name="typedDataSpecElement"/>
         </oneOrMore>
+      </element>
+      <element name="Array">
+        <attribute name="name"/>
+        <attribute name="length"/>
+        <attribute name="type">
+          <a:documentation>TODO : this should be made more general. Currently only arrays of scalars are allowed</a:documentation>
+          <choice>
+            <value>int32_t</value>
+            <value>uint32_t</value>
+            <value>float</value>
+            <value>bool</value>
+          </choice>
+        </attribute>
       </element>
     </choice>
   </define>
@@ -377,11 +398,16 @@ self-checking structure of XML at the large scale.</a:documentation>
         <data type="integer"/>
       </attribute>
       <attribute name="worldTime">
-        <a:documentation>The "world-time" of the simulator</a:documentation>
+        <a:documentation>The "world-time" of the simulator, whatever that may mean</a:documentation>
         <data type="float"/>
       </attribute>
-      <element name="DeviceSnapshot">
+      <element name="DevS">
         <attribute name="id">
+          <data type="string" datatypeLibrary=""/>
+        </attribute>
+        <attribute name="rts">
+          <a:documentation>A hexadecimal value that encodes whether each port is ready to send.
+The LSB encodes the port with index 0, and so on</a:documentation>
           <data type="string" datatypeLibrary=""/>
         </attribute>
         <optional>
@@ -390,14 +416,14 @@ self-checking structure of XML at the large scale.</a:documentation>
           </element>
         </optional>
       </element>
-      <element name="EdgeSnapshot">
+      <element name="EdgeS">
         <!-- id of the form:  "dstDeviceId:dstPortName-srcDeviceId:srcPortName" -->
         <attribute name="id">
           <data type="string" datatypeLibrary=""/>
         </attribute>
         <optional>
           <!-- How many times has this edge fired? -->
-          <attribute name="firedCount">
+          <attribute name="firings">
             <data type="integer"/>
           </attribute>
         </optional>
@@ -407,13 +433,13 @@ self-checking structure of XML at the large scale.</a:documentation>
           </element>
         </optional>
         <optional>
-          <element name="InFlight">
+          <element name="Q">
             <a:documentation>Any messages that are in flight</a:documentation>
-            <zeroOrMore>
-              <element name="Message">
+            <oneOrMore>
+              <element name="M">
                 <ref name="typedDataValue"/>
               </element>
-            </zeroOrMore>
+            </oneOrMore>
           </element>
         </optional>
       </element>

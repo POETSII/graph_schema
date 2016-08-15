@@ -44,7 +44,9 @@ def get_child_text(node,name):
     n=node.find(name,ns)
     if n is None:
         raise XMLSyntaxError("No child text node called {}".format(name),node)
-    return n.text
+    text=n.text
+    line=n.sourceline
+    return (text,line)
 
 
 def load_typed_data_spec(dt):
@@ -131,7 +133,7 @@ def load_edge_type(parent,dt):
         raise XMLSyntaxError("Error while parsing edge {}".format(id),dt,e)
 
 
-def load_device_type(graph,dtNode):
+def load_device_type(graph,dtNode,sourceFile="<graph-spec-file>"):
     id=get_attrib(dtNode,"id")
 
     state=None
@@ -152,8 +154,8 @@ def load_device_type(graph,dtNode):
         if edge_type_id not in graph.edge_types:
             raise XMLSyntaxError("Unknown edgeTypeId {}".format(edge_type_id),p)
         edge_type=graph.edge_types[edge_type_id]
-        handler=get_child_text(p,"p:OnReceive")
-        dt.add_input(name,edge_type,handler)
+        (handler,sourceLine)=get_child_text(p,"p:OnReceive")
+        dt.add_input(name,edge_type,handler,sourceFile,sourceLine)
 
     for p in dtNode.findall("p:OutputPort",ns):
         name=get_attrib(p,"name")
@@ -161,8 +163,8 @@ def load_device_type(graph,dtNode):
         if edge_type_id not in graph.edge_types:
             raise XMLSyntaxError("Unknown edgeTypeId {}".format(edge_type_id),p)
         edge_type=graph.edge_types[edge_type_id]
-        handler=get_child_text(p,"p:OnSend")
-        dt.add_output(name,edge_type,handler)
+        (handler,sourceLine)=get_child_text(p,"p:OnSend")
+        dt.add_output(name,edge_type,handler,sourceFile,sourceLine)
 
     return dt            
 
@@ -250,15 +252,15 @@ def split_endpoint(endpoint,node):
 
 def split_path(path,node):
     """Splits a path up into (dstDevice,dstPort,srcDevice,srcPort)"""
-    parts=endpoint.split('<-')
+    parts=path.split('-')
     if len(parts)!=2:
         raise XMLSyntaxError("Path does not contain exactly two endpoints",node)
-    return split_endpoint(parts[0])+split_endpoint(parts[1])
+    return split_endpoint(parts[0],node)+split_endpoint(parts[1],node)
 
 def load_edge_instance(graph,eiNode):
     path=get_attrib_optional(eiNode,"path")
     if path:
-        (dst_device_id,dst_port_name,src_device_id,src_port_name)=split_path(path)
+        (dst_device_id,dst_port_name,src_device_id,src_port_name)=split_path(path,eiNode)
     else:
         dst_device_id=get_attrib(eiNode,"dstDeviceId")
         dst_port_name=get_attrib(eiNode,"dstPortName")
@@ -279,20 +281,21 @@ def load_edge_instance(graph,eiNode):
 def load_graph_instance(graphTypes, graphNode):
     id=get_attrib(graphNode,"id")
     graphTypeId=get_attrib(graphNode,"graphTypeId")
-
-    graph=GraphInstance(id,graphTypes[graphTypeId])
+    graphType=graphTypes[graphTypeId]
 
     properties=None
     propertiesNode=graphNode.find("p:Properties",ns)
     if propertiesNode is not None:
-        assert(len(propertiesNode)==1)
-        properties=load_struct_instance(graph.properties, propertiesNode[0])
+        assert graphType.properties
+        properties=load_struct_instance(graphType.properties, propertiesNode)
 
-    for diNode in graphNode.findall("p:DevI/p:*",ns):
+    graph=GraphInstance(id,graphType,properties)
+
+    for diNode in graphNode.findall("p:DeviceInstances/p:DevI",ns):
         di=load_device_instance(graph,diNode)
         graph.add_device_instance(di)
 
-    for eiNode in graphNode.findall("p:EdgeI/p:*",ns):
+    for eiNode in graphNode.findall("p:EdgeInstances/p:EdgeI",ns):
         ei=load_edge_instance(graph,eiNode)
         graph.add_edge_instance(ei)
 
@@ -315,17 +318,17 @@ def load_graph_types_and_instances(src,basePath=None):
     
     try:
         for gtNode in graphsNode.findall("p:GraphType",ns):
-            sys.stderr.write("Loading graph type")
+            sys.stderr.write("Loading graph type\n")
             gt=load_graph_type(gtNode)
             graphTypes[gt.id]=gt
 
         for gtRefNode in graphsNode.findall("p:GraphTypeReference",ns):
-            sys.stderr.write("Loading graph reference")
+            sys.stderr.write("Loading graph reference\n")
             gt=load_graph_type_reference(gtRefNode,basePath)
             graphTypes[gt.id]=gt
             
         for giNode in graphsNode.findall("p:GraphInstance",ns): 
-            sys.stderr.write("Loading graph")
+            sys.stderr.write("Loading graph\n")
             g=load_graph_instance(graphTypes, giNode)
             graphs[g.id]=g
 

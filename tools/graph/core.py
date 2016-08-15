@@ -1,3 +1,5 @@
+import sys
+
 class GraphDescriptionError(Exception):
     def __init__(self,msg):
         Exception.__init__(self,msg)
@@ -40,6 +42,15 @@ class ScalarTypedDataSpec(TypedDataSpec):
             return False
         return True
 
+    def create_default(self):
+        return self.value
+
+    def expand(self,inst):
+        if inst is None:
+            return self.create_default()
+        else:
+            return self._check_value(inst)
+        
     def __str__(self):
         return "{}:{}".format(self.type,self.name,self.value)
 
@@ -72,6 +83,17 @@ class TupleTypedDataSpec(TypedDataSpec):
             acc=acc+"\n"
         return acc+"]"
 
+    def create_default(self):
+        return { e.name:e.create_default() for e in self._elts_by_index  }
+
+    def expand(self,inst):
+        if inst is None:
+            return self.create_default()
+        assert isinstance(inst,dict), "Want to expand dict, got '{}'".format(inst)
+        for e in self._elts_by_index:
+            inst[e.name]=e.expand(inst.get(e.name,None))
+        return inst
+
     def is_refinement_compatible(self,inst):
         if inst is None:
             return True;
@@ -103,6 +125,18 @@ class ArrayTypedDataSpec(TypedDataSpec):
         
         return "Array:{}[{}*{}]\n".format(self.name,self.types,self.length)
 
+    def create_default(self):
+        return [self.type.create_default() for i in range(self.length)]
+
+    def expand(self,inst):
+        if inst is None:
+            return self.create_default()
+        assert isinstance(inst,list)
+        assert len(inst)==self.length
+        for i in range(self.length):
+            inst[i]=self.type.expand(inst[i])
+        return inst
+
     def is_refinement_compatible(self,inst):
         if inst is None:
             return True;
@@ -120,6 +154,18 @@ class ArrayTypedDataSpec(TypedDataSpec):
         return True
 
 
+def create_default_typed_data(proto):
+    if proto is None:
+        return None
+    else:
+        return proto.create_default()
+
+def expand_typed_data(proto,inst):
+    if proto is None:
+        assert inst is None
+        return None
+    else:
+        return proto.expand(inst)
 
 def is_refinement_compatible(proto,inst):
     if proto is None:
@@ -139,21 +185,23 @@ class EdgeType(object):
     
 
 class Port(object):
-    def __init__(self,parent,name,edge_type):
+    def __init__(self,parent,name,edge_type,source_file,source_line):
         self.parent=parent
         self.name=name
         self.edge_type=edge_type
+        self.source_file=source_file
+        self.source_line=source_line
 
     
 class InputPort(Port):
-    def __init__(self,parent,name,edge_type,receive_handler):
-        Port.__init__(self,parent,name,edge_type)
+    def __init__(self,parent,name,edge_type,receive_handler,source_file=None,source_line=None):
+        Port.__init__(self,parent,name,edge_type,source_file,source_line)
         self.receive_handler=receive_handler
 
     
 class OutputPort(Port):
-    def __init__(self,parent,name,edge_type,send_handler):
-        Port.__init__(self,parent,name,edge_type)
+    def __init__(self,parent,name,edge_type,send_handler,source_file,source_line):
+        Port.__init__(self,parent,name,edge_type,source_file,source_line)
         self.send_handler=send_handler
     
             
@@ -169,26 +217,26 @@ class DeviceType(object):
         self.outputs_by_index=[]
         self.ports={}
 
-    def add_input(self,name,edge_type,receive_handler):
+    def add_input(self,name,edge_type,receive_handler,source_file=None,source_line={}):
         if name in self.ports:
             raise GraphDescriptionError("Duplicate port {} on device type {}".format(name,self.id))
         if edge_type.id not in self.parent.edge_types:
             raise GraphDescriptionError("Unregistered edge type {} on port {} of device type {}".format(edge_type.id,name,self.id))
         if edge_type != self.parent.edge_types[edge_type.id]:
             raise GraphDescriptionError("Incorrect edge type object {} on port {} of device type {}".format(edge_type.id,name,self.id))
-        p=InputPort(self, name, self.parent.edge_types[edge_type.id], receive_handler)
+        p=InputPort(self, name, self.parent.edge_types[edge_type.id], receive_handler, source_file, source_line)
         self.inputs[name]=p
         self.inputs_by_index.append(p)
         self.ports[name]=p
 
-    def add_output(self,name,edge_type,send_handler):
+    def add_output(self,name,edge_type,send_handler,source_file=None,source_line=None):
         if name in self.ports:
             raise GraphDescriptionError("Duplicate port {} on device type {}".format(name,self.id))
         if edge_type.id not in self.parent.edge_types:
             raise GraphDescriptionError("Unregistered edge type {} on port {} of device type {}".format(edge_type.id,name,self.id))
         if edge_type != self.parent.edge_types[edge_type.id]:
             raise GraphDescriptionError("Incorrect edge type object {} on port {} of device type {}".format(edge_type.id,name,self.id))
-        p=OutputPort(self, name, self.parent.edge_types[edge_type.id], send_handler)
+        p=OutputPort(self, name, self.parent.edge_types[edge_type.id], send_handler, source_file, source_line)
         self.outputs[name]=p
         self.outputs_by_index.append(p)
         self.ports[name]=p
@@ -278,8 +326,7 @@ class EdgeInstance(object):
         if not is_refinement_compatible(dst_port.edge_type.properties,properties):
             raise GraphDescriptionError("Properties are not compatible: proto={}, value={}.".format(dst_port.edge_type.properties, properties))
 
-        # We create a local id to ensure uniqueness of edges, but this is not persisted
-        self.id = (dst_device.id,dst_port_name,src_device.id,src_port_name)
+        self.id = dst_device.id+":"+dst_port_name+"-"+src_device.id+":"+src_port_name
         
         self.dst_device=dst_device
         self.src_device=src_device
