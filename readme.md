@@ -55,16 +55,16 @@ the same application-level results independently of the orchestrator. Models tha
 global clock refers to something created by the application, not
 the orchestrator.
 
-- (apps/ising_spin)[apps/ising_spin] : *Deterministic*, *Asynchronous* : This is an asynchronous ising spin model,
+- [apps/ising_spin](apps/ising_spin) : *Deterministic*, *Asynchronous* : This is an asynchronous ising spin model,
   which models magnetic dipole flipping. Each cell moves forwards using random
   increments in time, with the earliest cell in the neighbourhood advancing.
 
-- (apps/gals_heat)[apps/gals_heat] : *Deterministic*, *Asynchronous* : This models a
+- [apps/gals_heat](apps/gals_heat) : *Deterministic*, *Asynchronous* : This models a
   2D DTFD heat equation, with time-varying dirichlet boundaries. All cells within
   a neighbourhood are at time t or t+1 - once the value of all neighbours at time t is
   known, the current cell will move forwards.
 
-- (apps/gals_izhikevich)[apps/gals_izhikevich) : *Asynchronous* : This is
+- [apps/gals_izhikevich](apps/gals_izhikevich) : *Asynchronous* : This is
   an Izhikevich spikiung neural network, using a loose form of local synchronisation
   to manage the rate at which time proceeds. However, it is not very good - it
   does lots of local broadcasting (whether neurons fire or not), and it doesn't
