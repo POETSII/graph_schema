@@ -80,6 +80,12 @@ the orchestrator.
   The ticks are fanned out by the branches to the leaves, which reflect them back
   as tocks. Once the clock has received all the tocks, it ticks again.
 
+Currently all applications are designed to meet the abstract model, which means
+that messages can be arbitrarily delayed or re-ordered, and sending may be
+arbitrarily delayed. However, they are currently all interolerant to any
+kind of loss or error - AFAIK they will all eventually lock-up if any message
+is lost or any device fails.
+
 Tools
 =====
 
