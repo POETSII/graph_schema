@@ -61,7 +61,7 @@ for x in range(0,n):
             nodes[(x,y)]=di
             res.add_device_instance(di)
         elif edgeX != edgeY:
-            props={ "bias":0, "amplitude":1.0, "phase":1, "frequency": 70*dt, "neighbours":1 }
+            props={ "bias":0, "amplitude":1.0, "phase":1, "frequency": 70*dt*((x/float(n))+(y/float(n))), "neighbours":1 }
             di=DeviceInstance(res,"v_{}_{}".format(x,y), dirichletType, [x,y], props)
             nodes[(x,y)]=di
             res.add_device_instance(di)

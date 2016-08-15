@@ -14,14 +14,15 @@ demos/clock_tree/clock_tree_$1.xml : apps/clock_tree/create_clock_tree_instance.
 demos/clock_tree/clock_tree_$1.snap : demos/clock_tree/clock_tree_$1.xml bin/epoch_sim clock_tree_provider demos/clock_tree/clock_tree_$1.checked
 	bin/epoch_sim --max-steps $2 --snapshots 1 $$@  demos/clock_tree/clock_tree_$1.xml
 
-demos/clock_tree/clock_tree_$1.gif : demos/clock_tree/clock_tree_$1.xml demos/clock_tree/clock_tree_$1.snap clock_tree_provider
+demos/clock_tree/clock_tree_$1.mp4 : demos/clock_tree/clock_tree_$1.xml demos/clock_tree/clock_tree_$1.snap clock_tree_provider
 	mkdir -p demos/clock_tree/clock_tree_$1.tmp
 	$(PYTHON) tools/render_graph_as_dot.py demos/clock_tree/clock_tree_$1.xml --snapshots demos/clock_tree/clock_tree_$1.snap --output demos/clock_tree/clock_tree_$1.tmp/out  \
 		$3
 	(cd demos/clock_tree/clock_tree_$1.tmp/  &&  for i in *.dot; do echo $$$$i; neato -Gsize=5,5\! -Gdpi=100 -Tpng $$$$i > $$$$i.png; done )
 	(cd demos/clock_tree/clock_tree_$1.tmp/  && convert -delay 20 -loop 0 *.dot.png ../../clock_tree_$1.gif)
+	(cd demos/clock_tree/clock_tree_$1.tmp/  && ffmpeg -r 10 -i out_%06d.dot.png -c:v libx264 -crf 18 ../clock_$1.mp4)
 	
-clock_tree_demos : demos/clock_tree/clock_tree_$1.gif
+clock_tree_demos : demos/clock_tree/clock_tree_$1.mp4
 
 ALL_DEMOS += clock_tree_demos
 	

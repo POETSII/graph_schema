@@ -17,14 +17,15 @@ demos/gals_izhikevich/gals_izhikevich_$1.snap : demos/gals_izhikevich/gals_izhik
 
 ALL_GALS_IZHIKEVICH_TESTS += demos/gals_izhikevich/gals_izhikevich_$1.snap
 
-demos/gals_izhikevich/gals_izhikevich_$1.gif : demos/gals_izhikevich/gals_izhikevich_$1.xml demos/gals_izhikevich/gals_izhikevich_$1.snap
+demos/gals_izhikevich/gals_izhikevich_$1.mp4 : demos/gals_izhikevich/gals_izhikevich_$1.xml demos/gals_izhikevich/gals_izhikevich_$1.snap
 	mkdir -p demos/gals_izhikevich/gals_izhikevich_$1.tmp
 	$(PYTHON) tools/render_graph_as_dot.py demos/gals_izhikevich/gals_izhikevich_$1.xml --snapshots demos/gals_izhikevich/gals_izhikevich_$1.snap --output demos/gals_izhikevich/gals_izhikevich_$1.tmp/out  \
 		$4
 	(cd demos/gals_izhikevich/gals_izhikevich_$1.tmp/  &&  for i in *.dot; do echo $$$$i; neato -Gsize=5,5\! -Gdpi=100 -Tpng $$$$i > $$$$i.png; done )
 	(cd demos/gals_izhikevich/gals_izhikevich_$1.tmp/  && convert -delay 20 -loop 0 *.dot.png ../gals_izhikevich_$1.gif)
+	(cd demos/gals_izhikevich/gals_izhikevich_$1.tmp/  && ffmpeg -y -r 10 -i out_%06d.dot.png -c:v libx264 -crf 18 ../gals_izhikevich_$1.mp4)	
 	
-ALL_GALS_IZHIKEVICH_DEMOS += demos/gals_izhikevich/gals_izhikevich_$1.gif
+ALL_GALS_IZHIKEVICH_DEMOS += demos/gals_izhikevich/gals_izhikevich_$1.mp4
 	
 endef
 
@@ -39,7 +40,7 @@ GALS_IZHIKEVICH_FILTERS_I = \
 
 
 
-$(eval $(call gals_izhikevich_instance_template,8_2_10,10000,$(GALS_IZHIKEVICH_FILTERS)))
+$(eval $(call gals_izhikevich_instance_template,8_2_10,100,10000,$(GALS_IZHIKEVICH_FILTERS)))
 
 $(eval $(call gals_izhikevich_instance_template,50_10_20,1,100,$(GALS_IZHIKEVICH_FILTERS_I)))
 $(eval $(call gals_izhikevich_instance_template,50_10_60,100,10000,$(GALS_IZHIKEVICH_FILTERS)))

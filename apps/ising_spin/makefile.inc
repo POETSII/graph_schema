@@ -20,8 +20,9 @@ demos/ising_spin/ising_spin_$1.gif : demos/ising_spin/ising_spin_$1.xml demos/is
 	mkdir -p demos/ising_spin/ising_spin_$1.tmp
 	$(PYTHON) tools/render_graph_as_dot.py demos/ising_spin/ising_spin_$1.xml --snapshots demos/ising_spin/ising_spin_$1.snap --output demos/ising_spin/ising_spin_$1.tmp/out  \
 		$3
-	(cd demos/ising_spin/ising_spin_$1.tmp/  &&  for i in *.dot; do echo $$$$i; neato -n2 -Gsize=5,5\! -Gdpi=100 -Tpng $$$$i > $$$$i.png; done )
+	(cd demos/ising_spin/ising_spin_$1.tmp/  &&  for i in *.dot; do echo $$$$i; neato -Gsize=5,5\! -Gdpi=100 -Tpng $$$$i > $$$$i.png; done )
 	(cd demos/ising_spin/ising_spin_$1.tmp/  && convert -delay 20 -loop 0 *.dot.png ../ising_spin_$1.gif)
+	(cd demos/ising_spin/ising_spin_$1.tmp/  && ffmpeg -r 10 -i out_%06d.dot.png -c:v libx264 -crf 18 ../ising_spin_$1.mp4)
 	
 ALL_ISING_SPIN_DEMOS += demos/ising_spin/ising_spin_$1.gif
 	
@@ -34,6 +35,9 @@ ISING_SPIN_FILTERS = \
 $(eval $(call ising_spin_instance_template,16_2,50,$(ISING_SPIN_FILTERS)))
 $(eval $(call ising_spin_instance_template,32_1,50,$(ISING_SPIN_FILTERS)))
 $(eval $(call ising_spin_instance_template,40_0.5,50,$(ISING_SPIN_FILTERS)))
+
+# Too big to render as a graph. Render manually using render_graph_to_field
+#$(eval $(call ising_spin_instance_template,256_0.5,50,$(ISING_SPIN_FILTERS)))
 
 
 ising_spin_tests : $(ALL_ISING_SPIN_TESTS)
