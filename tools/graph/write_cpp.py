@@ -53,16 +53,12 @@ def render_typed_data_load_v4_tuple(proto,dst,prefix,indent):
         dst.write('{}  const rapidjson::Value &n=document["{}"];\n'.format(indent,elt.name))
         if isinstance(elt,ScalarTypedDataSpec):
             if elt.type=="int32_t":
-                dst.write('{}  assert(n.IsInt());\n'.format(indent))
                 dst.write('{}  {}{}=n.GetInt();\n'.format(indent, prefix, elt.name))
             elif elt.type=="uint32_t":
-                dst.write('{}  assert(n.IsUint());\n'.format(indent))
                 dst.write('{}  {}{}=n.GetUint();\n'.format(indent, prefix, elt.name))
             elif elt.type=="bool":
-                dst.write('{}  assert(n.IsBool());\n'.format(indent))
                 dst.write('{}  {}{}=n.GetBool();\n'.format(indent, prefix, elt.name))
             elif elt.type=="float":
-                dst.write('{}  assert(n.IsDouble());\n'.format(indent))
                 dst.write('{}  {}{}=n.GetDouble();\n'.format(indent, prefix, elt.name))
             else:
                 raise RuntimeError("Unknown scalar data type.")
@@ -226,6 +222,8 @@ def render_input_port_as_cpp(ip,dst):
         dst.write('    bool &requestSend_{}=requestSend[{}];\n'.format(dt.outputs_by_index[i].name, i))
 
     dst.write('    // Begin custom handler\n')
+    if ip.source_line and ip.source_file: 
+        dst.write('#line {} "{}"\n'.format(ip.source_line,ip.source_file))
     for line in ip.receive_handler.splitlines():
         dst.write('    {}\n'.format(line))
     dst.write('    // End custom handler\n')
@@ -266,6 +264,8 @@ def render_output_port_as_cpp(op,dst):
     dst.write('    HandlerLogImpl handler_log(orchestrator);\n')
 
     dst.write('    // Begin custom handler\n')
+    if op.source_line and op.source_file: 
+        dst.write('#line {} "{}"\n'.format(op.source_line,op.source_file))
     for line in op.send_handler.splitlines():
         dst.write('    {}\n'.format(line))
     dst.write('    // End custom handler\n')

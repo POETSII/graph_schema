@@ -326,8 +326,7 @@ class EdgeInstance(object):
         if not is_refinement_compatible(dst_port.edge_type.properties,properties):
             raise GraphDescriptionError("Properties are not compatible: proto={}, value={}.".format(dst_port.edge_type.properties, properties))
 
-        # We create a local id to ensure uniqueness of edges, but this is not persisted
-        self.id = (dst_device.id,dst_port_name,src_device.id,src_port_name)
+        self.id = dst_device.id+":"+dst_port_name+"-"+src_device.id+":"+src_port_name
         
         self.dst_device=dst_device
         self.src_device=src_device

@@ -46,14 +46,16 @@ for i in range(N):
         b=0.2
         c=-65+15*re*re
         d=8-6*re*re
+        Ir=5
     else:
         ri=urand()
         a=0.02+0.08*ri
         b=0.25-0.05*ri
         c=-65
         d=2
+        Ir=2
     props={
-        "a":a, "b":b, "c":c, "d":d, "fanin":K
+        "a":a, "b":b, "c":c, "d":d, "Ir":Ir, "fanin":K, "seed":int(urand()*2**32)
     }
     nodes[i]=DeviceInstance(res, "n_{}".format(i), neuronType, None, props)
     res.add_device_instance(nodes[i])

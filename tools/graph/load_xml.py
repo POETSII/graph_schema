@@ -133,7 +133,7 @@ def load_edge_type(parent,dt):
         raise XMLSyntaxError("Error while parsing edge {}".format(id),dt,e)
 
 
-def load_device_type(graph,dtNode,sourceFile="<unknown>"):
+def load_device_type(graph,dtNode,sourceFile="<graph-spec-file>"):
     id=get_attrib(dtNode,"id")
 
     state=None

@@ -144,7 +144,6 @@ public:
       }
 
 
-      bool isStateDifferent=false;
       std::string stateJSON;
       
       if(state){
@@ -186,26 +185,54 @@ public:
      const TypedDataPtr *pMessagesInFlight
      ) override
     {
-      xmlTextWriterStartElementNS(m_dst, NULL, (const xmlChar *)"EdgeS", m_ns);
+      std::string stateJSON;
+      
+      if(state){
+	stateJSON=et->getStateSpec()->toJSON(state);
+	if(stateJSON.size()>0){
+	  assert(stateJSON.size() >= 2);
+	  stateJSON=stateJSON.substr(0,stateJSON.size()-1);
+	  stateJSON=stateJSON.substr(1);
+	}
+      }
+
+      if(stateJSON.empty() && firings==0 && nMessagesInFlight==0){
+	return;
+      }
+
+      
+      xmlTextWriterStartElement(m_dst, (const xmlChar *)"EdgeS");
 
       xmlTextWriterWriteAttribute(m_dst, (const xmlChar *)"id", (const xmlChar *)id);
 
-        if(firings!=0){
-	  xmlTextWriterWriteFormatAttribute(m_dst, (const xmlChar *)"firings", "%llx", firings);
-        }
+      if(firings!=0){
+	xmlTextWriterWriteFormatAttribute(m_dst, (const xmlChar *)"firings", "%llx", firings);
+      }
 
-        writeTypedData(et->getStateSpec(), state, "S", false);
+      if(!stateJSON.empty()){
+	xmlTextWriterStartElement(m_dst, (const xmlChar *)"S");
+	xmlTextWriterWriteRaw(m_dst, (const xmlChar *)stateJSON.c_str());
+	xmlTextWriterEndElement(m_dst);
+      }
 
-        if(nMessagesInFlight>0){
-            xmlTextWriterStartElementNS(m_dst, NULL, (const xmlChar *)"Q", m_ns);
-            for(unsigned i=0; i<nMessagesInFlight; i++){
-                auto message=pMessagesInFlight[i];
-                writeTypedData(et->getMessageSpec(), state, "M", true);
-            }
-            xmlTextWriterEndElement(m_dst);
-        }
-
-        xmlTextWriterEndElement(m_dst);
+      if(nMessagesInFlight>0){
+	xmlTextWriterStartElement(m_dst, (const xmlChar *)"Q");
+	for(unsigned i=0; i<nMessagesInFlight; i++){
+	  xmlTextWriterStartElement(m_dst, (const xmlChar *)"M");
+	  auto message=pMessagesInFlight[i];
+	  std::string payload=et->getMessageSpec()->toJSON(message);
+	  if(payload.size()>0){
+	    assert(payload.size() >= 2);
+	    payload=stateJSON.substr(0,payload.size()-1);
+	    payload=payload.substr(1);
+	    xmlTextWriterWriteRaw(m_dst, (const xmlChar *)payload.c_str());
+	  }	  
+	  xmlTextWriterEndElement(m_dst);
+	}
+	xmlTextWriterEndElement(m_dst);
+      }
+      
+      xmlTextWriterEndElement(m_dst);
     }
 
 };

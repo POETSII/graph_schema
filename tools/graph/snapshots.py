@@ -57,8 +57,11 @@ def parseSnapshot(src,handler):
                 assert self.stack[-1]=="GraphSnapshot"
                 self.edgeState=None
                 self.edgeId=attrs["id"]
+                if "firings" in attrs:
+                    self.edgeFirings=int(attrs["firings"],16)
+                else:
+                    self.edgeFirings=0
                 self.edgeMessages=[]
-                self.edgeType=self.handler.getEdgeType(self.edgeid)
                 self.edgeState=None
             elif name=="S":
                 assert self.stack[-1]=="EdgeS" or self.stack[-1]=="DevS"
@@ -93,7 +96,7 @@ def parseSnapshot(src,handler):
                 self.devId=None
                 assert self.stack[-1]=="GraphSnapshot"
             elif name=="EdgeS":
-                self.handler.onEdgeInstance(self.edgeId,self.edgeFirings,self.edgeMessages)
+                self.handler.onEdgeInstance(self.edgeId,self.edgeState,self.edgeFirings,self.edgeMessages)
                 self.edgeType=None
                 self.edgeId=None
             elif name=="GraphSnapshot":

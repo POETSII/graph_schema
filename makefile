@@ -15,7 +15,7 @@ endif
 
 CPPFLAGS += -std=c++11 -g
 
-CPPFLAGS += -DNDEBUG=1 -O2
+CPPFLAGS += -O2
 
 TRANG = external/trang-20091111/trang.jar
 JING = external/jing-20081028/bin/jing.jar
@@ -87,7 +87,7 @@ bin/epoch_sim : tools/epoch_sim.cpp
 
 define provider_rules_template
 
-providers/$1.graph.cpp : apps/$1/$1_graph_type.xml graph_library
+providers/$1.graph.cpp : apps/$1/$1_graph_type.xml
 	mkdir -p providers
 	$$(PYTHON) tools/render_graph_as_cpp.py < apps/$1/$1_graph_type.xml > providers/$1.graph.cpp
 
@@ -102,6 +102,9 @@ endef
 
 include apps/clock_tree/makefile.inc
 include apps/ising_spin/makefile.inc
+include apps/clocked_izhikevich/makefile.inc
+include apps/gals_izhikevich/makefile.inc
+include apps/gals_heat/makefile.inc
 
 demos : $(ALL_DEMOS)
 

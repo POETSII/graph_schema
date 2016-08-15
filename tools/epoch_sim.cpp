@@ -42,6 +42,8 @@ struct EpochSim
   {
     TypedDataPtr properties;
     TypedDataPtr state;
+    unsigned firings;
+    const char *id;
   };
 
   struct device
@@ -104,6 +106,8 @@ struct EpochSim
     input i;
     i.properties=properties;
     i.state=dstInput->getEdgeType()->getStateSpec()->create();
+    i.firings=0;
+    i.id=intern( m_devices.at(dstDevIndex).id + ":" + dstInput->getName() + "-" + m_devices.at(srcDevIndex).id+":"+srcOutput->getName() );
     auto &slots=m_devices.at(dstDevIndex).inputs.at(dstInput->getIndex());
     unsigned dstPortSlot=slots.size();
     slots.push_back(i);
@@ -128,15 +132,23 @@ struct EpochSim
     }
     return (unsigned)-1;
   }
+  
 
   void writeSnapshot(SnapshotWriter *dst, double orchestratorTime, unsigned sequenceNumber)
   {
     dst->startSnapshot(m_graphType, m_id.c_str(), orchestratorTime, sequenceNumber);
 
-    for(const auto &dev : m_devices){
+    for(auto &dev : m_devices){
         dst->writeDeviceInstance(dev.type, dev.name, dev.state, dev.readyToSend.get());
+	for(unsigned i=0; i<dev.inputs.size(); i++){
+	  const auto &et=dev.type->getInput(i)->getEdgeType();
+	  for(auto &slot : dev.inputs[i]){
+	    dst->writeEdgeInstance(et, slot.id, slot.state, slot.firings, 0, 0);
+	    slot.firings=0;
+	  }
+	}
     }
-
+	  
     dst->endSnapshot();
   }
 
@@ -248,6 +260,8 @@ struct EpochSim
 	auto &dst=m_devices.at(out.dstDevice);
 	auto &in=dst.inputs.at(out.dstPortIndex);
 	auto &slot=in.at(out.dstPortSlot);
+
+	slot.firings++;
 
 	if(logLevel>3){
 	  fprintf(stderr, "    sending to device %d = %s\n", dst.index, dst.id.c_str());

@@ -130,6 +130,8 @@
 
 	  deviceState->fire = v >= 30;
 	  if(deviceState->fire){
+	  handler_log(1, "FIRE!");
+	  
 	    v=deviceProperties->c;
 	    u += deviceProperties->d;
 	  }

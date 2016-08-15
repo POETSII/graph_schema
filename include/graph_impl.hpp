@@ -281,7 +281,12 @@ protected:
   { return m_deviceTypesByIndex.at(index); }
 
   virtual const DeviceTypePtr &getDeviceType(const std::string &name) const override
-  { return m_deviceTypesById.at(name); }
+  {
+    auto it=m_deviceTypesById.find(name);
+    if(it==m_deviceTypesById.end())
+      throw std::runtime_error("Couldn't find device type called '"+name+"' in graph type '"+m_id+"'");
+    return it->second;
+  }
 
   virtual const std::vector<DeviceTypePtr> &getDeviceTypes() const override
   { return m_deviceTypesByIndex; }
@@ -671,7 +676,7 @@ void loadGraph(Registry *registry, xmlpp::Element *parent, GraphLoadEvents *even
       const auto &children=eEdge->get_children();
       if(children.size()<10){
 	for(const auto &nChild : children){
-	  assert(nChild->getName().is_ascii());
+	  assert(nChild->get_name().is_ascii());
 
 	  if(!strcmp(nChild->get_name().c_str(),"P")){
 	    eProperties=(xmlpp::Element*)nChild;
