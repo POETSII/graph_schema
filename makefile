@@ -1,5 +1,7 @@
 .PRECIOUS : output/%.checked
 
+export PYTHONPATH = tools
+
 SHELL=/bin/bash
 
 CPPFLAGS += -I include
@@ -15,7 +17,7 @@ endif
 
 CPPFLAGS += -std=c++11 -g
 
-CPPFLAGS += -O2
+CPPFLAGS += -O3 -DNDEBUG=1
 
 TRANG = external/trang-20091111/trang.jar
 JING = external/jing-20081028/bin/jing.jar
@@ -83,6 +85,10 @@ bin/print_graph_properties : tools/print_graph_properties.cpp
 bin/epoch_sim : tools/epoch_sim.cpp
 	mkdir -p bin
 	$(CXX) $(CPPFLAGS) $< -o $@ $(LDFLAGS) $(LDLIBS)
+
+bin/epoch_sim.s : tools/epoch_sim.cpp
+	mkdir -p bin
+	$(CXX) -S $(CPPFLAGS) $< -o $@ $(LDFLAGS) $(LDLIBS)
 
 
 define provider_rules_template
