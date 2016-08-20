@@ -1,4 +1,4 @@
-#include "graph_impl.hpp"
+#include "graph.hpp"
 
 #include <libxml++/parsers/domparser.h>
 

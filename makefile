@@ -120,7 +120,7 @@ include apps/gals_heat/makefile.inc
 demos : $(ALL_DEMOS)
 
 
-all_tools : bin/print_graph_properties bin/epoch_sim
+all_tools : bin/print_graph_properties bin/epoch_sim bin/queue_sim
 
 
 VIRTUAL_ALL_TESTS := $(patsubst test/virtual/%.xml,%,$(wildcard test/virtual/*.xml))
@@ -130,13 +130,14 @@ tt :
 
 validate-virtual : $(foreach t,$(VIRTUAL_ALL_TESTS),validate-virtual/$(t) output/virtual/$(t).svg output/virtual/$(t).graph.cpp output/virtual/$(t).graph.so)
 
-test : $(ALL_TESTS)
+test : all_tools $(ALL_TESTS)
 
 demo : $(ALL_DEMOS)
 
 clean :
 	-find . -iname '*~' -exec rm {} ';'  # Get rid of emacs temporaries
 	-rm -rf output/virtual/*.dot output/virtual/*.svg
+	-rm -rf bin/*
 	-rm -rf demos/*
 	-rm -rf providers/*
 	-rm -rf external/trang-20091111

@@ -1,7 +1,7 @@
-#ifndef snapshots_hpp
-#define snapshots_hpp
+#ifndef graph_snapshots_hpp
+#define graph_snapshots_hpp
 
-#include "graph.hpp"
+#include "graph_core.hpp"
 
 #include "libxml/xmlwriter.h"
 

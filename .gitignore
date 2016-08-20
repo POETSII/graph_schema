@@ -9,5 +9,13 @@ __pycache__/
 # Emacs
 *~
 
-
 demos
+bin
+providers
+
+# OS X profiling
+instruments*.trace
+
+# temporaries in root directory
+/*.xml
+/*.snap
