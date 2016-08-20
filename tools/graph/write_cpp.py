@@ -145,10 +145,10 @@ def render_typed_data_as_spec(proto,name,elt_name,dst):
     dst.write("class {}_Spec : public TypedDataSpec {{\n".format(name))
     dst.write("  public: TypedDataPtr create() const override {\n")
     if proto:
-        dst.write("    auto res=std::make_shared<{}>();\n".format(name))
+        dst.write("    {} *res=({}*)malloc(sizeof({}));\n".format(name,name,name))
         for elt in proto.elements_by_index:
             render_typed_data_init(elt, dst, "    res->");
-        dst.write("    return res;\n")
+        dst.write("    return TypedDataPtr(res);\n")
     else:
         dst.write("    return TypedDataPtr();\n")
     dst.write("  }\n")
@@ -158,13 +158,13 @@ def render_typed_data_as_spec(proto,name,elt_name,dst):
     else:
         dst.write("    xmlpp::Node::PrefixNsMap ns;\n")
         dst.write('    ns["g"]="TODO/POETS/virtual-graph-schema-v0";\n')
-        dst.write("    std::shared_ptr<{}> res(new {});\n".format(name,name))
+        dst.write("    {} *res=({}*)malloc(sizeof({}));\n".format(name,name,name))
         for elt in proto.elements_by_index:
             render_typed_data_init(elt,dst,"    res->")
         dst.write("    if(elt){\n")
         render_typed_data_load_v4(proto, dst, "elt", "res->", "      ")
         dst.write("    }\n")
-        dst.write("    return res;\n")
+        dst.write("    return TypedDataPtr(res);\n")
     dst.write("  }\n")
     dst.write("  void save(xmlpp::Element *parent, const TypedDataPtr &data) const override {\n")
     dst.write('    throw std::runtime_error("Not implemented.");\n')

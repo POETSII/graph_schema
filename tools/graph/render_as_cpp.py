@@ -49,7 +49,7 @@ def render_typed_data_load(proto,dst,elt,prefix, indent):
                            
 
 def render_typed_data_as_spec(proto,name,elt_name,dst):
-    dst.write("struct {}{{\n".format(name))
+    dst.write("struct {} : typed_data_t{{\n".format(name))
     if proto:
         render_typed_data_as_decl(proto,dst,"  ")
     else:
@@ -63,11 +63,11 @@ def render_typed_data_as_spec(proto,name,elt_name,dst):
     if proto is None
         dst.write("    return TypedDataPtr();\n")
     else:
-        dst.write("    std::shared_ptr<{}> res(new {});\n").format(name,name))
+        dst.write("    {} *res=malloc(sizeof({}));\n").format(name,name))
         render_typed_data_init(proto,dst,"    res->")
         dst.write('    xmlpp::Element *elt=find_single(parent, "./{}");\n'.format(elt_name))
         render_typed_data_load(proto, dst, "elt", "res->",  "    ")
-        dst.write("    return res;\n")
+        dst.write("    return TypedDataPtr(res);\n")
     dst.write("  }\n")
     dst.write("  void save(xmlpp::Element *parent, TypedDataPtr data) const override {\n")
     dst.write('    throw std::runtime_error("Not implemented.");\n')

@@ -320,22 +320,18 @@ class ReceiveOrchestratorServicesImpl
   : public OrchestratorServices
 {
 private:
-  unsigned m_logLevel;
   FILE *m_dst;
   std::string m_prefix;
   const char *m_device;
   const char *m_input;
 public:
   ReceiveOrchestratorServicesImpl(unsigned logLevel, FILE *dst, const char *device, const char *input)
-    : m_logLevel(logLevel)
+    : OrchestratorServices(logLevel)
     , m_dst(dst)
     , m_prefix("Recv: ")
     , m_device(device)
     , m_input(input)
   {}
-
-  virtual unsigned getLogLevel() const override
-  { return m_logLevel; }
 
   void setPrefix(const char *prefix)
   {
@@ -369,7 +365,7 @@ private:
   const char *m_output;
 public:
   SendOrchestratorServicesImpl(unsigned logLevel, FILE *dst, const char *device, const char *output)
-    : m_logLevel(logLevel)
+    : OrchestratorServices(logLevel)
     , m_dst(dst)
     , m_prefix("Send: ")
     , m_device(device)
@@ -386,9 +382,6 @@ public:
     m_device=device;
     m_output=output;
   }
-
-  virtual unsigned getLogLevel() const override
-  { return m_logLevel; }
 
   virtual void vlog(unsigned level, const char *msg, va_list args) override
   {
@@ -411,7 +404,7 @@ public:
 
   void operator()(unsigned level, const char *msg, ...)
   {
-    if(m_services){
+    if(m_services && (m_services->getLogLevel() >= level)){ // Allows call to be avoided out on client side
       va_list args;
       va_start(args, msg);
       m_services->vlog(level, msg, args);

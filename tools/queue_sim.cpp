@@ -42,13 +42,13 @@ struct QueueSim
       : message(0)
     {}
     
-    broadcast_t(unsigned _bid, const TypedDataPtr &_message)
+    broadcast_t(unsigned _bid, TypedDataPtr _message) // Note that the message is by-value to ensure a reference
       : bid(_bid)
-      , message(new TypedDataPtr(_message))
+      , message(_message.detach())
     {}
     
     unsigned bid; // Represent a bundle of devices in the target queue
-    TypedDataPtr *message; // TODO : this is because lock-free needs a trivial destructor
+    typed_data_t *message;
   };
 
     struct edge_bundle_id_t
@@ -176,18 +176,6 @@ struct QueueSim
     {
 
     }
-
-    void sanity()
-    {
-      assert(sentinelA==0x12345678);
-      assert(sentinelB==0x23456781);
-      
-      for(auto *dd : devices){
-	const char *id=dd->id;
-	auto type=dd->type;
-      }
-    }
-
 
     // Note: srcEndpoint _must_be interned
     edge_bundle_t &getEdgeBundle(const char *srcEndpoint, bool &newBundle)
@@ -337,8 +325,7 @@ struct QueueSim
       if(!m_broadcasts->pop(res))
 	return false;
       bid=res.bid;
-      message=*res.message;
-      delete res.message;
+      message.attach(res.message);
       return true;
     }
 
@@ -646,9 +633,6 @@ struct QueueSim
     unsigned index=-1;
     
     {
-      for(auto &q : m_queues){
-	q.sanity();
-      }
       
       TypedDataPtr state=dt->getStateSpec()->create();
       device_t d;
@@ -683,13 +667,9 @@ struct QueueSim
 	fprintf(stderr, " q[%d].add(%p=%s), type=%p\n", d.owner, device, device->id, device->type.get());
       }
       m_queues.at(d.owner).devices.push_back(device);
-    
-      m_queues.at(d.owner).sanity();
+   
     }
 
-    for(auto &q : m_queues){
-      q.sanity();
-    }
 
     return index;
   }

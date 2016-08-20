@@ -7,6 +7,8 @@
 
 #include <memory>
 #include <cstring>
+#include <atomic>
+#include <cassert>
 
 /* What is the point of all this?
 
@@ -43,11 +45,93 @@ virtual dispatch (usually quick), plus the loss of cross-function optimisation
 */
 
 
-class typed_data_t
+struct typed_data_t
 {
   // This is opaque data, and should be a POD
+  std::atomic<unsigned> _ref_count; // This is exposed in order to allow cross-module optimisations
 };
-typedef std::shared_ptr<typed_data_t> TypedDataPtr;
+
+class TypedDataPtr
+{
+private:
+  typed_data_t *m_p;
+public:
+  TypedDataPtr()
+    : m_p(0)
+  {}
+
+  TypedDataPtr(typed_data_t *p)
+    : m_p(p)
+  {
+    if(p){
+      assert(p->_ref_count==0);
+      p->_ref_count=1;
+    }
+  }
+
+  TypedDataPtr(const TypedDataPtr &o)
+    : m_p(o.m_p)
+  {
+    if(m_p){
+      std::atomic_fetch_add(&m_p->_ref_count, 1u);
+    }
+  }
+
+  TypedDataPtr &operator=(const TypedDataPtr &o)
+  {
+    if(m_p!=o.m_p){
+      release();
+      m_p=o.m_p;
+      if(m_p){
+	std::atomic_fetch_add(&m_p->_ref_count, 1u);
+      }
+    }
+    return *this;
+  }
+
+  TypedDataPtr(TypedDataPtr &&o)
+    : m_p(o.m_p)
+  {
+    o.m_p=0;
+  }
+
+  const typed_data_t *get() const
+  { return m_p; }
+
+  typed_data_t *get()
+  { return m_p; }
+
+  operator bool() const
+  { return m_p!=0; }
+
+  typed_data_t *detach()
+  {
+    typed_data_t *res=m_p;
+    m_p=0;
+    return res;
+  }
+
+  void attach(typed_data_t *p)
+  {
+    release();
+    m_p=p;
+  }
+
+  void release()
+  {
+    if(m_p){
+      if(std::atomic_fetch_sub(&m_p->_ref_count, 1u)==1){
+	free(m_p);
+      }
+      m_p=0;
+    }
+  }
+    
+  ~TypedDataPtr()
+  {
+    release();
+  }
+};
 
 class TypedDataSpec;
 class EdgeType;
@@ -128,13 +212,21 @@ typedef std::shared_ptr<Port> PortPtr;
 */
 class OrchestratorServices
 {
+protected:
+ unsigned m_logLevel;
+  
+  OrchestratorServices(unsigned logLevel)
+    : m_logLevel(logLevel)
+  {
+  }
 public:
   virtual ~OrchestratorServices()
   {}
 
   // Current logging level being used by the orchestrator
   // (used to allow handler to disable logging slightly more efficiently)
-  virtual unsigned getLogLevel() const =0;
+  unsigned getLogLevel() const
+  { return m_logLevel; }
 
   // Log a handler message with the given log level
   virtual void vlog(unsigned level, const char *msg, va_list args) =0;

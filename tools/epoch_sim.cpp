@@ -347,6 +347,13 @@ int main(int argc, char *argv[])
         }
         maxSteps=strtoul(argv[ia+1], 0, 0);
         ia+=2;
+      }else if(!strcmp("--stats-delta",argv[ia])){
+        if(ia+1 >= argc){
+          fprintf(stderr, "Missing argument to --stats-delta\n");
+          usage();
+        }
+        statsDelta=strtoul(argv[ia+1], 0, 0);
+        ia+=2;
       }else if(!strcmp("--prob-send",argv[ia])){
         if(ia+1 >= argc){
           fprintf(stderr, "Missing argument to --prob-send\n");
