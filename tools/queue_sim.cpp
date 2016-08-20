@@ -490,11 +490,11 @@ struct QueueSim
 
   void dump()
   {
-    
     ReceiveOrchestratorServicesImpl services(0, stderr, 0, "__print__");
     for(auto *device : m_devices){
       auto print=device->type->getInput("__print__");
       if(print){
+	    fprintf(stderr, "Dump\n");
 	services.setReceiver(device->id, "__print__");
 	print->onReceive(&services, m_graphProperties.get(), device->properties.get(), device->state.get(), 0, 0, 0, device->ready.get());
       }
@@ -612,7 +612,7 @@ struct QueueSim
     }
   }
 
-  virtual uint64_t onGraphInstance(const GraphTypePtr &graphType, const std::string &id, const TypedDataPtr &graphProperties) override
+  virtual uint64_t onBeginGraphInstance(const GraphTypePtr &graphType, const std::string &id, const TypedDataPtr &graphProperties) override
   {
     m_graphType=graphType;
     m_id=id;
@@ -633,14 +633,18 @@ struct QueueSim
     unsigned index=-1;
     
     {
+      const char *pid=intern(id);
+      
+      unsigned owner=chooseOwner(pid);
+      
       
       TypedDataPtr state=dt->getStateSpec()->create();
       device_t d;
-      d.id=intern(id);
+      d.id=pid;
       d.type=dt;
       d.properties=deviceProperties;
       d.state=state;
-      d.owner=chooseOwner(d.id);
+      d.owner=owner;
       d.outputCount=dt->getOutputCount();
       d.ready.reset(new bool[d.outputCount]{false});
       for(unsigned i=0; i<d.outputCount; i++){

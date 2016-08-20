@@ -80,7 +80,7 @@ struct EpochSim
   std::vector<device> m_devices;
 
 
-  virtual uint64_t onGraphInstance(const GraphTypePtr &graphType, const std::string &id, const TypedDataPtr &graphProperties) override
+  virtual uint64_t onBeginGraphInstance(const GraphTypePtr &graphType, const std::string &id, const TypedDataPtr &graphProperties) override
   {
     m_graphType=graphType;
     m_id=id;

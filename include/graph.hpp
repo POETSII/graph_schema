@@ -349,7 +349,19 @@ public:
   {}
 
   //! Tells the consumer that a new graph is starting
-  virtual uint64_t onGraphInstance(const GraphTypePtr &graph, const std::string &id, const TypedDataPtr &properties) =0;
+  virtual uint64_t onBeginGraphInstance(const GraphTypePtr &graph, const std::string &id, const TypedDataPtr &properties) =0;
+
+  //! The graph is now complete
+  virtual void onEndGraphInstance(uint64_t /*graphToken*/)
+  {}
+
+  //! The device instances within the graph instance will follow
+  virtual void onBeginDeviceInstances(uint64_t /*graphToken*/)
+  {}
+
+  //! There will be no more device instances in the graph.
+  virtual void onEndDeviceInstances(uint64_t /*graphToken*/)
+  {}
 
   // Tells the consumer that a new instance is being added
   /*! The return value is a unique identifier that means something
@@ -362,6 +374,14 @@ public:
    const TypedDataPtr &properties,
    const double *nativeLocation //! If null then no location, otherwise it will match graphType->getNativeDimension()
   ) =0;
+
+    //! The edge instances within the graph instance will follow
+  virtual void onBeginEdgeInstances(uint64_t /*graphToken*/)
+  {}
+
+  //! There will be no more edge instances in the graph.
+  virtual void onEndEdgeInstances(uint64_t /*graphToken*/)
+  {}
 
   //! Tells the consumer that the a new edge is being added
   /*! It is required that both device instances have already been

@@ -338,7 +338,6 @@ def render_device_type_as_cpp(dt,dst):
 
 def render_graph_as_cpp(graph,dst):
     dst.write('#include "graph_impl.hpp"\n')
-    dst.write('#include "json.hpp"\n')
     dst.write('#include "rapidjson/document.h"\n')
 
     gt=graph
