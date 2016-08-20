@@ -72,12 +72,14 @@ private:
   std::string m_name;
   unsigned m_index;
   EdgeTypePtr m_edgeType;
+  std::string m_code;
 protected:
-  InputPortImpl(DeviceTypePtr (*deviceTypeSrc)(), const std::string &name, unsigned index, EdgeTypePtr edgeType)
+  InputPortImpl(DeviceTypePtr (*deviceTypeSrc)(), const std::string &name, unsigned index, EdgeTypePtr edgeType, const std::string &code)
     : m_deviceTypeSrc(deviceTypeSrc)
     , m_name(name)
     , m_index(index)
     , m_edgeType(edgeType)
+    , m_code(code)
   {}
 public:
   virtual const DeviceTypePtr &getDeviceType() const override
@@ -96,6 +98,8 @@ public:
   virtual const EdgeTypePtr &getEdgeType() const override
   { return m_edgeType; }
 
+  virtual const std::string &getHandlerCode() const override
+  { return m_code; }
 };
 
 
@@ -108,12 +112,14 @@ private:
   std::string m_name;
   unsigned m_index;
   EdgeTypePtr m_edgeType;
+  std::string m_code;
 protected:
-  OutputPortImpl(DeviceTypePtr (*deviceTypeSrc)(), const std::string &name, unsigned index, EdgeTypePtr edgeType)
+  OutputPortImpl(DeviceTypePtr (*deviceTypeSrc)(), const std::string &name, unsigned index, EdgeTypePtr edgeType, const std::string &code)
     : m_deviceTypeSrc(deviceTypeSrc)
     , m_name(name)
     , m_index(index)
     , m_edgeType(edgeType)
+    , m_code(code)
   {}
 public:
   virtual const DeviceTypePtr &getDeviceType() const override
@@ -131,6 +137,9 @@ public:
 
   virtual const EdgeTypePtr &getEdgeType() const override
   { return m_edgeType; }
+
+  virtual const std::string &getHandlerCode() const override
+  { return m_code; }
 
 };
 
@@ -258,6 +267,7 @@ private:
   std::vector<DeviceTypePtr> m_deviceTypesByIndex;
   std::unordered_map<std::string,DeviceTypePtr> m_deviceTypesById;
 
+  std::string m_sharedCode;
 protected:
   GraphTypeImpl(std::string id, unsigned nativeDimension, TypedDataSpecPtr propertiesSpec)
     : m_id(id)
@@ -302,6 +312,16 @@ protected:
 
   virtual const std::vector<EdgeTypePtr> &getEdgeTypes() const override
   { return m_edgeTypesByIndex; }
+
+  virtual const std::string &getSharedCode() const override
+  {
+    return m_sharedCode;
+  }
+
+  void addSharedCode(const std::string &code)
+  {
+    m_sharedCode=m_sharedCode+code;
+  }
 
   void addEdgeType(EdgeTypePtr et)
   {

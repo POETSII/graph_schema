@@ -4,7 +4,7 @@ export PYTHONPATH = tools
 
 SHELL=/bin/bash
 
-CPPFLAGS += -I include -W -Wall -Wno-unused-parameter
+CPPFLAGS += -I include -W -Wall -Wno-unused-parameter -Wno-unused-variable
 CPPFLAGS += $(shell pkg-config --cflags libxml++-2.6)
 
 LDFLAGS += $(shell pkg-config --libs libxml++-2.6)
@@ -12,7 +12,15 @@ LDFLAGS += $(shell pkg-config --libs libxml++-2.6)
 ifeq ($(OS),Windows_NT)
 SO_CPPFLAGS += -shared
 else
+# http://stackoverflow.com/a/12099167
+UNAME_S := $(shell uname -s)
+ifeq ($(UNAME_S),Darwin)
 SO_CPPFLAGS += -dynamiclib -fPIC
+else
+SO_CPPFLAGS += -shared -fPIC
+LDFLAGS += -pthread
+LDLIBS += -ldl -fPIC
+endif
 endif
 
 CPPFLAGS += -std=c++11 -g

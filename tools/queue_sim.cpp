@@ -9,6 +9,8 @@
 #include <unordered_set>
 #include <algorithm>
 #include <thread>
+#include <condition_variable>
+#include <mutex>
 #include <queue>
 
 #include <boost/lockfree/queue.hpp>

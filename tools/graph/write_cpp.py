@@ -199,8 +199,10 @@ def render_input_port_as_cpp(ip,dst):
 
     dst.write('EdgeTypePtr {}_Spec_get();\n\n'.format(ip.edge_type.id))
 
+    dst.write('static const char *{}_{}_handler_code=R"CDATA({})CDATA";\n'.format(dt.id, ip.name, ip.receive_handler))
+
     dst.write("class {}_{}_Spec : public InputPortImpl {{\n".format(dt.id,ip.name))
-    dst.write('  public: {}_{}_Spec() : InputPortImpl({}_Spec_get, "{}", {}, {}_Spec_get()) {{}} \n'.format(dt.id,ip.name, dt.id, ip.name, index, ip.edge_type.id))
+    dst.write('  public: {}_{}_Spec() : InputPortImpl({}_Spec_get, "{}", {}, {}_Spec_get(), {}_{}_handler_code) {{}} \n'.format(dt.id,ip.name, dt.id, ip.name, index, ip.edge_type.id, dt.id, ip.name))
     dst.write("""  virtual void onReceive(
                          OrchestratorServices *orchestrator,
                          const typed_data_t *gGraphProperties,
@@ -244,8 +246,10 @@ def render_output_port_as_cpp(op,dst):
 
     dst.write('EdgeTypePtr {}_Spec_get();\n\n'.format(op.edge_type.id))
 
+    dst.write('static const char *{}_{}_handler_code=R"CDATA({})CDATA";\n'.format(dt.id, op.name, op.send_handler))
+
     dst.write("class {}_{}_Spec : public OutputPortImpl {{\n".format(dt.id,op.name))
-    dst.write('  public: {}_{}_Spec() : OutputPortImpl({}_Spec_get, "{}", {}, {}_Spec_get()) {{}} \n'.format(dt.id,op.name, dt.id, op.name, index, op.edge_type.id))
+    dst.write('  public: {}_{}_Spec() : OutputPortImpl({}_Spec_get, "{}", {}, {}_Spec_get(), {}_{}_handler_code) {{}} \n'.format(dt.id,op.name, dt.id, op.name, index, op.edge_type.id, dt.id, op.name))
     dst.write("""    virtual void onSend(
                       OrchestratorServices *orchestrator,
                       const typed_data_t *gGraphProperties,

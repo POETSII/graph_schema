@@ -34,7 +34,7 @@
     </Properties>
 
     <SharedCode><![CDATA[
-
+    #include <cmath>
     ]]></SharedCode>
 
     <EdgeTypes>

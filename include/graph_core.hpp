@@ -246,6 +246,8 @@ public:
 			 const typed_data_t *message,
 			 bool *requestSendPerOutput
 		      ) const=0;
+
+    virtual const std::string &getHandlerCode() const=0;
 };
 typedef std::shared_ptr<InputPort> InputPortPtr;
 
@@ -261,6 +263,8 @@ public:
 		      bool *requestSendPerOutput,
 		      bool *abortThisSend
 		      ) const=0;
+
+  virtual const std::string &getHandlerCode() const=0;
 };
 typedef std::shared_ptr<OutputPort> OutputPortPtr;
 
@@ -297,6 +301,8 @@ public:
   virtual unsigned getNativeDimension() const=0;
 
   virtual const TypedDataSpecPtr getPropertiesSpec() const=0;
+
+  virtual const std::string &getSharedCode() const=0;
 
   virtual unsigned getDeviceTypeCount() const=0;
   virtual const DeviceTypePtr &getDeviceType(unsigned index) const=0;
