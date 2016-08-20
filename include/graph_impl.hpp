@@ -329,7 +329,7 @@ public:
   ReceiveOrchestratorServicesImpl(unsigned logLevel, FILE *dst, const char *device, const char *input)
     : m_logLevel(logLevel)
     , m_dst(dst)
-    , m_prefix("Send: ")
+    , m_prefix("Recv: ")
     , m_device(device)
     , m_input(input)
   {}
@@ -351,7 +351,7 @@ public:
   virtual void vlog(unsigned level, const char *msg, va_list args) override
   {
     if(m_logLevel >= level){
-      fprintf(m_dst, "%sdevice:%s, input:%s : ", m_prefix.c_str(), m_device, m_input);
+      fprintf(m_dst, "%s%s:%s : ", m_prefix.c_str(), m_device, m_input);
       vfprintf(m_dst, msg, args);
       fprintf(m_dst, "\n");
     }
@@ -393,7 +393,7 @@ public:
   virtual void vlog(unsigned level, const char *msg, va_list args) override
   {
     if(m_logLevel >= level){
-      fprintf(m_dst, "%sdevice:%s, output:%s : ", m_prefix.c_str(), m_device, m_output);
+      fprintf(m_dst, "%s%s:%s : ", m_prefix.c_str(), m_device, m_output);
       vfprintf(m_dst, msg, args);
       fprintf(m_dst, "\n");
     }
@@ -411,10 +411,12 @@ public:
 
   void operator()(unsigned level, const char *msg, ...)
   {
-    va_list args;
-    va_start(args, msg);
-    m_services->vlog(level, msg, args);
-    va_end(args);
+    if(m_services){
+      va_list args;
+      va_start(args, msg);
+      m_services->vlog(level, msg, args);
+      va_end(args);
+    }
   }
 };
 

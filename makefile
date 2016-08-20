@@ -4,7 +4,7 @@ export PYTHONPATH = tools
 
 SHELL=/bin/bash
 
-CPPFLAGS += -I include
+CPPFLAGS += -I include -W -Wall -Wno-unused-parameter
 CPPFLAGS += $(shell pkg-config --cflags libxml++-2.6)
 
 LDFLAGS += $(shell pkg-config --libs libxml++-2.6)
@@ -16,6 +16,7 @@ SO_CPPFLAGS += -dynamiclib -fPIC
 endif
 
 CPPFLAGS += -std=c++11 -g
+#CPPFLAGS += -O0
 
 CPPFLAGS += -O3 -DNDEBUG=1
 
@@ -89,6 +90,10 @@ bin/epoch_sim : tools/epoch_sim.cpp
 bin/epoch_sim.s : tools/epoch_sim.cpp
 	mkdir -p bin
 	$(CXX) -S $(CPPFLAGS) $< -o $@ $(LDFLAGS) $(LDLIBS)
+
+bin/queue_sim : tools/queue_sim.cpp
+	mkdir -p bin
+	$(CXX) $(CPPFLAGS) $< -o $@ $(LDFLAGS) $(LDLIBS)
 
 
 define provider_rules_template
