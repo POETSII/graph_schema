@@ -74,8 +74,10 @@ for x in range(0,n):
         centre=nodes[(x,y)]
         add_channel(x,y, 0, -1, 1)
         add_channel(x,y, +1, 0, 2)
-        add_channel(x,y, 0, +1, 3)
-        add_channel(x,y, -1, 0, 4)        
+        if n>2:
+            add_channel(x,y, 0, +1, 3)
+        if n>2:
+            add_channel(x,y, -1, 0, 4)        
         
 
 save_graph(res,sys.stdout)        

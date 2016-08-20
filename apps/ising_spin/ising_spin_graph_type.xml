@@ -60,6 +60,10 @@
 	<!-- This doesn't have any properties -->
       </EdgeType>
 
+      <EdgeType id="__print__">
+	<!-- This doesn't have any properties -->
+      </EdgeType>
+
       <EdgeType id="update">
 	<Properties>
 	  <Scalar type="uint32_t" name="direction" /> <!-- 1=Up, 2=Right, 3=Down, 4=Left -->
@@ -130,7 +134,8 @@
 	  handler_log(3, "next_t = %g, next_spin = %d", deviceState->times[0], deviceState->spins[0]);
 
 	  requestSend_out = true;
-	  for(unsigned i=1; i<4; i++){
+	  for(unsigned i=1; i<5; i++){
+	    handler_log(3, "   times[%d] = %g\n", deviceState->times[i]);
 	    if(deviceState->times[0] >= deviceState->times[i]){
               requestSend_out = false; // We are not the earliest cell in neighbourhood
 	    }
@@ -139,6 +144,14 @@
 	  </OnReceive>
 	</InputPort>
 
+	<InputPort name="__print__" edgeTypeId="__print__">
+	  <OnReceive><![CDATA[
+	  handler_log(0, "ready=%d, times={%g,%g,%g,%g,%g}",
+	    requestSend_out,
+	    deviceState->times[0], deviceState->times[1], deviceState->times[2], deviceState->times[3], deviceState->times[4]);
+	  ]]></OnReceive>
+	</InputPort>
+	  
 	<InputPort name="in" edgeTypeId="update">
 	  <OnReceive><![CDATA[
 
@@ -189,7 +202,8 @@
 	      handler_log(4, "  time[%d] = %g < time[0] = %g", i, deviceState->times[i], deviceState->times[0]);
 	      requestSend_out = false;
             }
-	  }
+	    }
+	    handler_log(3, "sendAgain = %d\n", requestSend_out);
 	  ]]></OnSend>
 	</OutputPort>
       </DeviceType>

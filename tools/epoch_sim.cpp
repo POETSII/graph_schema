@@ -1,8 +1,6 @@
-#include "graph_impl.hpp"
+#include "graph.hpp"
 
 #include <libxml++/parsers/domparser.h>
-
-#include "snapshots.hpp"
 
 #include <iostream>
 #include <fstream>
@@ -55,6 +53,7 @@ struct EpochSim
     TypedDataPtr properties;
     TypedDataPtr state;
 
+    unsigned outputCount;
     std::shared_ptr<bool> readyToSend; // Grrr, std::vector<bool> !
 
     std::vector<const char *> outputNames; // interned names
@@ -63,7 +62,14 @@ struct EpochSim
     std::vector<std::vector<input> > inputs;
 
     bool anyReady() const
-    { return std::any_of(readyToSend.get(),readyToSend.get()+type->getOutputCount(), [](bool b){ return b; }); }
+    {
+      const bool *rts=readyToSend.get();
+      for(unsigned i=0;i<outputCount;i++){
+	if(rts[i])
+	  return true;
+      }
+      return false;
+    }
   };
 
   GraphTypePtr m_graphType;
@@ -72,7 +78,7 @@ struct EpochSim
   std::vector<device> m_devices;
 
 
-  virtual uint64_t onGraphInstance(const GraphTypePtr &graphType, const std::string &id, const TypedDataPtr &graphProperties) override
+  virtual uint64_t onBeginGraphInstance(const GraphTypePtr &graphType, const std::string &id, const TypedDataPtr &graphProperties) override
   {
     m_graphType=graphType;
     m_id=id;
@@ -91,6 +97,7 @@ struct EpochSim
     d.properties=deviceProperties;
     d.state=state;
     d.readyToSend.reset(new bool[dt->getOutputCount()], [](bool *p){ delete[](p);} );
+    d.outputCount=dt->getOutputCount();
     d.outputs.resize(dt->getOutputCount());
     for(unsigned i=0;i<dt->getOutputCount();i++){
       d.readyToSend.get()[i]=false;
@@ -192,11 +199,13 @@ struct EpochSim
     }
 
     std::vector<int> sendSel(m_devices.size());
+
+    unsigned rotA=rng();
     for(unsigned i=0;i<m_devices.size();i++){
       auto &src=m_devices[i];
 
       // Pick a random message
-      sendSel[i]=pick_bit(src.type->getOutputCount(), src.readyToSend.get(), rng());
+      sendSel[i]=pick_bit(src.outputCount, src.readyToSend.get(), rotA+i);
     }
 
 
@@ -204,6 +213,10 @@ struct EpochSim
     bool anyReady=false;
 
     unsigned rot=rng();
+
+    uint32_t threshSend=(uint32_t)ldexp(probSend, 32);
+    uint32_t threshRng=rng();
+    
     for(unsigned i=0;i<m_devices.size();i++){
       unsigned index=(i+rot)%m_devices.size();
 
@@ -222,7 +235,8 @@ struct EpochSim
 	continue;
       }
 
-      if(udist(rng) > probSend){
+      threshRng= threshRng*1664525+1013904223UL;
+      if(threshRng > threshSend){
 	anyReady=true;
 	continue;
       }
@@ -240,8 +254,8 @@ struct EpochSim
 
       src.readyToSend.get()[sel]=false; // Up to them to re-enable
 
-      OutputPortPtr output=src.type->getOutput(sel);
-      TypedDataPtr message=output->getEdgeType()->getMessageSpec()->create();
+      const OutputPortPtr &output=src.type->getOutput(sel);
+      TypedDataPtr message(output->getEdgeType()->getMessageSpec()->create());
 
       bool cancel=false;
       {
@@ -259,10 +273,10 @@ struct EpochSim
 
       sent=true;
 
-      for(auto &out : src.outputs.at(sel)){
-	auto &dst=m_devices.at(out.dstDevice);
-	auto &in=dst.inputs.at(out.dstPortIndex);
-	auto &slot=in.at(out.dstPortSlot);
+      for(auto &out : src.outputs[sel]){
+	auto &dst=m_devices[out.dstDevice];
+	auto &in=dst.inputs[out.dstPortIndex];
+	auto &slot=in[out.dstPortSlot];
 
 	slot.firings++;
 
@@ -270,7 +284,7 @@ struct EpochSim
 	  fprintf(stderr, "    sending to device %d = %s\n", dst.index, dst.id.c_str());
 	}
 
-	auto port=dst.type->getInput(out.dstPortIndex);
+	const auto &port=dst.type->getInput(out.dstPortIndex);
 
 	receiveServices.setReceiver(out.dstDeviceId, out.dstInputName);
 	port->onReceive(&receiveServices, m_graphProperties.get(), dst.properties.get(), dst.state.get(), slot.properties.get(), slot.state.get(), message.get(), dst.readyToSend.get());
@@ -330,6 +344,13 @@ int main(int argc, char *argv[])
           usage();
         }
         maxSteps=strtoul(argv[ia+1], 0, 0);
+        ia+=2;
+      }else if(!strcmp("--stats-delta",argv[ia])){
+        if(ia+1 >= argc){
+          fprintf(stderr, "Missing argument to --stats-delta\n");
+          usage();
+        }
+        statsDelta=strtoul(argv[ia+1], 0, 0);
         ia+=2;
       }else if(!strcmp("--prob-send",argv[ia])){
         if(ia+1 >= argc){

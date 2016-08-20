@@ -145,10 +145,10 @@ def render_typed_data_as_spec(proto,name,elt_name,dst):
     dst.write("class {}_Spec : public TypedDataSpec {{\n".format(name))
     dst.write("  public: TypedDataPtr create() const override {\n")
     if proto:
-        dst.write("    auto res=std::make_shared<{}>();\n".format(name))
+        dst.write("    {} *res=({}*)malloc(sizeof({}));\n".format(name,name,name))
         for elt in proto.elements_by_index:
             render_typed_data_init(elt, dst, "    res->");
-        dst.write("    return res;\n")
+        dst.write("    return TypedDataPtr(res);\n")
     else:
         dst.write("    return TypedDataPtr();\n")
     dst.write("  }\n")
@@ -158,13 +158,13 @@ def render_typed_data_as_spec(proto,name,elt_name,dst):
     else:
         dst.write("    xmlpp::Node::PrefixNsMap ns;\n")
         dst.write('    ns["g"]="TODO/POETS/virtual-graph-schema-v0";\n')
-        dst.write("    std::shared_ptr<{}> res(new {});\n".format(name,name))
+        dst.write("    {} *res=({}*)malloc(sizeof({}));\n".format(name,name,name))
         for elt in proto.elements_by_index:
             render_typed_data_init(elt,dst,"    res->")
         dst.write("    if(elt){\n")
         render_typed_data_load_v4(proto, dst, "elt", "res->", "      ")
         dst.write("    }\n")
-        dst.write("    return res;\n")
+        dst.write("    return TypedDataPtr(res);\n")
     dst.write("  }\n")
     dst.write("  void save(xmlpp::Element *parent, const TypedDataPtr &data) const override {\n")
     dst.write('    throw std::runtime_error("Not implemented.");\n')
@@ -199,8 +199,10 @@ def render_input_port_as_cpp(ip,dst):
 
     dst.write('EdgeTypePtr {}_Spec_get();\n\n'.format(ip.edge_type.id))
 
+    dst.write('static const char *{}_{}_handler_code=R"CDATA({})CDATA";\n'.format(dt.id, ip.name, ip.receive_handler))
+
     dst.write("class {}_{}_Spec : public InputPortImpl {{\n".format(dt.id,ip.name))
-    dst.write('  public: {}_{}_Spec() : InputPortImpl({}_Spec_get, "{}", {}, {}_Spec_get()) {{}} \n'.format(dt.id,ip.name, dt.id, ip.name, index, ip.edge_type.id))
+    dst.write('  public: {}_{}_Spec() : InputPortImpl({}_Spec_get, "{}", {}, {}_Spec_get(), {}_{}_handler_code) {{}} \n'.format(dt.id,ip.name, dt.id, ip.name, index, ip.edge_type.id, dt.id, ip.name))
     dst.write("""  virtual void onReceive(
                          OrchestratorServices *orchestrator,
                          const typed_data_t *gGraphProperties,
@@ -244,8 +246,10 @@ def render_output_port_as_cpp(op,dst):
 
     dst.write('EdgeTypePtr {}_Spec_get();\n\n'.format(op.edge_type.id))
 
+    dst.write('static const char *{}_{}_handler_code=R"CDATA({})CDATA";\n'.format(dt.id, op.name, op.send_handler))
+
     dst.write("class {}_{}_Spec : public OutputPortImpl {{\n".format(dt.id,op.name))
-    dst.write('  public: {}_{}_Spec() : OutputPortImpl({}_Spec_get, "{}", {}, {}_Spec_get()) {{}} \n'.format(dt.id,op.name, dt.id, op.name, index, op.edge_type.id))
+    dst.write('  public: {}_{}_Spec() : OutputPortImpl({}_Spec_get, "{}", {}, {}_Spec_get(), {}_{}_handler_code) {{}} \n'.format(dt.id,op.name, dt.id, op.name, index, op.edge_type.id, dt.id, op.name))
     dst.write("""    virtual void onSend(
                       OrchestratorServices *orchestrator,
                       const typed_data_t *gGraphProperties,
@@ -337,8 +341,7 @@ def render_device_type_as_cpp(dt,dst):
     registrationStatements.append('registry->registerDeviceType({}_Spec_get());'.format(dt.id,dt.id))
 
 def render_graph_as_cpp(graph,dst):
-    dst.write('#include "graph_impl.hpp"\n')
-    dst.write('#include "json.hpp"\n')
+    dst.write('#include "graph.hpp"\n')
     dst.write('#include "rapidjson/document.h"\n')
 
     gt=graph

@@ -1,4 +1,4 @@
-#include "graph_impl.hpp"
+#include "graph.hpp"
 
 #include <libxml++/parsers/domparser.h>
 
@@ -55,7 +55,7 @@ public:
   }
 
   
-  virtual uint64_t onGraphInstance(const GraphTypePtr &graphType,
+  virtual uint64_t onBeginGraphInstance(const GraphTypePtr &graphType,
 				 const std::string &id,
 				 const TypedDataPtr &properties) override
   {
@@ -73,7 +73,8 @@ public:
    uint64_t graphId,
    const DeviceTypePtr &dt,
    const std::string &id,
-   const TypedDataPtr &properties
+   const TypedDataPtr &properties,
+   const double *nativeLocation
    ) override {
     fprintf(stderr, "  onDeviceInstance(%s)\n", id.c_str());
 
@@ -100,7 +101,7 @@ public:
    uint64_t graphInst,
    uint64_t dstDevInst, const DeviceTypePtr &dstDevType, const InputPortPtr &dstPort,
    uint64_t srcDevInst,  const DeviceTypePtr &srcDevType, const OutputPortPtr &srcPort,
-   const TypedDataPtr properties
+   const TypedDataPtr &properties
   ) override
   { 
     auto dst=instances.at(dstDevInst);
