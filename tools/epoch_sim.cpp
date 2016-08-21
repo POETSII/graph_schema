@@ -78,15 +78,14 @@ struct EpochSim
   std::vector<device> m_devices;
 
 
-  virtual uint64_t onBeginGraphInstance(const GraphTypePtr &graphType, const std::string &id, const TypedDataPtr &graphProperties) override
+  virtual void onBeginGraphInstance(const GraphTypePtr &graphType, const std::string &id, const TypedDataPtr &graphProperties) override
   {
     m_graphType=graphType;
     m_id=id;
     m_graphProperties=graphProperties;
-    return 0;
   }
 
-  virtual uint64_t onDeviceInstance(uint64_t gId, const DeviceTypePtr &dt, const std::string &id, const TypedDataPtr &deviceProperties, const double */*nativeLocation*/) override
+  virtual uint64_t onDeviceInstance(const DeviceTypePtr &dt, const std::string &id, const TypedDataPtr &deviceProperties, const double */*nativeLocation*/) override
   {
     TypedDataPtr state=dt->getStateSpec()->create();
     device d;
@@ -108,7 +107,7 @@ struct EpochSim
     return d.index;
   }
 
-  void onEdgeInstance(uint64_t gId, uint64_t dstDevIndex, const DeviceTypePtr &dstDevType, const InputPortPtr &dstInput, uint64_t srcDevIndex, const DeviceTypePtr &srcDevType, const OutputPortPtr &srcOutput, const TypedDataPtr &properties) override
+  void onEdgeInstance(uint64_t dstDevIndex, const DeviceTypePtr &dstDevType, const InputPortPtr &dstInput, uint64_t srcDevIndex, const DeviceTypePtr &srcDevType, const OutputPortPtr &srcOutput, const TypedDataPtr &properties) override
   {
     input i;
     i.properties=properties;

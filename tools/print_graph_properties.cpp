@@ -55,14 +55,13 @@ public:
   }
 
   
-  virtual uint64_t onBeginGraphInstance(const GraphTypePtr &graphType,
+  virtual void onBeginGraphInstance(const GraphTypePtr &graphType,
 				 const std::string &id,
 				 const TypedDataPtr &properties) override
   {
     this->graphType=graphType;
     this->id=id;
     this->properties=properties;
-    return 0;
   }
   
   // Tells the consumer that a new instance is being added
@@ -70,7 +69,6 @@ public:
     to the consumer. */
   virtual uint64_t onDeviceInstance
   (
-   uint64_t graphId,
    const DeviceTypePtr &dt,
    const std::string &id,
    const TypedDataPtr &properties,
@@ -98,7 +96,6 @@ public:
   */
   virtual void onEdgeInstance
   (
-   uint64_t graphInst,
    uint64_t dstDevInst, const DeviceTypePtr &dstDevType, const InputPortPtr &dstPort,
    uint64_t srcDevInst,  const DeviceTypePtr &srcDevType, const OutputPortPtr &srcPort,
    const TypedDataPtr &properties

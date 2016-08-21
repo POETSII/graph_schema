@@ -6,6 +6,7 @@ SHELL=/bin/bash
 
 CPPFLAGS += -I include -W -Wall -Wno-unused-parameter -Wno-unused-variable
 CPPFLAGS += $(shell pkg-config --cflags libxml++-2.6)
+CPPFLAGS += -I providers
 
 LDFLAGS += $(shell pkg-config --libs libxml++-2.6)
 
@@ -103,12 +104,17 @@ bin/queue_sim : tools/queue_sim.cpp
 	mkdir -p bin
 	$(CXX) $(CPPFLAGS) $< -o $@ $(LDFLAGS) $(LDLIBS)
 
+bin/create_gals_heat_instance : apps/gals_heat/create_gals_heat_instance.cpp
+	mkdir -p bin
+	$(CXX) $(CPPFLAGS) $< -o $@ $(LDFLAGS) $(LDLIBS)
+
 
 define provider_rules_template
 
-providers/$1.graph.cpp : apps/$1/$1_graph_type.xml
+providers/$1.graph.cpp providers/$1.graph.hpp : apps/$1/$1_graph_type.xml
 	mkdir -p providers
 	$$(PYTHON) tools/render_graph_as_cpp.py < apps/$1/$1_graph_type.xml > providers/$1.graph.cpp
+	$$(PYTHON) tools/render_graph_as_cpp.py --header < apps/$1/$1_graph_type.xml > providers/$1.graph.hpp
 
 providers/$1.graph.so : providers/$1.graph.cpp
 	g++ $$(CPPFLAGS) $$(SO_CPPFLAGS) $$< -o $$@ $$(LDFLAGS)

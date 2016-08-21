@@ -8,9 +8,16 @@ import sys
 if len(types)!=1:
     raise RuntimeError("File did not contain exactly one graph type.")
 
+asHeader=False
+if len(sys.argv)>1:
+    if sys.argv[1]=="--header":
+        asHeader=True
+    else:
+        assert False, "Unknown param"
+
 graph=None
 for g in types.values():
     graph=g
     break
 
-render_graph_as_cpp(graph, sys.stdout)
+render_graph_as_cpp(graph, sys.stdout, asHeader)

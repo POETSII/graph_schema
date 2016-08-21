@@ -133,7 +133,7 @@ def render_typed_data_save(proto, dst, prefix, indent):
     else:
         assert False, "Unknown data-type"
 
-def render_typed_data_as_spec(proto,name,elt_name,dst):
+def render_typed_data_as_spec(proto,name,elt_name,dst,asHeader=False):
     dst.write("struct {} : typed_data_t{{\n".format(name))
     if proto:
         assert isinstance(proto, TupleTypedDataSpec)
@@ -142,6 +142,9 @@ def render_typed_data_as_spec(proto,name,elt_name,dst):
     else:
         dst.write("  //empty\n")
     dst.write("};\n")
+    if asHeader:
+        return
+    
     dst.write("class {}_Spec : public TypedDataSpec {{\n".format(name))
     dst.write("  public: TypedDataPtr create() const override {\n")
     if proto:
@@ -281,10 +284,10 @@ def render_output_port_as_cpp(op,dst):
     dst.write("  return singleton;\n")
     dst.write("}\n")
 
-def render_edge_type_as_cpp_fwd(et,dst):
-    render_typed_data_as_spec(et.properties, "{}_properties_t".format(et.id), "pp:Properties", dst)
-    render_typed_data_as_spec(et.state, "{}_state_t".format(et.id), "pp:State", dst)
-    render_typed_data_as_spec(et.message, "{}_message_t".format(et.id), "pp:Message", dst)
+def render_edge_type_as_cpp_fwd(et,dst,asHeader):
+    render_typed_data_as_spec(et.properties, "{}_properties_t".format(et.id), "pp:Properties", dst, asHeader)
+    render_typed_data_as_spec(et.state, "{}_state_t".format(et.id), "pp:State", dst, asHeader)
+    render_typed_data_as_spec(et.message, "{}_message_t".format(et.id), "pp:Message", dst, asHeader)
 
 def render_edge_type_as_cpp(et,dst):
     dst.write("class {}_Spec : public EdgeTypeImpl {{\n".format(et.id))
@@ -297,9 +300,9 @@ def render_edge_type_as_cpp(et,dst):
     dst.write("}\n")
     registrationStatements.append('registry->registerEdgeType({}_Spec_get());'.format(et.id,et.id))
 
-def render_device_type_as_cpp_fwd(dt,dst):
-    render_typed_data_as_spec(dt.properties, "{}_properties_t".format(dt.id), "pp:Properties", dst)
-    render_typed_data_as_spec(dt.state, "{}_state_t".format(dt.id), "pp:State", dst)
+def render_device_type_as_cpp_fwd(dt,dst, asHeader):
+    render_typed_data_as_spec(dt.properties, "{}_properties_t".format(dt.id), "pp:Properties", dst, asHeader)
+    render_typed_data_as_spec(dt.state, "{}_state_t".format(dt.id), "pp:State", dst, asHeader)
 
 def render_device_type_as_cpp(dt,dst):
     dst.write("DeviceTypePtr {}_Spec_get();\n".format(dt.id))
@@ -340,53 +343,58 @@ def render_device_type_as_cpp(dt,dst):
     dst.write("}\n")
     registrationStatements.append('registry->registerDeviceType({}_Spec_get());'.format(dt.id,dt.id))
 
-def render_graph_as_cpp(graph,dst):
+def render_graph_as_cpp(graph,dst,asHeader=False):
+    gt=graph
+    
+    if asHeader:
+        dst.write('#ifndef {}_header\n'.format(gt.id))
+        dst.write('#define {}_header\n'.format(gt.id))
+    
     dst.write('#include "graph.hpp"\n')
     dst.write('#include "rapidjson/document.h"\n')
 
-    gt=graph
-
-
-    render_typed_data_as_spec(gt.properties, "{}_properties_t".format(gt.id),"pp:Properties",dst)
+    render_typed_data_as_spec(gt.properties, "{}_properties_t".format(gt.id),"pp:Properties",dst,asHeader)
 
     dst.write("/////////////////////////////////\n")
     dst.write("// FWD\n")
     for et in gt.edge_types.values():
-        render_edge_type_as_cpp_fwd(et,dst)
+        render_edge_type_as_cpp_fwd(et,dst,asHeader)
 
     for dt in gt.device_types.values():
-        render_device_type_as_cpp_fwd(dt, dst)
+        render_device_type_as_cpp_fwd(dt, dst, asHeader)
 
-    if gt.shared_code:
-        for code in gt.shared_code:
-            dst.write(code)
+    if not asHeader:
+        if gt.shared_code:
+            for code in gt.shared_code:
+                dst.write(code)
+                
+        dst.write("/////////////////////////////////\n")
+        dst.write("// DEF\n")
+        for et in gt.edge_types.values():
+            render_edge_type_as_cpp(et,dst)
 
-    dst.write("/////////////////////////////////\n")
-    dst.write("// DEF\n")
-    for et in gt.edge_types.values():
-        render_edge_type_as_cpp(et,dst)
+        for dt in gt.device_types.values():
+            render_device_type_as_cpp(dt,dst)
+        
+        dst.write("class {}_Spec : public GraphTypeImpl {{\n".format(gt.id))
+        dst.write('  public: {}_Spec() : GraphTypeImpl("{}", {}, {}_properties_t_Spec_get()) {{\n'.format(gt.id,gt.id,gt.native_dimension,gt.id))
+        for et in gt.edge_types.values():
+            dst.write('    addEdgeType({}_Spec_get());\n'.format(et.id))
+        for et in gt.device_types.values():
+            dst.write('    addDeviceType({}_Spec_get());\n'.format(et.id))
+        dst.write("  };\n")
+        dst.write("};\n");
+        dst.write("GraphTypePtr {}_Spec_get(){{\n".format(gt.id))
+        dst.write("  static GraphTypePtr singleton(new {}_Spec);\n".format(gt.id))
+        dst.write("  return singleton;\n")
+        dst.write("}\n")
 
-    for dt in gt.device_types.values():
-        render_device_type_as_cpp(dt,dst)
+        registrationStatements.append('registry->registerGraphType({}_Spec_get());'.format(gt.id))
 
-    dst.write("class {}_Spec : public GraphTypeImpl {{\n".format(gt.id))
-    dst.write('  public: {}_Spec() : GraphTypeImpl("{}", {}, {}_properties_t_Spec_get()) {{\n'.format(gt.id,gt.id,gt.native_dimension,gt.id))
-    for et in gt.edge_types.values():
-        dst.write('    addEdgeType({}_Spec_get());\n'.format(et.id))
-    for et in gt.device_types.values():
-        dst.write('    addDeviceType({}_Spec_get());\n'.format(et.id))
-    dst.write("  };\n")
-    dst.write("};\n");
-    dst.write("GraphTypePtr {}_Spec_get(){{\n".format(gt.id))
-    dst.write("  static GraphTypePtr singleton(new {}_Spec);\n".format(gt.id))
-    dst.write("  return singleton;\n")
-    dst.write("}\n")
+        dst.write('extern "C" void registerGraphTypes(Registry *registry){\n')
+        for r in registrationStatements:
+            dst.write("  {}\n".format(r))
+        dst.write("}\n");
 
-
-    registrationStatements.append('registry->registerGraphType({}_Spec_get());'.format(gt.id))
-
-
-    dst.write('extern "C" void registerGraphTypes(Registry *registry){\n')
-    for r in registrationStatements:
-        dst.write("  {}\n".format(r))
-    dst.write("}\n");
+    if asHeader:
+        dst.write("#endif\n")

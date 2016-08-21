@@ -612,12 +612,11 @@ struct QueueSim
     }
   }
 
-  virtual uint64_t onBeginGraphInstance(const GraphTypePtr &graphType, const std::string &id, const TypedDataPtr &graphProperties) override
+  virtual void onBeginGraphInstance(const GraphTypePtr &graphType, const std::string &id, const TypedDataPtr &graphProperties) override
   {
     m_graphType=graphType;
     m_id=id;
     m_graphProperties=graphProperties;
-    return 0;
   }
 
   unsigned chooseOwner(const char *id)
@@ -628,7 +627,7 @@ struct QueueSim
     return hf(id) % m_queues.size();
   }
 
-  virtual uint64_t onDeviceInstance(uint64_t gId, const DeviceTypePtr &dt, const std::string &id, const TypedDataPtr &deviceProperties, const double */*nativeLocation*/) override
+  virtual uint64_t onDeviceInstance(const DeviceTypePtr &dt, const std::string &id, const TypedDataPtr &deviceProperties, const double */*nativeLocation*/) override
   {
     unsigned index=-1;
     
@@ -678,7 +677,7 @@ struct QueueSim
     return index;
   }
 
-  void onEdgeInstance(uint64_t gId, uint64_t dstDevIndex, const DeviceTypePtr &dstDevType, const InputPortPtr &dstInput, uint64_t srcDevIndex, const DeviceTypePtr &srcDevType, const OutputPortPtr &srcOutput, const TypedDataPtr &properties) override
+  void onEdgeInstance(uint64_t dstDevIndex, const DeviceTypePtr &dstDevType, const InputPortPtr &dstInput, uint64_t srcDevIndex, const DeviceTypePtr &srcDevType, const OutputPortPtr &srcOutput, const TypedDataPtr &properties) override
   {
     device_t *dstDevice=m_devices.at(dstDevIndex);
     device_t *srcDevice=m_devices.at(srcDevIndex);
@@ -750,7 +749,7 @@ void usage()
   fprintf(stderr, "  --max-steps n\n");
   fprintf(stderr, "  --snapshots interval destFile\n");
   fprintf(stderr, "  --prob-send probability\n");
-  fprintf(stderr, "  --threads count (default is number of cpus).\n");
+  fprintf(stderr, "  --threads count (default is 1).\n");
   exit(1);
 }
 
@@ -769,9 +768,7 @@ int main(int argc, char *argv[])
 
     double probSend=0.9;
 
-    unsigned nQueues=std::thread::hardware_concurrency();
-    if(nQueues==0)
-      nQueues=1;
+    unsigned nQueues=1;
 
     int ia=1;
     while(ia < argc){

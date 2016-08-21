@@ -51,7 +51,7 @@ void loadGraph(Registry *registry, xmlpp::Element *parent, GraphLoadEvents *even
     graphProperties=graphType->getPropertiesSpec()->create();
   }
 
-  auto gId=events->onBeginGraphInstance(graphType, graphId, graphProperties);
+  events->onBeginGraphInstance(graphType, graphId, graphProperties);
 
   std::unordered_map<std::string, std::pair<uint64_t,DeviceTypePtr> > devices;
 
@@ -59,7 +59,7 @@ void loadGraph(Registry *registry, xmlpp::Element *parent, GraphLoadEvents *even
   if(!eDeviceInstances)
     throw std::runtime_error("No DeviceInstances element");
 
-  events->onBeginDeviceInstances(gId);
+  events->onBeginDeviceInstances();
   
   for(auto *nDevice : eDeviceInstances->find("./g:DevI", ns)){
     auto *eDevice=(xmlpp::Element *)nDevice;
@@ -99,14 +99,14 @@ void loadGraph(Registry *registry, xmlpp::Element *parent, GraphLoadEvents *even
       deviceProperties=dt->getPropertiesSpec()->create();
     }
 
-    uint64_t dId=events->onDeviceInstance(gId, dt, id, deviceProperties, nativeLocationPtr);
+    uint64_t dId=events->onDeviceInstance(dt, id, deviceProperties, nativeLocationPtr);
 
     devices.insert(std::make_pair( id, std::make_pair(dId, dt)));
   }
 
-  events->onEndDeviceInstances(gId);
+  events->onEndDeviceInstances();
 
-  events->onBeginEdgeInstances(gId);
+  events->onBeginEdgeInstances();
 
   auto *eEdgeInstances=find_single(eGraph, "./g:EdgeInstances", ns);
   if(!eEdgeInstances)
@@ -168,15 +168,14 @@ void loadGraph(Registry *registry, xmlpp::Element *parent, GraphLoadEvents *even
     }
 
 
-    events->onEdgeInstance(gId,
-			   dstDevice.first, dstDevice.second, dstPort,
+    events->onEdgeInstance(dstDevice.first, dstDevice.second, dstPort,
 			   srcDevice.first, srcDevice.second, srcPort,
 			   edgeProperties);
   }
 
-  events->onBeginEdgeInstances(gId);
+  events->onBeginEdgeInstances();
 
-  events->onEndGraphInstance(gId);
+  events->onEndGraphInstance();
 }
 
 #endif
