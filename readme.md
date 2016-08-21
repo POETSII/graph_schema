@@ -49,11 +49,11 @@ which many XML parsers can handle.
 To validate a file `X.xml` you can ask for the file `X.checked`. This
 works for graph types:
 
-    make apps/ising_spin/ising_spin_graph_type.xml
+    make apps/ising_spin/ising_spin_graph_type.checked
 
 and graph instances:
 
-    make apps/ising_spin/ising_spin_16_16.xml
+    make apps/ising_spin/ising_spin_16_16.checked
 
 If there is a high-level syntax error, it should point you towards it.
 
