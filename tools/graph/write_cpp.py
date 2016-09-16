@@ -144,11 +144,12 @@ def render_typed_data_as_spec(proto,name,elt_name,dst,asHeader=False):
     dst.write("};\n")
     if asHeader:
         return
-    
+
     dst.write("class {}_Spec : public TypedDataSpec {{\n".format(name))
     dst.write("  public: TypedDataPtr create() const override {\n")
     if proto:
         dst.write("    {} *res=({}*)malloc(sizeof({}));\n".format(name,name,name))
+        dst.write("    res->_ref_count=0;\n")
         for elt in proto.elements_by_index:
             render_typed_data_init(elt, dst, "    res->");
         dst.write("    return TypedDataPtr(res);\n")
@@ -162,6 +163,7 @@ def render_typed_data_as_spec(proto,name,elt_name,dst,asHeader=False):
         dst.write("    xmlpp::Node::PrefixNsMap ns;\n")
         dst.write('    ns["g"]="TODO/POETS/virtual-graph-schema-v0";\n')
         dst.write("    {} *res=({}*)malloc(sizeof({}));\n".format(name,name,name))
+        dst.write("    res->_ref_count=0;\n")
         for elt in proto.elements_by_index:
             render_typed_data_init(elt,dst,"    res->")
         dst.write("    if(elt){\n")
@@ -227,7 +229,7 @@ def render_input_port_as_cpp(ip,dst):
         dst.write('    bool &requestSend_{}=requestSend[{}];\n'.format(dt.outputs_by_index[i].name, i))
 
     dst.write('    // Begin custom handler\n')
-    if ip.source_line and ip.source_file: 
+    if ip.source_line and ip.source_file:
         dst.write('#line {} "{}"\n'.format(ip.source_line,ip.source_file))
     for line in ip.receive_handler.splitlines():
         dst.write('    {}\n'.format(line))
@@ -271,7 +273,7 @@ def render_output_port_as_cpp(op,dst):
     dst.write('    HandlerLogImpl handler_log(orchestrator);\n')
 
     dst.write('    // Begin custom handler\n')
-    if op.source_line and op.source_file: 
+    if op.source_line and op.source_file:
         dst.write('#line {} "{}"\n'.format(op.source_line,op.source_file))
     for line in op.send_handler.splitlines():
         dst.write('    {}\n'.format(line))
@@ -345,11 +347,11 @@ def render_device_type_as_cpp(dt,dst):
 
 def render_graph_as_cpp(graph,dst,asHeader=False):
     gt=graph
-    
+
     if asHeader:
         dst.write('#ifndef {}_header\n'.format(gt.id))
         dst.write('#define {}_header\n'.format(gt.id))
-    
+
     dst.write('#include "graph.hpp"\n')
     dst.write('#include "rapidjson/document.h"\n')
 
@@ -367,7 +369,7 @@ def render_graph_as_cpp(graph,dst,asHeader=False):
         if gt.shared_code:
             for code in gt.shared_code:
                 dst.write(code)
-                
+
         dst.write("/////////////////////////////////\n")
         dst.write("// DEF\n")
         for et in gt.edge_types.values():
@@ -375,7 +377,7 @@ def render_graph_as_cpp(graph,dst,asHeader=False):
 
         for dt in gt.device_types.values():
             render_device_type_as_cpp(dt,dst)
-        
+
         dst.write("class {}_Spec : public GraphTypeImpl {{\n".format(gt.id))
         dst.write('  public: {}_Spec() : GraphTypeImpl("{}", {}, {}_properties_t_Spec_get()) {{\n'.format(gt.id,gt.id,gt.native_dimension,gt.id))
         for et in gt.edge_types.values():
