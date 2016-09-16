@@ -505,7 +505,7 @@ public:
     fprintf(stderr, "Loading provider '%s'\n", path.c_str());
     void *lib=dlopen(path.c_str(), RTLD_NOW|RTLD_LOCAL);
     if(lib==0)
-      throw std::runtime_error("Couldn't load provider '"+path+"'");
+      throw std::runtime_error("Couldn't load provider '"+path+"', err="+dlerror());
 
     // Mangled name of the export. TODO : A bit fragile.
     void *entry=dlsym(lib, "registerGraphTypes");

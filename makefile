@@ -8,7 +8,8 @@ CPPFLAGS += -I include -W -Wall -Wno-unused-parameter -Wno-unused-variable
 CPPFLAGS += $(shell pkg-config --cflags libxml++-2.6)
 CPPFLAGS += -I providers
 
-LDFLAGS += $(shell pkg-config --libs libxml++-2.6)
+LDLIBS += $(shell pkg-config --libs-only-l libxml++-2.6)
+LDFLAGS += $(shell pkg-config --libs-only-L --libs-only-other libxml++-2.6)
 
 ifeq ($(OS),Windows_NT)
 SO_CPPFLAGS += -shared
@@ -108,6 +109,10 @@ bin/create_gals_heat_instance : apps/gals_heat/create_gals_heat_instance.cpp
 	mkdir -p bin
 	$(CXX) $(CPPFLAGS) $< -o $@ $(LDFLAGS) $(LDLIBS)
 
+bin/% : tools/%.cpp
+	mkdir -p bin
+	$(CXX) $(CPPFLAGS) $< -o $@ $(LDFLAGS) $(LDLIBS)
+
 
 define provider_rules_template
 
@@ -117,7 +122,7 @@ providers/$1.graph.cpp providers/$1.graph.hpp : apps/$1/$1_graph_type.xml
 	$$(PYTHON) tools/render_graph_as_cpp.py --header < apps/$1/$1_graph_type.xml > providers/$1.graph.hpp
 
 providers/$1.graph.so : providers/$1.graph.cpp
-	g++ $$(CPPFLAGS) $$(SO_CPPFLAGS) $$< -o $$@ $$(LDFLAGS)
+	g++ $$(CPPFLAGS) $$(SO_CPPFLAGS) $$< -o $$@ $$(LDFLAGS) $(LDLIBS)
 
 $1_provider : providers/$1.graph.so
 
