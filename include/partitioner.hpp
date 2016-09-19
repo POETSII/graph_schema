@@ -62,6 +62,9 @@ private:
 
 
     count_t m_imbalanceWeight = 1;
+    int m_imbalanceExponent=2;
+    int m_crossingWeight=1;
+
     count_t m_targetCount;
     cost_t m_globalCost;
 
@@ -76,7 +79,11 @@ private:
     cost_t occupancyCost(const partition_t *part) const
     {
         cost_t d=std::abs(part->nodeCount-m_targetCount);
-        return d * m_imbalanceWeight;
+        cost_t acc=1;
+        for(int i=0; i<m_imbalanceExponent; i++){
+            acc=acc*d;
+        }
+        return acc * m_imbalanceWeight;
     }
 
 
@@ -124,7 +131,19 @@ private:
 
     cost_t calcEdgeWeight(const EdgeTypePtr &e, const TypedDataPtr &properties)
     {
-        return 5;
+        return m_crossingWeight;
+    }
+
+    cost_t recalcCost()
+    {
+        cost_t acc=0;
+        for(const auto &e : m_edges){
+            acc += distance(e->src->partition, e->dst->partition) * e->weight;
+        }
+        for(const auto &p : m_partitions){
+            acc += occupancyCost(p.get());
+        }
+        return acc;
     }
 
     virtual void onEdgeInstance(
@@ -140,6 +159,9 @@ private:
         node_t *src=m_nodes.at(srcDevInst).get();
         node_t *dst=m_nodes.at(dstDevInst).get();
 
+        if(src==dst)
+            return;
+
         m_edges.push_back(std::make_shared<edge_t>(edge_t{weight,src,dst}));
         auto e=m_edges.back();
         src->outputs.push_back(e);
@@ -149,7 +171,7 @@ private:
         src->cost += delta;
         m_globalCost += delta;
 
-        std::cerr<<"  delta="<<delta<<", cost="<<m_globalCost<<"\n";
+        //std::cerr<<"  delta="<<delta<<", cost="<<m_globalCost<<"\n";
     }
 
     cost_t move(node_t *node, partition_t *newPartition)
@@ -176,7 +198,7 @@ private:
                 cost_t remote = (distance(srcPartition, newPartition)-distance(srcPartition,oldPartition)) * e->weight;
                 e->src->cost += remote;
                 acc += remote;
-                //std::cerr<<"  in: ("<<e->src->id<<","<<e->dst->id<<") : "<<remote<<"\n";
+                //std::cerr<<"  in:("<<e->src->id<<":"<<e->src->partition->index<<","<<e->dst->id<<":"<<e->dst->partition->index<<") : "<<remote<<"\n";
             }
 
             // Update partitions
@@ -199,9 +221,20 @@ private:
 
 
 public:
-    void greedy(unsigned n)
+    void setImbalanceWeight(int v)
+    { m_imbalanceWeight=v; }
+
+    void setImbalanceExponent(int v)
+    { m_imbalanceExponent=v; }
+
+    void setCrossingWeight(int v)
+    { m_crossingWeight=v; }
+
+    void greedy(unsigned n, double prop=1.0)
     {
-        for(unsigned i=0; i<n; i++){
+        unsigned nn=(unsigned)ceil(n*prop);
+
+        for(unsigned i=0; i<nn; i++){
             node_t *node=m_nodes.at( m_urng()%m_nodes.size() ).get();
             partition_t *newPartition=m_partitions.at( m_urng()%m_partitions.size() ).get();
             partition_t *oldPartition=node->partition;
@@ -223,21 +256,25 @@ public:
         }
     }
 
-    void anneal(unsigned n)
+    void anneal(unsigned n, double prop=0.1)
     {
         std::uniform_real_distribution<> ureal;
 
-        double T0=100.0;
-        double Tn=000.1;
+        double T0=10.0;
+        double Tn=00.1;
         double alpha=std::pow(Tn/T0, 1.0/n);
 
         double T=T0;
 
-        for(unsigned i=0; i<n; i++){
+        unsigned nn=(unsigned)ceil(n*prop);
+
+        for(unsigned i=0; i<nn; i++){
             node_t *node=m_nodes.at( m_urng()%m_nodes.size() ).get();
             partition_t *newPartition=m_partitions.at( m_urng()%m_partitions.size() ).get();
 
             partition_t *oldPartition=node->partition;
+
+            //std::cerr<<"  "<<node->id<<" : "<<oldPartition->index<<" -> "<<newPartition->index<<"\n";
 
             auto oldCost=m_globalCost;
             cost_t delta=move(node, newPartition);
@@ -247,8 +284,9 @@ public:
 
             bool accept = ureal(m_urng) < thresh;
 
-            if(0==(i%10000)){
+            if(0==(i%100000)){
                 std::cerr<<"  "<<i<<" : T="<<T<<", cost="<<m_globalCost<<", delta="<<delta<<", thresh="<<thresh<<", accept="<<accept<<"\n";
+            //std::cerr<<"  recalc="<<recalcCost()<<"\n";
             }
 
             if(!accept){
@@ -264,7 +302,7 @@ public:
         std::uniform_real_distribution<> ureal;
 
         double T0=100.0;
-        double Tn=000.1;
+        double Tn=00.1;
         double alpha=std::pow(Tn/T0, 1.0/n);
 
         double T=T0;
@@ -314,23 +352,68 @@ public:
         }
     }
 
-    void dump_dot()
+    void dump_dot(bool showClusters=true)
     {
-        std::array<const char*,8> colours{"blue4","red4","green4","blue2","red2","green2","gray","yellow"};
+        std::array<const char*,8> colours{"blue","green","gray","yellow","blue4","red4","red","green4"};
+
+        std::vector<cost_t> costs;
+        for(const auto &n : m_nodes){
+            auto cost=n->cost;
+            if(cost >= costs.size()){
+                costs.resize(cost+1, 0);
+            }
+            costs.at(cost)++;
+        }
+        for(unsigned i=0; i<costs.size(); i++){
+            if(costs[i]>0){
+                std::cerr<<"  cost "<<i<<", count = "<<costs[i]<<"\n";
+            }
+        }
+
+        auto nodePrint = [&](node_t *n, const std::string &fillColour)
+        {
+            std::cout<<" \""<<n->id<<"\" [";
+            if(fillColour.size()){
+                std::cout<<" style=\"filled\" fillcolor=\""<<fillColour<<"\"";
+            }
+            if(n->location.size()){
+                std::cout<<" pos=\"" << n->location.at(0)*100<<","<<n->location.at(1)*100<<"\"";
+            }
+            std::cout<<"];\n";
+        };
 
         std::cout<<"digraph partitioned{\n";
         //std::cout<<"overlap=false;\n";
         //std::cout<<"spline=true;\n";
 
-        for(const auto &n : m_nodes){
-            std::cout<<" \""<<n->id<<"\" [style=\"filled\", fillcolor=\""<<colours.at(n->partition->index)<<"\"";
-            if(n->location.size()){
-                std::cout<<",pos=\"" << n->location.at(0)*0.25<<","<<n->location.at(1)*0.25<<"\"";
+        if(!showClusters){
+            for(const auto &n : m_nodes){
+                nodePrint(n.get(), colours.at(n->partition->index));
             }
-            std::cout<<"];\n";
+        }else{
+            std::map<partition_t*,std::vector<node_t*> > partitions;
+            for(const auto &n : m_nodes){
+                partitions[n->partition].push_back(n.get());
+            }
+
+            for(const auto &p : partitions){
+                std::cout<<" subgraph cluster_"<<p.first->index<<" {\n";
+
+                for(const auto &n : p.second){
+                   nodePrint(n, n->cost > 0 ? "red" : "");
+                }
+
+                std::cout<<"}\n";
+            }
         }
         for(const auto &e : m_edges){
-            std::cout<<" \""<<e->src->id<<"\" -> \""<<e->dst->id<<"\";\n";
+            std::cout<<" \""<<e->src->id<<"\" -> \""<<e->dst->id<<"\" [";
+            if(e->src->partition!=e->dst->partition){
+                std::cout<<" color=\"red\"";
+            }else{
+                std::cout<<" color=\"#00000040\"";
+            }
+            std::cout<<"];\n";
         }
 
         std::cout<<"}\n";

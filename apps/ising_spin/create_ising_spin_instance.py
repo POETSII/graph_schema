@@ -5,6 +5,7 @@ from graph.save_xml import save_graph
 import sys
 import os
 import math
+import random
 
 
 
@@ -21,7 +22,7 @@ if len(sys.argv)>2:
     n=int(sys.argv[2])
 if len(sys.argv)>3:
     T=float(sys.argv[3])
-    
+
 
 graphType=graphTypes["ising_spin"]
 devType=graphType.device_types["cell"]
@@ -56,10 +57,17 @@ for x in range(0,n):
     sys.stderr.write(" Devices : Row {} of {}\n".format(x, n))
     for y in range(0,n):
         devProps={"x":x, "y":y}
-        di=DeviceInstance(res,"n_{}_{}".format(x,y), devType, [x,y], devProps)
+        px=x
+        py=y
+        if x==0 or x==n-1:
+            py=y+0.5
+        if y==0 or y==n-1:
+            px=x+0.5
+        sys.stderr.write(" {},{} -> {},{}\n".format(x,y,px,py))
+        di=DeviceInstance(res,"n_{}_{}".format(x,y), devType, [px,py], devProps)
         nodes[(x,y)]=di
         res.add_device_instance(di)
-        
+
 def add_channel(x,y,dx,dy,dir):
     edgeProps={"direction":dir}
     dst=nodes[ (x,y) ]
@@ -77,7 +85,7 @@ for x in range(0,n):
         if n>2:
             add_channel(x,y, 0, +1, 3)
         if n>2:
-            add_channel(x,y, -1, 0, 4)        
-        
+            add_channel(x,y, -1, 0, 4)
 
-save_graph(res,sys.stdout)        
+
+save_graph(res,sys.stdout)

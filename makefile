@@ -33,6 +33,14 @@ CPPFLAGS += -O3 -DNDEBUG=1
 TRANG = external/trang-20091111/trang.jar
 JING = external/jing-20081028/bin/jing.jar
 
+FFMPEG := $(shell which ffmpeg)
+ifeq ($(FFMPEG),)
+FFMPEG := $(shell which avconv)
+endif
+
+ff :
+	echo $(FFMPEG)
+
 # TODO : OS X specific
 PYTHON = python3.4
 
@@ -135,6 +143,8 @@ include apps/ising_spin/makefile.inc
 include apps/clocked_izhikevich/makefile.inc
 include apps/gals_izhikevich/makefile.inc
 include apps/gals_heat/makefile.inc
+
+include tools/partitioner.inc
 
 demos : $(ALL_DEMOS)
 
