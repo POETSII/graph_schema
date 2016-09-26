@@ -26,7 +26,7 @@ demos/gals_heat/gals_heat_$1.mp4 : demos/gals_heat/gals_heat_$1.xml demos/gals_h
 		$4
 	(cd demos/gals_heat/gals_heat_$1.tmp/  &&  for i in *.dot; do echo $$$$i; neato -Gsize=5,5\! -Gdpi=100 -Tpng $$$$i > $$$$i.png; done )
 	#(cd demos/gals_heat/gals_heat_$1.tmp/  && convert -delay 20 -loop 0 *.dot.png ../gals_heat_$1.gif)
-	(cd demos/gals_heat/gals_heat_$1.tmp/  && $(FFMPEG) -r 10 -i out_%06d.dot.png -c:v libx264 -crf 18 ../gals_heat_$1.mp4)
+	(cd demos/gals_heat/gals_heat_$1.tmp/  && $(FFMPEG) -r 10 -i out_%06d.dot.png -vf "scale=trunc(iw/2)*2:trunc(ih/2)*2" -c:v libx264 -crf 18 ../gals_heat_$1.mp4)
 
 
 ALL_GALS_HEAT_DEMOS += demos/gals_heat/gals_heat_$1.mp4

@@ -22,7 +22,7 @@ demos/ising_spin/ising_spin_$1.gif : demos/ising_spin/ising_spin_$1.xml demos/is
 		$3
 	(cd demos/ising_spin/ising_spin_$1.tmp/  &&  for i in *.dot; do echo $$$$i; neato -Gsize=5,5\! -Gdpi=100 -Tpng $$$$i > $$$$i.png; done )
 	(cd demos/ising_spin/ising_spin_$1.tmp/  && convert -delay 20 -loop 0 *.dot.png ../ising_spin_$1.gif)
-	(cd demos/ising_spin/ising_spin_$1.tmp/  && $(FFMPEG) -r 10 -i out_%06d.dot.png -c:v libx264 -crf 18 ../ising_spin_$1.mp4)
+	(cd demos/ising_spin/ising_spin_$1.tmp/  && $(FFMPEG) -r 10 -i out_%06d.dot.png -vf "scale=trunc(iw/2)*2:trunc(ih/2)*2" -c:v libx264 -crf 18 ../ising_spin_$1.mp4)
 
 ALL_ISING_SPIN_DEMOS += demos/ising_spin/ising_spin_$1.gif
 
