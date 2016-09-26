@@ -2,6 +2,13 @@
 <Graph xmlns="http://TODO.org/POETS/virtual-graph-schema-v0">
   <GraphType id="async_heat_ts" nativeDimension="2">
     <!--
+
+	This is based on the TS method from "A survey of asynchronous finite-difference
+methods for parabolic PDEs on multiprocessors *",
+	which is filed as amitai-93-survey-of-async-finite-difference.pdf
+
+
+
     -->
 
     <Properties>
