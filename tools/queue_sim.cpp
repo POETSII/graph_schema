@@ -51,7 +51,7 @@ struct QueueSim
     typed_data_t *message;
   };
 
-    struct edge_bundle_id_t
+  struct edge_bundle_id_t
   {
     unsigned queue; // Index of the queue it goes to
     unsigned bid; // Index of the delivery batch within that queue
@@ -314,11 +314,11 @@ struct QueueSim
       /*if(m_broadcasts.empty())
 	return false;
       
-      bid=m_broadcasts.front().bid;
-      message=m_broadcasts.front().message;
-      m_broadcasts.pop();
+	bid=m_broadcasts.front().bid;
+	message=m_broadcasts.front().message;
+	m_broadcasts.pop();
 
-      return true;
+	return true;
       */
       broadcast_t res;
       assert(m_broadcasts);
@@ -331,70 +331,70 @@ struct QueueSim
 
     void deliver(unsigned bid, const TypedDataPtr &message)
     {
-    	assert(bid < edge_bundles.size());
+      assert(bid < edge_bundles.size());
 
-	edge_bundle_t &bundle=edge_bundles[bid];
+      edge_bundle_t &bundle=edge_bundles[bid];
 
-	deliver(bundle.edges, message);
+      deliver(bundle.edges, message);
     }
 
 
     void deliver(std::vector<edge_t> &edges, const TypedDataPtr &message)
     {
-	const typed_data_t *graphPropertiesPtr=parent->m_graphProperties.get();
-	
-	ReceiveOrchestratorServicesImpl services(logLevel, stderr, 0, 0);
+      const typed_data_t *graphPropertiesPtr=parent->m_graphProperties.get();
+    
+      ReceiveOrchestratorServicesImpl services(logLevel, stderr, 0, 0);
 
-	for(edge_t &e : edges){
-	  device_t *device=e.device;
+      for(edge_t &e : edges){
+	device_t *device=e.device;
 
-	  services.setReceiver(device->id, e.portName);
-	  
-	  e.port->onReceive(&services, graphPropertiesPtr,
+	services.setReceiver(device->id, e.portName);
+      
+	e.port->onReceive(&services, graphPropertiesPtr,
 			  device->properties.get(), device->state.get(),
 			  e.properties.get(), e.state.get(),
 			  message.get(), device->ready.get()
-			    );
+			  );
 
-	  if(device->outputCount==1){
-	    if(device->ready.get()[0] == (device->readyIndex!=-1) ){
-	      // do nothing. It is either still ready or still not ready
-	    }else if(device->readyIndex==-1){
-	      device->readyIndex=0;
-	      readyAdd(device);
-	    }else{
-	      device->readyIndex=-1;
+	if(device->outputCount==1){
+	  if(device->ready.get()[0] == (device->readyIndex!=-1) ){
+	    // do nothing. It is either still ready or still not ready
+	  }else if(device->readyIndex==-1){
+	    device->readyIndex=0;
+	    readyAdd(device);
+	  }else{
+	    device->readyIndex=-1;
+	    readyRemove(device);
+	  }
+	}else{	       
+	  int readyIndex=device->readyIndex;
+	  if(readyIndex!=-1 && device->ready.get()[readyIndex]){
+	    // Do nothing, we are still on the same valid ready index
+	    if(logLevel>4){
+	      fprintf(stderr, "      on-ready skip.\n");
+	    }
+	  }else{
+	    readyIndex=-1;
+	    for(unsigned i=0;i<device->outputCount;i++){
+	      if(device->ready.get()[i]){
+		readyIndex=i;
+		break;
+	      }
+	    }
+
+	    if((device->readyIndex!=-1) == (readyIndex!=-1)){
+	      // it was either already ready or not ready, and has not changed
+	    }else if(readyIndex==-1){
+	      // it was previously ready
 	      readyRemove(device);
-	    }
-	  }else{	       
-	    int readyIndex=device->readyIndex;
-	    if(readyIndex!=-1 && device->ready.get()[readyIndex]){
-	      // Do nothing, we are still on the same valid ready index
-	      if(logLevel>4){
-		fprintf(stderr, "      on-ready skip.\n");
-	      }
 	    }else{
-	      readyIndex=-1;
-	      for(unsigned i=0;i<device->outputCount;i++){
-		if(device->ready.get()[i]){
-		  readyIndex=i;
-		  break;
-		}
-	      }
-
-	      if((device->readyIndex!=-1) == (readyIndex!=-1)){
-		// it was either already ready or not ready, and has not changed
-	      }else if(readyIndex==-1){
-		// it was previously ready
-		readyRemove(device);
-	      }else{
-		// it was previously blocked
-		readyAdd(device);
-	      }
-	      device->readyIndex=readyIndex;
+	      // it was previously blocked
+	      readyAdd(device);
 	    }
+	    device->readyIndex=readyIndex;
 	  }
 	}
+      }
     }
     
     void send(device_t *device)
@@ -494,7 +494,7 @@ struct QueueSim
     for(auto *device : m_devices){
       auto print=device->type->getInput("__print__");
       if(print){
-	    fprintf(stderr, "Dump\n");
+        fprintf(stderr, "Dump\n");
 	services.setReceiver(device->id, "__print__");
 	print->onReceive(&services, m_graphProperties.get(), device->properties.get(), device->state.get(), 0, 0, 0, device->ready.get());
       }
@@ -513,32 +513,32 @@ struct QueueSim
     for(auto *device : queue.devices){
 
       if(logLevel>3){
-	fprintf(stderr, "  queue %u: trying __init__ on %p=%s, type=%p\n", queue.index, device, device->id, device->type.get());
+        fprintf(stderr, "  queue %u: trying __init__ on %p=%s, type=%p\n", queue.index, device, device->id, device->type.get());
       }
       auto init=device->type->getInput("__init__");
       if(!init){
-	if(logLevel>3){
-	  fprintf(stderr,"  No init on %s\n", device->id);
-	}
+        if(logLevel>3){
+          fprintf(stderr,"  No init on %s\n", device->id);
+        }
       }else{
-	if(logLevel>3){
-	  fprintf(stderr,"  Init %s\n", device->id);
-	}
+        if(logLevel>3){
+          fprintf(stderr,"  Init %s\n", device->id);
+        }
 
-	ReceiveOrchestratorServicesImpl services(logLevel, stderr, device->id, init->getName().c_str());
-	
-	init->onReceive(&services, graphPropertiesPtr, device->properties.get(), device->state.get(), 0, 0, 0, device->ready.get());
-	int readyIndex=-1;
-	for(unsigned i=0; i<device->outputCount; i++){
-	  if(device->ready.get()[i]){
-	    readyIndex=i;
-	    break;
-	  }
-	}
-	device->readyIndex=readyIndex;
-	if(readyIndex!=-1){
-	  queue.readyAdd(device);
-	}
+        ReceiveOrchestratorServicesImpl services(logLevel, stderr, device->id, init->getName().c_str());
+        
+        init->onReceive(&services, graphPropertiesPtr, device->properties.get(), device->state.get(), 0, 0, 0, device->ready.get());
+        int readyIndex=-1;
+        for(unsigned i=0; i<device->outputCount; i++){
+          if(device->ready.get()[i]){
+            readyIndex=i;
+            break;
+          }
+        }
+        device->readyIndex=readyIndex;
+        if(readyIndex!=-1){
+          queue.readyAdd(device);
+        }
       }
     }
 
@@ -551,8 +551,8 @@ struct QueueSim
 
     while(!m_quit){
       if(logLevel>2){
-	fprintf(stderr, "\n==========================================================\n");
-	fprintf(stderr, "q = %u, steps = %u\n", queue.index, steps);
+        fprintf(stderr, "\n==========================================================\n");
+        fprintf(stderr, "q = %u, steps = %u\n", queue.index, steps);
       }
       steps++;
       
@@ -560,17 +560,17 @@ struct QueueSim
       TypedDataPtr message;
 
       if(queue.pop(bid, message)){
-	queue.deliver(bid, message);
-	m_queuedMessages--;
+        queue.deliver(bid, message);
+        m_queuedMessages--;
       }else{
-	device_t *device=queue.readyPop();
+        device_t *device=queue.readyPop();
 	if(device){
 	  assert(device->owner==self);
 	  assert(device->readyIndex!=-1);
 	  assert(device->ready.get()[device->readyIndex]);
 
 	  queue.send(device);
-	  
+      
 	  for(unsigned i=0;i<64;i++){
 	    device=queue.readyPop();
 	    if(!device)
@@ -590,9 +590,9 @@ struct QueueSim
 	    if(logLevel>3){
 	      fprintf(stderr, "  idle : %d\n", queue.index);
 	    }
-	    
+        
 	    m_busyCount--;
-	    
+        
 	    if(m_busyCount==0 && m_queuedMessages==0){
 	      m_idleCondition.notify_all();
 	      if(logLevel>2){
@@ -600,9 +600,9 @@ struct QueueSim
 	      }
 	      return;
 	    }
-	    
+        
 	    m_idleCondition.wait_for(idleLock, std::chrono::milliseconds(100));
-	  
+      
 	    m_busyCount++;
 
 	    idleSteps=0;
@@ -648,12 +648,12 @@ struct QueueSim
       d.outputCount=dt->getOutputCount();
       d.ready.reset(new bool[d.outputCount]{false});
       for(unsigned i=0; i<d.outputCount; i++){
-	output_port_t out;
-	out.port=dt->getOutput(i);
-	std::string pid=id+":"+out.port->getName();
-	out.id=intern(pid.c_str());
-	out.spec=out.port->getEdgeType()->getMessageSpec();
-	d.outputs.push_back(out);
+        output_port_t out;
+        out.port=dt->getOutput(i);
+        std::string pid=id+":"+out.port->getName();
+        out.id=intern(pid.c_str());
+        out.spec=out.port->getEdgeType()->getMessageSpec();
+        d.outputs.push_back(out);
       }
       d.readyIndex=-1;
       d.isOnReady=false;
@@ -722,17 +722,17 @@ struct QueueSim
     throw std::runtime_error("Not implemented.");
     
     /*
-    for(auto &dev : m_devices){
-        dst->writeDeviceInstance(dev.type, dev.name, dev.state, dev.readyToSend.get());
-	for(unsigned i=0; i<dev.inputs.size(); i++){
-	  const auto &et=dev.type->getInput(i)->getEdgeType();
-	  for(auto &slot : dev.inputs[i]){
-	    dst->writeEdgeInstance(et, slot.id, slot.state, slot.firings, 0, 0);
-	    slot.firings=0;
-	  }
-	}
-	}*/
-	  
+      for(auto &dev : m_devices){
+      dst->writeDeviceInstance(dev.type, dev.name, dev.state, dev.readyToSend.get());
+      for(unsigned i=0; i<dev.inputs.size(); i++){
+      const auto &et=dev.type->getInput(i)->getEdgeType();
+      for(auto &slot : dev.inputs[i]){
+      dst->writeEdgeInstance(et, slot.id, slot.state, slot.firings, 0, 0);
+      slot.firings=0;
+      }
+      }
+      }*/
+      
     dst->endSnapshot();
   }
 

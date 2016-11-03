@@ -63,6 +63,13 @@
       <EdgeType id="__print__">
 	<!-- This doesn't have any properties -->
       </EdgeType>
+	  
+	  <EdgeType id="__output__">
+		<Properties>
+			<Scalar type="node_id_t" name="id" />
+		</Properties>
+		
+	  </EdgeType>
 
       <EdgeType id="update">
 	<Properties>

@@ -1,0 +1,183 @@
+<?xml version="1.0"?>
+<Graph xmlns="http://TODO.org/POETS/virtual-graph-schema-v0">
+  <GraphType id="toy" >
+
+    <Properties>
+        <Scalar type="float" name="wibble" />
+    </Properties>
+    
+    <EdgeTypes>
+        <EdgeType id="net">
+            <Properties>
+                <Scalar type="float" name="p1" value="6" />
+                <Scalar type="float" name="p2" value="6" />
+                <Scalar type="float" name="p3" value="6" />
+                <Scalar type="uint32_t" name="nhoodId" />
+            </Properties>
+            <!--<State>
+                <Scalar type="float" name="weight" value="6" />
+                <Scalar type="uint32_t" name="count" />
+            </State>-->
+            <Message>
+                <Scalar type="float" name="m1" value="5.0" />
+                <Array type="char" name="myString" length="16" />
+            </Message>
+        </EdgeType>
+    </EdgeTypes>
+    
+    <DeviceTypes>
+        <DeviceType id="neuron">
+            <Properties>
+                <Scalar type="float" name="p1" value="6" />
+                <Scalar type="float" name="p2" />
+               
+                <Scalar type="float" name="source_property" />
+                              
+                <Scalar type="uint32_t>" name="nhoodSize" />
+            </Properties>
+            
+            <State>
+                <Scalar type="uint32_t" name="count" value="0" />
+                <Scalar type="float" name="latest_m1" value="5.0" />
+                <Array type="char" name="latest_myString" length="16" />
+            </State>
+            
+            <!--<![CDATA[
+                while(1){
+                    message m=recv();
+                    dev_id_t *dests=find_dests(m);
+                    
+                    for(unsigned i=0;i<nDests;i++){
+                        send(m, dests[i]);
+                    }
+                }
+                
+                
+            
+                while(1){
+                    message_t incoming=recv();
+                    if(incoming){
+                        auto deviceState=find_device(incoming);
+                        deliver_handler(deviceState, incoming);
+                        
+                    }else if( rdeviceReady() ){
+                        auto deviceState=find_ready_device();
+                        
+                    }
+                }
+            
+            ]]>-->
+            
+            <InputPort name="sink" edgeTypeId="net">
+                <OnReceive><![CDATA[
+                    deviceState->count++;
+                    
+                    deviceState->latest_m1 = message->m1;
+                    memcpy(deviceState->latest_myString, message->myString, 16);
+                    
+                    if(deviceState->count > deviceProperties->fireThreshold){
+                        deviceState->count=0;
+                        requestSend_source = true;
+                    }
+                ]]></OnReceive>
+            </InputPort>
+            
+            <OutputPort name="source" edgeTypeId="net">
+                <OnSend><![CDATA[
+                    assert(requestSend_source == true);
+                    
+                    message->m1 = deviceState->latest_m1;
+                    memcpy(message->myString, deviceState->latest_myString, 16);
+                    
+                    requestSend_source = false;
+                ]]></OnSend>
+            </OutputPort>
+            
+        </DeviceType>
+        
+        <DeviceType id="stimulus">
+            <Properties>
+                <Scalar type="float" name="rate" value="6" />
+                              
+            </Properties>
+            
+            <State>
+                <Scalar type="uint32_t" name="rng" value="6" />
+                <Scalar type="float" name="nextFiring" />
+            </State>
+            
+            
+            <OutputPort name="source" edgeTypeId="net">
+                <OnSend><![CDATA[
+                    // TODO
+                ]]></OnSend>
+            </OutputPort>
+            
+        </DeviceType>
+        
+        <DeviceType id="statistics">
+            
+            <State>
+                <Scalar type="uint32_t" name="nSeen" />
+                <Scalar type="float" name="sumSeen" />
+            </State>
+            
+            
+            <InputPort name="sink" edgeTypeId="net">
+                <OnReceive><![CDATA[
+                    // TODO
+                ]]></OnReceive>
+            </InputPort>
+            
+        </DeviceType>
+    
+    </DeviceTypes>
+
+  </GraphType>
+  
+  <GraphInstance id="example_instance_1" graphTypeId="toy">
+    <Properties>
+        "wibble" : 0.7
+    </Properties>
+    
+    <DeviceInstances>
+        <DevI id="S1" type="stimulus">
+            <P>"rate":15.6</P>
+        </DevI>
+        <DevI id="S2" type="stimulus" />
+        <DevI id="D0" type="neuron">
+            <P>"p1":23,"p2":76</P>
+        </DevI>
+        <DevI id="D1" type="neuron">
+            <P>"p1":23,"p2":76</P>
+        </DevI>
+        <DevI id="D2" type="neuron">
+            <P>"p1":23,"p2":76</P>
+        </DevI>
+        <DevI id="M" type="statistics" />
+    </DeviceInstances>
+    
+    <EdgeInstances>
+        <EdgeI path="D0:sink-S1:source">
+            <P>"p1":2,"p2":3,"p3":3</P>
+        </EdgeI>
+        <EdgeI path="D1:sink-S2:source">
+            <P>"p1":0,"p2":0</P>
+        </EdgeI>
+        <EdgeI path="D0:sink-D2:source">
+            <P>"p1":1,"p2":2,"p3":3</P>
+        </EdgeI>
+        <EdgeI path="D1:sink-D0:source">
+            <P>"p1":1,"p2":2,"p3":3</P>
+        </EdgeI>
+        <EdgeI path="D2:sink-D1:source">
+            <P>"p1":1,"p2":2,"p3":3</P>
+        </EdgeI>
+        <EdgeI path="M:sink-D2:source">
+            <P>"p1":0,"p2":0,"p3":0</P>
+        </EdgeI>
+    </EdgeInstances>
+    
+    
+  </GraphInstance>
+</Graph>

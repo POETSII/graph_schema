@@ -4,6 +4,25 @@ import sys
 
 registrationStatements=[]
 
+def typed_data_packed_size(proto):
+    if proto in None:
+        return 0
+    elif isinstance(proto,ScalarTypedDataSpec):
+        if proto.type=="uint32_t": return 4
+        elif proto.type=="int32_t": return 4
+        elif proto.type=="bool": return 1
+        elif proto.type=="float": return 4
+        else raise RuntimeError("Uknknown scalar data type {}".format(proto.type))
+    elif isinstance(proto,TupleTypedDataSpec):
+        acc=0;
+        for elt in proto.elements_by_index:
+            acc += typed_data_packed_size(proto)
+        return acc
+    elif isinstance(proto,ArrayTypedDataSpec):
+        return typed_data_packed_size(proto.type)*proto.length;
+    else:
+        raise RuntimeError("Unknown data type {}.".format(type(proto)))
+
 def render_typed_data_as_decl(proto,dst,indent=""):
     if proto is None:
         pass

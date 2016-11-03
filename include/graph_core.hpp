@@ -48,6 +48,7 @@ virtual dispatch (usually quick), plus the loss of cross-function optimisation
 struct typed_data_t
 {
   // This is opaque data, and should be a POD
+  uint32_t _size_bytes; // The total number of bytes for the _local_ variant. Not for network serialisation.
   std::atomic<unsigned> _ref_count; // This is exposed in order to allow cross-module optimisations
 };
 
@@ -116,12 +117,25 @@ public:
     release();
     m_p=p;
   }
+  
+  TypedDataPtr clone() const
+  {
+    TypedDataPtr res;
+    
+    if(m_p){
+      typed_data_t *p=(typed_data_t*)malloc(m_p->_size_bytes);
+      memcpy(p, m_p, m_p->_size_bytes);
+      res.attach(p);
+    }
+    
+    return res;
+  }
 
   void release()
   {
     if(m_p){
       if(std::atomic_fetch_sub(&m_p->_ref_count, 1u)==1){
-	free(m_p);
+        free(m_p);
       }
       m_p=0;
     }
@@ -157,8 +171,16 @@ public:
 
   virtual std::string toJSON(const TypedDataPtr &data) const=0;
 
-
-
+  /*
+  //! Size of the structure on the wire
+  virtual unsigned packedSize() const;
+  
+  //! Take a data instance and pack it to bytes
+  virtual void pack(unsigned uint8_t *pBytes, const TypeDataPtr &data) const=0;
+  
+  //! Expand bytes back into an istance
+  virtual TypedDataPtr unpack(unsigned uint8_t *pBytes) const=0;
+  */
   virtual uint64_t getTypeHash() const
   {
     // TODO

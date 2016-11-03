@@ -99,11 +99,12 @@ def write_graph(dst, graph,devStates=None,edgeStates=None):
 
     minFirings={}
     maxFirings={}
-    for (id,es) in edgeStates.items():
-        et=graph.edge_instances[id].edge_type.id
-        firings=int(es[1])
-        minFirings[et]=min(firings,  minFirings.get(et,firings))
-        maxFirings[et]=max(firings,  maxFirings.get(et,firings))
+    if edgeStates:
+        for (id,es) in edgeStates.items():
+            et=graph.edge_instances[id].edge_type.id
+            firings=int(es[1])
+            minFirings[et]=min(firings,  minFirings.get(et,firings))
+            maxFirings[et]=max(firings,  maxFirings.get(et,firings))
 
     sys.stderr.write("min = {}, max = {}\n".format(minFirings,maxFirings))
     
@@ -115,10 +116,11 @@ def write_graph(dst, graph,devStates=None,edgeStates=None):
     for di in graph.device_instances.values():
         dt=di.device_type
         
-        stateTuple=devStates.get(di.id,None)
-        if stateTuple:
-            state=stateTuple[0]
-            rts=stateTuple[1]
+        if devStates:
+            stateTuple=devStates.get(di.id,None)
+            if stateTuple:
+                state=stateTuple[0]
+                rts=stateTuple[1]
         
 
         props=[]        
@@ -148,11 +150,12 @@ def write_graph(dst, graph,devStates=None,edgeStates=None):
     addLabels=len(graph.edge_instances) < 50
 
     for ei in graph.edge_instances.values():
-        stateTuple=edgeStates.get(ei.id,None)
-        if stateTuple:
-            state=stateTuple[0]
-            firings=stateTuple[1]
-            queue=stateTuple[2]
+        if edgeStates:
+            stateTuple=edgeStates.get(ei.id,None)
+            if stateTuple:
+                state=stateTuple[0]
+                firings=stateTuple[1]
+                queue=stateTuple[2]
         
         props={}
         props["color"]=edgeTypeToColor[ei.edge_type.id]

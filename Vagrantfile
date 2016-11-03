@@ -50,6 +50,9 @@ Vagrant.configure(2) do |config|
   #   # Customize the amount of memory on the VM:
      vb.memory = "2048"
   end
+
+  config.ssh.forward_agent = true
+  
   #
   # View the documentation for the provider you are using for more
   # information on available options.
@@ -65,6 +68,8 @@ Vagrant.configure(2) do |config|
   # Puppet, Chef, Ansible, Salt, and Docker are also available. Please see the
   # documentation for more information about their specific syntax and use.
   config.vm.provision "shell", inline: <<-SHELL
-     sudo apt-get install -y libxml2-dev g++ make libxml++2.6-dev libboost-dev python3.4 zip default-jre-headless python3-lxml
+     sudo apt install -y libxml2-dev g++ make libxml++2.6-dev libboost-dev python3.4 zip default-jre-headless python3-lxml graphviz
+     sudo apt install -y openmpi-doc openmpi-bin openmpi-common  libopenmpi-dev
+     sudo apt install -y emacs
   SHELL
 end

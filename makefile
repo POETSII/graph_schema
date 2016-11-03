@@ -102,6 +102,10 @@ bin/epoch_sim.s : tools/epoch_sim.cpp
 bin/queue_sim : tools/queue_sim.cpp
 	mkdir -p bin
 	$(CXX) $(CPPFLAGS) $< -o $@ $(LDFLAGS) $(LDLIBS)
+	
+bin/mpi_test : tools/mpi_test.cpp
+	mkdir -p bin
+	mpic++ $(CPPFLAGS) $< -o $@ $(LDFLAGS) $(LDLIBS)
 
 
 define provider_rules_template
