@@ -31,6 +31,11 @@ CPPFLAGS += -O3 -DNDEBUG=1
 TRANG = external/trang-20091111/trang.jar
 JING = external/jing-20081028/bin/jing.jar
 
+FFMPEG = $(shell which ffmpeg)
+ifeq ($(FFMPEG),)
+ FFMPEG = $(shell which avconv)
+endif
+
 # TODO : OS X specific
 PYTHON = python3.4
 
