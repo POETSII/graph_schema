@@ -31,6 +31,7 @@
       <Scalar type="float" name="weightSelf" />
       <Scalar type="float" name="weightOther" />
       <Scalar type="uint32_t" name="maxTime" value="1000" />
+	  <Scalar type="uint32_t" name="o_dt" value="5" /><!-- Output interval -->
     </Properties>
 
     <SharedCode><![CDATA[
@@ -39,208 +40,304 @@
 
     <EdgeTypes>
       <EdgeType id="__init__">
-	<!-- This doesn't have any properties -->
+		<!-- This doesn't have any properties -->
       </EdgeType>
 
       <EdgeType id="update">
-	<Message>
-	  <Scalar type="uint32_t" name="time" />
-	  <Scalar type="float" name="value" />
-	</Message>
+		<!-- This also gets used for exfiltration -->
+		<Message>
+		  <Scalar type="uint32_t" name="time" />
+		  <Scalar type="float" name="value" />
+		</Message>
       </EdgeType>
+	 
     </EdgeTypes>
 
     <DeviceTypes>
 
       <DeviceType id="dirichlet_variable">
-	<Properties>
-	  <Scalar type="float" name="amplitude" />
-	  <Scalar type="float" name="phase" />
-	  <Scalar type="float" name="frequency" />
-	  <Scalar type="float" name="bias" />
-	  
-	  <Scalar type="uint32_t" name="neighbours" /> <!-- We need to know the neighbour count in order to sync -->
-	</Properties>
+		<Properties>
+		  <Scalar type="float" name="amplitude" />
+		  <Scalar type="float" name="phase" />
+		  <Scalar type="float" name="frequency" />
+		  <Scalar type="float" name="bias" />
+		  
+		  <Scalar type="uint32_t" name="neighbours" /> <!-- We need to know the neighbour count in order to sync -->
+		</Properties>
 
-	<State>
-	  <Scalar type="float" name="value" />
+		<State>
+		  <Scalar type="float" name="value" />
 
-	  <Scalar type="bool" name="initial" />
-	  
-	  <Scalar type="uint32_t" name="timeNow" />
-	  <Scalar type="uint32_t" name="seenNow" />
-	  <Scalar type="uint32_t" name="seenNext" />
-	</State>
+		  <Scalar type="uint32_t" name="t" />
+		  <Scalar type="uint32_t" name="cs" />
+		  <Scalar type="uint32_t" name="ns" />
+		</State>
 
-	<InputPort name="__init__" edgeTypeId="__init__">
-	  <OnReceive><![CDATA[
-	  deviceState->timeNow=0;
-	  deviceState->seenNow=0;
+		<InputPort name="__init__" edgeTypeId="__init__">
+		  <OnReceive><![CDATA[
+		  deviceState->t =0;
+		  deviceState->cs = deviceState->neighbours; // Force us into the sending ready state
+		  deviceState->ns = 0;
 
-	  deviceState->initial=true;
-	  
-	  deviceState->seenNext=0;
+		  deviceState->value=deviceProperties->bias + deviceProperties->amplitude
+			* sin(deviceProperties->phase + deviceProperties->frequency * deviceState->t);
 
-	  deviceState->value=deviceProperties->bias + deviceProperties->amplitude
-	    * sin(deviceProperties->phase + deviceProperties->frequency * deviceState->timeNow);
+		  handler_log(3, "value = %f", deviceState->value);
 
-	  handler_log(3, "value = %f", deviceState->value);
+		  requestSend_out = deviceState->cs==deviceState->neighbours;
+		  assert(requestSend_out);
+		  ]]></OnReceive>
+		</InputPort>
 
-	  requestSend_out = true;
-	  ]]></OnReceive>
-	</InputPort>
+		<InputPort name="__print__" edgeTypeId="__init__">
+		  <OnReceive><![CDATA[
+		  handler_log(0, "t = %d, v=%8g (seenNow=%d, seenNext=%d)", deviceState->t, deviceState->value, deviceState->cs, deviceState->ns);
+		  ]]></OnReceive>
+		</InputPort>
 
-	<InputPort name="__print__" edgeTypeId="__init__">
-	  <OnReceive><![CDATA[
-	  handler_log(0, "t = %d, v=%8g (seenNow=%d, seenNext=%d)", deviceState->timeNow, deviceState->value, deviceState->seenNow, deviceState->seenNext);
-	  ]]></OnReceive>
-	</InputPort>
+		<InputPort name="in" edgeTypeId="update">
+		  <OnReceive><![CDATA[
+		  if(message->t==deviceState->t){
+			deviceState->cs++;
+		  }else{
+			assert( message->t == deviceState->t+1 );
+			deviceState->ns++;
+		  }
+		  requestSend_out = deviceState->cs == deviceProperties->neighbours;
+		  ]]></OnReceive>
+		</InputPort>
 
-	<InputPort name="in" edgeTypeId="update">
-	  <OnReceive><![CDATA[
-	  if(message->time==deviceState->timeNow){
-	    deviceState->seenNow++;
-	  }else{
-	    assert(deviceState->timeNow+1 == message->time);
-	    deviceState->seenNext++;
- 	  }
-	  requestSend_out = deviceState->initial || deviceState->seenNow==deviceProperties->neighbours;
-	  ]]></OnReceive>
-	</InputPort>
+		<OutputPort name="out" edgeTypeId="update">
+		  <OnSend><![CDATA[
 
-	<OutputPort name="out" edgeTypeId="update">
-	  <OnSend><![CDATA[
+		  if(deviceState->t > graphProperties->maxTime){
+			 *cancelSend=true;
+			requestSend_out=false;
+		  }else{
+			assert(deviceState->cs == deviceProperties->neighbours);
+		  
+			deviceState->value=deviceProperties->bias + deviceProperties->amplitude
+			  * sin(deviceProperties->phase + deviceProperties->frequency * deviceState->t);
+			deviceState->t++;
+			deviceState->cs = deviceState->ns;
+			deviceState->ns=0;
+			
+			message->t = deviceState->t+1;
+			message->value=deviceState->value;
 
-	  if(deviceState->timeNow > graphProperties->maxTime){
-	     *cancelSend=true;
-	    requestSend_out=false;
-	  }else{
-	    deviceState->value=deviceProperties->bias + deviceProperties->amplitude
-	      * sin(deviceProperties->phase + deviceProperties->frequency * deviceState->timeNow);
-
-	    if(deviceState->initial){
-	      message->time=0;
-	      message->value=deviceState->value;
-	      deviceState->initial=false;
-	    }else{
-              assert(deviceState->seenNow==deviceProperties->neighbours);
-	    
-   	      message->time=deviceState->timeNow+1;
-	      message->value=deviceState->value;
-
-	      deviceState->timeNow++;
-	      deviceState->seenNow = deviceState->seenNext;
-
-	      deviceState->seenNext=0;
-	    }
-	    requestSend_out = deviceState->seenNow==deviceProperties->neighbours;
-	  }
-	  ]]></OnSend>
-	</OutputPort>
+			requestSend_out = deviceState->cs == deviceProperties->neighbours;
+		  }
+		  ]]></OnSend>
+		</OutputPort>
       </DeviceType>
       
       <DeviceType id="cell">
 	<!-- This is a common-or-garden 2d cell, with no boundary stuff -->
-	<Properties>
-	  <Scalar type="float" name="initValue" />
-	</Properties>
+		<Properties>
+		  <Scalar type="float" name="initValue" />
+		</Properties>
 
-	<State>
-	  <Scalar type="float" name="value" />
+		<State>
+		  <Scalar type="float" name="value" />
 
-	  <Scalar type="bool" name="initial" />
+		  <Scalar type="uint32_t" name="t" />
+		  
+		  <Scalar type="float" name="ca" /> <!-- w_self * s_self + sum( w_o * s_o for o in cs)  -->
+		  <Scalar type="uint32_t" name="cs" />
+
+		  <Scalar type="float" name="na" /> <!-- sum(w_o * s_o for o in ns) -->
+		  <Scalar type="uint32_t" name="ns" />
+		</State>
+
+		<InputPort name="__init__" edgeTypeId="__init__">
+		  <OnReceive><![CDATA[
+		  deviceState->value = deviceProperties->initValue;
+		  deviceState->t = 0;
+		  deviceState->ca = graphProperties->weightSelf * deviceState->value;
+		  deviceState->cs = deviceProperties->neighbours;
+		  deviceState->na = 0;
+		  deviceState->ns =0;
+
+		  handler_log(3, "value = %f", deviceState->value);
+
+		  requestSend_out=true;
+		  ]]></OnReceive>
+		</InputPort>
+
+		<InputPort name="__print__" edgeTypeId="__init__">
+		  <OnReceive><![CDATA[
+		  handler_log(0, "t = %d, v=%8g (seenNow=%d, seenNext=%d)", deviceState->t, deviceState->value, deviceState->cs, deviceState->ns);
+		  ]]></OnReceive>
+		</InputPort>
+
+
+		<InputPort name="in" edgeTypeId="update">
+		  <OnReceive><![CDATA[
+		  if(message->t == deviceState->t){
+			deviceState->ca += graphProperties->weightOther * message->value;
+			deviceState->cs++;
+		  }else{
+			assert(deviceState->t+1 == message->t);
+			deviceState->na += graphProperties->weightOther * message->value;
+			deviceState->ns++;
+			}
+
+			handler_log(3, "(t=%d,v=%.4f) tNow=%d, sNow=%d, aNow=%.4f, sNext=%d, aNext=%f", message->time, message->value, deviceState->t, deviceState->cs, deviceState->ca, deviceState->ns, deviceState->na);
+
+		  requestSend_out = deviceState->seenNow == deviceProperties->neighbours;
+		  ]]></OnReceive>
+		</InputPort>
+
+		<OutputPort name="out" edgeTypeId="update">
+		  <OnSend><![CDATA[
+
+		  handler_log(3, "tNow=%d, sNow=%d, aNow=%.4f, sNext=%d, aNext=%f", deviceState->t, deviceState->cs, deviceState->ca, deviceState->ns, deviceState->na);
+
+		  if(deviceState->t > graphProperties->maxTime){
+			*cancelSend=true;
+			requestSend_out=false;
+		  }else{
+			assert(deviceState->seenNow == deviceProperties->neighbours);
+			
+			deviceState->t++;
+			deviceState->value = deviceState->ca;
+			deviceState->cs = deviceState->ns;
+			deviceState->ca = graphProperties->weightSelf * deviceState->value + deviceState->na;
+			deviceState->ns = 0;
+			deviceState->cs = 0;
+			
+			message->t = deviceState->t+1;
+			message->value = deviceState->value;
+
+			// It is possible that all our neighbours are ahead and have broadcast, so
+			// we could immediately be ready to go.
+			requestSend_out = deviceState->seenNow == deviceProperties->neighbours;
+		  }
+		  ]]></OnSend>
+		</OutputPort>
+      </DeviceType>
 	  
-	  <Scalar type="uint32_t" name="timeNow" />
-	  
-	  <Scalar type="float" name="accNow" /> <!-- w_self * s_self + sum( w_o * s_o for o in seenNow)  -->
-	  <Scalar type="uint32_t" name="seenNow" />
+	<DeviceType id="probe">
+		<!-- A probe looks like a normal device to the worker it is connected
+			to, but always sends a value of 0. This means that it essentially
+			contributes nothing, but takes part in the normal protocol at
+			no extra overhead.
+			It has no neighbours count, as it is always connect to precisely
+			one device.
+		-->
+	
+		<State>
+		  <Scalar type="uint32_t" name="t" />
+		  <Scalar type="uint32_t" name="cs" /> <!-- Current seen (0 or 1). If cs==1 we want to send. -->
+		  
+		  <Scalar type="uint32_t" name="et" /> <!-- Next exfil time (output if et==t) -->
+		  <Scalar type="uint32_t" name="ht" /> <!-- Exfil time horizon (only output if ht>=et) -->
+		  
+		  <Scalar type="float" name="value" />
+		</State>
+		
+		<SharedCode><![CDATA[
+			enum ProbeState{
+				Collecting,
+				PendingExfil,
+				PendingOut,
+				PendingHoriz
+			};
+			
+			ProbeState calcProbState(const probe_state_t *s)
+			{
+				if(s->et>t){
+					return s->cs==0 ? Collecting : PendingOut;
+				}else{
+					return s->ht>=st_et ? PendingExFil : PendingHoriz;
+				}
+			}
+		]]></SharedCode>
 
-	  <Scalar type="float" name="accNext" /> <!-- sum(w_o * s_o for o in seenNext) -->
-	  <Scalar type="uint32_t" name="seenNext" />
-	</State>
+		<InputPort name="__init__" edgeTypeId="__init__">
+		  <OnReceive><![CDATA[
+		  deviceState->t=0;
+		  deviceState->cs=1; // Start ready to send
+		  deviceState->et=1; // Start _not_ ready to exfiltrate
+		  deviceState->ht=1; // Always allowed at least one output until first horizon update
+		  deviceState->value=0;
+		  
+		  ProbeState state=calcProbeState(deviceState);
+		  requestSend_out = (state==PendingOut);
+		  requestSend_exfil = (state==PendingExfil);
+		  
+		  assert(state==PendingOut);
+		  ]]></OnReceive>
+		</InputPort>
+		
+		<OutputPort name="exfil" edgeTypeId="update" supervisor="true">
+			<OnSend><![CDATA[
+			ProbeState state=calcProbeState(deviceState);
+			assert(state==PendingExfil);
+			
+			message->t = deviceState->t;
+			message->value = deviceState->value;
+			
+			deviceState->et = deviceState->et+1;
+			
+			state=calcProbeState(deviceState);
+			requestSend_out = (state==PendingOut);
+			requestSend_exfil = (state==PendingExfil);
+		  
+			assert( (state==Collecting) || (state==PendingOut) );
+			]]></OnSend>
+		</OutputPort>
+		
+		<InputPort name="horiz" edgeTypeId="horizon_edge" supervisor="true">
+			<OnReceive><![CDATA[
+			ProbeState state=calcProbeState(deviceState);
+			assert(state==PendingHoriz);
+			
+			assert(message->ht >= deviceState->ht);
+			deviceState->ht = message->ht;
+			
+			state=calcProbeState(deviceState);
+			requestSend_out = (state==PendingOut);
+			requestSend_exfil = (state==PendingExfil);
+		  
+			assert( (state==PendinHoriz) || (state==PendingExfil) );
+			]]></OnReceive>
+		</InputPort>
 
-	<InputPort name="__init__" edgeTypeId="__init__">
-	  <OnReceive><![CDATA[
-	  float currTemp=deviceProperties->initValue;
-	  uint32_t currTime=0;
+		<InputPort name="in" edgeTypeId="update">
+		  <OnReceive><![CDATA[
+			ProbeState state=calcProbeState(deviceState);
+			assert( (state==Collecting) || (state==PendingHoriz) || (state==PendingExfil) );
+			
+			assert(message->t >= deviceState->t);
+			deviceState->value = message->value;
+			
+			state=calcProbeState(deviceState);
+			requestSend_out = (state==PendingOut);
+			requestSend_exfil = (state==PendingExfil);
+		  
+			assert( (state==PendingOut) || (state==PendingHoriz) || (state==PendingExfil) );
+		  ]]></OnReceive>
+		</InputPort>
 
-	  deviceState->value=currTemp;
-
-	  deviceState->initial=true;
-
-	  deviceState->timeNow=currTime;
-	  deviceState->accNow=graphProperties->weightSelf * currTemp;
-	  deviceState->seenNow=0; // Forces the sending if we receive any updates
-
-	  deviceState->seenNext=0;
-	  deviceState->accNext=0;
-
-	  handler_log(3, "value = %f", deviceState->value);
-
-	  requestSend_out=true;
-	  ]]></OnReceive>
-	</InputPort>
-
-	<InputPort name="__print__" edgeTypeId="__init__">
-	  <OnReceive><![CDATA[
-	  handler_log(0, "t = %d, v=%8g (seenNow=%d, seenNext=%d)", deviceState->timeNow, deviceState->value, deviceState->seenNow, deviceState->seenNext);
-	  ]]></OnReceive>
-	</InputPort>
-
-
-	<InputPort name="in" edgeTypeId="update">
-	  <OnReceive><![CDATA[
-	  if(message->time==deviceState->timeNow){
-	    deviceState->accNow += graphProperties->weightOther * message->value;
-	    deviceState->seenNow++;
-	  }else{
-	    assert(deviceState->timeNow+1 == message->time);
-	    deviceState->accNext += graphProperties->weightOther * message->value;
-	    deviceState->seenNext++;
- 	    }
-
-          handler_log(3, "(t=%d,v=%.4f) tNow=%d, sNow=%d, aNow=%.4f, sNext=%d, aNext=%f", message->time, message->value, deviceState->timeNow, deviceState->seenNow, deviceState->accNow, deviceState->seenNext, deviceState->accNext);
-
-	  requestSend_out = deviceState->initial || deviceState->seenNow==4;
-	  ]]></OnReceive>
-	</InputPort>
-
-	<OutputPort name="out" edgeTypeId="update">
-	  <OnSend><![CDATA[
-
-	  handler_log(3, "tNow=%d, sNow=%d, aNow=%.4f, sNext=%d, aNext=%f", deviceState->timeNow, deviceState->seenNow, deviceState->accNow, deviceState->seenNext, deviceState->accNext);
-
-	  if(deviceState->timeNow > graphProperties->maxTime){
-	    *cancelSend=true;
-	    requestSend_out=false;
-	  }else{
-	    if(deviceState->initial){
-	      message->time=0;
-	      message->value=deviceState->value;
-	      deviceState->initial=false;
-	    }else{
-	      assert(deviceState->seenNow==4);
-	    
-  	      float tempNow=deviceState->accNow;
-	      message->time=deviceState->timeNow+1;
-	      message->value=tempNow;
-
-	      deviceState->value=deviceState->accNow;
-
-	      deviceState->timeNow++;
-	      deviceState->accNow = graphProperties->weightSelf * tempNow + deviceState->accNext;
-	      deviceState->seenNow = deviceState->seenNext;
-
-	      deviceState->accNext=0;
-	      deviceState->seenNext=0;
-
-	    }
-  	    // It is possible that all our neighbours are ahead and have broadcast, so
-	    // we could immediately be ready to go.
-	    requestSend_out = deviceState->seenNow==4;
-	  }
-	  ]]></OnSend>
-	</OutputPort>
+		<OutputPort name="out" edgeTypeId="update">
+		  <OnSend><![CDATA[
+			ProbeState state=calcProbeState(deviceState);
+			assert( (state==PendingOut) );
+			
+			deviceState->t = deviceState->t+1;
+			deviceState->cs = 0;
+			
+			message->t = deviceState->t;
+			message->value = 0;
+			
+			state=calcProbeState(deviceState);
+			requestSend_out = (state==PendingOut);
+			requestSend_exfil = (state==PendingExfil);
+		  
+			assert( (state==Collecting) || (state==PendingHoriz) || (state==PendingExfil) );
+		  ]]></OnSend>
+		</OutputPort>
       </DeviceType>
     </DeviceTypes>
   </GraphType>

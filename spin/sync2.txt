@@ -1,0 +1,39 @@
+
+
+proctype Cell(bit id; chan in; chan out)
+{
+    byte t=0;
+    bit cs=1;
+    bit ns=0;
+    byte got;
+
+    do
+    :: t <= 4 
+        printf("id=%u, t=%u, cs=%u, ns=%u\n", id, t, cs, ns);
+        if
+        ::  atomic {
+            cs;
+            t = t + 1;
+            out ! t;
+            cs=ns;
+            ns=0;
+            }
+        ::  atomic {
+            in ? got;
+            if
+            :: got==t -> { assert(!cs); cs=1; }
+            :: got==t+1 -> {assert(!ns); ns=1; }
+            :: else -> assert(0);
+            fi
+            }
+        fi
+    ::  else -> break
+    od
+}
+
+init {
+    chan comms[2] = [1] of {byte};
+    
+    run Cell(0, comms[0], comms[1]);
+    run Cell(1, comms[1], comms[0]);
+}

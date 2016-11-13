@@ -1,0 +1,68 @@
+byte pending;
+
+proctype Fork(chan in; chan outA; chan outB)
+{
+    byte got;
+    bit sent;
+    do
+        :: pending==0 -> break;
+        :: in ? got -> {
+            if
+            :: outA ! got -> sent=0;
+            :: outB ! got -> sent=1;
+            fi
+            if
+            :: sent==1 -> outA ! got;
+            :: sent==0 -> outB ! got;
+            fi
+        }
+    od
+}
+
+proctype Join(chan inA; chan inB; chan out)
+{
+    byte got;
+    do
+    :: pending==0 -> break;
+    :: inA ? got -> out ! got;
+    :: inB ? got -> out ! got;
+    od
+}
+
+proctype Cell(byte id; byte nhood; chan in; chan out)
+{
+    byte t=0;
+    byte cs=nhood;
+    byte ns=0;
+    byte got;
+
+    do
+    :: t <= 4 
+        printf("id=%u, t=%u, cs=%u, ns=%u\n", id, t, cs, ns);
+        if
+        ::  atomic {
+            cs==nhood;
+            t = t + 1;
+            out ! t;
+            cs=ns;
+            ns=0;
+            }
+        ::  atomic {
+            in ? got;
+            if
+            :: got==t -> { assert(cs<nhood); cs=cs+1; }
+            :: got==t+1 -> {assert(ns<nhood); ns=ns+1; }
+            :: else -> assert(0);
+            fi
+            }
+        fi
+    ::  else -> break
+    od
+}
+
+init {
+    chan comms[2] = [1] of {byte};
+    
+    run Cell(0, 1, comms[0], comms[1]);
+    run Cell(1, 1, comms[1], comms[0]);
+}

@@ -1,12 +1,149 @@
 <html>
 <head>
-<script src="require.js"></script>
-<script src="core.js"></script>
-<script src="heat_graph.js"></script>
+<script data-main="core" src="require.js"></script>
+<script data-main="heat_graph" src="require.js"></script>
 
+<script src="sigma.js/src/sigma.core.js"></script>
+<script src="sigma.js/src/conrad.js"></script>
+<script src="sigma.js/src/utils/sigma.utils.js"></script>
+<script src="sigma.js/src/utils/sigma.polyfills.js"></script>
+<script src="sigma.js/src/sigma.settings.js"></script>
+<script src="sigma.js/src/classes/sigma.classes.dispatcher.js"></script>
+<script src="sigma.js/src/classes/sigma.classes.configurable.js"></script>
+<script src="sigma.js/src/classes/sigma.classes.graph.js"></script>
+<script src="sigma.js/src/classes/sigma.classes.camera.js"></script>
+<script src="sigma.js/src/classes/sigma.classes.quad.js"></script>
+<script src="sigma.js/src/classes/sigma.classes.edgequad.js"></script>
+<script src="sigma.js/src/captors/sigma.captors.mouse.js"></script>
+<script src="sigma.js/src/captors/sigma.captors.touch.js"></script>
+<script src="sigma.js/src/renderers/sigma.renderers.canvas.js"></script>
+<script src="sigma.js/src/renderers/sigma.renderers.webgl.js"></script>
+<script src="sigma.js/src/renderers/sigma.renderers.svg.js"></script>
+<script src="sigma.js/src/renderers/sigma.renderers.def.js"></script>
+<script src="sigma.js/src/renderers/webgl/sigma.webgl.nodes.def.js"></script>
+<script src="sigma.js/src/renderers/webgl/sigma.webgl.nodes.fast.js"></script>
+<script src="sigma.js/src/renderers/webgl/sigma.webgl.edges.def.js"></script>
+<script src="sigma.js/src/renderers/webgl/sigma.webgl.edges.fast.js"></script>
+<script src="sigma.js/src/renderers/webgl/sigma.webgl.edges.arrow.js"></script>
+<script src="sigma.js/src/renderers/canvas/sigma.canvas.labels.def.js"></script>
+<script src="sigma.js/src/renderers/canvas/sigma.canvas.hovers.def.js"></script>
+<script src="sigma.js/src/renderers/canvas/sigma.canvas.nodes.def.js"></script>
+<script src="sigma.js/src/renderers/canvas/sigma.canvas.edges.def.js"></script>
+<script src="sigma.js/src/renderers/canvas/sigma.canvas.edges.curve.js"></script>
+<script src="sigma.js/src/renderers/canvas/sigma.canvas.edges.arrow.js"></script>
+<script src="sigma.js/src/renderers/canvas/sigma.canvas.edges.curvedArrow.js"></script>
+<script src="sigma.js/src/renderers/canvas/sigma.canvas.edgehovers.def.js"></script>
+<script src="sigma.js/src/renderers/canvas/sigma.canvas.edgehovers.curve.js"></script>
+<script src="sigma.js/src/renderers/canvas/sigma.canvas.edgehovers.arrow.js"></script>
+<script src="sigma.js/src/renderers/canvas/sigma.canvas.edgehovers.curvedArrow.js"></script>
+<script src="sigma.js/src/renderers/canvas/sigma.canvas.extremities.def.js"></script>
+<script src="sigma.js/src/renderers/svg/sigma.svg.utils.js"></script>
+<script src="sigma.js/src/renderers/svg/sigma.svg.nodes.def.js"></script>
+<script src="sigma.js/src/renderers/svg/sigma.svg.edges.def.js"></script>
+<script src="sigma.js/src/renderers/svg/sigma.svg.edges.curve.js"></script>
+<script src="sigma.js/src/renderers/svg/sigma.svg.labels.def.js"></script>
+<script src="sigma.js/src/renderers/svg/sigma.svg.hovers.def.js"></script>
+<script src="sigma.js/src/middlewares/sigma.middlewares.rescale.js"></script>
+<script src="sigma.js/src/middlewares/sigma.middlewares.copy.js"></script>
+<script src="sigma.js/src/misc/sigma.misc.animation.js"></script>
+<script src="sigma.js/src/misc/sigma.misc.bindEvents.js"></script>
+<script src="sigma.js/src/misc/sigma.misc.bindDOMEvents.js"></script>
+<script src="sigma.js/src/misc/sigma.misc.drawHovers.js"></script>
+<!-- END SIGMA IMPORTS -->
+<script src="sigma.js/plugins/sigma.renderers.parallelEdges/utils.js"></script>
+<script src="sigma.js/plugins/sigma.renderers.parallelEdges/sigma.canvas.edges.curve.js"></script>
+<script src="sigma.js/plugins/sigma.renderers.parallelEdges/sigma.canvas.edges.curvedArrow.js"></script>
+<script src="sigma.js/plugins/sigma.renderers.parallelEdges/sigma.canvas.edgehovers.curve.js"></script>
+<script src="sigma.js/plugins/sigma.renderers.parallelEdges/sigma.canvas.edgehovers.curvedArrow.js"></script>
+<script src="sigma.js/plugins/sigma.renderers.customShapes/shape-library.js"></script>
+<script src="sigma.js/plugins/sigma.renderers.customShapes/sigma.renderers.customShapes.js"></script>
 </head>
 <body>
 
+<div id="container">
+  <style>
+    #graph-container {
+      top: 0;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      position: absolute;
+    }
+  </style>
+  <div id="graph-container"></div>
+</div>
+
+<script>
+var G=null;
+var s=null;
+require(['./heat_graph'], function(H){
+    console.log("Pre");
+    G=H.makeGrid(10,10);
+    console.log("Post");
+
+    // http://yomguithereal.github.io/articles/node-border-renderer/
+    sigma.canvas.nodes.border = function(node, context, settings) {
+        var prefix = settings('prefix') || '';
+
+        context.fillStyle = node.color || settings('defaultNodeColor');
+        context.beginPath();
+        context.arc(
+            node[prefix + 'x'],
+            node[prefix + 'y'],
+            node[prefix + 'size'],
+            0,
+            Math.PI * 2,
+            true
+        );
+
+        context.closePath();
+        context.fill();
+
+        // Adding a border
+        context.lineWidth = node.borderWidth || 1;
+        context.strokeStyle = node.borderColor || '#000';
+        context.stroke();
+        };
+
+    s = new sigma({
+        renderer: {
+            container: document.getElementById('graph-container'),
+            type: 'canvas'
+        },
+        settings: {
+            drawLabels: false,
+            maxNodeSize: 10,
+            minNodeSize: 1,
+            minEdgeSize: 0.5,
+            maxEdgeSize: 3
+        }
+    });
+
+    for(var d of G.enumDevices()){
+        s.graph.addNode({
+            id:d.id,
+            label:d.id,
+            x:d.metadata["x"]*50,
+            y:d.metadata["y"]*50,
+            size:0.5,
+            color:"#FFFFFF",
+            borderColor: d.blocked() ? "#FF0000" : "#00FF00",
+            type: d.deviceType.id=="cell" ? "circle" : "square"
+        });
+    }
+    for(var e of G.enumEdges()){
+        s.graph.addEdge({
+            id:e.id,
+            source:e.srcDev.id,
+            target:e.dstDev.id,
+             type: "curvedArrow",
+             size:1,
+             color:"#000000"
+        });
+    }
+    s.refresh();
+});
+</script>
 
 </body> 
 

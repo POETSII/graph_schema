@@ -1,0 +1,35 @@
+#include "cell_types.txt"
+
+init {
+    byte maxT=3;
+
+    chan cIn[9] = [1] of {byte};
+    chan cOut[9] = [1] of {byte};
+    
+    pending=9;
+    
+    atomic{
+        run Cell(0, maxT, 2, cIn[0], cOut[0]);
+        run Cell(1, maxT, 3, cIn[1], cOut[1]);
+        run Cell(2, maxT, 2, cIn[2], cOut[2]);
+        run Cell(3, maxT, 3, cIn[3], cOut[3]);
+        run Cell(4, maxT, 4, cIn[4], cOut[4]);
+        run Cell(5, maxT, 3, cIn[5], cOut[5]);
+        run Cell(6, maxT, 2, cIn[6], cOut[6]);
+        run Cell(7, maxT, 3, cIn[7], cOut[7]);
+        run Cell(8, maxT, 2, cIn[8], cOut[8]);
+        
+        
+        run ForkB1(cOut[0], cIn[1], cIn[3]);
+        run Fork3B1(cOut[1], cIn[0], cIn[4], cIn[2]);
+        run ForkB1(cOut[2], cIn[1], cIn[5]);
+        
+        run Fork3B1(cOut[3], cIn[0], cIn[4], cIn[6]);
+        run Fork4B1(cOut[4], cIn[3], cIn[1], cIn[7], cIn[5]);
+        run Fork3B1(cOut[5], cIn[4], cIn[2], cIn[8]);
+        
+        run ForkB1(cOut[6], cIn[3], cIn[7]);
+        run Fork3B1(cOut[7], cIn[6], cIn[4], cIn[8]);
+        run ForkB1(cOut[8], cIn[5], cIn[7]);
+    }
+}

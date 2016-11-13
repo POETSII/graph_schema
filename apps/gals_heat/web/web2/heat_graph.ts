@@ -29,7 +29,7 @@ export const heatGraphType = new GraphType(
 
 export function makeGrid(w : number, h : number) : POETS.GraphInstance
 {
-    var g = new POETS.GraphInstance(heatGraphType);
+    var g = new POETS.GraphInstance(heatGraphType, {});
 
     for(var y=0; y<w; y++){
         let T = y==0;

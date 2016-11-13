@@ -1,0 +1,23 @@
+#include "cell_types.txt"
+
+init {
+    byte maxT = 5;
+
+    chan cIn = [1] of {byte};
+    chan cOut = [1] of {byte};
+    
+    chan cExfil = [1] of {byte};
+    chan cHoriz = [1] of {byte};
+    
+    pending=2;
+    
+    run Cell(0, maxT, 2, cIn[0], cOut[0]);
+    run Cell(1, maxT, 2, cIn[1], cOut[1]);
+    
+    run Monitor(2, maxT, 1, cIn[2], cOut[2]);
+    run Monitor(3, maxT, 1, cIn[3], cOut[3]);
+    
+    run Monitor(1, maxT, cOut, cIn, cExfil, cHoriz);
+    run Supervisor(100, maxT, cExfil, cHoriz);
+    
+}

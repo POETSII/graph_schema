@@ -1,0 +1,252 @@
+byte pending;
+
+proctype Reorder(chan c)
+{
+    byte got=0;
+    bit valid=0;
+    do
+    :: pending==0 -> break;
+    :: !valid -> {
+        if
+        :: d_step{ c ? got; valid = 1; printf("Stole\n"); };
+        :: d_step { else -> skip ; };
+        fi
+        };
+    :: valid -> {
+        if
+        :: d_step{ c!got; valid=0; got=0; printf("Returned\n"); };
+        :: d_step{ else->skip; };
+        fi
+        };
+    od
+}
+
+proctype ForkB1(chan in; chan outA; chan outB)
+{
+    xr in;
+
+    byte got=0;
+    do
+        :: pending==0 -> break;
+        :: d_step { nempty(in) && nfull(outA) && nfull(outB) -> in ? got;
+            outA!got;
+            outB!got;
+            got=0;
+        }
+    od
+}
+
+proctype Fork3B1(chan in; chan outA; chan outB; chan outC)
+{
+    xr in;
+
+    byte got=0;
+    do
+        :: pending==0 -> break;
+        :: d_step { nempty(in) && nfull(outA) && nfull(outB) && nfull(outC) -> {
+            in ? got;
+            outA!got;
+            outB!got;
+            outC!got;
+            got=0;
+        }}
+    od
+}
+
+proctype Fork4B1(chan in; chan outA; chan outB; chan outC; chan outD)
+{
+    xr in;
+
+    byte got=0;
+    do
+        :: pending==0 -> break;
+        :: d_step { nempty(in) && nfull(outA) && nfull(outB) && nfull(outC) && nfull(outD) -> {
+            in ? got;
+            outA!got;
+            outB!got;
+            outC!got;
+            outD!got;
+            got=0;
+        }}
+    od
+}
+
+proctype ConnectB1(chan in; chan out)
+{
+    xr in;
+
+    byte got=0;
+    do
+    :: pending==0 -> break;
+    :: d_step { nempty(in) && nfull(out) -> in ? got; out ! got;  got=0; }
+    od
+}
+
+proctype Cell(byte id; byte maxT; byte nhood; chan in; chan out)
+{
+    xr in;
+    xs out;
+
+    byte t=0;
+    byte cs=nhood;
+    byte ns=0;
+    byte got=0;
+
+    do
+    :: t <= maxT;
+        printf("Cell: id=%u, t=%u, cs=%u, ns=%u\n", id, t, cs, ns);
+        if
+        ::  d_step {
+            in ? got;
+            printf("Cell: id=%u, received=%u\n", id, got);
+            if
+            :: got==t -> { assert(cs<nhood); cs=cs+1; }
+            :: got==t+1 -> {assert(ns<nhood); ns=ns+1; }
+            :: else -> assert(0);
+            fi
+            got=0;
+            }
+        ::  d_step{
+            cs==nhood && nfull(out);
+            t = t + 1;
+            cs=ns;
+            ns=0;
+            out ! t;
+            printf("Cell: id=%u, sent=%u\n", id, t);
+            }
+        fi
+    ::  else -> { pending=pending-1; break }
+    od
+}
+
+
+proctype Monitor(byte id; byte maxT; chan in; chan out; chan exfil; chan horiz)
+{
+    xr in;
+    xs out;
+    
+    xr horiz;
+
+    byte t=0;
+    bit cs=1;
+    bit ns=0;
+    
+    byte et=0; // Next point where we exfiltrate
+    byte ht=0; // Time horizon
+    
+    bit toSend=0; // Is the current value "valid" (i.e. still to be sent)
+    
+    
+    byte got=0; // Not part of state
+
+    do
+    :: t <= maxT;
+        printf("Mon: id=%u, t=%u, cs=%u\n", id, t, cs);
+        if
+        ::  d_step{ in ? got;
+            printf("Mon: id=%u, received=%u\n", id, got);
+            if
+            ::  got==t;
+                assert(!cs);
+                cs=1;
+            ::  got==t+1;
+                assert(!ns);
+                ns=1;
+            ::  else;
+                assert(0);
+            fi;
+            got=0;
+            }
+            
+        :: d_step{ horiz ? got;
+            printf("Mon: id=%u, got=%u, ht=%u\n", id, got, ht);
+            assert(got >= ht);
+            ht=got;
+            got=0;
+            }
+            
+        ::  d_step{
+            t>et;
+            assert(0);
+            }
+            
+        ::  d_step{
+            t==et && et <= ht && nfull(exfil);
+            exfil ! t;
+            et=et+1;
+            toSend=0; // the captured value is done
+            printf("Mon: id=%u, exfil=%u\n", id, t);
+            }
+            
+        ::  d_step{
+            t<et && cs==1 && nfull(out);
+            t=t+1;
+            (t==et) -> toSend=1; // "capture" the value
+            cs=ns;
+            ns=0;
+            out ! t;
+            printf("Mon: id=%u, sent=%u\n", id, t-1);
+            }
+        fi
+    ::  else -> { pending=pending-1; break }
+    od
+}
+
+proctype Supervisor(byte id; byte maxT; chan exfil; chan horiz)
+{
+    byte ht=0;
+    
+    byte got=0;
+
+    do
+    :: pending==0 -> break
+    :: else
+        end: if
+        :: {
+            horiz ! ht+1;
+            if
+            :: (ht<maxT) -> ht=ht+1
+            :: else -> skip
+            fi
+            }
+            
+        :: {
+            exfil ? got;
+            assert(got <= ht);
+            }
+        fi
+    od
+}
+
+proctype Supervisor2Mon(byte id; byte maxT; chan exfil1; chan exfil2; chan horiz1; chan horiz2)
+{
+    byte ht=0;
+    byte count=0;
+    
+    byte got=0;
+
+    do
+    :: pending==0 -> break
+    :: else
+        if
+        // Randomly send the current horizon in 
+        :: horiz2 ! ht;
+        :: horiz1 ! ht;
+            
+        :: {
+            exfil1 ? got;
+            assert(count<2);
+            assert(got <= ht);
+            count=count+1;
+            }
+        
+        :: d_step{
+            count==2 && ht<=maxTime;
+            count=0;
+            ht=ht+1;
+            }
+        
+        :: ht > maxTime -> break
+        fi
+    od
+}

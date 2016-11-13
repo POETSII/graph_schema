@@ -1,0 +1,185 @@
+byte pending;
+
+proctype Reorder(chan c)
+{
+    byte got=0;
+    bit valid=0;
+    do
+    :: atomic { pending==0 -> break; };
+    :: !valid -> {
+        if
+        :: atomic{ c ? got; valid = 1; printf("Stole\n"); };
+        :: atomic { else -> skip ; };
+        fi
+        };
+    :: valid -> {
+        if
+        :: atomic{ c!got; valid=0; got=0; printf("Returned\n"); };
+        :: atomic{ else->skip; };
+        fi
+        };
+    od
+}
+
+proctype Fork(chan in; chan outA; chan outB)
+{
+    xr in;
+
+    byte got=0;
+    bit pendingA=0;
+    bit pendingB=0;
+    do
+        :: atomic { pending==0 -> break; }
+        :: !(pendingA||pendingB) -> {
+            if
+            :: atomic { in ? got -> { pendingA=1; pendingB=1; } };
+            :: atomic { else -> skip; };
+            fi
+            };
+        :: pendingA && pendingB -> {
+            if
+            :: atomic { outA ! got -> {pendingA=0; } }
+            :: atomic { outB ! got -> {pendingB=0; } }
+            :: atomic { else -> skip; };
+            fi
+            };
+        :: pendingA && !pendingB -> {
+            if
+            :: atomic { outA ! got -> {pendingA=0; got=0; } }
+            :: atomic { else -> skip; };
+            fi
+            };
+        :: !pendingA && pendingB -> {
+            if
+            :: atomic { outB ! got -> {pendingB=0; got=0;} }
+            :: atomic { else -> skip; };
+            fi
+            };
+    od
+}
+
+proctype ForkB1(chan in; chan outA; chan outB)
+{
+    xr in;
+
+    byte got=0;
+    do
+        :: atomic { pending==0 -> break; }
+        :: atomic { nempty(in) && nfull(outA) && nfull(outB) -> in ? got;
+            outA!got;
+            outB!got;
+            got=0;
+        }
+    od
+}
+
+proctype Fork4B1(chan in; chan outA; chan outB; chan outC; chan outD)
+{
+    xr in;
+
+    byte got=0;
+    do
+        :: atomic { pending==0 -> break; }
+        :: atomic { nempty(in) && nfull(outA) && nfull(outB) && nfull(outC) && nfull(outD) -> {
+            in ? got;
+            outA!got;
+            outB!got;
+            outC!got;
+            outD!got;
+            got=0;
+        }}
+    od
+}
+
+proctype Fork4(chan in; chan outA; chan outB; chan outC; chan outD)
+{
+    chan AB = [0] of {byte};
+    chan CD = [0] of {byte};
+
+    run Fork(in, AB, CD);
+    run Fork(AB, outA, outB);
+    run Fork(CD, outC, outD);
+}
+
+
+proctype Connect(chan in; chan out)
+{
+    byte got=0;
+    do
+    :: pending==0 -> break;
+    :: in ? got -> end: {out ! got;  got=0; }
+    od
+}
+
+proctype ConnectB1(chan in; chan out)
+{
+    xr in;
+
+    byte got=0;
+    do
+    :: atomic { pending==0 -> break; }
+    :: atomic { nempty(in) && nfull(out) -> in ? got; out ! got;  got=0; }
+    od
+}
+
+proctype Cell(byte id; byte nhood; chan in; chan out)
+{
+    xr in;
+    xs out;
+
+    byte t=0;
+    byte cs=nhood;
+    byte ns=0;
+    byte got=0;
+
+    do
+    :: t <= 5;
+        printf("id=%u, t=%u, cs=%u, ns=%u\n", id, t, cs, ns);
+        if
+        ::  atomic {
+            cs==nhood;
+            t = t + 1;
+            out ! t;
+            cs=ns;
+            ns=0;
+            }
+        ::  atomic {
+            in ? got;
+            if
+            :: got==t -> { assert(cs<nhood); cs=cs+1; }
+            :: got==t+1 -> {assert(ns<nhood); ns=ns+1; }
+            :: else -> assert(0);
+            fi
+            got=0;
+            }
+        fi
+    ::  atomic { else -> { pending=pending-1; break } }
+    od
+}
+
+init {
+    chan cIn[5] = [1] of {byte};
+    chan cOut[5] = [1] of {byte};
+    
+    pending=5;
+    
+    atomic{
+        run Cell(0, 1, cIn[0], cOut[0]);
+        run Cell(1, 1, cIn[1], cOut[1]);
+        run Cell(2, 4, cIn[2], cOut[2]);
+        run Cell(3, 1, cIn[3], cOut[3]);
+        run Cell(4, 1, cIn[4], cOut[4]);
+        
+        
+        run ConnectB1(cOut[0], cIn[2]);
+        run ConnectB1(cOut[1], cIn[2]);
+        run Fork4B1(cOut[2], cIn[0], cIn[1], cIn[3], cIn[4]);
+        run ConnectB1(cOut[3], cIn[2]);
+        run ConnectB1(cOut[4], cIn[2]);
+        
+        //run Reorder(cIn[0]);
+        //run Reorder(cIn[1]);
+        //run Reorder(cIn[2]);
+        //run Reorder(cIn[3]);
+    }
+}

@@ -147,12 +147,98 @@
     - 1 view complete or very near complete
     - 1 view which is actively filling up
     - 1 view to catch the advance devices
+    
+    There also needs to be a similar buffer size between
+    the root device and the supervisor devices, with similar
+    properties.
+    
+    
+    In order to add a bit of variety to the problem, we'll
+    seperate devices into monitor and worker devices. We could
+    just give every device the ability to output and turn it
+    off and on in the properties or state, but this is a
+    bit more interesting. 
+    
+    Graph Properties:
+    
+    - o_dt : Defines the sub-sampling for outputing
+      values. If output_step is 1, then all samples are sent
+      to the output. Given a simulation time t, the device
+      should output if  0==mod(t,o_dt). So t=0 is an output
+      step.
+    
+    State:
+    
+    - o_h : The time horizon of the device (in simulation
+      time). The device is allowed to output for any time
+      t <= o_h.
+      
+    - o_l : The last time-step when the device did actually
+      output. If the device is at time t, and:
+        0==mod(t+1,o_dt)  // need to send next step
+        and
+        o_l < t-o_dt      // Haven't output last time step
+        and
+        t > 0             // We are not in the first time step
+      then the output node cannot advance.
+    
 */
 
-struct gals_setup
+
+class SupervisorContext
 {
-  
+    
 };
+typedef std::shared_ptr<SupervisorContext> SupervisorContextPtr;
+
+class SupervisorDevice
+{
+private:    
+    SupervisorContextPtr m_context;
+protected:    
+    SupervisorDevice(SupervisorContextPtr context)
+    { m_context=context; }
+
+    SupervisorContextPtr getContext()
+    { return m_context; }
+public:
+    //! Tells a supervisor that it will be managing a graph with the given properties
+    /*! At this point all supervisors and the root are up and running, but devices
+        have not yet been attached. */
+    virtual void onAttachGraph(typed_data_ptr_t graphProperties) =0;
+    
+    //! Tells a supervisor that it will be directly managing this particular device
+    /*! Pre: onAttachGraph has completed on all supervisors and the root */
+    virtual void onAttachWorkerDevice(
+        const char *instanceId,
+        const char *deviceType,
+        device_address_t address,
+        typed_data_ptr_t pDeviceProperties
+    ) =0;
+    
+    //! All graphs have been added, so any local initialisation can happen
+    /*! Pre: anything that will be attached to this supervisor has been
+        This does _not_ guarantee that all other supervisors are ready,
+        so no cross-supervisor communication should happen.
+        The root supervisor will be available though.
+    */
+    virtual void onLocalWorkersReady() =0;
+
+    //! All devices have been attached to all supervisors
+    /*! The idea of this is not to start computation, but to do any
+        final initialisation that can only happen when all supervisors
+        know their attached devices.
+    */
+    virtual void onGlobalWorkersReady() =0;
+
+    //! Start executing
+    /*! Pre: all supervisors have finished onGlobalWorkersReady
+        At this point the worker devices and all other supervisors should
+        be considered to be executing concurrently.
+    */
+    virtual void run() =0;
+};
+
 
 
 class GALSHeatRootDevice
@@ -161,8 +247,8 @@ class GALSHeatRootDevice
     
 };
 
-class GALSHeatMotherDevice
-    : public MotherDevice
+class GALSHeatSupervisorDevice
+    : public SupervisorDevice
 {
 private:
     std::unordered_map<device_address_t,unsigned> m_deviceAddressToSnapshotIndex;
