@@ -46,9 +46,9 @@ export function makeGrid(w : number, h : number) : POETS.GraphInstance
             let id=`d_${x}_${y}`;
 
             if( H || V){
-                g.addDevice(id, dirichletDeviceType, {}, {x:x,y:y});
+                g.addDevice(id, dirichletDeviceType, {neighbours:1}, {x:x,y:y});
             }else{
-                g.addDevice(id, cellDeviceType, {nhood:1, wSelf:0.25}, {x:x,y:y});
+                g.addDevice(id, cellDeviceType, {nhood:4, wSelf:0.25}, {x:x,y:y});
             }
 
             console.log(` ${y} ${x}`);

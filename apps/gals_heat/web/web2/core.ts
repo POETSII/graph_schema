@@ -23,6 +23,7 @@ class EmptyTypedData
     implements TypedData
 {
     readonly _name_ = "empty";
+
 };
 
 
@@ -73,7 +74,6 @@ export class GenericTypedDataSpec<T extends TypedData>
         if(data !=null){
             //for(var k of data.getOwnPropertyNames()){
             for(let k in data){
-                console.log(` ${k} = ${r[k]}`);
                 if(!r.hasOwnProperty(k)){
                     throw new Error(`Object ${r._name_} does not have property called ${k}`);
                 }
@@ -297,8 +297,8 @@ export class GraphInstance
         this.devices[id]=new DeviceInstance(
             id,
             deviceType,
-            deviceType.state.create(),
             properties,
+            deviceType.state.create(),
             metadata
         );
     }
@@ -337,15 +337,16 @@ export class GraphInstance
             metadata
         );
         this.edges[id]=edge;
-        srcDev.outputs[id].push(edge);
-        dstDev.inputs[id].push(edge);
+        srcDev.outputs[srcPort.name].push(edge);
+        dstDev.inputs[dstPort.name].push(edge);
     }
 };
 
 enum EventType
 {
     Send,
-    Receive
+    Receive,
+    Init
 }
 
 abstract class Event
@@ -353,8 +354,21 @@ abstract class Event
     eventType : EventType;
     applied : boolean = true;
 
-    abstract apply(g:GraphInstance) : void;
-    abstract unapply(g:GraphInstance) : void;
+    abstract swap() : void;
+
+    apply() : void
+    {
+        assert(!this.applied);
+        this.swap();
+        this.applied=true;
+    }
+
+    unapply() : void
+    {
+        assert(this.applied);
+        this.swap();
+        this.applied=false;
+    }
 };
 
 class SendEvent
@@ -362,75 +376,128 @@ class SendEvent
 {
     readonly eventType = EventType.Send;
 
-    
-
     constructor(
-        public readonly device : DeviceInstance
+        public readonly device : DeviceInstance,
+        public state : TypedData,
+        public rts : ReadySet,
+        public readonly message : TypedData,
+        public readonly cancelled : boolean
     ){
-        
+        super();
     }
 
-    apply(g:GraphInstance) : void
+    swap() : void
     {
         assert(!this.applied);
-        this.device.state=this.device.deviceType.state.import(this.postState);
-        this.device.rts=clone(this.postReady);
-    }
-
-    unapply(g:GraphInstance) : void
-    {
-        assert(this.applied);
-        this.device.state=this.device.deviceType.state.import(this.preState);
-        this.device.rts=clone(this.preReady);
+        var tmp1=this.device.state;
+        this.device.state=this.state;
+        this.state=tmp1;
+        var tmp2=this.device.rts;
+        this.device.rts=this.rts;
+        this.rts=tmp2;
     }
 };
 
+class InitEvent
+    extends Event
+{
+    readonly eventType = EventType.Init;
+
+    constructor(
+        public readonly device : DeviceInstance,
+        public state : TypedData,
+        public rts : ReadySet,
+        public readonly message : TypedData
+    ){
+        super();
+    }
+
+    swap() : void
+    {
+        assert(!this.applied);
+        var tmp1=this.device.state;
+        this.device.state=this.state;
+        this.state=tmp1;
+        var tmp2=this.device.rts;
+        this.device.rts=this.rts;
+        this.rts=tmp2;
+    }   
+ 
+};
+
 class ReceiveEvent
-    implements Event
+    extends Event
 {
     readonly eventType = EventType.Receive;
 
     constructor(
         public readonly edge : EdgeInstance,
-        public readonly preState : TypedData,
-        public readonly preReady : ReadySet,
-        public readonly preEdgeState : TypedData
-    ){}
-
-    public postState : 
-
-    apply(g:GraphInstance) : void
-    {
-        this.edge.dstDev.state=this.edge.dstDev.deviceType.state.import(this.postState);
-        this.edge.dstDev.rts=clone(this.postReady);
-        this.edge.state=this.edge.edgeType.state.import(this.postEdgeState);
+        public state : TypedData,
+        public rts : ReadySet,
+        public readonly message : TypedData
+    ){
+        super();
     }
 
-    unapply(g:GraphInstance) : void
+    swap() : void
     {
-        this.device.state=this.device.deviceType.state.import(this.preState);
-        this.device.rts=clone(this.preReady);
-    }
+        assert(!this.applied);
+        var tmp1=this.edge.dstDev.state;
+        this.edge.dstDev.state=this.state;
+        this.state=tmp1;
+        var tmp2=this.edge.dstDev.rts;
+        this.edge.dstDev.rts=this.rts;
+        this.rts=tmp2;
+    }   
+ 
 };
 
-class SingleStepper
+export interface Stepper
+{
+    step() : Event[]
+}
+
+export class SingleStepper
+    implements Stepper
 {
     ready : DeviceInstance[] = [];
+
+    history : Event[] = [];
 
     constructor(
         public g : GraphInstance
     ){
         for(let d of g.enumDevices()){
+            if("__init__" in d.deviceType.inputs){
+                let port=d.deviceType.inputs["__init__"];
+                let message=port.edgeType.message.create();
+                
+                let preState=d.deviceType.state.import(d.state);
+                let preRts=clone(d.rts);
+                port.onReceive(
+                    this.g.properties,
+                    d.properties,
+                    d.state,
+                    port.edgeType.properties.create(),
+                    port.edgeType.state.create(),
+                    message,
+                    d.rts
+                );
+                this.history.push(new InitEvent(d, preState, preRts, message));
+            }
+
             if(!d.blocked()){
                 this.ready.push(d);
             }
         }
     }
 
-    step() : boolean
+    step() : Event[]
     {
+        let res:Event[]=[];
+
         if(this.ready.length==0)
-            return false;
+            return res;
 
         let selDev=Math.floor(Math.random()*this.ready.length);
         let dev=this.ready[selDev];
@@ -449,6 +516,9 @@ class SingleStepper
 
         let message=port.edgeType.message.create();
 
+        let preState=dev.deviceType.state.import(dev.state)
+        let preRts=clone(dev.rts);
+
         let doSend=port.onSend(
             this.g.properties,
             dev.properties,
@@ -456,8 +526,13 @@ class SingleStepper
             message,
             dev.rts
         );
+        res.push(new SendEvent(dev, preState, preRts, message, !doSend));
+        console.log(` send to ${dev.id} : state'=${JSON.stringify(dev.state)}, rts'=${JSON.stringify(dev.rts)}`);
+
         if(doSend){
             for(let e of dev.outputs[port.name]){
+                let preState=e.dstDev.deviceType.state.import(e.dstDev.state);
+                let preRts=clone(e.dstDev.rts);
                 e.dstPort.onReceive(
                     this.g.properties,
                     e.dstDev.properties,
@@ -467,6 +542,10 @@ class SingleStepper
                     message,
                     e.dstDev.rts
                 );
+                res.push(new ReceiveEvent(e, preState, preRts, message));
+
+                console.log(` recv on ${e.dstDev.id} : state'=${JSON.stringify(e.dstDev.state)}, rts'=${JSON.stringify(e.dstDev.rts)}`);
+
                 let ii=this.ready.indexOf(e.dstDev);
                 if(e.dstDev.blocked()){
                     if(ii!=-1){
@@ -484,6 +563,8 @@ class SingleStepper
             this.ready.push(dev);
         }
 
-        return true;
+        this.history=this.history.concat(res);
+
+        return res;
     }
 }

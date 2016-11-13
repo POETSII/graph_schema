@@ -1,5 +1,7 @@
 <html>
 <head>
+<script data-main="core" src="jquery.min.js"></script>
+
 <script data-main="core" src="require.js"></script>
 <script data-main="heat_graph" src="require.js"></script>
 
@@ -60,25 +62,44 @@
 </head>
 <body>
 
+<div>
+    <button id="step">
+        Step
+    </button>
+</div>
 <div id="container">
   <style>
     #graph-container {
-      top: 0;
-      bottom: 0;
-      left: 0;
-      right: 0;
-      position: absolute;
+      width:100%;
+      height:100%;
     }
   </style>
   <div id="graph-container"></div>
 </div>
 
 <script>
+var C=null;
+var H=null;
 var G=null;
 var s=null;
-require(['./heat_graph'], function(H){
+var stepper=null;
+
+function shade(v)
+{
+    var x=v;
+    if(x<-1) x=-1;
+    if(x>+1) x=+1;
+    x=x/2+0.5;
+    x=(x*256)|0;
+    x=x.toString(16);
+    return "#0000"+x;
+}
+
+require(['./core','./heat_graph'], function(CC,HH){
+    C=CC;
+    H=HH;
     console.log("Pre");
-    G=H.makeGrid(10,10);
+    G=H.makeGrid(16,16);
     console.log("Post");
 
     // http://yomguithereal.github.io/articles/node-border-renderer/
@@ -128,7 +149,8 @@ require(['./heat_graph'], function(H){
             size:0.5,
             color:"#FFFFFF",
             borderColor: d.blocked() ? "#FF0000" : "#00FF00",
-            type: d.deviceType.id=="cell" ? "circle" : "square"
+            type: d.deviceType.id=="cell" ? "circle" : "square",
+            device:d
         });
     }
     for(var e of G.enumEdges()){
@@ -141,8 +163,28 @@ require(['./heat_graph'], function(H){
              color:"#000000"
         });
     }
+    
+    stepper=new C.SingleStepper(G);
+
+    for(let d of s.graph.nodes()){
+        let device=d.device;
+        d.borderColor = device.blocked() ? "#FF0000" : "#00FF00";
+        d.color = shade(device.state.v);
+    }
     s.refresh();
+
+    $("#step").click(function(){
+        var changes=stepper.step();
+        
+        for(let d of s.graph.nodes()){
+            let device=d.device;
+            d.borderColor = device.blocked() ? "#FF0000" : "#00FF00";
+            d.color = shade(device.state.v);
+        }
+        s.refresh();
+    });
 });
+
 </script>
 
 </body> 

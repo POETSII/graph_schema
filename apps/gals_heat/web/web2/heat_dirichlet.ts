@@ -21,9 +21,9 @@ class DirichletDeviceProperties
 
     constructor(
         public neighbours : number = 0,
-        public amplitude : number = 0,
-        public phase : number = 0,
-        public frequency : number = 0,
+        public amplitude : number = 1,
+        public phase : number = 0.5,
+        public frequency : number = 1,
         public bias : number = 0
     ){}
 };
@@ -135,7 +135,7 @@ class DirichletOutOutputPort
             deviceState.cs = deviceState.ns;
             deviceState.ns=0;
 
-            message.t = deviceState.t+1;
+            message.t = deviceState.t;
             message.v=deviceState.v;
             
             rts["out"] = deviceState.cs == deviceProperties.neighbours;
