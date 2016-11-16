@@ -49,8 +49,13 @@
 		  <Scalar type="uint32_t" name="time" />
 		  <Scalar type="float" name="value" />
 		</Message>
-      </EdgeType>
-	 
+	  </EdgeType>
+		<EdgeType id="horizon">
+			<Message>
+				<Scalar type="uint32_t" name="h" />
+			</Message>
+		</EdgeType>
+
     </EdgeTypes>
 
     <DeviceTypes>
@@ -288,7 +293,7 @@
 			]]></OnSend>
 		</OutputPort>
 		
-		<InputPort name="horiz" edgeTypeId="horizon_edge" supervisor="true">
+		<InputPort name="horiz" edgeTypeId="horizon" supervisor="true">
 			<OnReceive><![CDATA[
 			ProbeState state=calcProbeState(deviceState);
 			assert(state==PendingHoriz);

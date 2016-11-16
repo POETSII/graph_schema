@@ -76,6 +76,8 @@
     <input id="step-size" value="1">
     </input>
     <label><input type="checkbox" id="show-events" checked="true"></input>Show events</label>
+    <span>Events: <span id="total-events">0</span></span>
+    <span>Events/sec: <span id="events-per-sec">0</span></span>
 </div>
 <div id="container">
   <style>
@@ -133,30 +135,7 @@ require(['./core','./heat_graph'], function(CC,HH){
     console.log("Pre");
     G=H.makeGrid(32,32);
     console.log("Post");
-
-    // http://yomguithereal.github.io/articles/node-border-renderer/
-/*    sigma.canvas.nodes.border = function(node, context, settings) {
-        var prefix = settings('prefix') || '';
-
-        context.fillStyle = node.color || settings('defaultNodeColor');
-        context.beginPath();
-        context.arc(
-            node[prefix + 'x'],
-            node[prefix + 'y'],
-            node[prefix + 'size'],
-            0,
-            Math.PI * 2,
-            true
-        );
-
-        context.closePath();
-        context.fill();
-
-        // Adding a border
-        context.lineWidth = node.borderWidth || 1;
-        context.strokeStyle = node.borderColor || '#000';
-        context.stroke();
-        };*/
+    var totalEvents=0;
 
     s = new sigma({
         renderer: {
@@ -166,7 +145,7 @@ require(['./core','./heat_graph'], function(CC,HH){
         settings: {
             drawLabels: false,
             maxNodeSize: 10,
-            minNodeSize: 1,
+            minNodeSize: 0.25,
             minEdgeSize: 0.5,
             maxEdgeSize: 3
         }
@@ -271,7 +250,11 @@ require(['./core','./heat_graph'], function(CC,HH){
             }
             stepper.history.splice(0,stepper.history.length);
 
-            console.log(`  events=${events}`);
+            totalEvents += events;
+            $("#total-events").text(totalEvents.toString());
+
+            var eventsPerSec = events / (tNow-tStart);
+            $("#events-per-sec").text(eventsPerSec.toFixed(1)+" KEvents/sec")
 
             updateAllNodes(changes);
             /*var delta=C.get_event_list_updated_nodes_and_edges(changes);
