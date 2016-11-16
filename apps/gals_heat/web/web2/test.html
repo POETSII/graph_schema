@@ -59,6 +59,7 @@
 <script src="sigma.js/plugins/sigma.renderers.parallelEdges/sigma.canvas.edgehovers.curvedArrow.js"></script>
 <script src="sigma.js/plugins/sigma.renderers.customShapes/shape-library.js"></script>
 <script src="sigma.js/plugins/sigma.renderers.customShapes/sigma.renderers.customShapes.js"></script>
+
 </head>
 <body>
 
@@ -66,44 +67,75 @@
     <button id="step">
         Step
     </button>
+    <button id="run">
+        Run
+    </button>
+        <button id="stop">
+            Stop
+    </button>
+    <input id="step-size" value="1">
+    </input>
+    <label><input type="checkbox" id="show-events" checked="true"></input>Show events</label>
 </div>
 <div id="container">
   <style>
     #graph-container {
       width:100%;
-      height:100%;
+      height:80%;
     }
   </style>
   <div id="graph-container"></div>
 </div>
 
 <script>
+var runAnim=false;
 var C=null;
 var H=null;
 var G=null;
 var s=null;
 var stepper=null;
 
+function hex2(v)
+{
+    return ('00'+(v|0).toString(16)).substr(-2);
+}
+
 function shade(v)
 {
-    var x=v;
-    if(x<-1) x=-1;
-    if(x>+1) x=+1;
-    x=x/2+0.5;
-    x=(x*256)|0;
-    x=x.toString(16);
-    return "#0000"+x;
+    var x=(v*256)|0;
+    if(x<=-255) x=-255;
+    if(x>=+255) x=+255;
+    var r=255, g=255, b=255;
+    if(x<0){
+        x=255+x;
+        b=x;
+    }else{
+        x=255-x;
+        r=x;
+        g=x;
+    }
+    r=hex2(r);
+    g=hex2(g);
+    b=hex2(b);
+    console.assert(r.length==   2);
+    console.assert(g.length==2);
+    console.assert(b.length==2);
+    return "#"+r+g+b;
+}
+
+for(var i=-1.1;i<=1.1;i+=0.1){
+    console.log(shade(i));
 }
 
 require(['./core','./heat_graph'], function(CC,HH){
     C=CC;
     H=HH;
     console.log("Pre");
-    G=H.makeGrid(16,16);
+    G=H.makeGrid(32,32);
     console.log("Post");
 
     // http://yomguithereal.github.io/articles/node-border-renderer/
-    sigma.canvas.nodes.border = function(node, context, settings) {
+/*    sigma.canvas.nodes.border = function(node, context, settings) {
         var prefix = settings('prefix') || '';
 
         context.fillStyle = node.color || settings('defaultNodeColor');
@@ -124,12 +156,12 @@ require(['./core','./heat_graph'], function(CC,HH){
         context.lineWidth = node.borderWidth || 1;
         context.strokeStyle = node.borderColor || '#000';
         context.stroke();
-        };
+        };*/
 
     s = new sigma({
         renderer: {
             container: document.getElementById('graph-container'),
-            type: 'canvas'
+            type: 'webgl'
         },
         settings: {
             drawLabels: false,
@@ -140,6 +172,28 @@ require(['./core','./heat_graph'], function(CC,HH){
         }
     });
 
+    var showEvents=true;
+
+    var updateNodeStyle=function(n)
+    {
+        var device=n.device;
+        if(showEvents){
+            n.borderColor = device.blocked() ? "#FF0000" : device.is_rts() ? "#00FF00" : "#808080";
+        }else{
+            n.borderColor = "#808080";
+        }
+        n.color = shade(device.state.v); 
+    };
+    var updateEdgeStyle=function(e)
+    {
+        var edge=e.edge;
+        if(showEvents){
+           e.color= edge.empty() ? "#808080" : "#00FF00";
+        }else{
+            e.color="#808080";
+        }
+    };
+
     for(var d of G.enumDevices()){
         s.graph.addNode({
             id:d.id,
@@ -148,10 +202,14 @@ require(['./core','./heat_graph'], function(CC,HH){
             y:d.metadata["y"]*50,
             size:0.5,
             color:"#FFFFFF",
-            borderColor: d.blocked() ? "#FF0000" : "#00FF00",
             type: d.deviceType.id=="cell" ? "circle" : "square",
+            borderColor:"#000000",
             device:d
         });
+    }
+    for(var n of s.graph.nodes()){
+        n.device.gNode=n;
+        updateNodeStyle(n);
     }
     for(var e of G.enumEdges()){
         s.graph.addEdge({
@@ -160,29 +218,90 @@ require(['./core','./heat_graph'], function(CC,HH){
             target:e.dstDev.id,
              type: "curvedArrow",
              size:1,
-             color:"#000000"
+             color:"#000000",
+             edge:e
         });
     }
-    
-    stepper=new C.SingleStepper(G);
-
-    for(let d of s.graph.nodes()){
-        let device=d.device;
-        d.borderColor = device.blocked() ? "#FF0000" : "#00FF00";
-        d.color = shade(device.state.v);
+    for(var e of s.graph.edges()){
+        e.edge.gEdge=e;
+        updateEdgeStyle(e);
     }
+    
+    stepper=new C.BatchStepper();
+    stepper.attach(G,true);
     s.refresh();
+
+    var updateAllNodes = function()
+    {
+        for(let d of s.graph.nodes()){
+            updateNodeStyle(d);
+        }
+        for(let e of s.graph.edges()){
+            updateEdgeStyle(e);
+        }
+        s.refresh({skipIndexation: true});
+    }
+    updateAllNodes();
 
     $("#step").click(function(){
         var changes=stepper.step();
         
-        for(let d of s.graph.nodes()){
-            let device=d.device;
-            d.borderColor = device.blocked() ? "#FF0000" : "#00FF00";
-            d.color = shade(device.state.v);
-        }
-        s.refresh();
+        updateAllNodes();
     });
+
+    $("#run").click(function(){
+        function animate()
+        {
+
+            var k=0|$("#step-size").val();
+            
+            var tStart = (new Date()).getTime();
+                
+            var events=0;
+            var changes=[];
+            while(events < k){
+                var done=stepper.step();
+                events+=done[0];
+                changes=changes.concat(changes, done[1]);
+                if(done[0]==0)
+                    break;
+                var tNow= (new Date()).getTime();
+                if(tNow-tStart > 250)
+                    break;
+            }
+            stepper.history.splice(0,stepper.history.length);
+
+            console.log(`  events=${events}`);
+
+            updateAllNodes(changes);
+            /*var delta=C.get_event_list_updated_nodes_and_edges(changes);
+            for(let d of delta[0]){
+                updateNodeStyle(d.gNode);
+            }
+            for(let e of delta[1]){
+                updateEdgeStyle(e.gEdge);
+            }
+            s.refresh({skipIndexation: true});*/
+
+
+            if(runAnim && events>0){
+                requestAnimationFrame(animate);
+            }
+        }
+
+        runAnim=true;
+        requestAnimationFrame(animate);
+    });
+
+        $("#stop").click(function(){
+            runAnim=false;
+        });
+
+        $("#show-events").change(function(){
+            showEvents=this.checked;
+            s.settings('drawEdges',showEvents);
+            updateAllNodes();
+        })
 });
 
 </script>

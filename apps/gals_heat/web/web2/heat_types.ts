@@ -49,7 +49,7 @@ export class HeatGraphProperties
     readonly _name_ ="heat_properties";
 
     constructor(
-        public maxTime : number = 10
+        public maxTime : number = 1000000
     ) {};
 };
 

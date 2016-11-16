@@ -61,7 +61,7 @@ class CellInitInputPort
         let deviceProperties=devicePropertiesG as CellDeviceProperties;
         let deviceState=deviceStateG as CellDeviceState;
 
-        deviceState.v = 0; 
+        deviceState.v = deviceProperties.iv; 
         deviceState.t = 0;
         deviceState.cs = deviceProperties.nhood; // Force us into the sending ready state
         deviceState.ca = deviceProperties.iv;   // This is the first value
@@ -93,6 +93,8 @@ class CellInInputPort
         let deviceState=deviceStateG as CellDeviceState;
         let edgeProperties=edgePropertiesG as UpdateEdgeProperties;
         let message=messageG as UpdateMessage;
+
+        //console.log("  w = "+edgeProperties.w);
         
         if(message.t==deviceState.t){
             deviceState.cs++;

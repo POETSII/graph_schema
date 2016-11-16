@@ -142,11 +142,11 @@ export class DeviceType
         outputs : OutputPort[] = []
     ){
         for(let i of inputs){
-            console.log(`  adding ${i.name}, edgeType=${i.edgeType.id}`);
+            //console.log(`  adding ${i.name}, edgeType=${i.edgeType.id}`);
             this.inputs[i.name]=i;
         }
         for(let o of outputs){
-            console.log(`  adding ${o.name}`);
+            //console.log(`  adding ${o.name}`);
             this.outputs[o.name]=o;
         }
     }
@@ -218,13 +218,35 @@ export class DeviceInstance
     inputs : { [key:string] : EdgeInstance[]; } = {};
     outputs : { [key:string] : EdgeInstance[]; } = {};
 
+    private _is_blocked : boolean = false;
+    private _is_rts : boolean = false;
+
+    update() : void
+    {
+        var _blocked=false;
+        var _is_rts=false;
+        for( let k in this.rts){
+            var lrts=this.rts[k];
+            _is_rts = _is_rts || lrts;
+            if(lrts){
+                for( let e of  this.outputs[k]){
+                    let b = e.full();
+                    _blocked=_blocked || b;
+                }
+            }
+        }
+        this._is_blocked=_blocked;
+        this._is_rts=_is_rts;
+    }
+
     blocked() : boolean
     {
-        for( let k in this.rts){
-            if(this.rts[k])
-                return false;
-        }
-        return true;
+        return this._is_blocked && this._is_rts;
+    }
+
+    is_rts() : boolean
+    {
+        return this._is_rts;
     }
     
 };
@@ -240,8 +262,25 @@ export class EdgeInstance
         public dstPort : InputPort,
         public properties : TypedData = edgeType.properties.create(),
         public state : TypedData = edgeType.state.create(),
-        public metadata = {}
+        public metadata = {},
+        public queue : TypedData[] = []
     ){};
+
+    private _is_blocked=false;
+
+    full() : boolean
+    {
+        return this.queue.length>0;
+    }
+
+    empty() : boolean
+    {
+        return this.queue.length==0;
+    }
+
+    update() : void
+    {
+    }
 };
 
 export class GraphInstance
@@ -378,6 +417,7 @@ class SendEvent
 
     constructor(
         public readonly device : DeviceInstance,
+        public readonly port : OutputPort,
         public state : TypedData,
         public rts : ReadySet,
         public readonly message : TypedData,
@@ -452,23 +492,69 @@ class ReceiveEvent
  
 };
 
+export function get_event_list_updated_nodes_and_edges(
+    events : Event[]
+) : [ DeviceInstance[], EdgeInstance[] ]
+{
+    var devices : {[key:string]:DeviceInstance; } = {};
+    var edges : {[key:string]:EdgeInstance; } = {};
+    for(let ev of events)
+    {
+        if(ev instanceof InitEvent){
+            devices[ev.device.id]=ev.device;
+        }else if(ev instanceof SendEvent){
+            devices[ev.device.id]=ev.device;
+            for(let e of ev.device.outputs[ev.port.name]){
+                edges[e.id]=e;
+                devices[e.dstDev.id]=e.dstDev;
+            }
+        }else if(ev instanceof ReceiveEvent){
+            devices[ev.edge.srcDev.id]=ev.edge.srcDev;
+            devices[ev.edge.dstDev.id]=ev.edge.dstDev;
+            edges[ev.edge.id]=ev.edge;
+        }else{
+            assert(false);
+        }
+    }
+
+    var aDevices:DeviceInstance[]=[];
+    var aEdges:EdgeInstance[]=[];
+    for(var d in devices){
+        aDevices.push(devices[d]);
+    }
+    for(var e in edges){
+        aEdges.push(edges[e]);
+    }
+    return [aDevices,aEdges];
+}
+
 export interface Stepper
 {
-    step() : Event[]
+    attach(g:GraphInstance, doInit:boolean) : void;
+    detach() : GraphInstance;
+
+    step() : [number,Event[]];
 }
 
 export class SingleStepper
     implements Stepper
 {
-    ready : DeviceInstance[] = [];
+    readyDevs : DeviceInstance[] = [];
+    readyEdges : EdgeInstance[] = [];
 
     history : Event[] = [];
 
-    constructor(
-        public g : GraphInstance
+    g : GraphInstance|null = null;
+
+    attach(
+        graph : GraphInstance,
+        doInit: boolean
     ){
-        for(let d of g.enumDevices()){
-            if("__init__" in d.deviceType.inputs){
+        assert(this.g==null);
+        this.g=graph;
+
+        for(let d of this.g.enumDevices()){
+            if(doInit && ("__init__" in d.deviceType.inputs)){
                 let port=d.deviceType.inputs["__init__"];
                 let message=port.edgeType.message.create();
                 
@@ -486,53 +572,186 @@ export class SingleStepper
                 this.history.push(new InitEvent(d, preState, preRts, message));
             }
 
-            if(!d.blocked()){
-                this.ready.push(d);
+            this.update_dev(d);
+        }
+        for(let e of this.g.enumEdges()){
+            this.update_edge(e);
+        }
+    }
+
+    detach() : GraphInstance
+    {
+        assert(this.g!=null);
+        var res=this.g;
+
+        this.history=[];
+        this.readyDevs=[];
+        this.readyEdges=[];
+        this.g=null;
+
+        return res;
+    }
+
+    private update_dev(dev:DeviceInstance) : void
+    {
+        dev.update();
+        let ii=this.readyDevs.indexOf(dev);
+        if(!dev.is_rts() || dev.blocked()){
+            if(ii!=-1){
+                this.readyDevs.splice(ii,1);
+            }
+        }else{
+            if(ii==-1){
+                this.readyDevs.push(dev);
             }
         }
     }
 
-    step() : Event[]
+    private update_edge(edge:EdgeInstance) : void
+    {
+        edge.update();
+        let ii=this.readyEdges.indexOf(edge);
+        if(edge.empty()){
+            if(ii!=-1){
+                this.readyEdges.splice(ii,1);
+            }
+        }else{
+            if(ii==-1){
+                this.readyEdges.push(edge);
+            }
+        }
+    }
+
+    step() : [number,Event[]]
     {
         let res:Event[]=[];
 
-        if(this.ready.length==0)
-            return res;
+        let readyAll=this.readyEdges.length+this.readyDevs.length;
 
-        let selDev=Math.floor(Math.random()*this.ready.length);
-        let dev=this.ready[selDev];
-        this.ready.splice(selDev,1);
+        //console.log(`readyEdges : ${this.readyEdges.length}, readyDevs : ${this.readyDevs.length}`);
 
-        let rts=dev.rts;
-        let rtsPorts:string[]=[];
-        for(let k in rts){
-            if(rts[k]){
-                rtsPorts.push(k);
+        if(readyAll==0)
+            return [0,res];
+
+        let sel=Math.floor(Math.random()*readyAll);
+
+        if(sel < this.readyDevs.length){
+            let selDev=sel;
+            let dev=this.readyDevs[selDev];
+            this.readyDevs.splice(selDev,1);
+
+            assert(dev.is_rts());
+
+            let rts=dev.rts;
+            let rtsPorts:string[]=[];
+            for(let k in rts){
+                if(rts[k]){
+                    rtsPorts.push(k);
+                }
             }
+
+            assert(rtsPorts.length>0);
+
+            let selPort=Math.floor(Math.random()*rtsPorts.length);
+            let port=dev.deviceType.getOutput(rtsPorts[selPort]);
+
+            let message=port.edgeType.message.create();
+
+            let preState=dev.deviceType.state.import(dev.state)
+            let preRts=clone(dev.rts);
+
+            let doSend=port.onSend(
+                this.g.properties,
+                dev.properties,
+                dev.state,
+                message,
+                dev.rts
+            );
+            res.push(new SendEvent(dev, port, preState, preRts, message, !doSend));
+            //console.log(` send to ${dev.id} : state'=${JSON.stringify(dev.state)}, rts'=${JSON.stringify(dev.rts)}`);
+
+            if(doSend){
+                for(let e of dev.outputs[port.name]){
+                    e.queue.push(message);
+                    this.update_edge(e);
+                }
+            }
+
+            this.update_dev(dev);
+
+        }else{   
+            let selEdge=sel-this.readyDevs.length;
+            let e= this.readyEdges[selEdge];
+            this.readyEdges.splice(selEdge, 1);
+
+            let message=e.queue[0];
+            e.queue.splice(0,1);
+            
+            let preState=e.dstDev.deviceType.state.import(e.dstDev.state);
+            let preRts=clone(e.dstDev.rts);
+            e.dstPort.onReceive(
+                this.g.properties,
+                e.dstDev.properties,
+                e.dstDev.state,
+                e.properties,
+                e.state,
+                message,
+                e.dstDev.rts
+            );
+            res.push(new ReceiveEvent(e, preState, preRts, message));
+
+            //console.log(`   eprops = ${JSON.stringify(e.properties)}`);
+            //console.log(`   recv on ${e.dstDev.id} : state'=${JSON.stringify(e.dstDev.state)}, rts'=${JSON.stringify(e.dstDev.rts)}`);
+
+            this.update_dev(e.dstDev);
+            this.update_dev(e.srcDev);
         }
 
-        let selPort=Math.floor(Math.random()*rtsPorts.length);
-        let port=dev.deviceType.getOutput(rtsPorts[selPort]);
+        this.history=this.history.concat(res);
 
-        let message=port.edgeType.message.create();
+        return [res.length,res];
+    }
+}
 
-        let preState=dev.deviceType.state.import(dev.state)
-        let preRts=clone(dev.rts);
 
-        let doSend=port.onSend(
-            this.g.properties,
-            dev.properties,
-            dev.state,
-            message,
-            dev.rts
-        );
-        res.push(new SendEvent(dev, preState, preRts, message, !doSend));
-        console.log(` send to ${dev.id} : state'=${JSON.stringify(dev.state)}, rts'=${JSON.stringify(dev.rts)}`);
+export class BatchStepper
+    implements Stepper
+{
+    g : GraphInstance|null = null;
 
-        if(doSend){
-            for(let e of dev.outputs[port.name]){
-                let preState=e.dstDev.deviceType.state.import(e.dstDev.state);
-                let preRts=clone(e.dstDev.rts);
+    history : Event[] = [];
+
+    attach(
+        graph : GraphInstance,
+        doInit: boolean
+    ){
+        assert(this.g==null);
+        this.g=graph;
+
+        for(let d of this.g.enumDevices()){
+            if(doInit && ("__init__" in d.deviceType.inputs)){
+                let port=d.deviceType.inputs["__init__"];
+                let message=port.edgeType.message.create();
+                
+                port.onReceive(
+                    this.g.properties,
+                    d.properties,
+                    d.state,
+                    port.edgeType.properties.create(),
+                    port.edgeType.state.create(),
+                    message,
+                    d.rts
+                );
+            }
+            d.update();
+        }
+        for(let e of this.g.enumEdges()){
+            while(e.queue.length>0){
+                var h=e.queue.pop();
+
+                let message=e.queue[0];
+                e.queue.splice(0,1);
+            
                 e.dstPort.onReceive(
                     this.g.properties,
                     e.dstDev.properties,
@@ -542,29 +761,72 @@ export class SingleStepper
                     message,
                     e.dstDev.rts
                 );
-                res.push(new ReceiveEvent(e, preState, preRts, message));
-
-                console.log(` recv on ${e.dstDev.id} : state'=${JSON.stringify(e.dstDev.state)}, rts'=${JSON.stringify(e.dstDev.rts)}`);
-
-                let ii=this.ready.indexOf(e.dstDev);
-                if(e.dstDev.blocked()){
-                    if(ii!=-1){
-                        this.ready.splice(ii,1);
-                    }
-                }else{
-                    if(ii==-1){
-                        this.ready.push(e.dstDev);
-                    }
-                }
             }
+            e.update();
+            e.srcDev.update();
+            e.dstDev.update();
         }
+    }
 
-        if(!dev.blocked()){
-            this.ready.push(dev);
-        }
+    detach() : GraphInstance
+    {
+        assert(this.g!=null);
+        var res=this.g;
 
-        this.history=this.history.concat(res);
+        this.g=null;
 
         return res;
+    }
+
+    step() : [number,Event[]]
+    {
+        var count=0;
+
+        for(let dev of this.g.enumDevices()){
+            if(!dev.is_rts())
+                continue;
+
+            let rts=dev.rts;
+            let rtsPorts:string[]=[];
+            for(let k in rts){
+                if(rts[k]){
+                    rtsPorts.push(k);
+                }
+            }
+
+            assert(rtsPorts.length>0);
+
+            let selPort=Math.floor(Math.random()*rtsPorts.length);
+            let port=dev.deviceType.getOutput(rtsPorts[selPort]);
+
+            let message=port.edgeType.message.create();
+
+            let doSend=port.onSend(
+                this.g.properties,
+                dev.properties,
+                dev.state,
+                message,
+                dev.rts
+            );
+            ++count;
+            if(doSend){
+                for(let e of dev.outputs[port.name]){
+                
+                    e.dstPort.onReceive(
+                        this.g.properties,
+                        e.dstDev.properties,
+                        e.dstDev.state,
+                        e.properties,
+                        e.state,
+                        message,
+                        e.dstDev.rts
+                    );
+                    e.dstDev.update();
+                    ++count;
+                }
+            }
+            dev.update();
+        }
+        return [count,[]];
     }
 }
