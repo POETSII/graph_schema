@@ -67,7 +67,7 @@
     <button id="reset">
         Reset
     </button>
-    <label>width: <input id="width" value="16"></input></label>
+    <label>width: <input id="width" value="12"></input></label>
     <select id="engine">
         <option value="single">Single stepper (faithful blocking)</option>
         <option value="batch">Batch stepper (fast)</option>
@@ -78,6 +78,7 @@
         <option value="svg">SVG (buggy)</option>
     </select>
 </div>
+
 <div>
     <button id="step">
         Step
@@ -88,20 +89,60 @@
         <button id="stop">
             Stop
     </button>
+    <label>
+        Steps/frame: 
     <input id="step-size" value="1">
     </input>
+    </label>
     <label><input type="checkbox" id="show-events" checked="true"></input>Show events</label>
     <span>Events: <span id="total-events">0</span></span>
     <span>Events/sec: <span id="events-per-sec">0</span></span>
 </div>
-<div id="container">
-  <style>
-    #graph-container {
-      width:100%;
-      height:80%;
-    }
-  </style>
-  <div id="graph-container"></div>
+<div style="display:flex;       width:100%; height:80%;"    > 
+<div id="description" style="flex-basis:30%; overflow-y:scroll">
+<p>Hit "Step" to advance once. Hit "Run" to advance lots.
+<p>If you want to see the big (fast) picture, suggest you set:
+    <ul>
+        <li>Width=32+
+        <li>Batch-Stepper
+        <li>WebGL
+        <li>Disable show-events
+    </ul>
+    Then hit "reset" and "run"
+
+<p>
+<p>Single-stepper / Event-mode
+<p>In event mode the edges are simulated as channels with a single
+    buffer slot. When a node sends, a copy is placed in all channels
+    (and it turns green). If any outgoing edge currently has a message,
+    then the source node will be unable to send until that message
+    is received by the target (i.e. that node is blocked).
+<ul>
+<li>Nodes:
+    <ul>
+        <li>Grey border : idle (waiting for messages)
+        <li>Green border : ready (want to send, and not blocked)
+        <li>Red border: blocked (want to send, blocked by one or more edges)
+    </ul>
+<li>Edges:
+    <ul>
+        <li>Grey edge: channel currently empty
+        <li>Green edge: message pending in channel
+    </ul>
+</ul>
+
+<p>Batch stepper
+<p>The batch stepper will ignore channel buffers, and allow a device to
+    send its message and immediately call the send handler on
+    all target devices. All devices that are ready to send get a
+    chance to send one message in each frame. This is a lot faster
+    to simulate, but is less realistic in terms of messages and
+    blocking.
+
+</div>
+<div id="container"  style="flex-basis:70%">
+  <div id="graph-container" style="width:100%; height:80%;"></div>
+</div>
 </div>
 
 <script>
