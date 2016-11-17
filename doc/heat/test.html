@@ -1,0 +1,371 @@
+<html>
+<head>
+<script data-main="core" src="jquery.min.js"></script>
+
+<script data-main="core" src="require.js"></script>
+<script data-main="heat_graph" src="require.js"></script>
+
+<script src="sigma.js/src/sigma.core.js"></script>
+<script src="sigma.js/src/conrad.js"></script>
+<script src="sigma.js/src/utils/sigma.utils.js"></script>
+<script src="sigma.js/src/utils/sigma.polyfills.js"></script>
+<script src="sigma.js/src/sigma.settings.js"></script>
+<script src="sigma.js/src/classes/sigma.classes.dispatcher.js"></script>
+<script src="sigma.js/src/classes/sigma.classes.configurable.js"></script>
+<script src="sigma.js/src/classes/sigma.classes.graph.js"></script>
+<script src="sigma.js/src/classes/sigma.classes.camera.js"></script>
+<script src="sigma.js/src/classes/sigma.classes.quad.js"></script>
+<script src="sigma.js/src/classes/sigma.classes.edgequad.js"></script>
+<script src="sigma.js/src/captors/sigma.captors.mouse.js"></script>
+<script src="sigma.js/src/captors/sigma.captors.touch.js"></script>
+<script src="sigma.js/src/renderers/sigma.renderers.canvas.js"></script>
+<script src="sigma.js/src/renderers/sigma.renderers.webgl.js"></script>
+<script src="sigma.js/src/renderers/sigma.renderers.svg.js"></script>
+<script src="sigma.js/src/renderers/sigma.renderers.def.js"></script>
+<script src="sigma.js/src/renderers/webgl/sigma.webgl.nodes.def.js"></script>
+<script src="sigma.js/src/renderers/webgl/sigma.webgl.nodes.fast.js"></script>
+<script src="sigma.js/src/renderers/webgl/sigma.webgl.edges.def.js"></script>
+<script src="sigma.js/src/renderers/webgl/sigma.webgl.edges.fast.js"></script>
+<script src="sigma.js/src/renderers/webgl/sigma.webgl.edges.arrow.js"></script>
+<script src="sigma.js/src/renderers/canvas/sigma.canvas.labels.def.js"></script>
+<script src="sigma.js/src/renderers/canvas/sigma.canvas.hovers.def.js"></script>
+<script src="sigma.js/src/renderers/canvas/sigma.canvas.nodes.def.js"></script>
+<script src="sigma.js/src/renderers/canvas/sigma.canvas.edges.def.js"></script>
+<script src="sigma.js/src/renderers/canvas/sigma.canvas.edges.curve.js"></script>
+<script src="sigma.js/src/renderers/canvas/sigma.canvas.edges.arrow.js"></script>
+<script src="sigma.js/src/renderers/canvas/sigma.canvas.edges.curvedArrow.js"></script>
+<script src="sigma.js/src/renderers/canvas/sigma.canvas.edgehovers.def.js"></script>
+<script src="sigma.js/src/renderers/canvas/sigma.canvas.edgehovers.curve.js"></script>
+<script src="sigma.js/src/renderers/canvas/sigma.canvas.edgehovers.arrow.js"></script>
+<script src="sigma.js/src/renderers/canvas/sigma.canvas.edgehovers.curvedArrow.js"></script>
+<script src="sigma.js/src/renderers/canvas/sigma.canvas.extremities.def.js"></script>
+<script src="sigma.js/src/renderers/svg/sigma.svg.utils.js"></script>
+<script src="sigma.js/src/renderers/svg/sigma.svg.nodes.def.js"></script>
+<script src="sigma.js/src/renderers/svg/sigma.svg.edges.def.js"></script>
+<script src="sigma.js/src/renderers/svg/sigma.svg.edges.curve.js"></script>
+<script src="sigma.js/src/renderers/svg/sigma.svg.labels.def.js"></script>
+<script src="sigma.js/src/renderers/svg/sigma.svg.hovers.def.js"></script>
+<script src="sigma.js/src/middlewares/sigma.middlewares.rescale.js"></script>
+<script src="sigma.js/src/middlewares/sigma.middlewares.copy.js"></script>
+<script src="sigma.js/src/misc/sigma.misc.animation.js"></script>
+<script src="sigma.js/src/misc/sigma.misc.bindEvents.js"></script>
+<script src="sigma.js/src/misc/sigma.misc.bindDOMEvents.js"></script>
+<script src="sigma.js/src/misc/sigma.misc.drawHovers.js"></script>
+<!-- END SIGMA IMPORTS -->
+<script src="sigma.js/plugins/sigma.renderers.parallelEdges/utils.js"></script>
+<script src="sigma.js/plugins/sigma.renderers.parallelEdges/sigma.canvas.edges.curve.js"></script>
+<script src="sigma.js/plugins/sigma.renderers.parallelEdges/sigma.canvas.edges.curvedArrow.js"></script>
+<script src="sigma.js/plugins/sigma.renderers.parallelEdges/sigma.canvas.edgehovers.curve.js"></script>
+<script src="sigma.js/plugins/sigma.renderers.parallelEdges/sigma.canvas.edgehovers.curvedArrow.js"></script>
+<script src="sigma.js/plugins/sigma.renderers.customShapes/shape-library.js"></script>
+<script src="sigma.js/plugins/sigma.renderers.customShapes/sigma.renderers.customShapes.js"></script>
+
+</head>
+<body>
+
+<div>
+    <button id="reset">
+        Reset
+    </button>
+    <label>width: <input id="width" value="12"></input></label>
+    <select id="engine">
+        <option value="single">Single stepper (faithful blocking)</option>
+        <option value="batch">Batch stepper (fast)</option>
+    </select>
+    <select id="renderer">
+        <option value="canvas">Canvas (pretty but slow)</option>
+        <option value="webgl">WebGL (fast)</option>
+        <option value="svg">SVG (buggy)</option>
+    </select>
+</div>
+
+<div>
+    <button id="step">
+        Step
+    </button>
+    <button id="run">
+        Run
+    </button>
+        <button id="stop">
+            Stop
+    </button>
+    <label>
+        Steps/frame: 
+    <input id="step-size" value="1">
+    </input>
+    </label>
+    <label><input type="checkbox" id="show-events" checked="true"></input>Show events</label>
+    <span>Events: <span id="total-events">0</span></span>
+    <span>Events/sec: <span id="events-per-sec">0</span></span>
+</div>
+<div style="display:flex;       width:100%; height:80%;"    > 
+<div id="description" style="flex-basis:30%; overflow-y:scroll">
+<p>Hit "Step" to advance once. Hit "Run" to advance lots.
+<p>If you want to see the big (fast) picture, suggest you set:
+    <ul>
+        <li>Width=32+
+        <li>Batch-Stepper
+        <li>WebGL
+        <li>Disable show-events
+    </ul>
+    Then hit "reset" and "run"
+
+<p>
+<p>Single-stepper / Event-mode
+<p>In event mode the edges are simulated as channels with a single
+    buffer slot. When a node sends, a copy is placed in all channels
+    (and it turns green). If any outgoing edge currently has a message,
+    then the source node will be unable to send until that message
+    is received by the target (i.e. that node is blocked).
+<ul>
+<li>Nodes:
+    <ul>
+        <li>Grey border : idle (waiting for messages)
+        <li>Green border : ready (want to send, and not blocked)
+        <li>Red border: blocked (want to send, blocked by one or more edges)
+    </ul>
+<li>Edges:
+    <ul>
+        <li>Grey edge: channel currently empty
+        <li>Green edge: message pending in channel
+    </ul>
+</ul>
+
+<p>Batch stepper
+<p>The batch stepper will ignore channel buffers, and allow a device to
+    send its message and immediately call the send handler on
+    all target devices. All devices that are ready to send get a
+    chance to send one message in each frame. This is a lot faster
+    to simulate, but is less realistic in terms of messages and
+    blocking.
+
+</div>
+<div id="container"  style="flex-basis:70%">
+  <div id="graph-container" style="width:100%; height:80%;"></div>
+</div>
+</div>
+
+<script>
+var runAnim=false;
+var C=null;
+var H=null;
+var G=null;
+var s=null;
+var stepper=null;
+
+function hex2(v)
+{
+    return ('00'+(v|0).toString(16)).substr(-2);
+}
+
+function shade(v)
+{
+    var x=(v*256)|0;
+    if(x<=-255) x=-255;
+    if(x>=+255) x=+255;
+    var r=255, g=255, b=255;
+    if(x<0){
+        x=255+x;
+        b=x;
+    }else{
+        x=255-x;
+        r=x;
+        g=x;
+    }
+    r=hex2(r);
+    g=hex2(g);
+    b=hex2(b);
+    console.assert(r.length==   2);
+    console.assert(g.length==2);
+    console.assert(b.length==2);
+    return "#"+r+g+b;
+}
+
+for(var i=-1.1;i<=1.1;i+=0.1){
+    console.log(shade(i));
+}
+
+var totalEvents=0;
+var showEvents=true;
+
+function updateNodeStyle(n)
+{
+    var device=n.device;
+    if(showEvents){
+        n.borderColor = device.blocked() ? "#FF0000" : device.is_rts() ? "#00FF00" : "#808080";
+    }else{
+        n.borderColor = "#808080";
+    }
+    n.color = shade(device.state.v); 
+};
+function updateEdgeStyle(e)
+{
+    var edge=e.edge;
+    if(showEvents){
+        e.color= edge.empty() ? "#808080" : "#00FF00";
+    }else{
+        e.color="#808080";
+    }
+};
+
+function updateAllNodes(s)
+{
+    for(let d of s.graph.nodes()){
+        updateNodeStyle(d);
+    }
+    for(let e of s.graph.edges()){
+        updateEdgeStyle(e);
+    }
+    s.refresh({skipIndexation: true});
+}
+
+function animate()
+{
+
+    var k=0|$("#step-size").val();
+    
+    var tStart = (new Date()).getTime();
+        
+    var events=0;
+    var changes=[];
+    while(events < k){
+        var done=stepper.step();
+        events+=done[0];
+        changes=changes.concat(changes, done[1]);
+        if(done[0]==0)
+            break;
+        var tNow= (new Date()).getTime();
+        if(tNow-tStart > 250)
+            break;
+    }
+    stepper.history.splice(0,stepper.history.length);
+
+    totalEvents += events;
+    $("#total-events").text(totalEvents.toString());
+
+    var eventsPerSec = events / (tNow-tStart);
+    $("#events-per-sec").text(eventsPerSec.toFixed(1)+" KEvents/sec")
+
+    updateAllNodes(s);
+
+    if(runAnim && events>0){
+        requestAnimationFrame(animate);
+    }
+}
+
+function resetGraph()
+{
+    var w=$("#width").val()|0;
+    var h=w;
+
+    console.log("Pre");
+    G=H.makeGrid(w,h);
+    console.log("Post");
+
+    totalEvents=0;    
+    runAnim=false;
+
+    if(s!=null){
+        s.graph.clear();
+        s.graph.kill();
+        $("#graph-container").empty();
+        s=null;
+    }
+
+    s = new sigma({
+        renderer: {
+            container: document.getElementById('graph-container'),
+            type: $("#renderer").val()
+        },
+        settings: {
+            drawLabels: false,
+            maxNodeSize: 10,
+            minNodeSize: 0.25,
+            minEdgeSize: 0.5,
+            maxEdgeSize: 3
+        }
+    });
+
+    for(var d of G.enumDevices()){
+        s.graph.addNode({
+            id:d.id,
+            label:d.id,
+            x:d.metadata["x"]*50,
+            y:d.metadata["y"]*50,
+            size:0.5,
+            color:"#FFFFFF",
+            type: d.deviceType.id=="cell" ? "circle" : "square",
+            borderColor:"#000000",
+            device:d
+        });
+    }
+    for(var n of s.graph.nodes()){
+        n.device.gNode=n;
+        updateNodeStyle(n);
+    }
+    for(var e of G.enumEdges()){
+        s.graph.addEdge({
+            id:e.id,
+            source:e.srcDev.id,
+            target:e.dstDev.id,
+             type: "curvedArrow",
+             size:1,
+             color:"#000000",
+             edge:e
+        });
+    }
+    for(var e of s.graph.edges()){
+        e.edge.gEdge=e;
+        updateEdgeStyle(e);
+    }
+    
+    if($("#engine").val()=="batch"){
+        stepper=new C.BatchStepper();
+    }else{
+        stepper=new C.SingleStepper();
+    }
+    stepper.attach(G,true);
+    s.refresh();
+
+    
+    updateAllNodes(s);
+}
+
+require(['./core','./heat_graph'], function(CC,HH){
+    C=CC;
+    H=HH;
+    
+    resetGraph();
+
+    $("#reset").click(function(){
+         runAnim=true;
+        resetGraph();
+    });
+
+    $("#run").click(function(){
+         runAnim=true;
+        requestAnimationFrame(animate);
+    });    
+
+    $("#step").click(function(){
+        var changes=stepper.step();
+        
+        updateAllNodes(s);
+    });
+
+    $("#stop").click(function(){
+        runAnim=false;
+    });
+
+    $("#show-events").change(function(){
+        showEvents=this.checked;
+        s.settings('drawEdges',showEvents);
+        updateAllNodes(s);
+    })
+});
+
+</script>
+
+</body> 
+
+</html> 
