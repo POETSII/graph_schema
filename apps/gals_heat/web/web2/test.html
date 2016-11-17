@@ -64,6 +64,21 @@
 <body>
 
 <div>
+    <button id="reset">
+        Reset
+    </button>
+    <label>width: <input id="width" value="16"></input></label>
+    <select id="engine">
+        <option value="single">Single stepper (faithful blocking)</option>
+        <option value="batch">Batch stepper (fast)</option>
+    </select>
+    <select id="renderer">
+        <option value="canvas">Canvas (pretty but slow)</option>
+        <option value="webgl">WebGL (fast)</option>
+        <option value="svg">SVG (buggy)</option>
+    </select>
+</div>
+<div>
     <button id="step">
         Step
     </button>
@@ -129,18 +144,97 @@ for(var i=-1.1;i<=1.1;i+=0.1){
     console.log(shade(i));
 }
 
-require(['./core','./heat_graph'], function(CC,HH){
-    C=CC;
-    H=HH;
+var totalEvents=0;
+var showEvents=true;
+
+function updateNodeStyle(n)
+{
+    var device=n.device;
+    if(showEvents){
+        n.borderColor = device.blocked() ? "#FF0000" : device.is_rts() ? "#00FF00" : "#808080";
+    }else{
+        n.borderColor = "#808080";
+    }
+    n.color = shade(device.state.v); 
+};
+function updateEdgeStyle(e)
+{
+    var edge=e.edge;
+    if(showEvents){
+        e.color= edge.empty() ? "#808080" : "#00FF00";
+    }else{
+        e.color="#808080";
+    }
+};
+
+function updateAllNodes(s)
+{
+    for(let d of s.graph.nodes()){
+        updateNodeStyle(d);
+    }
+    for(let e of s.graph.edges()){
+        updateEdgeStyle(e);
+    }
+    s.refresh({skipIndexation: true});
+}
+
+function animate()
+{
+
+    var k=0|$("#step-size").val();
+    
+    var tStart = (new Date()).getTime();
+        
+    var events=0;
+    var changes=[];
+    while(events < k){
+        var done=stepper.step();
+        events+=done[0];
+        changes=changes.concat(changes, done[1]);
+        if(done[0]==0)
+            break;
+        var tNow= (new Date()).getTime();
+        if(tNow-tStart > 250)
+            break;
+    }
+    stepper.history.splice(0,stepper.history.length);
+
+    totalEvents += events;
+    $("#total-events").text(totalEvents.toString());
+
+    var eventsPerSec = events / (tNow-tStart);
+    $("#events-per-sec").text(eventsPerSec.toFixed(1)+" KEvents/sec")
+
+    updateAllNodes(s);
+
+    if(runAnim && events>0){
+        requestAnimationFrame(animate);
+    }
+}
+
+function resetGraph()
+{
+    var w=$("#width").val()|0;
+    var h=w;
+
     console.log("Pre");
-    G=H.makeGrid(32,32);
+    G=H.makeGrid(w,h);
     console.log("Post");
-    var totalEvents=0;
+
+    totalEvents=0;    
+    runAnim=false;
+
+    if(s!=null){
+        s.graph.clear();
+        s.graph.kill();
+        $("#graph-container").empty();
+        s=null;
+    }
 
     s = new sigma({
         renderer: {
             container: document.getElementById('graph-container'),
-            type: 'webgl'
+            type: $("#renderer").val()
         },
         settings: {
             drawLabels: false,
@@ -150,28 +244,6 @@ require(['./core','./heat_graph'], function(CC,HH){
             maxEdgeSize: 3
         }
     });
-
-    var showEvents=true;
-
-    var updateNodeStyle=function(n)
-    {
-        var device=n.device;
-        if(showEvents){
-            n.borderColor = device.blocked() ? "#FF0000" : device.is_rts() ? "#00FF00" : "#808080";
-        }else{
-            n.borderColor = "#808080";
-        }
-        n.color = shade(device.state.v); 
-    };
-    var updateEdgeStyle=function(e)
-    {
-        var edge=e.edge;
-        if(showEvents){
-           e.color= edge.empty() ? "#808080" : "#00FF00";
-        }else{
-            e.color="#808080";
-        }
-    };
 
     for(var d of G.enumDevices()){
         s.graph.addNode({
@@ -206,85 +278,49 @@ require(['./core','./heat_graph'], function(CC,HH){
         updateEdgeStyle(e);
     }
     
-    stepper=new C.BatchStepper();
+    if($("#engine").val()=="batch"){
+        stepper=new C.BatchStepper();
+    }else{
+        stepper=new C.SingleStepper();
+    }
     stepper.attach(G,true);
     s.refresh();
 
-    var updateAllNodes = function()
-    {
-        for(let d of s.graph.nodes()){
-            updateNodeStyle(d);
-        }
-        for(let e of s.graph.edges()){
-            updateEdgeStyle(e);
-        }
-        s.refresh({skipIndexation: true});
-    }
-    updateAllNodes();
+    
+    updateAllNodes(s);
+}
+
+require(['./core','./heat_graph'], function(CC,HH){
+    C=CC;
+    H=HH;
+    
+    resetGraph();
+
+    $("#reset").click(function(){
+         runAnim=true;
+        resetGraph();
+    });
+
+    $("#run").click(function(){
+         runAnim=true;
+        requestAnimationFrame(animate);
+    });    
 
     $("#step").click(function(){
         var changes=stepper.step();
         
-        updateAllNodes();
+        updateAllNodes(s);
     });
 
-    $("#run").click(function(){
-        function animate()
-        {
-
-            var k=0|$("#step-size").val();
-            
-            var tStart = (new Date()).getTime();
-                
-            var events=0;
-            var changes=[];
-            while(events < k){
-                var done=stepper.step();
-                events+=done[0];
-                changes=changes.concat(changes, done[1]);
-                if(done[0]==0)
-                    break;
-                var tNow= (new Date()).getTime();
-                if(tNow-tStart > 250)
-                    break;
-            }
-            stepper.history.splice(0,stepper.history.length);
-
-            totalEvents += events;
-            $("#total-events").text(totalEvents.toString());
-
-            var eventsPerSec = events / (tNow-tStart);
-            $("#events-per-sec").text(eventsPerSec.toFixed(1)+" KEvents/sec")
-
-            updateAllNodes(changes);
-            /*var delta=C.get_event_list_updated_nodes_and_edges(changes);
-            for(let d of delta[0]){
-                updateNodeStyle(d.gNode);
-            }
-            for(let e of delta[1]){
-                updateEdgeStyle(e.gEdge);
-            }
-            s.refresh({skipIndexation: true});*/
-
-
-            if(runAnim && events>0){
-                requestAnimationFrame(animate);
-            }
-        }
-
-        runAnim=true;
-        requestAnimationFrame(animate);
+    $("#stop").click(function(){
+        runAnim=false;
     });
 
-        $("#stop").click(function(){
-            runAnim=false;
-        });
-
-        $("#show-events").change(function(){
-            showEvents=this.checked;
-            s.settings('drawEdges',showEvents);
-            updateAllNodes();
-        })
+    $("#show-events").change(function(){
+        showEvents=this.checked;
+        s.settings('drawEdges',showEvents);
+        updateAllNodes(s);
+    })
 });
 
 </script>

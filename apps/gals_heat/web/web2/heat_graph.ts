@@ -59,10 +59,10 @@ export function makeGrid(width : number, height : number) : POETS.GraphInstance
 
             let id=`d_${x}_${y}`;
 
-            /*if( x == Math.floor(width/2) && y==Math.floor(height/2)){
+            if( x == Math.floor(width/2) && y==Math.floor(height/2)){
                 let props={ "bias":0, "amplitude":1.0, "phase":1.5, "frequency": 100*dt, "neighbours":4 };
                 g.addDevice(id, dirichletDeviceType, props, {x:x,y:y});
-            } else*/if( H || V){
+            } else if( H || V){
                 let props={ "bias":0, "amplitude":1.0, "phase":1, "frequency": 70*dt*((x/width)+(y/height)), "neighbours":1 };
                 g.addDevice(id, dirichletDeviceType, props, {x:x,y:y});
             }else{

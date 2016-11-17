@@ -3,7 +3,9 @@ declare function require(name: string) : any;
 
 export function assert(cond : boolean)
 {
-    console.assert(cond);
+    if(!cond){
+        console.assert(false);
+    }
 }
 
 // http://stackoverflow.com/a/3826081
@@ -239,6 +241,17 @@ export class DeviceInstance
         this._is_rts=_is_rts;
     }
 
+    update_rts_only() : void
+    {
+        this._is_rts=false;
+        for( let k in this.rts){
+            if(this.rts[k]){
+                this._is_rts=true;
+                return;
+            }
+        }
+    }
+
     blocked() : boolean
     {
         return this._is_blocked && this._is_rts;
@@ -288,6 +301,8 @@ export class GraphInstance
     private devices : {[key:string]:DeviceInstance} = {};
     private edges : {[key:string]:EdgeInstance} = {};
 
+    private devicesA : DeviceInstance[] = [];
+
     public readonly properties : TypedData;
     
     constructor(
@@ -307,11 +322,7 @@ export class GraphInstance
 
     enumDevices() : DeviceInstance[]
     {
-        var res:DeviceInstance[]=[];
-        for(let k in this.devices){
-            res.push(this.devices[k]);
-        }
-        return res;
+        return this.devicesA;
     }
 
     enumEdges() : EdgeInstance[]
@@ -340,6 +351,7 @@ export class GraphInstance
             deviceType.state.create(),
             metadata
         );
+        this.devicesA.push(this.devices[id]);
     }
     
     addEdge(
@@ -821,11 +833,11 @@ export class BatchStepper
                         message,
                         e.dstDev.rts
                     );
-                    e.dstDev.update();
+                    e.dstDev.update_rts_only();
                     ++count;
                 }
             }
-            dev.update();
+            dev.update_rts_only();
         }
         return [count,[]];
     }
