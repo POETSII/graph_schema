@@ -173,6 +173,7 @@ export class DeviceType
 export class GraphType
 {
     readonly deviceTypes : { [key:string]:DeviceType; } = {};
+    readonly edgeTypes : { [key:string]:EdgeType; } = {};
 
     constructor(
         public readonly id : string,
@@ -181,6 +182,17 @@ export class GraphType
     ){
         for(let d of _deviceTypes){
             this.deviceTypes[d.id]=d;
+            for(let eId in d.inputs){
+                if( ! (eId in this.edgeTypes ) ){
+                    this.edgeTypes[eId] = d.inputs[eId].edgeType;
+                }
+            }
+            for(let eId in d.outputs){
+                if( ! (eId in this.edgeTypes ) ){
+                    this.edgeTypes[eId] = d.outputs[eId].edgeType;
+                }
+            }
+
         }
     }
 
@@ -204,7 +216,7 @@ export class DeviceInstance
         public readonly deviceType : DeviceType,
         public readonly  properties : TypedData =deviceType.properties.create(),
         public state : TypedData = deviceType.state.create(),
-        public metadata = {}
+        public metadata : {[key:string]:any;} = {}
     )
     {
         for(let k in deviceType.outputs){
@@ -302,6 +314,8 @@ export class GraphInstance
     private edges : {[key:string]:EdgeInstance} = {};
 
     private devicesA : DeviceInstance[] = [];
+    private edgesA : EdgeInstance[] = [];
+
 
     public readonly properties : TypedData;
     
@@ -327,11 +341,7 @@ export class GraphInstance
 
     enumEdges() : EdgeInstance[]
     {
-        var res:EdgeInstance[]=[];
-        for(let k in this.edges){
-            res.push(this.edges[k]);
-        }
-        return res;
+        return this.edgesA;
     }
     
     addDevice(
@@ -388,6 +398,7 @@ export class GraphInstance
             metadata
         );
         this.edges[id]=edge;
+        this.edgesA.push(edge);
         srcDev.outputs[srcPort.name].push(edge);
         dstDev.inputs[dstPort.name].push(edge);
     }

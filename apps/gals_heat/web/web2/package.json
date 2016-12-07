@@ -1,0 +1,19 @@
+{
+  "name": "web2",
+  "version": "1.0.0",
+  "description": "Wibble",
+  "main": "test.js",
+  "dependencies": {
+    "@types/jquery": "^2.0.34",
+    "@types/snapsvg": "^0.4.27",
+    "@types/svg.js": "0.0.17",
+    "jquery": "^3.1.1",
+    "svg.js": "^2.3.6"
+  },
+  "devDependencies": {},
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC"
+}
