@@ -1,6 +1,6 @@
 /// <reference path="heat_types.ts" />
 
-import * as POETS from "./core"
+import * as POETS from "../core/core"
 import {HeatGraphProperties} from "./heat_types"
 import {UpdateMessage,initEdgeType,updateEdgeType} from "./heat_types"
 

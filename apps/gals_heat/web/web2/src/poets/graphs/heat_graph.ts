@@ -2,7 +2,7 @@
 /// <reference path="heat_dirichlet.ts" />
 /// <reference path="heat_cell.ts" />
 
-import * as POETS from "./core"
+import * as POETS from "../core/core"
 
 import {HeatGraphProperties} from "./heat_types"
 import {UpdateMessage,initEdgeType,updateEdgeType} from "./heat_types"

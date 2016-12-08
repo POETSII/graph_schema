@@ -1,7 +1,6 @@
-/// <reference path="core.ts" />
+/// <reference path="../core/core.ts" />
 
-import * as POETS from "./core" 
-
+import * as POETS from "../core/core" 
 
 import assert = POETS.assert;
 import TypedData = POETS.TypedData;

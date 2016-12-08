@@ -1,9 +1,8 @@
 <html>
 <head>
-<script data-main="core" src="jquery.min.js"></script>
+<script src="scripts/jquery.min.js"></script>
 
-<script data-main="core" src="require.js"></script>
-<script data-main="heat_graph" src="require.js"></script>
+<script src="scripts/require.js"></script>
 
 <script src="sigma.js/src/sigma.core.js"></script>
 <script src="sigma.js/src/conrad.js"></script>
@@ -183,9 +182,7 @@ function shade(v)
     return "#"+r+g+b;
 }
 
-for(var i=-1.1;i<=1.1;i+=0.1){
-    console.log(shade(i));
-}
+
 
 var totalEvents=0;
 var showEvents=true;
@@ -333,37 +330,42 @@ function resetGraph()
     updateAllNodes(s);
 }
 
-require(['./core','./heat_graph'], function(CC,HH){
-    C=CC;
-    H=HH;
-    
-    resetGraph();
+console.log("Pre load");
 
-    $("#reset").click(function(){
-         runAnim=true;
-        resetGraph();
-    });
+require(['scripts/require_config'],function() {
 
-    $("#run").click(function(){
-         runAnim=true;
-        requestAnimationFrame(animate);
-    });    
-
-    $("#step").click(function(){
-        var changes=stepper.step();
+    require(['scripts/core/core','scripts/graphs/heat_graph'], function(CC,HH){
+        C=CC;
+        H=HH;
         
-        updateAllNodes(s);
-    });
+        resetGraph();
 
-    $("#stop").click(function(){
-        runAnim=false;
-    });
+        $("#reset").click(function(){
+            runAnim=true;
+            resetGraph();
+        });
 
-    $("#show-events").change(function(){
-        showEvents=this.checked;
-        s.settings('drawEdges',showEvents);
-        updateAllNodes(s);
-    })
+        $("#run").click(function(){
+            runAnim=true;
+            requestAnimationFrame(animate);
+        });    
+
+        $("#step").click(function(){
+            var changes=stepper.step();
+            
+            updateAllNodes(s);
+        });
+
+        $("#stop").click(function(){
+            runAnim=false;
+        });
+
+        $("#show-events").change(function(){
+            showEvents=this.checked;
+            s.settings('drawEdges',showEvents);
+            updateAllNodes(s);
+        });
+    });
 });
 
 </script>
