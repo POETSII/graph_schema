@@ -4,41 +4,56 @@ import * as POETS from "../core/core"
 import {HeatGraphProperties} from "./heat_types"
 import {UpdateMessage,initEdgeType,updateEdgeType} from "./heat_types"
 
+import {tFloat,tInt,tBoolean} from "../core/typed_data"
+
 import assert = POETS.assert;
 import TypedData = POETS.TypedData;
 import EdgeType = POETS.EdgeType;
 import DeviceType = POETS.DeviceType;
 import GraphType = POETS.GraphType;
 import GenericTypedDataSpec = POETS.GenericTypedDataSpec;
+import TypedDataSpec = POETS.TypedDataSpec;
 import InputPort = POETS.InputPort;
 import OutputPort = POETS.OutputPort;
 
 
 class DirichletDeviceProperties
-    implements TypedData
+    extends TypedData
 {
-    readonly _name_ ="dirichlet_properties";
+    static elements = [
+        tInt("neighbours"),
+        tFloat("amplitude"), tFloat("phase"), tFloat("frequency"), tFloat("bias")
+    ];
 
     constructor(
+        _spec_:TypedDataSpec,
         public neighbours : number = 0,
         public amplitude : number = 1,
         public phase : number = 0.5,
         public frequency : number = 1,
         public bias : number = 0
-    ){}
+    ){
+        super("dirichlet_properties", _spec_);
+    }
 };
 
 class DirichletDeviceState
-    implements TypedData
+    extends TypedData
 {
-    readonly _name_ ="dirichlet_state";
+    static elements = [
+        tFloat("v"), tInt("t"),
+        tFloat("cs"), tInt("ns")
+    ];
 
     constructor(
+        _spec_:TypedDataSpec,
         public v : number =0,
         public t : number =0,
         public cs : number =0,
         public ns : number =0
-    ){};
+    ){
+        super("dirichlet_state", _spec_);
+    };
 };
 
 class DirichletInitInputPort
@@ -147,8 +162,8 @@ class DirichletOutOutputPort
 
 export const dirichletDeviceType = new DeviceType(
     "dirichlet",
-    new GenericTypedDataSpec(DirichletDeviceProperties),
-    new GenericTypedDataSpec(DirichletDeviceState),
+    new GenericTypedDataSpec(DirichletDeviceProperties, DirichletDeviceProperties.elements),
+    new GenericTypedDataSpec(DirichletDeviceState, DirichletDeviceState.elements),
     [
         new DirichletInitInputPort(),
         new DirichletInInputPort()

@@ -141,9 +141,10 @@
             blocking.
 
     </div>
-    <div id="container"  style="flex-basis:70%">
+    <div id="container"  style="flex-basis:50%">
         <div id="graph-container" style="width:100%; height:100%;"></div>
     </div>
+    <div id="state-panel" style="flex-basis:20%; overflow-y:scroll">
 </div>
 
 <script>
@@ -151,8 +152,11 @@ var runAnim=false;
 var C=null;
 var H=null;
 var G=null;
+var GUI=null;
 var s=null;
 var stepper=null;
+
+var statePanel=null;
 
 function hex2(v)
 {
@@ -216,6 +220,8 @@ function updateAllNodes(s)
         updateEdgeStyle(e);
     }
     s.refresh({skipIndexation: true});
+
+    statePanel.update();
 }
 
 function animate()
@@ -328,15 +334,26 @@ function resetGraph()
 
     
     updateAllNodes(s);
+
+    s.bind('clickNode', function(e) {
+        //console.log(e.type, e.data.node.label, e.data.captor);
+        var node=e.data.node;
+        var device=node.device;
+
+        statePanel.attach(device);
+    });
 }
 
 console.log("Pre load");
 
 require(['scripts/require_config'],function() {
 
-    require(['scripts/core/core','scripts/graphs/heat_graph'], function(CC,HH){
+    require(['scripts/core/core','scripts/graphs/heat_graph', 'scripts/gui/gui'], function(CC,HH,GG){
         C=CC;
         H=HH;
+        GUI=GG;
+
+        statePanel=new GUI.StatePanel( $("#state-panel")[0] );
         
         resetGraph();
 

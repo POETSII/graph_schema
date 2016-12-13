@@ -20,7 +20,7 @@ import OutputPort = POETS.OutputPort;
 
 export const heatGraphType = new GraphType(
     "gals_heat",
-    new GenericTypedDataSpec(HeatGraphProperties),
+    new GenericTypedDataSpec(HeatGraphProperties, HeatGraphProperties.elements),
     [
         dirichletDeviceType,
         cellDeviceType

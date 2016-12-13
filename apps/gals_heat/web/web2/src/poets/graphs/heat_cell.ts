@@ -1,6 +1,9 @@
 /// <reference path="heat_types.ts" />
 
 import * as POETS from "../core/core"
+
+import {tFloat,tInt,tBoolean} from "../core/typed_data"
+
 import {HeatGraphProperties} from "./heat_types"
 import {initEdgeType,updateEdgeType,UpdateEdgeProperties,UpdateMessage} from "./heat_types"
 
@@ -9,35 +12,48 @@ import TypedData = POETS.TypedData;
 import EdgeType = POETS.EdgeType;
 import DeviceType = POETS.DeviceType;
 import GraphType = POETS.GraphType;
+import TypedDataSpec = POETS.TypedDataSpec;
 import GenericTypedDataSpec = POETS.GenericTypedDataSpec;
 import InputPort = POETS.InputPort;
 import OutputPort = POETS.OutputPort;
 
+
+
 class CellDeviceProperties
-    implements TypedData
+    extends TypedData
 {
-    readonly _name_ ="cell_properties";
+    static elements = [tInt("nhood"),tFloat("iv"),tFloat("wSelf")];
 
     constructor(
+        _spec_ : TypedDataSpec,
         public nhood : number = 0,
         public iv : number = 0,
         public wSelf : number = 0
-    ){};
+    ){
+        super("cell_properties", _spec_);
+    };
 };
 
 class CellDeviceState
-    implements TypedData
+    extends TypedData
 {
-    readonly _name_ ="cell_state";
+    static elements = [
+        tFloat("v"), tInt("t"),
+        tInt("cs"), tFloat("ca"),
+        tInt("ns"), tFloat("na")
+    ];
 
     constructor(
+        _spec_ : TypedDataSpec,
         public v : number = 0 ,
         public t : number = 0,
         public cs : number = 0,
         public ca : number = 0,
         public ns : number = 0,
         public na : number = 0
-    ){};
+    ){
+        super("cell_state", _spec_);
+    };
 };
 
 class CellInitInputPort
@@ -152,8 +168,8 @@ class CellOutOutputPort
 
 export const cellDeviceType = new DeviceType(
     "cell",
-    new GenericTypedDataSpec(CellDeviceProperties),
-    new GenericTypedDataSpec(CellDeviceState),
+    new GenericTypedDataSpec(CellDeviceProperties, CellDeviceProperties.elements),
+    new GenericTypedDataSpec(CellDeviceState, CellDeviceState.elements),
     [
         new CellInitInputPort(),
         new CellInInputPort()

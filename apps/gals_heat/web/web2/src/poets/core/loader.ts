@@ -1,19 +1,12 @@
 declare function require(name: string) : any;
 //require('source-map-support').install();
 
+import {TypedData,TypedDataSpec} from "./typed_data"
+import {assert,DeviceType,EdgeType,GraphType,OutputPort,InputPort} from "./types"
+import {ReadySet,DeviceInstance,EdgeInstance,GraphInstance} from "./instances"
 
-import * as POETS from "./core"
 
-import assert = POETS.assert;
-import TypedData = POETS.TypedData;
-import EdgeType = POETS.EdgeType;
-import DeviceType = POETS.DeviceType;
-import GraphType = POETS.GraphType;
-import TypedDataSpec = POETS.TypedDataSpec;
-import InputPort = POETS.InputPort;
-import OutputPort = POETS.OutputPort;
-
-interface GraphLoadEvents
+export interface GraphLoadEvents
 {
     onDeviceType(deviceType:DeviceType) : void;
 
@@ -65,16 +58,10 @@ interface GraphLoadEvents
     ) : void;
 }
 
-interface Registry
+export interface Registry
 {
   registerGraphType(graphType:GraphType) : void;
   lookupGraphType(id:string) : GraphType;
-
-  registerEdgeType(edge:EdgeType):void;
-  lookupEdgeType(id:string):void;
-
-  registerDeviceType(deviceType:DeviceType) :void;
-  lookupDeviceType(id:string):DeviceType;
 };
 
 function find_single(elt:Element, tag:string, ns:string) : Element|null
