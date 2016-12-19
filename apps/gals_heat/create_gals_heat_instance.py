@@ -44,7 +44,7 @@ dirichletType=graphType.device_types["dirichlet_variable"]
 
 instName="heat_{}_{}".format(n,n)
 
-properties={"weightSelf":weightSelf, "weightOther":weightOther}
+properties={}
 
 res=GraphInstance(instName, graphType, properties)
 
@@ -66,7 +66,7 @@ for x in range(0,n):
             nodes[(x,y)]=di
             res.add_device_instance(di)
         elif not (edgeX or edgeY):
-            props={ "initValue":urand()*2-1 }
+            props={ "iv":urand()*2-1, "nhood":4, "wSelf":weightSelf }
             di=DeviceInstance(res,"c_{}_{}".format(x,y), devType, [x,y], props)
             nodes[(x,y)]=di
             res.add_device_instance(di)
@@ -74,7 +74,8 @@ for x in range(0,n):
 def add_channel(x,y,dx,dy):
     dst=nodes[ (x,y) ]
     src=nodes[ ( (x+dx+n)%n, (y+dy+n)%n ) ]
-    ei=EdgeInstance(res,dst,"in", src,"out", None)
+    props={"w":weightOther}
+    ei=EdgeInstance(res,dst,"in", src,"out", props)
     res.add_edge_instance(ei)
 
 for x in range(0,n):
