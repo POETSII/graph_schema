@@ -1,6 +1,15 @@
 #ifndef graph_supervisor_hpp
 #define graph_supervisor_hpp
 
+#pragma push()
+#pragma pack(1)
+struct my_properties{
+  uint8_t x;
+};
+#pragma pop()
+
+
+
 namespace POETS
 {
     

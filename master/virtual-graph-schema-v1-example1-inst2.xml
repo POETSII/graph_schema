@@ -1,6 +1,7 @@
 <?xml version="1.0"?>
 <Graphs xmlns="http://TODO.org/POETS/virtual-graph-schema-v1">
-  <GraphTypeReference id="dt10_graph_schema_example" src="virtual-graph-schema-v1-example1.xml" />
+  <GraphTypeReference id="dt10_graph_schema_example"
+        src="virtual-graph-schema-v1-example1.xml" />
     
   <GraphInstance id="inst2" graphTypeId="dt10_graph_schema_example">
     <Documentation>
@@ -29,10 +30,12 @@
     <DeviceInstances>
       
       <DevI id="x" type="cell">
-        <P>"leader":1</P> <!-- Set the "leader" property to true. -->
+        <P>"leader":1</P> <!-- Set the "leader" property to
+                                true. -->
       </DevI>
       
-      <DevI id="y" type="cell" /> <!-- For this instance we can let it default to zero. -->
+      <DevI id="y" type="cell" /> <!-- For this instance
+                        we can let it default to zero. -->
     </DeviceInstances>
     
     <EdgeInstances>

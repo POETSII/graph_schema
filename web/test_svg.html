@@ -1,0 +1,160 @@
+<html>
+<head>
+<script data-main="core" src="jquery.min.js"></script>
+
+<script data-main="core" src="node_modules/svg.js/dist/svg.min.js"></script>
+
+
+<script data-main="core" src="require.js"></script>
+<script data-main="heat_graph" src="require.js"></script>
+
+</head>
+<body>
+
+<div>
+    <button id="reset">
+        Reset
+    </button>
+    <label>width: <input id="width" value="12"></input></label>
+    <select id="engine">
+        <option value="single">Single stepper (faithful blocking)</option>
+        <option value="batch">Batch stepper (fast)</option>
+    </select>
+</div>
+
+<div>
+    <button id="step">
+        Step
+    </button>
+    <button id="run">
+        Run
+    </button>
+        <button id="stop">
+            Stop
+    </button>
+    <label>
+        Steps/frame: 
+    <input id="step-size" value="1">
+    </input>
+    </label>
+    <label><input type="checkbox" id="show-events" checked="true"></input>Show events</label>
+    <span>Events: <span id="total-events">0</span></span>
+    <span>Events/sec: <span id="events-per-sec">0</span></span>
+</div>
+<div style="display:flex;       width:100%; height:100%;"    > 
+    <div id="description" style="flex-basis:30%; overflow-y:scroll">
+    <p>Hit "Step" to advance once. Hit "Run" to advance lots.
+    <p>If you want to see the big (fast) picture, suggest you set:
+        <ul>
+            <li>Width=32+
+            <li>Batch-Stepper
+            <li>Disable show-events
+        </ul>
+        Then hit "reset" and "run"
+
+    <p>
+    <p>Single-stepper / Event-mode
+    <p>In event mode the edges are simulated as channels with a single
+        buffer slot. When a node sends, a copy is placed in all channels
+        (and it turns green). If any outgoing edge currently has a message,
+        then the source node will be unable to send until that message
+        is received by the target (i.e. that node is blocked).
+    <ul>
+    <li>Nodes:
+        <ul>
+            <li>Grey border : idle (waiting for messages)
+            <li>Green border : ready (want to send, and not blocked)
+            <li>Red border: blocked (want to send, blocked by one or more edges)
+        </ul>
+    <li>Edges:
+        <ul>
+            <li>Grey edge: channel currently empty
+            <li>Green edge: message pending in channel
+        </ul>
+    </ul>
+
+    <p>Batch stepper
+    <p>The batch stepper will ignore channel buffers, and allow a device to
+        send its message and immediately call the send handler on
+        all target devices. All devices that are ready to send get a
+        chance to send one message in each frame. This is a lot faster
+        to simulate, but is less realistic in terms of messages and
+        blocking.
+
+    </div>
+    <div id="container"  style="flex-basis:70%">
+        <div id="graph-container" style="width:100%; height:100%;"></div>
+    </div>
+</div>
+
+<script>
+var runAnim=false;
+var C=null;
+var H=null;
+var G=null;
+var S=null;
+var stepper=null;
+
+function hex2(v)
+{
+    return ('00'+(v|0).toString(16)).substr(-2);
+}
+
+function shade(v)
+{
+    var x=(v*256)|0;
+    if(x<=-255) x=-255;
+    if(x>=+255) x=+255;
+    var r=255, g=255, b=255;
+    if(x<0){
+        x=255+x;
+        b=x;
+    }else{
+        x=255-x;
+        r=x;
+        g=x;
+    }
+    r=hex2(r);
+    g=hex2(g);
+    b=hex2(b);
+    console.assert(r.length==   2);
+    console.assert(g.length==2);
+    console.assert(b.length==2);
+    return "#"+r+g+b;
+}
+
+
+function resetGraph()
+{
+    var w=$("#width").val()|0;
+    var h=w;
+
+    console.log("Pre");
+    G=H.makeGrid(w,h);
+    console.log("Post");
+
+    totalEvents=0;    
+    runAnim=false;
+
+    var e=$("#graph-container").get(0);
+    var svg=S.RenderSVG(G,e);
+}
+
+require(['./core','./heat_graph','./render_svg'], function(CC,HH,SS){
+    C=CC;
+    H=HH;
+    S=SS;
+    
+    resetGraph();
+
+    $("#reset").click(function(){
+         runAnim=true;
+        resetGraph();
+    });
+});
+
+</script>
+
+</body> 
+
+</html> 

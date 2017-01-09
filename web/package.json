@@ -1,0 +1,27 @@
+{
+  "name": "web2",
+  "version": "1.0.0",
+  "description": "Wibble",
+  "main": "test.js",
+  "dependencies": {
+    "@types/jquery": "^2.0.34",
+    "@types/snapsvg": "^0.4.27",
+    "@types/svg.js": "0.0.17",
+    "jquery": "^3.1.1",
+    "svg.js": "^2.3.6"
+  },
+  "devDependencies": {
+    "@types/node": "^6.0.52",
+    "@types/xml2js": "0.0.32",
+    "@types/xmldom": "^0.1.28",
+    "hsl-to-rgb": "^1.0.0",
+    "source-map-support": "^0.4.6",
+    "xml2js": "^0.4.17",
+    "xmldom": "^0.1.27"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC"
+}
