@@ -7,7 +7,7 @@ import os
 import sys
 import json
 
-ns={"p":"http://TODO.org/POETS/virtual-graph-schema-v0"}
+ns={"p":"http://TODO.org/POETS/virtual-graph-schema-v1"}
 
 def deNS(t):
     tt=t.replace("{"+ns["p"]+"}","p:")
@@ -98,42 +98,19 @@ def load_struct_instance(spec,dt):
     assert(spec.is_refinement_compatible(value))
     return value
     
-def load_edge_type(parent,dt):
+def load_message_type(parent,dt):
     id=get_attrib(dt,"id")
     try:    
+        message=load_struct_spec(id+"_message", dt)
 
-        try:
-            message=None
-            messageNode=dt.find("p:Message",ns)
-            if messageNode is not None:
-                message=load_struct_spec(id+"_message", messageNode)
-        except Exception as e:
-            raise XMLSyntaxError("Error while parsing message of edge {} : {}".format(id,e),dt,e)
-
-        try:
-            state=None
-            stateNode=dt.find("p:State",ns)
-            if stateNode is not None:
-                state=load_struct_spec(id+"_state", stateNode)
-        except Exception as e:
-            raise XMLSyntaxError("Error while parsing state of edge {} : {}".format(id,e),dt,e)
-
-        try:
-            properties=None
-            propertiesNode=dt.find("p:Properties",ns)
-            if propertiesNode is not None:
-                properties=load_struct_spec(id+"_properties", propertiesNode)
-        except Exception as e:
-            raise XMLSyntaxError("Error while parsing properties of edge {} : {}".format(id,e),dt,e)
-                
-        return EdgeType(parent,id,message,state,properties)
+        return MessageType(parent,id,message)
     except XMLSyntaxError:
             raise
     except Exception as e:
-        raise XMLSyntaxError("Error while parsing edge {}".format(id),dt,e)
+        raise XMLSyntaxError("Error while parsing message {}".format(id),dt,e)
 
 
-def load_device_type(graph,dtNode,sourceFile="<graph-spec-file>"):
+def load_device_type(graph,dtNode,sourceFile):
     id=get_attrib(dtNode,"id")
 
     state=None
@@ -150,25 +127,42 @@ def load_device_type(graph,dtNode,sourceFile="<graph-spec-file>"):
         
     for p in dtNode.findall("p:InputPort",ns):
         name=get_attrib(p,"name")
-        edge_type_id=get_attrib(p,"edgeTypeId")
-        if edge_type_id not in graph.edge_types:
-            raise XMLSyntaxError("Unknown edgeTypeId {}".format(edge_type_id),p)
-        edge_type=graph.edge_types[edge_type_id]
+        message_type_id=get_attrib(p,"messageTypeId")
+        if message_type_id not in graph.message_types:
+            raise XMLSyntaxError("Unknown messageTypeId {}".format(message_type_id),p)
+        message_type=graph.message_types[message_type_id]
+        
+        try:
+            state=None
+            stateNode=p.find("p:State",ns)
+            if stateNode is not None:
+                state=load_struct_spec(id+"_state", stateNode)
+        except Exception as e:
+            raise XMLSyntaxError("Error while parsing state of pin {} : {}".format(id,e),p,e)
+
+        try:
+            properties=None
+            propertiesNode=p.find("p:Properties",ns)
+            if propertiesNode is not None:
+                properties=load_struct_spec(id+"_properties", propertiesNode)
+        except Exception as e:
+            raise XMLSyntaxError("Error while parsing properties of pin {} : {}".format(id,e),p,e)
+        
         (handler,sourceLine)=get_child_text(p,"p:OnReceive")
-        dt.add_input(name,edge_type,handler,sourceFile,sourceLine)
+        dt.add_input(name,message_type,properties,state,handler,sourceFile,sourceLine)
 
     for p in dtNode.findall("p:OutputPort",ns):
         name=get_attrib(p,"name")
-        edge_type_id=get_attrib(p,"edgeTypeId")
-        if edge_type_id not in graph.edge_types:
-            raise XMLSyntaxError("Unknown edgeTypeId {}".format(edge_type_id),p)
-        edge_type=graph.edge_types[edge_type_id]
+        message_type_id=get_attrib(p,"messageTypeId")
+        if message_type_id not in graph.message_types:
+            raise XMLSyntaxError("Unknown messageTypeId {}".format(message_type_id),p)
+        message_type=graph.message_types[message_type_id]
         (handler,sourceLine)=get_child_text(p,"p:OnSend")
-        dt.add_output(name,edge_type,handler,sourceFile,sourceLine)
+        dt.add_output(name,message_type,handler,sourceFile,sourceLine)
 
     return dt            
 
-def load_graph_type(graphNode):
+def load_graph_type(graphNode, sourcePath):
     id=get_attrib(graphNode,"id")
 
     dimension=get_attrib_optional(graphNode, "nativeDimension")
@@ -188,12 +182,12 @@ def load_graph_type(graphNode):
 
     graphType=GraphType(id,dimension,properties,shared_code)
         
-    for etNode in graphNode.findall("p:EdgeTypes/p:*",ns):
-        et=load_edge_type(graphType,etNode)
-        graphType.add_edge_type(et)
+    for etNode in graphNode.findall("p:MessageTypes/p:*",ns):
+        et=load_message_type(graphType,etNode)
+        graphType.add_message_type(et)
 
     for dtNode in graphNode.findall("p:DeviceTypes/p:*",ns):
-        dt=load_device_type(graphType,dtNode)
+        dt=load_device_type(graphType,dtNode, sourcePath)
         graphType.add_device_type(dt)
 
     return graphType
@@ -211,7 +205,7 @@ def load_graph_type_reference(graphNode,basePath):
         graphsNode = doc;
     
         for gtNode in graphsNode.findall("p:GraphType",ns):
-            gt=load_graph_type(gtNode)
+            gt=load_graph_type(gtNode, fullSrc)
             if gt.id==id:
                 return gt
 
@@ -302,12 +296,7 @@ def load_graph_instance(graphTypes, graphNode):
     return graph
 
 
-def load_graph_types_and_instances(src,basePath=None):
-    if basePath==None:
-        if isinstance(src,str):
-            basePath=os.path.dirname(src)
-        else:
-            basePath=os.getcwd()
+def load_graph_types_and_instances(src,basePath):
     
     tree = etree.parse(src)
     doc = tree.getroot()
@@ -319,7 +308,7 @@ def load_graph_types_and_instances(src,basePath=None):
     try:
         for gtNode in graphsNode.findall("p:GraphType",ns):
             sys.stderr.write("Loading graph type\n")
-            gt=load_graph_type(gtNode)
+            gt=load_graph_type(gtNode, basePath)
             graphTypes[gt.id]=gt
 
         for gtRefNode in graphsNode.findall("p:GraphTypeReference",ns):
@@ -329,7 +318,7 @@ def load_graph_types_and_instances(src,basePath=None):
             
         for giNode in graphsNode.findall("p:GraphInstance",ns): 
             sys.stderr.write("Loading graph\n")
-            g=load_graph_instance(graphTypes, giNode)
+            g=load_graph_instance(graphTypes, giNode, basePath)
             graphs[g.id]=g
 
         return (graphTypes,graphs)
@@ -340,7 +329,7 @@ def load_graph_types_and_instances(src,basePath=None):
             print(etree.tostring(e.node, pretty_print = True, encoding='utf-8').decode("utf-8"))
         raise e
 
-def load_graph(src,basePath=None):
+def load_graph(src,basePath):
     (graphTypes,graphInstances)=load_graph_types_and_instances(src,basePath)
     if len(graphInstances)==0:
         raise RuntimeError("File contained no graph instances.")

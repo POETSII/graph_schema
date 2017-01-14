@@ -191,51 +191,88 @@ def render_typed_data_as_spec(proto,name,elt_name,dst):
 
 def render_input_port_as_cpp(ip,dst):
     dt=ip.parent
-    et=ip.edge_type
+    gt=dt.parent
+    mt=ip.message_type
     graph=dt.parent
     for index in range(len(dt.inputs_by_index)):
         if ip==dt.inputs_by_index[index]:
             break
-
-    dst.write('EdgeTypePtr {}_Spec_get();\n\n'.format(ip.edge_type.id))
-
-    dst.write('static const char *{}_{}_handler_code=R"CDATA({})CDATA";\n'.format(dt.id, ip.name, ip.receive_handler))
-
-    dst.write("class {}_{}_Spec : public InputPortImpl {{\n".format(dt.id,ip.name))
-    dst.write('  public: {}_{}_Spec() : InputPortImpl({}_Spec_get, "{}", {}, {}_Spec_get(), {}_{}_handler_code) {{}} \n'.format(dt.id,ip.name, dt.id, ip.name, index, ip.edge_type.id, dt.id, ip.name))
-    dst.write("""  virtual void onReceive(
-                         OrchestratorServices *orchestrator,
-                         const typed_data_t *gGraphProperties,
-			 const typed_data_t *gDeviceProperties,
-			 typed_data_t *gDeviceState,
-			 const typed_data_t *gEdgeProperties,
-			 typed_data_t *gEdgeState,
-                         const typed_data_t *gMessage,
-			 bool *requestSend
-		      ) const override {\n""")
-    dst.write('    auto graphProperties=cast_typed_properties<{}_properties_t>(gGraphProperties);\n'.format( graph.id ))
-    dst.write('    auto deviceProperties=cast_typed_properties<{}_properties_t>(gDeviceProperties);\n'.format( dt.id ))
-    dst.write('    auto deviceState=cast_typed_data<{}_state_t>(gDeviceState);\n'.format( dt.id ))
-    dst.write('    auto edgeProperties=cast_typed_properties<{}_properties_t>(gEdgeProperties);\n'.format( et.id ))
-    dst.write('    auto edgeState=cast_typed_data<{}_state_t>(gEdgeState);\n'.format( et.id ))
-    dst.write('    auto message=cast_typed_properties<{}_message_t>(gMessage);\n'.format(ip.edge_type.id))
-    dst.write('    HandlerLogImpl handler_log(orchestrator);\n')
-    for i in range(0,len(dt.outputs_by_index)):
-        dst.write('    bool &requestSend_{}=requestSend[{}];\n'.format(dt.outputs_by_index[i].name, i))
-
-    dst.write('    // Begin custom handler\n')
+            
+    subs={
+        "graphPropertiesStructName"     : "{}_properties_t".format(dt.id), 
+        "deviceTypeId"                  : dt.id,
+        "devicePropertiesStructName"    : "{}_properties_t".format(dt.id),
+        "deviceStateStructName"         : "{}_state_t".format(dt.id),
+        "messageTypeId"                 : mt.id,
+        "messageStructName"             : "{}_message_t".format(mt.id),
+        "portName"                      : ip.name,
+        "portIndex"                     : index,
+        "pinPropertiesStructName"       : "{}_{}_properties_t".format(dt.id,ip.name),
+        "pinStateStructName"            : "{}_{}_state_t".format(dt.id,ip.name),
+        "handlerCode"                   : ip.receive_handler
+    }
+    
     if ip.source_line and ip.source_file: 
-        dst.write('#line {} "{}"\n'.format(ip.source_line,ip.source_file))
-    for line in ip.receive_handler.splitlines():
-        dst.write('    {}\n'.format(line))
-    dst.write('    // End custom handler\n')
+        subs["preProcLinePragma"]= '#line {} "{}"\n'.format(ip.source_line-1,ip.source_file) 
+    else:
+        subst["preProcLinePragma"]="// No line/file information for handler"
+    
+    dst.write(
+"""
+MessageTypePtr {messageTypeId}_Spec_get();
 
-    dst.write('  }\n')
-    dst.write("};\n")
-    dst.write("InputPortPtr {}_{}_Spec_get(){{\n".format(dt.id,ip.name))
-    dst.write("  static InputPortPtr singleton(new {}_{}_Spec);\n".format(dt.id,ip.name))
-    dst.write("  return singleton;\n")
-    dst.write("}\n")
+static const char *{deviceTypeId}_{portName}_handler_code=R"CDATA({handlerCode})CDATA";
+
+class {deviceTypeId}_{portName}_Spec
+    : public InputPortImpl {{
+public:
+  {deviceTypeId}_{portName}_Spec()
+    : InputPortImpl(
+        {deviceTypeId}_Spec_get,  // 
+        "{portName}",
+        {portIndex},
+        {messageTypeId}_Spec_get(),
+        {pinPropertiesStructName}_Spec_get(),
+        {pinStateStructName}_Spec_get(),
+        {deviceTypeId}_{portName}_handler_code
+    ) {{}} \n
+
+    virtual void onReceive(
+        OrchestratorServices *orchestrator,
+        const typed_data_t *gGraphProperties,
+        const typed_data_t *gDeviceProperties,
+        typed_data_t *gDeviceState,
+        const typed_data_t *gEdgeProperties,
+        typed_data_t *gEdgeState,
+        const typed_data_t *gMessage,
+        bool *requestSend
+    ) const override {{
+    auto graphProperties=cast_typed_properties<{graphPropertiesStructName}>(gGraphProperties);
+    auto deviceProperties=cast_typed_properties<{devicePropertiesStructName}>(gDeviceProperties);
+    auto deviceState=cast_typed_data<{deviceStateStructName}>(gDeviceState);
+    auto edgeProperties=cast_typed_properties<{pinPropertiesStructName}>(gEdgeProperties);
+    auto edgeState=cast_typed_data<{pinPropertiesStructName}>(gEdgeState);
+    auto message=cast_typed_properties<{messageStructName}>(gMessage);
+    HandlerLogImpl handler_log(orchestrator);
+    
+    // Begin custom handler
+    {preProcLinePragma}
+    
+    {handlerCode}
+    __POETS_REVERT_PREPROC_DETOUR__
+    // End custom handler
+
+  }}
+}};
+
+InputPortPtr {deviceTypeId}_{portName}_Spec_get(){{
+  static InputPortPtr singleton(new {deviceTypeId}_{portName}_Spec);
+  return singleton;
+}}
+""".format(**subs))
+    
+    #    end of render_input_port_as_cpp
+    return None
 
 def render_output_port_as_cpp(op,dst):
     dt=op.parent
@@ -244,12 +281,12 @@ def render_output_port_as_cpp(op,dst):
         if op==dt.outputs_by_index[index]:
             break
 
-    dst.write('EdgeTypePtr {}_Spec_get();\n\n'.format(op.edge_type.id))
+    dst.write('MessageTypePtr {}_Spec_get();\n\n'.format(op.message_type.id))
 
     dst.write('static const char *{}_{}_handler_code=R"CDATA({})CDATA";\n'.format(dt.id, op.name, op.send_handler))
 
     dst.write("class {}_{}_Spec : public OutputPortImpl {{\n".format(dt.id,op.name))
-    dst.write('  public: {}_{}_Spec() : OutputPortImpl({}_Spec_get, "{}", {}, {}_Spec_get(), {}_{}_handler_code) {{}} \n'.format(dt.id,op.name, dt.id, op.name, index, op.edge_type.id, dt.id, op.name))
+    dst.write('  public: {}_{}_Spec() : OutputPortImpl({}_Spec_get, "{}", {}, {}_Spec_get(), {}_{}_handler_code) {{}} \n'.format(dt.id,op.name, dt.id, op.name, index, op.message_type.id, dt.id, op.name))
     dst.write("""    virtual void onSend(
                       OrchestratorServices *orchestrator,
                       const typed_data_t *gGraphProperties,
@@ -262,7 +299,7 @@ def render_output_port_as_cpp(op,dst):
     dst.write('    auto graphProperties=cast_typed_properties<{}_properties_t>(gGraphProperties);\n'.format( graph.id ))
     dst.write('    auto deviceProperties=cast_typed_properties<{}_properties_t>(gDeviceProperties);\n'.format( dt.id ))
     dst.write('    auto deviceState=cast_typed_data<{}_state_t>(gDeviceState);\n'.format( dt.id ))
-    dst.write('    auto message=cast_typed_data<{}_message_t>(gMessage);\n'.format(op.edge_type.id))
+    dst.write('    auto message=cast_typed_data<{}_message_t>(gMessage);\n'.format(op.message_type.id))
     for i in range(0,len(dt.outputs_by_index)):
         dst.write('    bool &requestSend_{}=requestSend[{}];\n'.format(dt.outputs_by_index[i].name, i))
     dst.write('    HandlerLogImpl handler_log(orchestrator);\n')
@@ -281,25 +318,26 @@ def render_output_port_as_cpp(op,dst):
     dst.write("  return singleton;\n")
     dst.write("}\n")
 
-def render_edge_type_as_cpp_fwd(et,dst):
-    render_typed_data_as_spec(et.properties, "{}_properties_t".format(et.id), "pp:Properties", dst)
-    render_typed_data_as_spec(et.state, "{}_state_t".format(et.id), "pp:State", dst)
+def render_message_type_as_cpp_fwd(et,dst):
     render_typed_data_as_spec(et.message, "{}_message_t".format(et.id), "pp:Message", dst)
 
-def render_edge_type_as_cpp(et,dst):
-    dst.write("class {}_Spec : public EdgeTypeImpl {{\n".format(et.id))
+def render_message_type_as_cpp(et,dst):
+    dst.write("class {}_Spec : public MessageTypeImpl {{\n".format(et.id))
     dst.write("public:\n")
-    dst.write('  {}_Spec() : EdgeTypeImpl("{}", {}_properties_t_Spec_get(), {}_state_t_Spec_get(), {}_message_t_Spec_get()) {{}}\n'.format(et.id, et.id, et.id, et.id, et.id))
+    dst.write('  {}_Spec() : MessageTypeImpl("{}", {}_message_t_Spec_get()) {{}}\n'.format(et.id, et.id, et.id))
     dst.write('};\n')
-    dst.write("EdgeTypePtr {}_Spec_get(){{\n".format(et.id))
-    dst.write("  static EdgeTypePtr singleton(new {}_Spec);\n".format(et.id))
+    dst.write("MessageTypePtr {}_Spec_get(){{\n".format(et.id))
+    dst.write("  static MessageTypePtr singleton(new {}_Spec);\n".format(et.id))
     dst.write("  return singleton;\n")
     dst.write("}\n")
-    registrationStatements.append('registry->registerEdgeType({}_Spec_get());'.format(et.id,et.id))
+    registrationStatements.append('registry->registerMessageType({}_Spec_get());'.format(et.id,et.id))
 
 def render_device_type_as_cpp_fwd(dt,dst):
     render_typed_data_as_spec(dt.properties, "{}_properties_t".format(dt.id), "pp:Properties", dst)
     render_typed_data_as_spec(dt.state, "{}_state_t".format(dt.id), "pp:State", dst)
+    for ip in dt.inputs.values():
+        render_typed_data_as_spec(ip.properties, "{}_{}_properties_t".format(dt.id,ip.name), "pp:Properties", dst)
+        render_typed_data_as_spec(ip.state, "{}_{}_state_t".format(dt.id,ip.name), "pp:State", dst)
 
 def render_device_type_as_cpp(dt,dst):
     dst.write("DeviceTypePtr {}_Spec_get();\n".format(dt.id))
@@ -340,19 +378,18 @@ def render_device_type_as_cpp(dt,dst):
     dst.write("}\n")
     registrationStatements.append('registry->registerDeviceType({}_Spec_get());'.format(dt.id,dt.id))
 
-def render_graph_as_cpp(graph,dst):
+def render_graph_as_cpp(graph,dst, destPath):
     dst.write('#include "graph.hpp"\n')
     dst.write('#include "rapidjson/document.h"\n')
-
+    
     gt=graph
-
 
     render_typed_data_as_spec(gt.properties, "{}_properties_t".format(gt.id),"pp:Properties",dst)
 
     dst.write("/////////////////////////////////\n")
     dst.write("// FWD\n")
-    for et in gt.edge_types.values():
-        render_edge_type_as_cpp_fwd(et,dst)
+    for et in gt.message_types.values():
+        render_message_type_as_cpp_fwd(et,dst)
 
     for dt in gt.device_types.values():
         render_device_type_as_cpp_fwd(dt, dst)
@@ -363,16 +400,16 @@ def render_graph_as_cpp(graph,dst):
 
     dst.write("/////////////////////////////////\n")
     dst.write("// DEF\n")
-    for et in gt.edge_types.values():
-        render_edge_type_as_cpp(et,dst)
+    for et in gt.message_types.values():
+        render_message_type_as_cpp(et,dst)
 
     for dt in gt.device_types.values():
         render_device_type_as_cpp(dt,dst)
 
     dst.write("class {}_Spec : public GraphTypeImpl {{\n".format(gt.id))
     dst.write('  public: {}_Spec() : GraphTypeImpl("{}", {}, {}_properties_t_Spec_get()) {{\n'.format(gt.id,gt.id,gt.native_dimension,gt.id))
-    for et in gt.edge_types.values():
-        dst.write('    addEdgeType({}_Spec_get());\n'.format(et.id))
+    for et in gt.message_types.values():
+        dst.write('    addMessageType({}_Spec_get());\n'.format(et.id))
     for et in gt.device_types.values():
         dst.write('    addDeviceType({}_Spec_get());\n'.format(et.id))
     dst.write("  };\n")

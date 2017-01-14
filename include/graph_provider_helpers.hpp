@@ -71,14 +71,26 @@ private:
   mutable DeviceTypePtr m_deviceType;
   std::string m_name;
   unsigned m_index;
-  EdgeTypePtr m_edgeType;
+  MessageTypePtr m_messageType;
+  TypedDataSpecPtr m_propertiesType;
+  TypedDataSpecPtr m_stateType;
   std::string m_code;
 protected:
-  InputPortImpl(DeviceTypePtr (*deviceTypeSrc)(), const std::string &name, unsigned index, EdgeTypePtr edgeType, const std::string &code)
+  InputPortImpl(
+    DeviceTypePtr (*deviceTypeSrc)(),
+    const std::string &name,
+    unsigned index,
+    MessageTypePtr messageType,
+    TypedDataSpecPtr propertiesType,
+    TypedDataSpecPtr stateType,
+    const std::string &code
+  )
     : m_deviceTypeSrc(deviceTypeSrc)
     , m_name(name)
     , m_index(index)
-    , m_edgeType(edgeType)
+    , m_messageType(messageType)
+    , m_propertiesType(propertiesType)
+    , m_stateType(stateType)
     , m_code(code)
   {}
 public:
@@ -95,9 +107,15 @@ public:
   virtual unsigned getIndex() const override
   { return m_index; }
 
-  virtual const EdgeTypePtr &getEdgeType() const override
-  { return m_edgeType; }
+  virtual const MessageTypePtr &getMessageType() const override
+  { return m_messageType; }
 
+  virtual const TypedDataSpecPtr &getPropertiesSpec() const override
+  { return m_propertiesType; }
+
+  virtual const TypedDataSpecPtr &getStateSpec() const override
+  { return m_stateType; }
+  
   virtual const std::string &getHandlerCode() const override
   { return m_code; }
 };
@@ -111,14 +129,14 @@ private:
   mutable DeviceTypePtr m_deviceType;
   std::string m_name;
   unsigned m_index;
-  EdgeTypePtr m_edgeType;
+  MessageTypePtr m_messageType;
   std::string m_code;
 protected:
-  OutputPortImpl(DeviceTypePtr (*deviceTypeSrc)(), const std::string &name, unsigned index, EdgeTypePtr edgeType, const std::string &code)
+  OutputPortImpl(DeviceTypePtr (*deviceTypeSrc)(), const std::string &name, unsigned index, MessageTypePtr messageType, const std::string &code)
     : m_deviceTypeSrc(deviceTypeSrc)
     , m_name(name)
     , m_index(index)
-    , m_edgeType(edgeType)
+    , m_messageType(messageType)
     , m_code(code)
   {}
 public:
@@ -135,39 +153,30 @@ public:
   virtual unsigned getIndex() const override
   { return m_index; }
 
-  virtual const EdgeTypePtr &getEdgeType() const override
-  { return m_edgeType; }
+  virtual const MessageTypePtr &getMessageType() const override
+  { return m_messageType; }
 
   virtual const std::string &getHandlerCode() const override
   { return m_code; }
 
 };
 
-class EdgeTypeImpl
-  : public EdgeType
+class MessageTypeImpl
+  : public MessageType
 {
 private:
   std::string m_id;
-  TypedDataSpecPtr m_properties;
-  TypedDataSpecPtr m_state;
   TypedDataSpecPtr m_message;
 
 protected:
-  EdgeTypeImpl(const std::string &id, TypedDataSpecPtr properties, TypedDataSpecPtr state, TypedDataSpecPtr message)
+  MessageTypeImpl(const std::string &id, TypedDataSpecPtr message)
     : m_id(id)
-    , m_properties(properties)
-    , m_state(state)
     , m_message(message)
   {}
 public:
   virtual const std::string &getId() const override
   { return m_id; }
 
-  virtual const TypedDataSpecPtr &getPropertiesSpec() const override
-  { return m_properties; }
-
-  virtual const TypedDataSpecPtr &getStateSpec() const override
-  { return m_state; }
 
   virtual const TypedDataSpecPtr &getMessageSpec() const override
   { return m_message; }
@@ -261,8 +270,8 @@ private:
 
   TypedDataSpecPtr m_propertiesSpec;
 
-  std::vector<EdgeTypePtr> m_edgeTypesByIndex;
-  std::unordered_map<std::string,EdgeTypePtr> m_edgeTypesById;
+  std::vector<MessageTypePtr> m_messageTypesByIndex;
+  std::unordered_map<std::string,MessageTypePtr> m_messageTypesById;
 
   std::vector<DeviceTypePtr> m_deviceTypesByIndex;
   std::unordered_map<std::string,DeviceTypePtr> m_deviceTypesById;
@@ -301,17 +310,17 @@ protected:
   virtual const std::vector<DeviceTypePtr> &getDeviceTypes() const override
   { return m_deviceTypesByIndex; }
 
-  virtual unsigned getEdgeTypeCount() const override
-  { return m_edgeTypesByIndex.size(); }
+  virtual unsigned getMessageTypeCount() const override
+  { return m_messageTypesByIndex.size(); }
 
-  virtual const EdgeTypePtr &getEdgeType(unsigned index) const override
-  { return m_edgeTypesByIndex.at(index); }
+  virtual const MessageTypePtr &getMessageType(unsigned index) const override
+  { return m_messageTypesByIndex.at(index); }
 
-  virtual const EdgeTypePtr &getEdgeType(const std::string &name) const override
-  { return m_edgeTypesById.at(name); }
+  virtual const MessageTypePtr &getMessageType(const std::string &name) const override
+  { return m_messageTypesById.at(name); }
 
-  virtual const std::vector<EdgeTypePtr> &getEdgeTypes() const override
-  { return m_edgeTypesByIndex; }
+  virtual const std::vector<MessageTypePtr> &getMessageTypes() const override
+  { return m_messageTypesByIndex; }
 
   virtual const std::string &getSharedCode() const override
   {
@@ -323,10 +332,10 @@ protected:
     m_sharedCode=m_sharedCode+code;
   }
 
-  void addEdgeType(EdgeTypePtr et)
+  void addMessageType(MessageTypePtr et)
   {
-    m_edgeTypesByIndex.push_back(et);
-    m_edgeTypesById[et->getId()]=et;
+    m_messageTypesByIndex.push_back(et);
+    m_messageTypesById[et->getId()]=et;
   }
 
   void addDeviceType(DeviceTypePtr et)
@@ -438,7 +447,7 @@ class RegistryImpl
 {
 private:
   std::unordered_map<std::string,GraphTypePtr> m_graphs;
-  std::unordered_map<std::string,EdgeTypePtr> m_edges;
+  std::unordered_map<std::string,MessageTypePtr> m_edges;
   std::unordered_map<std::string,DeviceTypePtr> m_devices;
 
   std::string m_soExtension;
@@ -537,10 +546,10 @@ public:
     return it->second;
   }
 
-  virtual void registerEdgeType(EdgeTypePtr edge) override
+  virtual void registerMessageType(MessageTypePtr edge) override
   {  m_edges.insert(std::make_pair(edge->getId(), edge)); }
 
-  virtual EdgeTypePtr lookupEdgeType(const std::string &id) const override
+  virtual MessageTypePtr lookupMessageType(const std::string &id) const override
   { return m_edges.at(id); }
 
   virtual void registerDeviceType(DeviceTypePtr dev) override

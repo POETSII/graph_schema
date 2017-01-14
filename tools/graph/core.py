@@ -175,33 +175,33 @@ def is_refinement_compatible(proto,inst):
     return proto.is_refinement_compatible(inst)
     
 
-class EdgeType(object):
-    def __init__(self,parent,id,message,state,properties):
+class MessageType(object):
+    def __init__(self,parent,id,message):
         self.id=id
         self.parent=parent
         self.message=message
-        self.state=state
-        self.properties=properties
     
 
 class Port(object):
-    def __init__(self,parent,name,edge_type,source_file,source_line):
+    def __init__(self,parent,name,message_type,source_file,source_line):
         self.parent=parent
         self.name=name
-        self.edge_type=edge_type
+        self.message_type=message_type
         self.source_file=source_file
         self.source_line=source_line
 
     
 class InputPort(Port):
-    def __init__(self,parent,name,edge_type,receive_handler,source_file=None,source_line=None):
-        Port.__init__(self,parent,name,edge_type,source_file,source_line)
+    def __init__(self,parent,name,message_type,properties,state,receive_handler,source_file=None,source_line=None):
+        Port.__init__(self,parent,name,message_type,source_file,source_line)
+        self.properties=properties
+        self.state=state
         self.receive_handler=receive_handler
 
     
 class OutputPort(Port):
-    def __init__(self,parent,name,edge_type,send_handler,source_file,source_line):
-        Port.__init__(self,parent,name,edge_type,source_file,source_line)
+    def __init__(self,parent,name,message_type,send_handler,source_file,source_line):
+        Port.__init__(self,parent,name,message_type,source_file,source_line)
         self.send_handler=send_handler
     
             
@@ -217,26 +217,26 @@ class DeviceType(object):
         self.outputs_by_index=[]
         self.ports={}
 
-    def add_input(self,name,edge_type,receive_handler,source_file=None,source_line={}):
+    def add_input(self,name,message_type,properties,state,receive_handler,source_file=None,source_line={}):
         if name in self.ports:
             raise GraphDescriptionError("Duplicate port {} on device type {}".format(name,self.id))
-        if edge_type.id not in self.parent.edge_types:
-            raise GraphDescriptionError("Unregistered edge type {} on port {} of device type {}".format(edge_type.id,name,self.id))
-        if edge_type != self.parent.edge_types[edge_type.id]:
-            raise GraphDescriptionError("Incorrect edge type object {} on port {} of device type {}".format(edge_type.id,name,self.id))
-        p=InputPort(self, name, self.parent.edge_types[edge_type.id], receive_handler, source_file, source_line)
+        if message_type.id not in self.parent.message_types:
+            raise GraphDescriptionError("Unregistered message type {} on port {} of device type {}".format(message_type.id,name,self.id))
+        if message_type != self.parent.message_types[message_type.id]:
+            raise GraphDescriptionError("Incorrect message type object {} on port {} of device type {}".format(message_type.id,name,self.id))
+        p=InputPort(self, name, self.parent.message_types[message_type.id], properties, state, receive_handler, source_file, source_line)
         self.inputs[name]=p
         self.inputs_by_index.append(p)
         self.ports[name]=p
 
-    def add_output(self,name,edge_type,send_handler,source_file=None,source_line=None):
+    def add_output(self,name,message_type,send_handler,source_file=None,source_line=None):
         if name in self.ports:
             raise GraphDescriptionError("Duplicate port {} on device type {}".format(name,self.id))
-        if edge_type.id not in self.parent.edge_types:
-            raise GraphDescriptionError("Unregistered edge type {} on port {} of device type {}".format(edge_type.id,name,self.id))
-        if edge_type != self.parent.edge_types[edge_type.id]:
-            raise GraphDescriptionError("Incorrect edge type object {} on port {} of device type {}".format(edge_type.id,name,self.id))
-        p=OutputPort(self, name, self.parent.edge_types[edge_type.id], send_handler, source_file, source_line)
+        if message_type.id not in self.parent.message_types:
+            raise GraphDescriptionError("Unregistered message type {} on port {} of device type {}".format(message_type.id,name,self.id))
+        if message_type != self.parent.message_types[message_type.id]:
+            raise GraphDescriptionError("Incorrect message type object {} on port {} of device type {}".format(message_type.id,name,self.id))
+        p=OutputPort(self, name, self.parent.message_types[message_type.id], send_handler, source_file, source_line)
         self.outputs[name]=p
         self.outputs_by_index.append(p)
         self.ports[name]=p
@@ -251,12 +251,12 @@ class GraphType(object):
         self.properties=properties
         self.shared_code=shared_code
         self.device_types={}
-        self.edge_types={}
+        self.message_types={}
 
-    def add_edge_type(self,edge_type):
-        if edge_type.id in self.edge_types:
-            raise GraphDescriptionError("Edge type already exists.")
-        self.edge_types[edge_type.id]=edge_type
+    def add_message_type(self,message_type):
+        if message_type.id in self.message_types:
+            raise GraphDescriptionError("message type already exists.")
+        self.message_types[message_type.id]=message_type
 
     def add_device_type(self,device_type):
         if device_type.id in self.device_types:
@@ -271,7 +271,7 @@ class GraphTypeReference(object):
         self.native_dimension=native_dimension
         self.properties=properties
         self.device_types={}
-        self.edge_types={}
+        self.message_types={}
 
     @property
     def native_dimension(self):
@@ -286,10 +286,10 @@ class GraphTypeReference(object):
         raise RuntimeError("Cannot get device_types of unresolved GraphTypeReference.")
 
     @property
-    def edge_types(self):
-        raise RuntimeError("Cannot get edge_types of unresolved GraphTypeReference.")
+    def message_types(self):
+        raise RuntimeError("Cannot get message_types of unresolved GraphTypeReference.")
 
-    def add_edge_type(self,edge_type):
+    def add_message_type(self,message_type):
         raise RuntimeError("Cannot add to unresolved GraphTypeReference.")
 
     def add_device_type(self,device_type):
@@ -320,17 +320,17 @@ class EdgeInstance(object):
         dst_port=dst_device.device_type.inputs[dst_port_name]
         src_port=src_device.device_type.outputs[src_port_name]
         
-        if dst_port.edge_type != src_port.edge_type:
+        if dst_port.message_type != src_port.message_type:
             raise GraphDescriptionError("Dest port has type {}, source port type {}".format(dst_port.id,src_port.id))
 
-        if not is_refinement_compatible(dst_port.edge_type.properties,properties):
-            raise GraphDescriptionError("Properties are not compatible: proto={}, value={}.".format(dst_port.edge_type.properties, properties))
+        if not is_refinement_compatible(dst_port.properties,properties):
+            raise GraphDescriptionError("Properties are not compatible: proto={}, value={}.".format(dst_port.properties, properties))
 
         self.id = dst_device.id+":"+dst_port_name+"-"+src_device.id+":"+src_port_name
         
         self.dst_device=dst_device
         self.src_device=src_device
-        self.edge_type=dst_port.edge_type
+        self.message_type=dst_port.message_type
         self.dst_port=dst_port
         self.src_port=src_port
         self.properties=properties
@@ -346,15 +346,15 @@ class GraphInstance:
         self.edge_instances={}
         self._validated=True
 
-    def _validate_edge_type(self,et):
+    def _validate_message_type(self,et):
         pass
 
     def _validate_device_type(self,dt):
         for p in dt.ports.values():
-            if p.edge_type.id not in self.graph_type.edge_types:
-                raise GraphDescriptionError("DeviceType uses an edge type that is uknown.")
-            if p.edge_type != self.graph_type.edge_types[p.edge_type.id]:
-                raise GraphDescriptionError("DeviceType uses an edge type object that is not part of this graph.")
+            if p.message_type.id not in self.graph_type.message_types:
+                raise GraphDescriptionError("DeviceType uses an message type that is uknown.")
+            if p.message_type != self.graph_type.message_types[p.message_type.id]:
+                raise GraphDescriptionError("DeviceType uses an message type object that is not part of this graph.")
 
     def _validate_device_instance(self,di):
         if di.device_type.id not in self.graph_type.device_types:
@@ -396,8 +396,8 @@ class GraphInstance:
         if self._validated:
             return True
         
-        for et in self.edge_types:
-            self._validate_edge_type(et)
+        for et in self.message_types:
+            self._validate_message_type(et)
         for dt in self.device_types:
             self._validate_device_type(et)
         for di in self.device_instances:

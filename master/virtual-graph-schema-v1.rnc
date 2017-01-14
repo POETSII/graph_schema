@@ -566,10 +566,11 @@ grammar {
           ##   `const ${GRAPH_PROPERTIES_T} *graphProperties` :  Read-only pointer to the graph properties
           ##   `const ${DEVICE_PROPERTIES_T} *deviceProperties` : Read-only pointer to the device properties
           ##   `const ${DEVICE_STATE_T} *deviceState` : Read-only pointer to the device state
+          ##   uint32_t *readyToSend : Used to specify the bit-mask indicating which ports want to send
           element ReadyToSend {
             cxxSourceCode 
           }
-        }
+        } *
       }
       
       &
@@ -618,7 +619,7 @@ grammar {
         &
         
         ## Do the device info structures persist beyond the call to `onAttachDevice` ?
-        attribute requiresPersistentLocalDeviceInfo { "yes" | "no" }
+        attribute requiresPersistentLocalDeviceInfo { "yes" | "no" } ?
         
         &
         
@@ -626,14 +627,14 @@ grammar {
         ##
         ## If this is true, then the `properties` member of `device_info_type` will be valid
         ## for local devices.
-        attribute requiresLocalDeviceProperties { "yes" | "no" }
+        attribute requiresLocalDeviceProperties { "yes" | "no" } ?
         
         &
         
         ## Do the device info structures contain the endpoints that each local device is attached to ?
         ##
         ## Warning: this is going to require O(nLocal*avgDegree) bytes of storage.
-        attribute requiresLocalEdgeEndpoints { "yes" | "no" }
+        attribute requiresLocalEdgeEndpoints { "yes" | "no" } ?
         
         &
         
@@ -719,6 +720,14 @@ grammar {
           } ? 
           
         } * 
+        
+        &
+        
+        element Code {
+          ## implementation of the supervisor.
+          
+          cxxSourceCode 
+        } ?
       } * 
    }
     

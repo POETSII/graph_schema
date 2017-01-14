@@ -134,12 +134,12 @@ public:
 };
 
 class TypedDataSpec;
-class EdgeType;
+class MessageType;
 class DeviceType;
 class GraphType;
 
 typedef std::shared_ptr<TypedDataSpec> TypedDataSpecPtr;
-typedef std::shared_ptr<EdgeType> EdgeTypePtr;
+typedef std::shared_ptr<MessageType> MessageTypePtr;
 typedef std::shared_ptr<DeviceType> DeviceTypePtr;
 typedef std::shared_ptr<GraphType> GraphTypePtr;
 
@@ -169,19 +169,17 @@ public:
 
 
 
-class EdgeType
+class MessageType
 {
 public:
-  virtual ~EdgeType()
+  virtual ~MessageType()
   {}
 
-  static void registerEdgeType(const std::string &name, EdgeTypePtr dev);
-  static EdgeTypePtr lookupEdgeType(const std::string &name);
+  static void registerMessageType(const std::string &name, MessageTypePtr dev);
+  static MessageTypePtr lookupMessageType(const std::string &name);
 
   virtual const std::string &getId() const=0;
 
-  virtual const TypedDataSpecPtr &getPropertiesSpec() const=0;
-  virtual const TypedDataSpecPtr &getStateSpec() const=0;
   virtual const TypedDataSpecPtr &getMessageSpec() const=0;
 };
 
@@ -196,7 +194,7 @@ public:
   virtual const std::string &getName() const=0;
   virtual unsigned getIndex() const=0;
 
-  virtual const EdgeTypePtr &getEdgeType() const=0;
+  virtual const MessageTypePtr &getMessageType() const=0;
 };
 typedef std::shared_ptr<Port> PortPtr;
 
@@ -246,6 +244,9 @@ public:
 			 const typed_data_t *message,
 			 bool *requestSendPerOutput
 		      ) const=0;
+
+    virtual const TypedDataSpecPtr &getPropertiesSpec() const=0;
+    virtual const TypedDataSpecPtr &getStateSpec() const=0;
 
     virtual const std::string &getHandlerCode() const=0;
 };
@@ -309,10 +310,10 @@ public:
   virtual const DeviceTypePtr &getDeviceType(const std::string &name) const=0;
   virtual const std::vector<DeviceTypePtr> &getDeviceTypes() const=0;
 
-  virtual unsigned getEdgeTypeCount() const=0;
-  virtual const EdgeTypePtr &getEdgeType(unsigned index) const=0;
-  virtual const EdgeTypePtr &getEdgeType(const std::string &name) const=0;
-  virtual const std::vector<EdgeTypePtr> &getEdgeTypes() const=0;
+  virtual unsigned getMessageTypeCount() const=0;
+  virtual const MessageTypePtr &getMessageType(unsigned index) const=0;
+  virtual const MessageTypePtr &getMessageType(const std::string &name) const=0;
+  virtual const std::vector<MessageTypePtr> &getMessageTypes() const=0;
 };
 
 /* These allow registration/discovery of different data types at run-time */
@@ -326,8 +327,8 @@ public:
   virtual void registerGraphType(GraphTypePtr graph) =0;
   virtual GraphTypePtr lookupGraphType(const std::string &id) const=0;
 
-  virtual void registerEdgeType(EdgeTypePtr edge) =0;
-  virtual EdgeTypePtr lookupEdgeType(const std::string &id) const=0;
+  virtual void registerMessageType(MessageTypePtr edge) =0;
+  virtual MessageTypePtr lookupMessageType(const std::string &id) const=0;
 
   virtual void registerDeviceType(DeviceTypePtr dev) =0;
   virtual DeviceTypePtr lookupDeviceType(const std::string &id) const=0;

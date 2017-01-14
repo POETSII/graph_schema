@@ -220,10 +220,7 @@
         }
       };
       ]]></Code>
-    </SupervisorDevice>
+    </SupervisorDeviceType>
     
-    <ExecutiveDevice>
-      
-    </ExecutiveDevice>
   </GraphType>
 </Graphs>

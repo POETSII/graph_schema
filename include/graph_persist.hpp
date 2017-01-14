@@ -15,7 +15,7 @@ public:
   virtual void onDeviceType(const DeviceTypePtr &device)
   {}
 
-  virtual void onEdgeType(const EdgeTypePtr &edge)
+  virtual void onMessageType(const MessageTypePtr &edge)
   {}
 
   //! Tells the consumer that a new graph is starting

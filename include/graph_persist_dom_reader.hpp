@@ -33,8 +33,8 @@ void loadGraph(Registry *registry, xmlpp::Element *parent, GraphLoadEvents *even
 
   auto graphType=registry->lookupGraphType(graphTypeId);
 
-  for(auto et : graphType->getEdgeTypes()){
-    events->onEdgeType(et);
+  for(auto et : graphType->getMessageTypes()){
+    events->onMessageType(et);
   }
   for(auto dt : graphType->getDeviceTypes()){
     events->onDeviceType(dt);
@@ -137,11 +137,10 @@ void loadGraph(Registry *registry, xmlpp::Element *parent, GraphLoadEvents *even
     auto srcPort=srcDevice.second->getOutput(srcPortName);
     auto dstPort=dstDevice.second->getInput(dstPortName);
 
-    if(srcPort->getEdgeType()!=dstPort->getEdgeType())
+    if(srcPort->getMessageType()!=dstPort->getMessageType())
       throw std::runtime_error("Edge type mismatch on ports.");
 
-    auto et=srcPort->getEdgeType();
-
+    auto et=dstPort->getPropertiesSpec();
 
 
     TypedDataPtr edgeProperties;
@@ -149,22 +148,22 @@ void loadGraph(Registry *registry, xmlpp::Element *parent, GraphLoadEvents *even
     {
       const auto &children=eEdge->get_children();
       if(children.size()<10){
-	for(const auto &nChild : children){
-	  assert(nChild->get_name().is_ascii());
+        for(const auto &nChild : children){
+          assert(nChild->get_name().is_ascii());
 
-	  if(!strcmp(nChild->get_name().c_str(),"P")){
-	    eProperties=(xmlpp::Element*)nChild;
-	    break;
-	  }
-	}
+          if(!strcmp(nChild->get_name().c_str(),"P")){
+            eProperties=(xmlpp::Element*)nChild;
+            break;
+          }
+        }
       }else{
-	eProperties=find_single(eEdge, "./g:P", ns);
+        eProperties=find_single(eEdge, "./g:P", ns);
       }
     }
     if(eProperties){
-      edgeProperties=et->getPropertiesSpec()->load(eProperties);
+      edgeProperties=et->load(eProperties);
     }else{
-      edgeProperties=et->getPropertiesSpec()->create();
+      edgeProperties=et->create();
     }
 
 

@@ -70,7 +70,7 @@ derived/%.rng derived/%.xsd : master/%.rnc $(TRANG) $(JING) $(wildcard master/%-
 	
 		
 
-build-virtual-schema : derived/virtual-graph-schema.rng derived/virtual-graph-schema.xsd
+build-virtual-schema-v1 : derived/virtual-graph-schema-v1.rng derived/virtual-graph-schema-v1.xsd
 
 regenerate-random :
 	python3.4 tools/create_random_graph.py 1 > test/virtual/random1.xml
@@ -79,9 +79,9 @@ regenerate-random :
 	python3.4 tools/create_random_graph.py 8 > test/virtual/random4.xml
 
 
-%.checked : %.xml $(JING) master/virtual-graph-schema.rnc derived/virtual-graph-schema.xsd
-	java -jar $(JING) -c master/virtual-graph-schema.rnc $*.xml
-	java -jar $(JING) derived/virtual-graph-schema.xsd $*.xml
+%.checked : %.xml $(JING) master/virtual-graph-schema-v1.rnc derived/virtual-graph-schema-v1.xsd
+	java -jar $(JING) -c master/virtual-graph-schema-v1.rnc $*.xml
+	java -jar $(JING) derived/virtual-graph-schema-v1.xsd $*.xml
 	$(PYTHON) tools/print_graph_properties.py < $*.xml
 	touch $@
 
@@ -95,11 +95,11 @@ output/%.svg output/%.dot : test/%.xml tools/render_graph_as_dot.py graph_librar
 
 output/%.graph.cpp : test/%.xml graph_library
 	mkdir -p $(dir output/$*)
-	$(PYTHON) tools/render_graph_as_cpp.py < test/$*.xml > output/$*.graph.cpp
+	$(PYTHON) tools/render_graph_as_cpp.py test/$*.xml output/$*.graph.cpp
 
 output/%.graph.cpp : apps/%.xml graph_library
 	mkdir -p $(dir output/$*)
-	$(PYTHON) tools/render_graph_as_cpp.py < apps/$*.xml > output/$*.graph.cpp
+	$(PYTHON) tools/render_graph_as_cpp.py apps/$*.xml output/$*.graph.cpp
 
 output/%.graph.so : output/%.graph.cpp rapidjson
 	g++ $(CPPFLAGS) $(SO_CPPFLAGS) $< -o $@ $(LDFLAGS)
@@ -125,7 +125,7 @@ define provider_rules_template
 
 providers/$1.graph.cpp : apps/$1/$1_graph_type.xml
 	mkdir -p providers
-	$$(PYTHON) tools/render_graph_as_cpp.py < apps/$1/$1_graph_type.xml > providers/$1.graph.cpp
+	$$(PYTHON) tools/render_graph_as_cpp.py apps/$1/$1_graph_type.xml providers/$1.graph.cpp
 
 providers/$1.graph.so : providers/$1.graph.cpp
 	g++ $$(CPPFLAGS) $$(SO_CPPFLAGS) $$< -o $$@ $$(LDFLAGS)
@@ -168,5 +168,3 @@ clean :
 	-rm -rf external/trang-20091111
 	-rm -rf external/jing-20081028
 	-rm -rf rapidjson-master
-
-

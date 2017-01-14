@@ -1,12 +1,12 @@
 <?xml version="1.0"?>
-<Graph xmlns="http://TODO.org/POETS/virtual-graph-schema-v1">
+<Graphs xmlns="http://TODO.org/POETS/virtual-graph-schema-v1">
   <GraphType id="clock_tree">
-	<Doc>
+	<Documentation>
 		This implements a simple clock-tree benchmark. The graph consists of
 		a root node, branch nodes, and leaf nodes. The root node initiates
 		clock pulses, the branch nodes fan them out, and the leaf nodes
 		reflect them back again.
-	</Doc>
+	</Documentation>
 	 
 	 <MetaData>
 		"native_dimension":2
@@ -15,15 +15,15 @@
 
     <MessageTypes>
       <MessageType id="__init__">
-		<Doc>This doesn't have any properties</Doc>
+		<Documentation>This doesn't have any properties</Documentation>
       </MessageType>
       
       <MessageType id="tick">
-		<Doc>A tick being sent from the root through to the leaves</Doc>
+		<Documentation>A tick being sent from the root through to the leaves</Documentation>
       </MessageType>
 
       <MessageType id="ack">
-		<Doc>An acknowledgement being sent from the leaves back through to the root</Doc>
+		<Documentation>An acknowledgement being sent from the leaves back through to the root</Documentation>
       </MessageType>
     </MessageTypes>
     
@@ -34,22 +34,22 @@
 		</Properties>
 		
 		<State>
-		  <Scalar type="uint32_t" name="cycle" value="0" />
-		  <Scalar type="uint32_t" name="pending" value="0" />
+		  <Scalar type="uint32_t" name="cycle" />
+		  <Scalar type="uint32_t" name="pending" />
 		</State>
 		
-		<RequestSend><![CDATA[
-			*requestSendFlags = deviceState->pending==0 ? root_tick_out_index : 0;
-		]]></RequestSend>
+		<ReadyToSend><![CDATA[
+			*requestSendFlags = deviceState->pending==0 ? OUTPUT_FLAG_root_tick_out : 0;
+		]]></ReadyToSend>
 		
-		<OutputPort name="tick_out" edgeTypeId="tick">
+		<OutputPort name="tick_out" messageTypeId="tick">
 		  <OnSend><![CDATA[
 		  deviceState->cycle++;
 		  deviceState->pending=deviceProperties->fanout;
 		  ]]></OnSend>
 		</OutputPort>
 		
-		<InputPort name="ack_in" edgeTypeId="ack">
+		<InputPort name="ack_in" messageTypeId="ack">
 		  <OnReceive><![CDATA[
 		  deviceState->pending--;
 		  ]]></OnReceive>
@@ -72,37 +72,37 @@
 		<Scalar type="int32_t" name="status" />
 	  </State>
 	  
-	  <RequestSend><![CDATA[
+	  <ReadyToSend><![CDATA[
 			if(deviceState->status==0){
 				*requestSendFlags=0;
 			}else if(deviceState->status==1){
-				*requestSendFlags = branch_tick_out_index;
+				*requestSendFlags = OUTPUT_FLAG_branch_tick_out;
 			}else if(deviceState->status==2){
-				*requestSendFlags = branch_ack_out_index;
+				*requestSendFlags = OUTPUT_FLAG_branch_ack_out;
 			}else{
 				*requestSendFlags=0;
 			}
-		]]></RequestSend>
+		]]></ReadyToSend>
 	  
-	  <InputPort name="tick_in" edgeTypeId="tick">
+	  <InputPort name="tick_in" messageTypeId="tick">
 	    <OnReceive><![CDATA[
 	    deviceState->status=1;
 	    ]]></OnReceive>
 	  </InputPort>
 	  
-	  <OutputPort name="tick_out" edgeTypeId="tick">
+	  <OutputPort name="tick_out" messageTypeId="tick">
 	    <OnSend><![CDATA[
 	    deviceState->status=2+deviceProperties->fanout;
 	    ]]></OnSend>
 	  </OutputPort>
 	  
-	  <InputPort name="ack_in" edgeTypeId="ack">
+	  <InputPort name="ack_in" messageTypeId="ack">
 	    <OnReceive><![CDATA[
 	    deviceState->status--;
 	    ]]></OnReceive>
 	  </InputPort>
 	  
-	  <OutputPort name="ack_out" edgeTypeId="ack">
+	  <OutputPort name="ack_out" messageTypeId="ack">
 	    <OnSend><![CDATA[
 	    deviceState->status=0;
 	    ]]></OnSend>
@@ -111,21 +111,21 @@
 	
 	<DeviceType id="leaf">
 		<State>
-			<Scalar type="bool" name="ready" />
+			<Scalar type="int8_t" name="ready" />
 		</State>
 		
-		<RequestSend><![CDATA[
-		*requestSendFlags = deviceState->ready ? leaf_ack_out_index : 0;
-		]]></RequestSend>
+		<ReadyToSend><![CDATA[
+		*requestSendFlags = deviceState->ready ? OUTPUT_FLAG_leaf_ack_out : 0;
+		]]></ReadyToSend>
 	
-		  <InputPort name="tick_in" edgeTypeId="tick">
+		  <InputPort name="tick_in" messageTypeId="tick">
 			<OnReceive><![CDATA[
 			deviceState->ready=true;
 			]]>
 			</OnReceive>
 		  </InputPort>
 		  
-		  <OutputPort name="ack_out" edgeTypeId="ack">
+		  <OutputPort name="ack_out" messageTypeId="ack">
 			<OnSend><![CDATA[
 			deviceState->ready=false;
 			]]></OnSend>
@@ -133,5 +133,5 @@
 		</DeviceType>
 	  </DeviceTypes>
 	</GraphType>
-</Graph>
+</Graphs>
 
