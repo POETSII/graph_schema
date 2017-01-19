@@ -241,8 +241,7 @@ public:
 			 typed_data_t *deviceState,
 			 const typed_data_t *edgeProperties,
 			 typed_data_t *edgeState,
-			 const typed_data_t *message,
-			 bool *requestSendPerOutput
+			 const typed_data_t *message
 		      ) const=0;
 
     virtual const TypedDataSpecPtr &getPropertiesSpec() const=0;
@@ -261,8 +260,7 @@ public:
 		      const typed_data_t *deviceProperties,
 		      typed_data_t *deviceState,
 		      typed_data_t *message,
-		      bool *requestSendPerOutput,
-		      bool *abortThisSend
+		      bool *doSend
 		      ) const=0;
 
   virtual const std::string &getHandlerCode() const=0;
@@ -289,6 +287,13 @@ public:
   virtual const OutputPortPtr &getOutput(unsigned index) const=0;
   virtual OutputPortPtr getOutput(const std::string &name) const=0;
   virtual const std::vector<OutputPortPtr> &getOutputs() const=0;
+  
+  virtual uint32_t calcReadyToSend(
+    OrchestratorServices *orchestrator,
+    const typed_data_t *graphProperties,
+    const typed_data_t *deviceProperties,
+    const typed_data_t *deviceState
+  );
 };
 
 class GraphType

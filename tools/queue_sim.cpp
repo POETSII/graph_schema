@@ -20,9 +20,27 @@
 
 static unsigned  logLevel=2;
 
+
+
 struct QueueSim
   : public GraphLoadEvents
 {
+    static unsigned lmo(uint32_t x)
+    {
+      assert(x);
+      unsigned r=0;
+      if(! (x&0xFFFF) ){  r=r+16; x=x>>16; }
+      if(! (x&0xFF) ){  r=r+8; x=x>>8; }
+      if(! (x&0xF) ){  r=r+4; x=x>>4; }
+      if(! (x&0x3) ){  r=r+2; x=x>>2; }
+      if(! (x&0x1) ){  r=r+1; x=x>>1; }
+      return r;
+    }
+
+
+
+
+  
   typedef std::mutex mutex_t;
   typedef std::unique_lock<mutex_t> lock_t;
   
@@ -117,7 +135,7 @@ struct QueueSim
 
     int owner; // Which queue currently has responsibility
 
-    std::shared_ptr<bool> ready;
+    uint32_t rtsFlags;
 
     unsigned outputCount;
     std::vector<output_port_t> outputs;
@@ -206,7 +224,7 @@ struct QueueSim
       
       assert(!device->isOnReady);
       assert(device->readyIndex!=-1);
-      assert(device->ready.get()[device->readyIndex]);
+      assert( (device->rtsFlags >> (device->readyIndex) ) & 1);
 
       assert(device->readyPrev==0 && device->readyNext==0);
       assert( (readyBegin==0) == (readyEnd==0) );
@@ -276,7 +294,7 @@ struct QueueSim
 
       assert(device->readyIndex!=-1);
       assert(device->isOnReady==true);
-      assert(device->ready.get()[device->readyIndex]);
+      assert((device->rtsFlags >> device->readyIndex) & 1);
       assert( (readyBegin!=0) && (readyEnd!=0) );
 
       readyBegin=readyBegin->readyNext;
@@ -353,46 +371,26 @@ struct QueueSim
 	  e.port->onReceive(&services, graphPropertiesPtr,
 			  device->properties.get(), device->state.get(),
 			  e.properties.get(), e.state.get(),
-			  message.get(), device->ready.get()
+			  message.get()
 			    );
 
-	  if(device->outputCount==1){
-	    if(device->ready.get()[0] == (device->readyIndex!=-1) ){
-	      // do nothing. It is either still ready or still not ready
-	    }else if(device->readyIndex==-1){
-	      device->readyIndex=0;
-	      readyAdd(device);
-	    }else{
-	      device->readyIndex=-1;
-	      readyRemove(device);
-	    }
-	  }else{	       
-	    int readyIndex=device->readyIndex;
-	    if(readyIndex!=-1 && device->ready.get()[readyIndex]){
-	      // Do nothing, we are still on the same valid ready index
-	      if(logLevel>4){
-		fprintf(stderr, "      on-ready skip.\n");
-	      }
-	    }else{
-	      readyIndex=-1;
-	      for(unsigned i=0;i<device->outputCount;i++){
-		if(device->ready.get()[i]){
-		  readyIndex=i;
-		  break;
-		}
-	      }
+	  device->rtsFlags = device->type->calcReadyToSend(&services,
+						     graphPropertiesPtr,
+						     device->properties.get(),
+						     device->state.get()
+						     );
+						     
 
-	      if((device->readyIndex!=-1) == (readyIndex!=-1)){
-		// it was either already ready or not ready, and has not changed
-	      }else if(readyIndex==-1){
-		// it was previously ready
-		readyRemove(device);
-	      }else{
-		// it was previously blocked
-		readyAdd(device);
-	      }
-	      device->readyIndex=readyIndex;
-	    }
+	  if( (device->rtsFlags!=0) == (device->readyIndex!=-1)){
+	    // do nothing. It is eiter still ready or still not ready
+	  }else if(device->readyIndex==-1){
+	    // it was previously not ready
+	    device->readyIndex = lmo(device->rtsFlags);
+	    readyAdd(device);
+	  }else{
+	    // it was previously not ready
+	    device->readyIndex = -1;
+	    readyRemove(device);
 	  }
 	}
     }
@@ -400,7 +398,7 @@ struct QueueSim
     void send(device_t *device)
     {
       assert(device->readyIndex!=-1);
-      assert(device->ready.get()[device->readyIndex]);
+      assert( (device->rtsFlags >> device->readyIndex) & 1 );
 
       assert(device->readyIndex < (int)device->outputs.size());
       auto &output=device->outputs[device->readyIndex];
@@ -408,26 +406,24 @@ struct QueueSim
       SendOrchestratorServicesImpl services(logLevel, stderr, device->id, output.port->getName().c_str());
 
       TypedDataPtr message=output.spec->create();
-      bool cancel=false;
-      output.port->onSend(&services, parent->m_graphProperties.get(), device->properties.get(), device->state.get(), message.get(), device->ready.get(), &cancel);
+      bool doSend=true;
+      output.port->onSend(&services, parent->m_graphProperties.get(), device->properties.get(), device->state.get(), message.get(), &doSend);
 
       if(logLevel>3){
 	fprintf(stderr, "  Send %s\n", device->id);
       }
 
-      int readyIndex=-1;
-      for(unsigned i=0; i<device->outputCount; i++){
-	if(device->ready.get()[i]){
-	  readyIndex=i;
-	  break;
-	}
-      }
-      device->readyIndex=readyIndex;
-      if(readyIndex!=-1){
+      device->rtsFlags = device->type->calcReadyToSend(&services, parent->m_graphProperties.get(), device->properties.get(), device->state.get());
+
+      if(device->rtsFlags==0){
+	device->readyIndex=-1;
+      }else{
+	device->readyIndex=lmo(device->rtsFlags);
 	readyAdd(device);
       }
+
       
-      if(cancel){
+      if(!doSend){
 	if(logLevel>3){
 	  fprintf(stderr, "    Cancelled\n");
 	}
@@ -496,7 +492,7 @@ struct QueueSim
       if(print){
 	    fprintf(stderr, "Dump\n");
 	services.setReceiver(device->id, "__print__");
-	print->onReceive(&services, m_graphProperties.get(), device->properties.get(), device->state.get(), 0, 0, 0, device->ready.get());
+	print->onReceive(&services, m_graphProperties.get(), device->properties.get(), device->state.get(), 0, 0, 0);
       }
     }
   }
@@ -527,16 +523,12 @@ struct QueueSim
 
 	ReceiveOrchestratorServicesImpl services(logLevel, stderr, device->id, init->getName().c_str());
 	
-	init->onReceive(&services, graphPropertiesPtr, device->properties.get(), device->state.get(), 0, 0, 0, device->ready.get());
-	int readyIndex=-1;
-	for(unsigned i=0; i<device->outputCount; i++){
-	  if(device->ready.get()[i]){
-	    readyIndex=i;
-	    break;
-	  }
-	}
-	device->readyIndex=readyIndex;
-	if(readyIndex!=-1){
+	init->onReceive(&services, graphPropertiesPtr, device->properties.get(), device->state.get(), 0, 0, 0);
+
+	
+	device->rtsFlags = device->type->calcReadyToSend( &services, graphPropertiesPtr, device->properties.get(), device->state.get());
+	device->readyIndex=lmo(device->rtsFlags);
+	if(device->readyIndex!=-1){
 	  queue.readyAdd(device);
 	}
       }
@@ -567,7 +559,7 @@ struct QueueSim
 	if(device){
 	  assert(device->owner==self);
 	  assert(device->readyIndex!=-1);
-	  assert(device->ready.get()[device->readyIndex]);
+	  assert( (device->rtsFlags >> device->readyIndex) & 1 );
 
 	  queue.send(device);
 	  
@@ -646,13 +638,13 @@ struct QueueSim
       d.state=state;
       d.owner=owner;
       d.outputCount=dt->getOutputCount();
-      d.ready.reset(new bool[d.outputCount]{false});
+      d.rtsFlags=0;
       for(unsigned i=0; i<d.outputCount; i++){
 	output_port_t out;
 	out.port=dt->getOutput(i);
 	std::string pid=id+":"+out.port->getName();
 	out.id=intern(pid.c_str());
-	out.spec=out.port->getEdgeType()->getMessageSpec();
+	out.spec=out.port->getMessageType()->getMessageSpec();
 	d.outputs.push_back(out);
       }
       d.readyIndex=-1;
@@ -691,7 +683,7 @@ struct QueueSim
     edge.portName=intern(dstInput->getName());
     edge.device=dstDevice;
     edge.port=dstInput;
-    edge.state=dstInput->getEdgeType()->getStateSpec()->create();
+    edge.state=dstInput->getStateSpec()->create();
     edge.properties=properties;
 
     unsigned dstQueue=dstDevice->owner;

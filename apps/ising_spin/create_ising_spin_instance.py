@@ -7,9 +7,11 @@ import os
 import math
 
 
+import os
+appBase=os.path.dirname(os.path.realpath(__file__))
 
-src=sys.argv[1]
-(graphTypes,graphInstances)=load_graph_types_and_instances(src)
+src=appBase+"/ising_spin_graph_type.xml"
+(graphTypes,graphInstances)=load_graph_types_and_instances(src,src)
 
 endTime=1000
 T=1

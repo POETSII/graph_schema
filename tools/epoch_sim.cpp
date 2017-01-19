@@ -54,7 +54,7 @@ struct EpochSim
     TypedDataPtr state;
 
     unsigned outputCount;
-    std::shared_ptr<bool> readyToSend; // Grrr, std::vector<bool> !
+    uint32_t readyToSend;
 
     std::vector<const char *> outputNames; // interned names
 
@@ -63,12 +63,7 @@ struct EpochSim
 
     bool anyReady() const
     {
-      const bool *rts=readyToSend.get();
-      for(unsigned i=0;i<outputCount;i++){
-	if(rts[i])
-	  return true;
-      }
-      return false;
+      return readyToSend!=0;
     }
   };
 
@@ -96,11 +91,10 @@ struct EpochSim
     d.type=dt;
     d.properties=deviceProperties;
     d.state=state;
-    d.readyToSend.reset(new bool[dt->getOutputCount()], [](bool *p){ delete[](p);} );
+    d.readyToSend=0;
     d.outputCount=dt->getOutputCount();
     d.outputs.resize(dt->getOutputCount());
     for(unsigned i=0;i<dt->getOutputCount();i++){
-      d.readyToSend.get()[i]=false;
       d.outputNames.push_back(intern(dt->getOutput(i)->getName()));
     }
     d.inputs.resize(dt->getInputCount());
@@ -112,7 +106,7 @@ struct EpochSim
   {
     input i;
     i.properties=properties;
-    i.state=dstInput->getEdgeType()->getStateSpec()->create();
+    i.state=dstInput->getStateSpec()->create();
     i.firings=0;
     i.id=intern( m_devices.at(dstDevIndex).id + ":" + dstInput->getName() + "-" + m_devices.at(srcDevIndex).id+":"+srcOutput->getName() );
     auto &slots=m_devices.at(dstDevIndex).inputs.at(dstInput->getIndex());
@@ -130,12 +124,12 @@ struct EpochSim
   }
 
 
-  unsigned pick_bit(unsigned n, const bool *bits, unsigned rot)
+  unsigned pick_bit(unsigned n, uint32_t bits, unsigned rot)
   {
     for(unsigned i=0;i<n;i++){
       unsigned s=(i+rot)%n;
-      if(bits[s])
-	return s;
+      if( (bits>>s)&1 )
+        return s;
     }
     return (unsigned)-1;
   }
@@ -146,14 +140,14 @@ struct EpochSim
     dst->startSnapshot(m_graphType, m_id.c_str(), orchestratorTime, sequenceNumber);
 
     for(auto &dev : m_devices){
-        dst->writeDeviceInstance(dev.type, dev.name, dev.state, dev.readyToSend.get());
-	for(unsigned i=0; i<dev.inputs.size(); i++){
-	  const auto &et=dev.type->getInput(i)->getEdgeType();
-	  for(auto &slot : dev.inputs[i]){
-	    dst->writeEdgeInstance(et, slot.id, slot.state, slot.firings, 0, 0);
-	    slot.firings=0;
-	  }
-	}
+      dst->writeDeviceInstance(dev.type, dev.name, dev.state, dev.readyToSend);
+      for(unsigned i=0; i<dev.inputs.size(); i++){
+        const auto &ip=dev.type->getInput(i);
+        for(auto &slot : dev.inputs[i]){
+          dst->writeEdgeInstance(ip, slot.id, slot.state, slot.firings, 0, 0);
+          slot.firings=0;
+        }
+      }
     }
 	  
     dst->endSnapshot();
@@ -164,12 +158,13 @@ struct EpochSim
     for(auto &dev : m_devices){
       auto init=dev.type->getInput("__init__");
       if(init){
-	if(logLevel>2){
-	  fprintf(stderr, "  init device %d = %s\n", dev.index, dev.id.c_str());
-	}
+        if(logLevel>2){
+          fprintf(stderr, "  init device %d = %s\n", dev.index, dev.id.c_str());
+        }
 
-	ReceiveOrchestratorServicesImpl receiveServices{logLevel, stderr, dev.name, "__init__"  };
-	init->onReceive(&receiveServices, m_graphProperties.get(), dev.properties.get(), dev.state.get(), 0, 0, 0, dev.readyToSend.get());
+        ReceiveOrchestratorServicesImpl receiveServices{logLevel, stderr, dev.name, "__init__"  };
+        init->onReceive(&receiveServices, m_graphProperties.get(), dev.properties.get(), dev.state.get(), 0, 0, 0);
+        dev.readyToSend = dev.type->calcReadyToSend(&receiveServices, m_graphProperties.get(), dev.properties.get(), dev.state.get());
       }
     }
   }
@@ -205,7 +200,7 @@ struct EpochSim
       auto &src=m_devices[i];
 
       // Pick a random message
-      sendSel[i]=pick_bit(src.outputCount, src.readyToSend.get(), rotA+i);
+      sendSel[i]=pick_bit(src.outputCount, src.readyToSend, rotA+i);
     }
 
 
@@ -223,73 +218,72 @@ struct EpochSim
       auto &src=m_devices[index];
 
       if(logLevel>3){
-	fprintf(stderr, "  step device %d = %s\n", src.index, src.id.c_str());
+        fprintf(stderr, "  step device %d = %s\n", src.index, src.id.c_str());
       }
 
       // Pick a random message
       int sel=sendSel[index];
       if(sel==-1){
-	if(logLevel>3){
-	  fprintf(stderr, "   not ready to send.\n");
-	}
-	continue;
+        if(logLevel>3){
+          fprintf(stderr, "   not ready to send.\n");
+        }
+        continue;
       }
 
       threshRng= threshRng*1664525+1013904223UL;
       if(threshRng > threshSend){
-	anyReady=true;
-	continue;
+        anyReady=true;
+        continue;
       }
 
-      if(!src.readyToSend.get()[sel]){
-	anyReady=true; // We don't know if it turned any others on
-	continue;
+      if(!((src.readyToSend>>sel)&1)){
+        anyReady=true; // We don't know if it turned any others on
+        continue;
       }
 
       if(logLevel>3){
-	fprintf(stderr, "    output port %d ready\n", sel);
+        fprintf(stderr, "    output port %d ready\n", sel);
       }
 
       m_statsSends++;
 
-      src.readyToSend.get()[sel]=false; // Up to them to re-enable
-
       const OutputPortPtr &output=src.type->getOutput(sel);
-      TypedDataPtr message(output->getEdgeType()->getMessageSpec()->create());
+      TypedDataPtr message(output->getMessageType()->getMessageSpec()->create());
 
-      bool cancel=false;
+      bool doSend=true;
       {
-	sendServices.setSender(src.name, src.outputNames[sel]);
-	output->onSend(&sendServices, m_graphProperties.get(), src.properties.get(), src.state.get(), message.get(), src.readyToSend.get(), &cancel);
+        sendServices.setSender(src.name, src.outputNames[sel]);
+        output->onSend(&sendServices, m_graphProperties.get(), src.properties.get(), src.state.get(), message.get(), &doSend);
       }
 
-      if(cancel){
-	if(logLevel>3){
-	  fprintf(stderr, "    send aborted.\n");
-	}
-	anyReady = anyReady || src.anyReady();
-	continue;
+      if(!doSend){
+        if(logLevel>3){
+          fprintf(stderr, "    send aborted.\n");
+        }
+        anyReady = anyReady || src.anyReady();
+        continue;
       }
 
       sent=true;
 
       for(auto &out : src.outputs[sel]){
-	auto &dst=m_devices[out.dstDevice];
-	auto &in=dst.inputs[out.dstPortIndex];
-	auto &slot=in[out.dstPortSlot];
+        auto &dst=m_devices[out.dstDevice];
+        auto &in=dst.inputs[out.dstPortIndex];
+        auto &slot=in[out.dstPortSlot];
 
-	slot.firings++;
+        slot.firings++;
 
-	if(logLevel>3){
-	  fprintf(stderr, "    sending to device %d = %s\n", dst.index, dst.id.c_str());
-	}
+        if(logLevel>3){
+          fprintf(stderr, "    sending to device %d = %s\n", dst.index, dst.id.c_str());
+        }
 
-	const auto &port=dst.type->getInput(out.dstPortIndex);
+        const auto &port=dst.type->getInput(out.dstPortIndex);
 
-	receiveServices.setReceiver(out.dstDeviceId, out.dstInputName);
-	port->onReceive(&receiveServices, m_graphProperties.get(), dst.properties.get(), dst.state.get(), slot.properties.get(), slot.state.get(), message.get(), dst.readyToSend.get());
-
-	anyReady = anyReady || dst.anyReady();
+        receiveServices.setReceiver(out.dstDeviceId, out.dstInputName);
+        port->onReceive(&receiveServices, m_graphProperties.get(), dst.properties.get(), dst.state.get(), slot.properties.get(), slot.state.get(), message.get());
+        dst.readyToSend = dst.type->calcReadyToSend(&receiveServices, m_graphProperties.get(), dst.properties.get(), dst.state.get());
+        
+        anyReady = anyReady || dst.anyReady();
       }
     }
 

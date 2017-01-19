@@ -23,7 +23,7 @@ public:
   
   struct output
   {
-    EdgeTypePtr edgeType;
+    MessageTypePtr messageType;
     std::vector<edge> edges;
   };
   
@@ -49,9 +49,9 @@ public:
     fprintf(stderr, "  onDeviceType(%s)\n", device->getId().c_str());
   }
 
-  virtual void onEdgeType(const EdgeTypePtr &edge) override
+  virtual void onMessageType(const MessageTypePtr &message) override
   {
-    fprintf(stderr, "  onEdgeType(%s)\n", edge->getId().c_str());
+    fprintf(stderr, "  onMessageType(%s)\n", message->getId().c_str());
   }
 
   
@@ -80,7 +80,7 @@ public:
 
     std::vector<output> outputs;
     for(auto o : dt->getOutputs()){
-      output to{ o->getEdgeType(), {} };
+      output to{ o->getMessageType(), {} };
       outputs.emplace_back(std::move(to));
     }
 

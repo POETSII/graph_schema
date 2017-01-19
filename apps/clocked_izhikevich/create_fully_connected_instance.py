@@ -1,3 +1,5 @@
+#!/usr/bin/python3
+
 from graph.core import *
 
 from graph.load_xml import load_graph_types_and_instances

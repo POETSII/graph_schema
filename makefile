@@ -26,7 +26,7 @@ endif
 CPPFLAGS += -std=c++11 -g
 #CPPFLAGS += -O0
 
-CPPFLAGS += -O3 -DNDEBUG=1
+#CPPFLAGS += -O3 -DNDEBUG=1
 
 TRANG = external/trang-20091111/trang.jar
 JING = external/jing-20081028/bin/jing.jar

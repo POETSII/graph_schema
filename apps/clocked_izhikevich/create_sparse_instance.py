@@ -1,3 +1,5 @@
+#!/usr/bin/python3
+
 from graph.core import *
 
 from graph.load_xml import load_graph_types_and_instances
@@ -9,8 +11,11 @@ import random
 
 urand=random.random
 
-src=sys.argv[1]
-(graphTypes,graphInstances)=load_graph_types_and_instances(src)
+import os
+appBase=os.path.dirname(os.path.realpath(__file__))
+
+src=appBase+"/clocked_izhikevich_graph_type.xml"
+(graphTypes,graphInstances)=load_graph_types_and_instances(src,src)
 
 Ne=80
 Ni=20

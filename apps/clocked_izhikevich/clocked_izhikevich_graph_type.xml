@@ -138,7 +138,7 @@
     
         <ReadyToSend><![CDATA[
         *readyToSend=0;
-        if(deviceState->ICount==deviceProperties->fanin && !deviceState->waitTick && deviceState->sentSpike ){
+        if(deviceState->Icount==deviceProperties->fanin && !deviceState->waitTick && deviceState->sentSpike ){
             *readyToSend |= OUTPUT_INDEX_tick;
         }else if(!deviceState->waitTick && !deviceState->sendSpike){
             *readyToSend |= OUTPUT_INDEX_spike;
@@ -147,7 +147,7 @@
         
         <OutputPort name="tock" messageTypeId="tick">
           <OnSend><![CDATA[
-          assert(deviceState->ICount==deviceProperties->fanin);
+          assert(deviceState->Icount==deviceProperties->fanin);
           assert(!deviceState->waitTick && deviceState->sentSpike);
           
           float &v=deviceState->v;
@@ -207,7 +207,7 @@
 
       </DeviceType>
 
-      <DeviceType id="barrier">
+      <DeviceType id="clock">
         <Properties>
           <Scalar type="uint32_t" name="neuronCount" />
         </Properties>
@@ -223,9 +223,9 @@
           ]]></OnReceive>
         </InputPort>
 
-        <RequestToSend><![CDATA[[
+        <ReadyToSend><![CDATA[[
         *readyToSend = deviceState->waitCount==0 ? OUTPUT_FLAG_tick : 0;
-        ]]></RequestToSend>
+        ]]></ReadyToSend>
 
         <InputPort name="tock" messageTypeId="tick">
           <OnReceive><![CDATA[
@@ -239,7 +239,6 @@
           <OnSend><![CDATA[
           assert(deviceState->waitCount==0);
           deviceState->waitCount=deviceProperties->neuronCount;
-          requestSend_tick = deviceState->waitCount==0;
           handler_log(3,"tick : waitCount = %d\n", deviceState->waitCount);
           ]]></OnSend>
         </OutputPort>

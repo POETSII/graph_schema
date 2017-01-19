@@ -1,5 +1,5 @@
 <?xml version="1.0"?>
-<Graph xmlns="http://TODO.org/POETS/virtual-graph-schema-v0">
+<Graph xmlns="http://TODO.org/POETS/virtual-graph-schema-v1">
   <GraphType id="gals_heat" nativeDimension="2">
     <!-- Locally synchronous heat.
 	 Each cell i has a time t, and all cells start at t=0.

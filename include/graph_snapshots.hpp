@@ -25,7 +25,7 @@ public:
      const DeviceTypePtr &dt,
      const char *id,
      const TypedDataPtr &state,
-     const bool *readyToSendFlags
+     uint32_t readyToSendFlags
      ) =0;
 
     virtual void writeEdgeInstance
@@ -131,18 +131,13 @@ public:
      const DeviceTypePtr &dt,
      const char *id,
      const TypedDataPtr &state,
-     const bool *readyToSendFlags
+     uint32_t readyToSendFlags
      ) override
     {
       unsigned numOutputs=dt->getOutputCount();
       if(numOutputs>32)
-	throw std::runtime_error("Not supported.");
-      uint32_t flags=0;
-      for(unsigned i=0;i<numOutputs;i++){
-	if(readyToSendFlags[i])
-	  flags |= (1ul << i);
-      }
-
+        throw std::runtime_error("Not supported.");
+      uint32_t flags=readyToSendFlags;
 
       std::string stateJSON;
       

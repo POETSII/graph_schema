@@ -7,7 +7,7 @@ import os
 import sys
 import json
 
-ns={"p":"http://TODO.org/POETS/virtual-graph-schema-v0"}
+ns={"p":"http://TODO.org/POETS/virtual-graph-schema-v1"}
 
 def toNS(t):
     tt=t.replace("p:","{"+ns["p"]+"}")
@@ -15,7 +15,7 @@ def toNS(t):
 
 _type_to_tag={
     GraphType : toNS("p:GraphType"),
-    EdgeType : toNS("p:EdgeType"),
+    MessageType : toNS("p:MessageType"),
     DeviceType : toNS("p:DeviceType"),
     InputPort : toNS("p:InputPort"),
     OutputPort : toNS("p:OutputPort"),
@@ -51,6 +51,18 @@ def save_typed_data_spec(dt):
         raise RuntimeError("Unknown data type.")
 
     return n
+    
+def save_typed_struct_spec_contents(node,tuple):
+    if tuple is None:
+        return
+    
+    assert isinstance(tuple,TupleTypedDataSpec), "Expected tuple, got {}".format(tuple)
+    if len(tuple.elements_by_index)==0:
+        return
+
+    for elt in tuple.elements_by_index:
+        node.append(save_typed_data_spec(elt))
+    return node
 
 def save_typed_struct_spec(node,childTagName,tuple):
     if tuple is None:
@@ -61,8 +73,7 @@ def save_typed_struct_spec(node,childTagName,tuple):
         return
 
     r=etree.Element(toNS(childTagName))
-    for elt in tuple.elements_by_index:
-        r.append(save_typed_data_spec(elt))
+    save_typed_struct_spec_contents(r, tuple)   
     node.append(r)
     return r
 
@@ -81,13 +92,11 @@ def save_typed_struct_instance(node,childTagName,type,inst):
     
     
     
-def save_edge_type(et):
-    n=_type_to_element(et)
+def save_message_type(mt):
+    n=_type_to_element(mt)
 
-    n.attrib["id"]=et.id
-    save_typed_struct_spec(n, "p:Message", et.message)
-    save_typed_struct_spec(n, "p:Properties", et.properties)
-    save_typed_struct_spec(n, "p:State", et.state)
+    n.attrib["id"]=mt.id
+    save_typed_struct_spec_contents(n, mt.message)
 
     return n
 
@@ -102,7 +111,12 @@ def save_device_type(dt):
     for p in dt.inputs_by_index:
         pn=_type_to_element(p)
         pn.attrib["name"]=p.name
-        pn.attrib["edgeTypeId"]=p.edge_type.id
+        pn.attrib["edgeTypeId"]=p.message_type.id
+        if(p.properties):
+            save_typed_struct_spec(pn, "p:Properties", p.properties)
+        if(p.state):
+            save_typed_struct_spec(pn, "p:State", p.state)
+
         h=etree.Element(toNS("p:OnReceive"))
         h.text = etree.CDATA(p.receive_handler)
         #h.txt = p.received_handler
@@ -112,7 +126,7 @@ def save_device_type(dt):
     for p in dt.outputs_by_index:
         pn=_type_to_element(p)
         pn.attrib["name"]=p.name
-        pn.attrib["edgeTypeId"]=p.edge_type.id
+        pn.attrib["edgeTypeId"]=p.message_type.id
         h=etree.Element(toNS("p:OnSend"))
         h.text = etree.CDATA(p.send_handler)
         #h.text = p.send_handler
@@ -146,7 +160,7 @@ def save_edge_instance(ei):
         n.attrib["srcDeviceId"]=ei.src_device.id
         n.attrib["srcPortName"]=ei.src_port.name
     
-    save_typed_struct_instance(n, "p:P", ei.edge_type.properties, ei.properties)
+    save_typed_struct_instance(n, "p:P", ei.dst_port.properties, ei.properties)
 
     return n
 
@@ -166,10 +180,10 @@ def save_graph_type(graph):
             h.text=etree.CDATA(code)
             gn.append(h)
 
-    etn = etree.Element(toNS("p:EdgeTypes"))
+    etn = etree.Element(toNS("p:MessageTypes"))
     gn.append(etn)
-    for et in graph.edge_types.values():
-        etn.append(save_edge_type(et))
+    for et in graph.message_types.values():
+        etn.append(save_message_type(et))
 
     dtn = etree.Element(toNS("p:DeviceTypes"))
     gn.append(dtn)
@@ -198,8 +212,8 @@ def save_graph_instance(graph):
     return gn
 
 def save_graph(graph,dst):
-    nsmap = { None : "http://TODO.org/POETS/virtual-graph-schema-v0" }
-    root=etree.Element(toNS("p:Graph"), nsmap=nsmap)
+    nsmap = { None : "http://TODO.org/POETS/virtual-graph-schema-v1" }
+    root=etree.Element(toNS("p:Graphs"), nsmap=nsmap)
     
     root.append(save_graph_type(graph.graph_type))
     root.append(save_graph_instance(graph))

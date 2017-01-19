@@ -159,6 +159,11 @@ def load_device_type(graph,dtNode,sourceFile):
         message_type=graph.message_types[message_type_id]
         (handler,sourceLine)=get_child_text(p,"p:OnSend")
         dt.add_output(name,message_type,handler,sourceFile,sourceLine)
+        
+    (handler,sourceLine)=get_child_text(dtNode,"p:ReadyToSend")
+    dt.ready_to_send_handler=handler
+    dt.ready_to_send_source_line=sourceLine
+    dt.ready_to_send_source_file=sourceFile
 
     return dt            
 

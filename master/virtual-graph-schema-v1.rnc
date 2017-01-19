@@ -524,7 +524,7 @@ grammar {
             ##   `const ${DEVICE_PROPERTIES_T} *deviceProperties` : Read-only pointer to the device properties
             ##   `${DEVICE_STATE_T} *deviceState` : Mutable pointer to the device state
             ##   `${MESSAGE_T} *message` : A mutable pointer to payload associate with the edge
-            ##   `bool *cancelSend` : A mutable pointer which enables cancellation. By default it is true.
+            ##   `bool *doSend` : A mutable pointer to control whether the message is sent. By default it is true.
             element OnSend {
               cxxSourceCode 
             }
