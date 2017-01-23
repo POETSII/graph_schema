@@ -278,17 +278,13 @@ private:
 
   std::string m_sharedCode;
 protected:
-  GraphTypeImpl(std::string id, unsigned nativeDimension, TypedDataSpecPtr propertiesSpec)
+  GraphTypeImpl(std::string id, TypedDataSpecPtr propertiesSpec)
     : m_id(id)
-    , m_nativeDimension(nativeDimension)
     , m_propertiesSpec(propertiesSpec)
   {}
 
   const std::string &getId() const override
   { return m_id; }
-
-  unsigned getNativeDimension() const override
-  { return m_nativeDimension; }
 
   const TypedDataSpecPtr getPropertiesSpec() const override
   { return m_propertiesSpec; }
@@ -513,8 +509,8 @@ public:
   {
     fprintf(stderr, "Loading provider '%s'\n", path.c_str());
     void *lib=dlopen(path.c_str(), RTLD_NOW|RTLD_LOCAL);
-    if(lib==0)
-      throw std::runtime_error("Couldn't load provider '"+path+"'");
+    if(lib==0)  
+      throw std::runtime_error("Couldn't load provider '"+path+" + '"+dlerror()+"'");
 
     // Mangled name of the export. TODO : A bit fragile.
     void *entry=dlsym(lib, "registerGraphTypes");

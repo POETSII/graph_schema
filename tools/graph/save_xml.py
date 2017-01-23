@@ -40,7 +40,7 @@ def save_typed_data_spec(dt):
         n.attrib["type"]=dt.type
 
         if dt.value is not None and dt.value is not 0:
-            n.attrib["value"]=str(dt.value)
+            n.attrib["default"]=str(dt.value)
     elif isinstance(dt,ArrayTypedDataSpec):
         n=etree.Element(toNS("p:Array"))
         n.attrib["name"]=dt.name
@@ -89,14 +89,26 @@ def save_typed_struct_instance(node,childTagName,type,inst):
     r.text=text[1:-1] # Get rid of brackets
     node.append(r)
     return r
-    
+
+def save_metadata(node,childTagName,value):
+    if value is None:
+        return
+    text=json.dumps(value)
+    sys.stderr.write(str(value)+"\n")
+    sys.stderr.write(text+"\n")
+    assert text.startswith('{') and text.endswith('}')
+    r=etree.Element(toNS(childTagName))
+    r.text=text[1:-1] # Get rid of brackets
+    node.append(r)
+    return r
     
     
 def save_message_type(mt):
     n=_type_to_element(mt)
 
     n.attrib["id"]=mt.id
-    save_typed_struct_spec_contents(n, mt.message)
+    save_typed_struct_spec(n, "p:Message", mt.message)
+    save_metadata(n, "p:MetaData", mt.metadata)
 
     return n
 
@@ -107,15 +119,18 @@ def save_device_type(dt):
     n.attrib["id"]=dt.id
     save_typed_struct_spec(n, "p:Properties", dt.properties)
     save_typed_struct_spec(n, "p:State", dt.state)
+    save_metadata(n, "p:MetaData", dt.metadata)
         
     for p in dt.inputs_by_index:
         pn=_type_to_element(p)
         pn.attrib["name"]=p.name
-        pn.attrib["edgeTypeId"]=p.message_type.id
+        pn.attrib["messageTypeId"]=p.message_type.id
         if(p.properties):
             save_typed_struct_spec(pn, "p:Properties", p.properties)
         if(p.state):
             save_typed_struct_spec(pn, "p:State", p.state)
+
+        save_metadata(pn, "p:MetaData", p.metadata)
 
         h=etree.Element(toNS("p:OnReceive"))
         h.text = etree.CDATA(p.receive_handler)
@@ -126,12 +141,19 @@ def save_device_type(dt):
     for p in dt.outputs_by_index:
         pn=_type_to_element(p)
         pn.attrib["name"]=p.name
-        pn.attrib["edgeTypeId"]=p.message_type.id
+        pn.attrib["messageTypeId"]=p.message_type.id
+
+        save_metadata(pn, "p:MetaData", p.metadata)
+        
         h=etree.Element(toNS("p:OnSend"))
         h.text = etree.CDATA(p.send_handler)
         #h.text = p.send_handler
         pn.append(h)
         n.append(pn)
+
+    pn=etree.Element(toNS("ReadyToSend"))
+    pn.text=etree.CDATA(dt.ready_to_send_handler)
+    n.append(pn)
 
     return n     
 
@@ -143,8 +165,7 @@ def save_device_instance(di):
     n.attrib["type"]=di.device_type.id
     save_typed_struct_instance(n, "p:P", di.device_type.properties, di.properties)
 
-    if di.native_location is not None:
-        n.attrib["nativeLocation"]= ",".join([str(l) for l in di.native_location])
+    save_metadata(n, "p:M", di.metadata)
 
     return n
 
@@ -162,6 +183,9 @@ def save_edge_instance(ei):
     
     save_typed_struct_instance(n, "p:P", ei.dst_port.properties, ei.properties)
 
+    save_metadata(n, "p:M", ei.metadata)
+
+
     return n
 
 
@@ -169,10 +193,10 @@ def save_graph_type(graph):
     gn = _type_to_element(graph);
     gn.attrib["id"]=graph.id
 
-    if graph.native_dimension!=None and graph.native_dimension!=0:
-        gn.attrib["nativeDimension"]=str(graph.native_dimension)
 
     save_typed_struct_spec(gn, "p:Properties", graph.properties)
+
+    save_metadata(gn, "p:MetaData", graph.metadata)
 
     if graph.shared_code:
         for code in graph.shared_code:
@@ -198,6 +222,8 @@ def save_graph_instance(graph):
     gn.attrib["graphTypeId"]=graph.graph_type.id
 
     save_typed_struct_instance(gn, "p:Properties", graph.graph_type.properties ,graph.properties)
+
+    save_metadata(gn, "p:MetaData", graph.metadata)
     
     din = etree.Element(toNS("p:DeviceInstances"))
     gn.append(din)

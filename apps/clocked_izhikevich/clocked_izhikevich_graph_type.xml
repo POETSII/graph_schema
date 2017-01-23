@@ -35,7 +35,9 @@
       </MessageType>
 
       <MessageType id="spike">
-        <Scalar type="bool" name="fired" />
+        <Message>
+          <Scalar type="int8_t" name="fired" />
+       </Message>
     </MessageType>
 
       <MessageType id="tick">
@@ -112,10 +114,10 @@
 
           <Scalar name="I" type="float" />
           <Scalar name="Icount" type="uint32_t" />
-          <Scalar name="fireValue" type="bool" />
+          <Scalar name="fireValue" type="int8_t" />
           
-          <Scalar name="waitTick" type="bool" />
-          <Scalar name="sentSpike" type="bool" />
+          <Scalar name="waitTick" type="int8_t" />
+          <Scalar name="sentSpike" type="int8_t" />
         </State>
         
         
@@ -132,6 +134,8 @@
           deviceState->Icount=deviceProperties->fanin;
           deviceState->waitTick=false;
           deviceState->sentSpike=true;
+          
+          handler_log(3, "sentSpike=%d, waitTick=%d, Icount = %d, fanin=%d", deviceState->sentSpike, deviceState->waitTick, deviceState->Icount, deviceProperties->fanin);
           ]]>
           </OnReceive>
         </InputPort>
@@ -139,9 +143,9 @@
         <ReadyToSend><![CDATA[
         *readyToSend=0;
         if(deviceState->Icount==deviceProperties->fanin && !deviceState->waitTick && deviceState->sentSpike ){
-            *readyToSend |= OUTPUT_INDEX_tick;
-        }else if(!deviceState->waitTick && !deviceState->sendSpike){
-            *readyToSend |= OUTPUT_INDEX_spike;
+            *readyToSend |= OUTPUT_FLAG_tock;
+        }else if(!deviceState->waitTick && !deviceState->sentSpike){
+            *readyToSend |= OUTPUT_FLAG_fire;
         }
         ]]></ReadyToSend>
         
@@ -170,19 +174,27 @@
           deviceState->Icount=0;
           deviceState->sentSpike=false;
           deviceState->waitTick=true;
+          handler_log(3, "sentSpike=%d, waitTick=%d, Icount = %d, fanin=%d", deviceState->sentSpike, deviceState->waitTick, deviceState->Icount, deviceProperties->fanin);
+
           ]]></OnSend>
         </OutputPort>
 
         <InputPort name="tick" messageTypeId="tick">
           <OnReceive><![CDATA[
-          assert(deviceState->waitTick && !deviceState->sentSpike);
+          handler_log(3, "sentSpike=%d, waitTick=%d, Icount = %d, fanin=%d", deviceState->sentSpike, deviceState->waitTick, deviceState->Icount, deviceProperties->fanin);
+
+          assert(deviceState->waitTick);
+          assert(!deviceState->sentSpike);
           deviceState->waitTick=false;
           ]]></OnReceive>
         </InputPort>
 
         <OutputPort name="fire" messageTypeId="spike">
           <OnSend><![CDATA[
-          assert(!deviceState->waitTick && !deviceState->sentSpike);
+          handler_log(3, "sentSpike=%d, waitTick=%d, Icount = %d, fanin=%d", deviceState->sentSpike, deviceState->waitTick, deviceState->Icount, deviceProperties->fanin);
+          
+          assert(!deviceState->waitTick);
+          assert(!deviceState->sentSpike);
           message->fired=deviceState->fireValue;
           deviceState->sentSpike=true;
           ]]></OnSend>
@@ -201,7 +213,7 @@
             deviceState->I += edgeProperties->weight;
           }
 
-          handler_log(3, "Icount = %d, fanin=%d", deviceState->Icount, deviceProperties->fanin);
+          handler_log(3, "sentSpike=%d, waitTick=%d, Icount = %d, fanin=%d", deviceState->sentSpike, deviceState->waitTick, deviceState->Icount, deviceProperties->fanin);
           ]]></OnReceive>
         </InputPort>
 
@@ -219,11 +231,11 @@
         <InputPort name="__init__" messageTypeId="__init__">
           <OnReceive><![CDATA[
           deviceState->waitCount = deviceProperties->neuronCount;
-          handler_log(3,"__init__");
+          handler_log(3,"waitCount=%d, neuronCount=%d", deviceState->waitCount, deviceProperties->neuronCount);
           ]]></OnReceive>
         </InputPort>
 
-        <ReadyToSend><![CDATA[[
+        <ReadyToSend><![CDATA[
         *readyToSend = deviceState->waitCount==0 ? OUTPUT_FLAG_tick : 0;
         ]]></ReadyToSend>
 
@@ -237,9 +249,9 @@
 
         <OutputPort name="tick" messageTypeId="tick">
           <OnSend><![CDATA[
+          handler_log(3,"tick : waitCount = %d\n", deviceState->waitCount);
           assert(deviceState->waitCount==0);
           deviceState->waitCount=deviceProperties->neuronCount;
-          handler_log(3,"tick : waitCount = %d\n", deviceState->waitCount);
           ]]></OnSend>
         </OutputPort>
 

@@ -293,7 +293,7 @@ public:
     const typed_data_t *graphProperties,
     const typed_data_t *deviceProperties,
     const typed_data_t *deviceState
-  );
+  ) const=0;
 };
 
 class GraphType
@@ -303,8 +303,6 @@ public:
   {}
 
   virtual const std::string &getId() const=0;
-
-  virtual unsigned getNativeDimension() const=0;
 
   virtual const TypedDataSpecPtr getPropertiesSpec() const=0;
 

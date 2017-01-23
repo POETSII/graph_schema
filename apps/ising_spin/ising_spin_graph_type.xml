@@ -1,9 +1,13 @@
 <?xml version="1.0"?>
 <Graph xmlns="http://TODO.org/POETS/virtual-graph-schema-v1">
-  <GraphType id="ising_spin" nativeDimension="2">
+  <GraphType id="ising_spin">
     <!-- This is supposed to implement the method from [lubachevsky-87-asynchronous-ising-spin-models]:
 	 "Efficient Parallel Simulations of Asynchronous Cellular Arrays", 1987, Boris D. Lubachevsky -->
 
+    <MetaData>
+      "nativeDimension":2
+    </MetaData>
+    
     <Properties>
       <Scalar type="float" name="endTime" value="10" />
       <Scalar type="uint32_t" name="width" />
@@ -65,8 +69,10 @@
       </MessageType>
 
       <MessageType id="update">
+	<Message>
 	  <Scalar type="float" name="time" value="0" />
 	  <Scalar type="uint32_t" name="spin" /> <!-- By implication, it had the opposite spin before-hand -->
+	</Message>
       </MessageType>
     </MessageTypes>
 
@@ -127,11 +133,11 @@
 
 	  handler_log(3, "next_t = %g, next_spin = %d", deviceState->times[0], deviceState->spins[0]);
 
-	  deviceState->rts = RTS_FLAG_update;
+	  deviceState->rts = RTS_FLAG_cell_out;
 	  for(unsigned i=1; i<5; i++){
 	    handler_log(3, "   times[%d] = %g\n", deviceState->times[i]);
 	    if(deviceState->times[0] >= deviceState->times[i]){
-              requestSend_out = false; // We are not the earliest cell in neighbourhood
+              deviceState->rts=0; // We are not the earliest cell in neighbourhood
 	    }
 	  }
 	  ]]>
@@ -140,8 +146,8 @@
 
 	<InputPort name="__print__" messageTypeId="__print__">
 	  <OnReceive><![CDATA[
-	  handler_log(0, "ready=%d, times={%g,%g,%g,%g,%g}",
-	    requestSend_out,
+	  handler_log(0, "ready=%x, times={%g,%g,%g,%g,%g}",
+	    deviceState->rts,
 	    deviceState->times[0], deviceState->times[1], deviceState->times[2], deviceState->times[3], deviceState->times[4]);
 	  ]]></OnReceive>
 	</InputPort>
@@ -164,7 +170,7 @@
 	    handler_log(4, "from %d, new_time = %g, new_spin  %d", edgeProperties->direction, message->time, message->spin);
 	  }
 
-	  deviceState->rts = RTS_FLAG_update;
+	  deviceState->rts = RTS_FLAG_cell_out;
 
 	  for(unsigned i=1; i<5; i++){
             if(deviceState->times[i] < deviceState->times[0]){
@@ -183,7 +189,7 @@
 
 	  // Check if simulation has finished. If so do nothing
 	  if(deviceState->times[0] >= graphProperties->endTime){
-	    *cancelSend=true;
+	    *doSend=false;
 	  }
 
 	  float prevTime=deviceState->times[0];
@@ -199,14 +205,14 @@
 
           handler_log(3, "prev_t = %g, next_t = %g, curr_spin = %d", prevTime, deviceState->times[0], deviceState->spins[0]);
 
-	  deviceState->rts = RTS_FLAG_update;
+	  deviceState->rts = RTS_FLAG_cell_out;
 	  for(unsigned i=1; i<5; i++){
             if(deviceState->times[0] > deviceState->times[i]){
 	      handler_log(4, "  time[%d] = %g < time[0] = %g", i, deviceState->times[i], deviceState->times[0]);
 	      deviceState->rts = 0;
             }
 	    }
-	    handler_log(3, "sendAgain = %d\n", requestSend_out);
+	    handler_log(3, "sendAgain = %x\n", deviceState->rts);
 	  ]]></OnSend>
 	</OutputPort>
 

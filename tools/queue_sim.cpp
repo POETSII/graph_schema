@@ -757,7 +757,7 @@ int main(int argc, char *argv[])
 
     unsigned statsDelta=1;
 
-    unsigned maxSteps=INT_MAX;
+    int maxSteps=INT_MAX;
 
     double probSend=0.9;
 

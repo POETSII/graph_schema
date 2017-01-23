@@ -14,13 +14,23 @@ class ScalarTypedDataSpec(TypedDataSpec):
         if self.type=="int32_t":
             res=int(value)
             assert(-2**31 <= res < 2**31)
+        elif self.type=="int16_t":
+            res=int(value)
+            assert(-2**15 <= res < 2**15)
+        elif self.type=="int8_t":
+            res=int(value)
+            assert(-2**7 <= res < 2**7)
         elif self.type=="uint32_t":
             res=int(value)
             assert(0 <= res < 2**32)
+        elif self.type=="uint16_t":
+            res=int(value)
+            assert(0 <= res < 2**16)
+        elif self.type=="uint8_t":
+            res=int(value)
+            assert(0 <= res < 2**8)
         elif self.type=="float":
             res=float(value)
-        elif self.type=="bool":
-            res=bool(value)
         else:
             assert False, "Unknown data type {}.".format(self.type)
         return res
@@ -176,37 +186,39 @@ def is_refinement_compatible(proto,inst):
     
 
 class MessageType(object):
-    def __init__(self,parent,id,message):
+    def __init__(self,parent,id,message,metadata):
         self.id=id
         self.parent=parent
         self.message=message
+        self.metadata=metadata
     
 
 class Port(object):
-    def __init__(self,parent,name,message_type,source_file,source_line):
+    def __init__(self,parent,name,message_type,metadata,source_file,source_line):
         self.parent=parent
         self.name=name
         self.message_type=message_type
+        self.metadata=metadata
         self.source_file=source_file
         self.source_line=source_line
 
     
 class InputPort(Port):
-    def __init__(self,parent,name,message_type,properties,state,receive_handler,source_file=None,source_line=None):
-        Port.__init__(self,parent,name,message_type,source_file,source_line)
+    def __init__(self,parent,name,message_type,properties,state,metadata,receive_handler,source_file=None,source_line=None):
+        Port.__init__(self,parent,name,message_type,metadata,source_file,source_line)
         self.properties=properties
         self.state=state
         self.receive_handler=receive_handler
 
     
 class OutputPort(Port):
-    def __init__(self,parent,name,message_type,send_handler,source_file,source_line):
-        Port.__init__(self,parent,name,message_type,source_file,source_line)
+    def __init__(self,parent,name,message_type,metadata,send_handler,source_file,source_line):
+        Port.__init__(self,parent,name,message_type,metadata,source_file,source_line)
         self.send_handler=send_handler
     
             
 class DeviceType(object):
-    def __init__(self,parent,id,state,properties):
+    def __init__(self,parent,id,properties,state,metadata=None):
         self.id=id
         self.parent=parent
         self.state=state
@@ -216,39 +228,40 @@ class DeviceType(object):
         self.outputs={}
         self.outputs_by_index=[]
         self.ports={}
+        self.metadata=metadata
 
-    def add_input(self,name,message_type,properties,state,receive_handler,source_file=None,source_line={}):
+    def add_input(self,name,message_type,properties,state,metadata,receive_handler,source_file=None,source_line={}):
         if name in self.ports:
             raise GraphDescriptionError("Duplicate port {} on device type {}".format(name,self.id))
         if message_type.id not in self.parent.message_types:
             raise GraphDescriptionError("Unregistered message type {} on port {} of device type {}".format(message_type.id,name,self.id))
         if message_type != self.parent.message_types[message_type.id]:
             raise GraphDescriptionError("Incorrect message type object {} on port {} of device type {}".format(message_type.id,name,self.id))
-        p=InputPort(self, name, self.parent.message_types[message_type.id], properties, state, receive_handler, source_file, source_line)
+        p=InputPort(self, name, self.parent.message_types[message_type.id], properties, state, metadata, receive_handler, source_file, source_line)
         self.inputs[name]=p
         self.inputs_by_index.append(p)
         self.ports[name]=p
 
-    def add_output(self,name,message_type,send_handler,source_file=None,source_line=None):
+    def add_output(self,name,message_type,metadata,send_handler,source_file=None,source_line=None):
         if name in self.ports:
             raise GraphDescriptionError("Duplicate port {} on device type {}".format(name,self.id))
         if message_type.id not in self.parent.message_types:
             raise GraphDescriptionError("Unregistered message type {} on port {} of device type {}".format(message_type.id,name,self.id))
         if message_type != self.parent.message_types[message_type.id]:
             raise GraphDescriptionError("Incorrect message type object {} on port {} of device type {}".format(message_type.id,name,self.id))
-        p=OutputPort(self, name, self.parent.message_types[message_type.id], send_handler, source_file, source_line)
+        p=OutputPort(self, name, self.parent.message_types[message_type.id], metadata, send_handler, source_file, source_line)
         self.outputs[name]=p
         self.outputs_by_index.append(p)
         self.ports[name]=p
 
 
 class GraphType(object):
-    def __init__(self,id,native_dimension,properties,shared_code):
+    def __init__(self,id,properties,metadata,shared_code):
         self.id=id
-        self.native_dimension=native_dimension
         if properties:
             assert isinstance(properties,TupleTypedDataSpec), "Expected TupleTypedDataSpec, got={}".format(properties)
         self.properties=properties
+        self.metadata=metadata
         self.shared_code=shared_code
         self.device_types={}
         self.message_types={}
@@ -268,8 +281,8 @@ class GraphTypeReference(object):
         self.id=id
         self.src=src
         
-        self.native_dimension=native_dimension
         self.properties=properties
+        self.metadata=metadata
         self.device_types={}
         self.message_types={}
 
@@ -297,19 +310,19 @@ class GraphTypeReference(object):
 
         
 class DeviceInstance(object):
-    def __init__(self,parent,id,device_type,native_location,properties):
+    def __init__(self,parent,id,device_type,properties,metadata=None):
         if not is_refinement_compatible(device_type.properties,properties):
             raise GraphDescriptionError("Properties not compatible with device type properties: proto={}, value={}".format(device_type.properties, properties))
 
         self.parent=parent
         self.id=id
         self.device_type=device_type
-        self.native_location=native_location
         self.properties=properties
+        self.metadata=metadata
 
         
 class EdgeInstance(object):
-    def __init__(self,parent,dst_device,dst_port_name,src_device,src_port_name,properties):
+    def __init__(self,parent,dst_device,dst_port_name,src_device,src_port_name,properties=None,metadata=None):
         self.parent=parent
 
         if dst_port_name not in dst_device.device_type.inputs:
@@ -334,14 +347,16 @@ class EdgeInstance(object):
         self.dst_port=dst_port
         self.src_port=src_port
         self.properties=properties
+        self.metadata=metadata
         
 
 class GraphInstance:
-    def __init__(self,id,graph_type,properties=None):
+    def __init__(self,id,graph_type,properties=None,metadata=None):
         self.id=id
         self.graph_type=graph_type
         assert is_refinement_compatible(graph_type.properties,properties), "value {} is not a refinement of {}".format(properties,graph_type.properties)
         self.properties=properties
+        self.metadata=metadata
         self.device_instances={}
         self.edge_instances={}
         self._validated=True

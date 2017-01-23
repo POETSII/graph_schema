@@ -58,7 +58,7 @@ for x in range(0,n):
     sys.stderr.write(" Devices : Row {} of {}\n".format(x, n))
     for y in range(0,n):
         devProps={"x":x, "y":y}
-        di=DeviceInstance(res,"n_{}_{}".format(x,y), devType, [x,y], devProps)
+        di=DeviceInstance(res,"n_{}_{}".format(x,y), devType, devProps)
         nodes[(x,y)]=di
         res.add_device_instance(di)
         

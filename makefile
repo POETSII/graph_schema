@@ -6,6 +6,7 @@ SHELL=/bin/bash
 
 CPPFLAGS += -I include -W -Wall -Wno-unused-parameter -Wno-unused-variable
 CPPFLAGS += $(shell pkg-config --cflags libxml++-2.6)
+CPPFLAGS += -Wno-unused-local-typedefs
 
 LDFLAGS += $(shell pkg-config --libs libxml++-2.6)
 
@@ -42,7 +43,7 @@ $(TRANG) : external/trang-20091111.zip
 $(JING) : external/jing-20081028.zip
 	(cd external && unzip -o jing-20081028.zip)
 	touch $@
-	
+
 $(RNG_SVG) : external/rng-svg-latest.zip
 	mkdir external/rng-svg
 	(cd external/rng-svg && unzip -o ../rng-svg-latest)
@@ -67,8 +68,8 @@ derived/%.rng derived/%.xsd : master/%.rnc $(TRANG) $(JING) $(wildcard master/%-
 	# Update the derived shemas
 	java -jar $(TRANG) -I rnc -O rng master/$*.rnc derived/$*.rng
 	java -jar $(TRANG) -I rnc -O xsd master/$*.rnc derived/$*.xsd
-	
-		
+
+
 
 build-virtual-schema-v1 : derived/virtual-graph-schema-v1.rng derived/virtual-graph-schema-v1.xsd
 
@@ -125,6 +126,7 @@ define provider_rules_template
 
 providers/$1.graph.cpp : apps/$1/$1_graph_type.xml
 	mkdir -p providers
+	java -jar $(JING) -c master/virtual-graph-schema-v1.rnc $<
 	$$(PYTHON) tools/render_graph_as_cpp.py apps/$1/$1_graph_type.xml providers/$1.graph.cpp
 
 providers/$1.graph.so : providers/$1.graph.cpp

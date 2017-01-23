@@ -81,7 +81,7 @@ struct EpochSim
     return 0;
   }
 
-  virtual uint64_t onDeviceInstance(uint64_t gId, const DeviceTypePtr &dt, const std::string &id, const TypedDataPtr &deviceProperties, const double */*nativeLocation*/) override
+  virtual uint64_t onDeviceInstance(uint64_t gId, const DeviceTypePtr &dt, const std::string &id, const TypedDataPtr &deviceProperties) override
   {
     TypedDataPtr state=dt->getStateSpec()->create();
     device d;
@@ -126,11 +126,16 @@ struct EpochSim
 
   unsigned pick_bit(unsigned n, uint32_t bits, unsigned rot)
   {
+    if(bits==0)
+      return (unsigned)-1;
+      
     for(unsigned i=0;i<n;i++){
       unsigned s=(i+rot)%n;
       if( (bits>>s)&1 )
         return s;
     }
+    
+    assert(0);
     return (unsigned)-1;
   }
   
@@ -252,8 +257,14 @@ struct EpochSim
 
       bool doSend=true;
       {
+        uint32_t check=src.type->calcReadyToSend(&sendServices, m_graphProperties.get(), src.properties.get(), src.state.get());
+        assert(check);
+        assert( (check>>sel) & 1);
+        
         sendServices.setSender(src.name, src.outputNames[sel]);
         output->onSend(&sendServices, m_graphProperties.get(), src.properties.get(), src.state.get(), message.get(), &doSend);
+        
+        src.readyToSend = src.type->calcReadyToSend(&sendServices, m_graphProperties.get(), src.properties.get(), src.state.get());
       }
 
       if(!doSend){
@@ -317,7 +328,7 @@ int main(int argc, char *argv[])
 
     unsigned statsDelta=1;
 
-    unsigned maxSteps=INT_MAX;
+    int maxSteps=INT_MAX;
 
     double probSend=0.9;
 
@@ -413,9 +424,9 @@ int main(int argc, char *argv[])
     }
     int nextStats=0;
     int nextSnapshot=snapshotDelta ? snapshotDelta-1 : -1;
-    unsigned snapshotSequenceNum=1;
+    int snapshotSequenceNum=1;
 
-    for(unsigned i=0; i<maxSteps; i++){
+    for(int i=0; i<maxSteps; i++){
       bool running = graph.step(rng, probSend);
 
       if(logLevel>2 || i==nextStats){

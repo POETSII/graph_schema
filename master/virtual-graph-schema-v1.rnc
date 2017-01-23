@@ -821,7 +821,7 @@ grammar {
         ## and will connect to the supervisor. Both cannot be missing, as that
         ## would connect from a supervisor output to a supervisor input, but
         ## a supervisor only exists in the context of devices being managed.
-        attribute path { xsd:string { pattern="[a-zA-Z0-9]*:[a-zA-Z0-9]+-[a-zA-Z0-9]*:[a-zA-Z0-9]+" } } ?,
+        attribute path { xsd:string { pattern="[_a-zA-Z0-9]*:[_a-zA-Z0-9]+-[_a-zA-Z0-9]*:[_a-zA-Z0-9]+" } } ?,
         
         ## Read-only properties associated with the destination (input port) of the edge instance
         ##
@@ -1001,7 +1001,7 @@ grammar {
             ## TODO: what exactly are the semantics here?
             ##
             ## Special case for an array of char, where the string will be converted to chars
-            attribute default { text }
+            attribute default { text } ?
           )
           |
           ## Allows an array of any data-type

@@ -20,7 +20,7 @@ class XMLSyntaxError(Exception):
         if node==None:
             Exception.__init__(self, "Parse error at line <unknown> : {}".format(msg))
         else:
-            Exception.__init__(self, "Parse error at line {} : {}".format(node.sourceline,msg))
+            Exception.__init__(self, "Parse error at line {} : {} in element {}".format(node.sourceline,msg,str(node)))
         self.node=node
         self.outer=outer
         
@@ -97,13 +97,27 @@ def load_struct_instance(spec,dt):
     value=json.loads(text)
     assert(spec.is_refinement_compatible(value))
     return value
+
+def load_metadata(parent, name):
+    metadata=None
+    metadataNode=parent.find(name,ns)
+    if metadataNode is not None:
+        metadata=json.loads("{"+metadataNode.text+"}")
+
+    return metadata
+
     
 def load_message_type(parent,dt):
     id=get_attrib(dt,"id")
-    try:    
-        message=load_struct_spec(id+"_message", dt)
+    try:
+        message=None
+        messageNode=dt.find("p:Message",ns)
+        if messageNode is not None:
+            message=load_struct_spec(id+"_message", messageNode)
 
-        return MessageType(parent,id,message)
+        metadata=load_metadata(dt, "p:MetaData")
+
+        return MessageType(parent,id,message,metadata)
     except XMLSyntaxError:
             raise
     except Exception as e:
@@ -123,7 +137,9 @@ def load_device_type(graph,dtNode,sourceFile):
     if propertiesNode is not None:
         properties=load_struct_spec(id+"_properties", propertiesNode)
 
-    dt=DeviceType(graph,id,state,properties)
+    metadata=load_metadata(dtNode,"p:MetaData")
+
+    dt=DeviceType(graph,id,properties,state,metadata)
         
     for p in dtNode.findall("p:InputPort",ns):
         name=get_attrib(p,"name")
@@ -147,9 +163,11 @@ def load_device_type(graph,dtNode,sourceFile):
                 properties=load_struct_spec(id+"_properties", propertiesNode)
         except Exception as e:
             raise XMLSyntaxError("Error while parsing properties of pin {} : {}".format(id,e),p,e)
+
+        pinMetadata=load_metadata(p,"p:MetaData")
         
         (handler,sourceLine)=get_child_text(p,"p:OnReceive")
-        dt.add_input(name,message_type,properties,state,handler,sourceFile,sourceLine)
+        dt.add_input(name,message_type,properties,state,pinMetadata, handler,sourceFile,sourceLine)
 
     for p in dtNode.findall("p:OutputPort",ns):
         name=get_attrib(p,"name")
@@ -157,8 +175,9 @@ def load_device_type(graph,dtNode,sourceFile):
         if message_type_id not in graph.message_types:
             raise XMLSyntaxError("Unknown messageTypeId {}".format(message_type_id),p)
         message_type=graph.message_types[message_type_id]
+        pinMetadata=load_metadata(p,"p:MetaData")
         (handler,sourceLine)=get_child_text(p,"p:OnSend")
-        dt.add_output(name,message_type,handler,sourceFile,sourceLine)
+        dt.add_output(name,message_type,pinMetadata,handler,sourceFile,sourceLine)
         
     (handler,sourceLine)=get_child_text(dtNode,"p:ReadyToSend")
     dt.ready_to_send_handler=handler
@@ -170,22 +189,18 @@ def load_device_type(graph,dtNode,sourceFile):
 def load_graph_type(graphNode, sourcePath):
     id=get_attrib(graphNode,"id")
 
-    dimension=get_attrib_optional(graphNode, "nativeDimension")
-    if dimension:
-        dimension=int(dimension)
-    else:
-        dimension=0
-        
     properties=None
     propertiesNode=graphNode.find("p:Properties",ns)
     if propertiesNode is not None:
         properties=load_struct_spec(id+"_properties", propertiesNode)
 
+    metadata=load_metadata(graphNode,"p:MetaData")
+        
     shared_code=[]
     for n in graphNode.findall("p:SharedCode",ns):
         shared_code.append(n.text)
 
-    graphType=GraphType(id,dimension,properties,shared_code)
+    graphType=GraphType(id,properties,metadata,shared_code)
         
     for etNode in graphNode.findall("p:MessageTypes/p:*",ns):
         et=load_message_type(graphType,etNode)
@@ -222,14 +237,6 @@ def load_graph_type_reference(graphNode,basePath):
 def load_device_instance(graph,diNode):
     id=get_attrib(diNode,"id")
 
-    nativeLocationStr=get_attrib_optional(diNode,"nativeLocation")
-    if(nativeLocationStr):
-        nativeLocation=[float(p) for p in nativeLocationStr.split(',')]
-        if len(nativeLocation) != graph.graph_type.native_dimension:
-            raise XMLSyntaxError("native location '{}' does not match graph dimension {}.".format(nativeLocationStr,graph.graph_type.native_dimension), diNode)
-    else:
-        nativeLocation=None
-    
     device_type_id=get_attrib(diNode,"type")
     if device_type_id not in graph.graph_type.device_types:
         raise XMLSyntaxError("Unknown device type id {}".format(device_type_id))
@@ -240,7 +247,9 @@ def load_device_instance(graph,diNode):
     if propertiesNode is not None:
         properties=load_struct_instance(device_type.properties, propertiesNode)
 
-    return DeviceInstance(graph,id,device_type,nativeLocation,properties)
+    metadata=load_metadata(diNode,"p:M")
+
+    return DeviceInstance(graph,id,device_type,properties,metadata)
 
 def split_endpoint(endpoint,node):
     parts=endpoint.split(':')
@@ -275,7 +284,9 @@ def load_edge_instance(graph,eiNode):
         spec=dst_device.device_type.inputs[dst_port_name].properties
         properties=load_struct_instance(spec, propertiesNode[0])
 
-    return EdgeInstance(graph,dst_device,dst_port_name,src_device,src_port_name,properties)
+    metadata=load_metadata(eiNode,"p:M")
+        
+    return EdgeInstance(graph,dst_device,dst_port_name,src_device,src_port_name,properties,metadata)
 
 def load_graph_instance(graphTypes, graphNode):
     id=get_attrib(graphNode,"id")
@@ -288,7 +299,9 @@ def load_graph_instance(graphTypes, graphNode):
         assert graphType.properties
         properties=load_struct_instance(graphType.properties, propertiesNode)
 
-    graph=GraphInstance(id,graphType,properties)
+    metadata=load_metadata(graphNode, "p:MetaData")
+
+    graph=GraphInstance(id,graphType,properties,metadata)
 
     for diNode in graphNode.findall("p:DeviceInstances/p:DevI",ns):
         di=load_device_instance(graph,diNode)
@@ -323,15 +336,15 @@ def load_graph_types_and_instances(src,basePath):
             
         for giNode in graphsNode.findall("p:GraphInstance",ns): 
             sys.stderr.write("Loading graph\n")
-            g=load_graph_instance(graphTypes, giNode, basePath)
+            g=load_graph_instance(graphTypes, giNode)
             graphs[g.id]=g
 
         return (graphTypes,graphs)
 
     except XMLSyntaxError as e:
-        print(e)
+        sys.stderr.write(str(e)+"\n")
         if e.node is not None:
-            print(etree.tostring(e.node, pretty_print = True, encoding='utf-8').decode("utf-8"))
+            sys.stderr.write(etree.tostring(e.node, pretty_print = True, encoding='utf-8').decode("utf-8")+"\n")
         raise e
 
 def load_graph(src,basePath):

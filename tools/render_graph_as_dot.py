@@ -20,9 +20,9 @@ deviceTypeToShape={}
 edgeTypeToColor={}
 
 if args.graph=="-":
-    graph=load_graph(sys.stdin)
+    graph=load_graph(sys.stdin, "<stdin>")
 else:
-    graph=load_graph(args.graph)
+    graph=load_graph(args.graph, args.graph)
 
 
 bind_dev=[]
@@ -45,11 +45,11 @@ else:
     for id in graph.graph_type.device_types.keys():
         deviceTypeToShape[id]=shapes[0]
 
-if len(graph.graph_type.edge_types) <= len(colors):
-    for id in graph.graph_type.edge_types.keys():
+if len(graph.graph_type.message_types) <= len(colors):
+    for id in graph.graph_type.message_types.keys():
         edgeTypeToColor[id]=colors.pop(0)
 else:
-    for id in graph.graph_type.edge_types.keys():
+    for id in graph.graph_type.message_types.keys():
         edgeTypeToColor[id]="black"
 
 
@@ -100,7 +100,7 @@ def write_graph(dst, graph,devStates=None,edgeStates=None):
     minFirings={}
     maxFirings={}
     for (id,es) in edgeStates.items():
-        et=graph.edge_instances[id].edge_type.id
+        et=graph.edge_instances[id].message_type.id
         firings=int(es[1])
         minFirings[et]=min(firings,  minFirings.get(et,firings))
         maxFirings[et]=max(firings,  maxFirings.get(et,firings))
@@ -125,9 +125,9 @@ def write_graph(dst, graph,devStates=None,edgeStates=None):
         shape=deviceTypeToShape[di.device_type.id]
         props.append('shape={}'.format(shape))
         
-        pos=di.native_location
-        if pos:
-            props.append('pos="{},{}"'.format(pos[0]*0.25,pos[1]*0.25))
+        #pos=di.native_location
+        #if pos:
+        #    props.append('pos="{},{}"'.format(pos[0]*0.25,pos[1]*0.25))
 
         for b in bind_dev:
             if b[0]=="*" or b[0]==di.device_type.id:
@@ -155,14 +155,14 @@ def write_graph(dst, graph,devStates=None,edgeStates=None):
             queue=stateTuple[2]
         
         props={}
-        props["color"]=edgeTypeToColor[ei.edge_type.id]
+        props["color"]=edgeTypeToColor[ei.message_type.id]
         if addLabels:
             props["headlabel"]=ei.dst_port.name
             props["taillabel"]=ei.src_port.name
-            props["label"]=ei.edge_type.id
+            props["label"]=ei.message_type.id
 
         for b in bind_edge:
-            if b[0]=="*" or b[0]==ei.edge_type.id:
+            if b[0]=="*" or b[0]==ei.message_type.id:
                 if b[1]=="property":
                     value=di.properties[b[2]]
                 elif b[1]=="state":

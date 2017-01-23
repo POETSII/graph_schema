@@ -61,8 +61,11 @@ Vagrant.configure(2) do |config|
   config.vm.provision "shell", inline: <<-SHELL
      sudo apt-get install -y libxml2-dev gdb g++ make libxml++2.6-dev libboost-dev python3.4 zip default-jre-headless python3-lxml curl
      
+     # Visualisation
+     sudo apt-get install -y graphviz
+     
      # Editors
-     sudo apt-get install emacs-nox screen
+     sudo apt-get install -y emacs-nox screen
      
      # Used to support generation of documentation from schema
      sudo apt-get install -y xsltproc ant libsaxon-java docbook docbook-xsl-ns pandoc

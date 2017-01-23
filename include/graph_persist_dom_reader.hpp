@@ -22,7 +22,7 @@ void split_path(const std::string &src, std::string &dstDevice, std::string &dst
 void loadGraph(Registry *registry, xmlpp::Element *parent, GraphLoadEvents *events)
 {
   xmlpp::Node::PrefixNsMap ns;
-  ns["g"]="http://TODO.org/POETS/virtual-graph-schema-v0";
+  ns["g"]="http://TODO.org/POETS/virtual-graph-schema-v1";
 
   auto *eGraph=find_single(parent, "./g:GraphInstance", ns);
   if(eGraph==0)
@@ -66,7 +66,7 @@ void loadGraph(Registry *registry, xmlpp::Element *parent, GraphLoadEvents *even
 
     std::string id=get_attribute_required(eDevice, "id");
     std::string deviceTypeId=get_attribute_required(eDevice, "type");
-
+    /*
     std::vector<double> nativeLocation;
     const double *nativeLocationPtr = 0;
     std::string nativeLocationStr=get_attribute_optional(eDevice, "nativeLocation");
@@ -88,6 +88,7 @@ void loadGraph(Registry *registry, xmlpp::Element *parent, GraphLoadEvents *even
 
       nativeLocationPtr = &nativeLocation[0];
     }
+    */
 
     auto dt=graphType->getDeviceType(deviceTypeId);
 
@@ -99,7 +100,7 @@ void loadGraph(Registry *registry, xmlpp::Element *parent, GraphLoadEvents *even
       deviceProperties=dt->getPropertiesSpec()->create();
     }
 
-    uint64_t dId=events->onDeviceInstance(gId, dt, id, deviceProperties, nativeLocationPtr);
+    uint64_t dId=events->onDeviceInstance(gId, dt, id, deviceProperties);
 
     devices.insert(std::make_pair( id, std::make_pair(dId, dt)));
   }

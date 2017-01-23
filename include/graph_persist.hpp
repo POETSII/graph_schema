@@ -41,8 +41,7 @@ public:
    uint64_t graphInst,
    const DeviceTypePtr &dt,
    const std::string &id,
-   const TypedDataPtr &properties,
-   const double *nativeLocation //! If null then no location, otherwise it will match graphType->getNativeDimension()
+   const TypedDataPtr &properties
   ) =0;
 
     //! The edge instances within the graph instance will follow
