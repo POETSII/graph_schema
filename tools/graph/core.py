@@ -201,7 +201,7 @@ class Port(object):
         self.metadata=metadata
         self.source_file=source_file
         self.source_line=source_line
-
+        
     
 class InputPort(Port):
     def __init__(self,parent,name,message_type,properties,state,metadata,receive_handler,source_file=None,source_line=None):
@@ -210,7 +210,6 @@ class InputPort(Port):
         self.state=state
         self.receive_handler=receive_handler
 
-    
 class OutputPort(Port):
     def __init__(self,parent,name,message_type,metadata,send_handler,source_file,source_line):
         Port.__init__(self,parent,name,message_type,metadata,source_file,source_line)

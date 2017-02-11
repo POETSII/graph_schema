@@ -1,12 +1,13 @@
 <?xml version="1.0"?>
 <Graph xmlns="http://TODO.org/POETS/virtual-graph-schema-v1">
-  <GraphType id="gals_izhikevich" nativeDimension="2">
+  <GraphType id="gals_izhikevich">
     <!-- This is not a true simulation as it does not guarantee that spikes will
 	 be integrated in the same time interval. An unfair orchestrator could
 	 also spin some neurons ahead, as each neuron only depends on the total
 	 number of updates, not on whether it is received an update from each
 	 neuron.
     -->
+	
 
     <Properties>
     </Properties>
@@ -35,111 +36,114 @@
 
     ]]></SharedCode>
 
-    <EdgeTypes>
-      <EdgeType id="__init__">
+    <MessageTypes>
+      <MessageType id="__init__">
 	<!-- This doesn't have any properties -->
-      </EdgeType>
+      </MessageType>
 
-      <EdgeType id="synapse">
-	<Properties>
-	  <Scalar type="float" name="weight" />
-	</Properties>
-	<Message>
-	  <Scalar type="bool" name="fired" />
-	</Message>
-      </EdgeType>
+      <MessageType id="synapse">	
+		<Message>
+		  <Scalar type="int8_t" name="fired" />
+		</Message>
+      </MessageType>
 
-    </EdgeTypes>
+    </MessageTypes>
 
     <DeviceTypes>
       <DeviceType id="neuron">
-	<Properties>
-	  <Scalar type="uint32_t" name="seed" />
+		<Properties>
+		  <Scalar type="uint32_t" name="seed" />
 
-	  <Scalar type="float" name="a" value="0" />
-	  <Scalar type="float" name="b" value="0" />
-	  <Scalar type="float" name="c" value="0" />
-	  <Scalar type="float" name="d" value="0" />
-	  <Scalar type="float" name="Ir" />
+		  <Scalar type="float" name="a" value="0" />
+		  <Scalar type="float" name="b" value="0" />
+		  <Scalar type="float" name="c" value="0" />
+		  <Scalar type="float" name="d" value="0" />
+		  <Scalar type="float" name="Ir" />
 
-	  <Scalar type="uint32_t" name="fanin" />
-	</Properties>
+		  <Scalar type="uint32_t" name="fanin" />
+		</Properties>
 
-	<State>
-	  <Scalar type="uint32_t" name="rng" />
+		<State>
+		  <Scalar type="uint32_t" name="rng" />
 
-	  <Scalar type="float" name="u" />
-	  <Scalar type="float" name="v" />
+		  <Scalar type="float" name="u" />
+		  <Scalar type="float" name="v" />
 
-	  <Scalar name="I" type="float" />
-	  <Scalar name="Icount" type="uint32_t" />
+		  <Scalar name="I" type="float" />
+		  <Scalar name="Icount" type="uint32_t" />
 
-	  <Scalar name="pendingFires" type="uint32_t" />
-	</State>
+		  <Scalar name="pendingFires" type="uint32_t" />
+		  
+		  <Scalar name="rts" type="uint32_t" />
+		</State>
 
-	<InputPort name="__init__" edgeTypeId="__init__">
-	  <OnReceive><![CDATA[
-	  deviceState->rng = deviceProperties->seed;
+		<InputPort name="__init__" messageTypeId="__init__">
+			
+		  <OnReceive><![CDATA[
+		  deviceState->rng = deviceProperties->seed;
 
-	  deviceState->v=-65;
-	  deviceState->u=deviceProperties->b * deviceState->v;
+		  deviceState->v=-65;
+		  deviceState->u=deviceProperties->b * deviceState->v;
 
-	  deviceState->I=deviceProperties->Ir * grng(deviceState->rng);
-	  deviceState->Icount=0;
+		  deviceState->I=deviceProperties->Ir * grng(deviceState->rng);
+		  deviceState->Icount=0;
 
-	  deviceState->pendingFires=1;
-	  requestSend_fire = true;
-	  ]]>
-	  </OnReceive>
-	</InputPort>
+		  deviceState->pendingFires=1;
+		  
+		  deviceState->rts = RTS_FLAG_fire;
+		  ]]>
+		  </OnReceive>
+		</InputPort>
 
-	<OutputPort name="fire" edgeTypeId="synapse">
-	  <OnSend><![CDATA[
-	  assert(deviceState->pendingFires > 0);
-	  
-	  float &v=deviceState->v;
-	  float &u=deviceState->u;
-	  float &I=deviceState->I;
+		<OutputPort name="fire" messageTypeId="synapse">
+		  <OnSend><![CDATA[
+		  assert(deviceState->pendingFires > 0);
+		  
+		  float &v=deviceState->v;
+		  float &u=deviceState->u;
+		  float &I=deviceState->I;
 
-	  v=v+0.5*(0.04*v*v+5*v+140-u+I); // step 0.5 ms
-	  v=v+0.5*(0.04*v*v+5*v+140-u+I); // for numerical
-	  u=u+deviceProperties->a*(deviceProperties->b*v-u);                 // stability
+		  v=v+0.5*(0.04*v*v+5*v+140-u+I); // step 0.5 ms
+		  v=v+0.5*(0.04*v*v+5*v+140-u+I); // for numerical
+		  u=u+deviceProperties->a*(deviceProperties->b*v-u);                 // stability
 
-	  message->fired = v >= 30;
-	  if(message->fired){
-	    v=deviceProperties->c;
-	    u += deviceProperties->d;
-	  }
+		  message->fired = v >= 30;
+		  if(message->fired){
+			v=deviceProperties->c;
+			u += deviceProperties->d;
+		  }
 
-	  deviceState->I=deviceProperties->Ir * grng(deviceState->rng);
-	  deviceState->Icount=0;
+		  deviceState->I=deviceProperties->Ir * grng(deviceState->rng);
+		  deviceState->Icount=0;
 
-	  deviceState->pendingFires--;
+		  deviceState->pendingFires--;
+		  ]]></OnSend>
+		</OutputPort>
 
-	  requestSend_fire=deviceState->pendingFires > 0;
-	  ]]></OnSend>
-	</OutputPort>
+		<InputPort name="input" messageTypeId="synapse">
+			<Properties>
+			<Scalar type="float" name="weight" />
+			</Properties>
+		
+		
+		  <OnReceive><![CDATA[
+		  deviceState->Icount++;
+		  if(message->fired){
+			deviceState->I += edgeProperties->weight;
+			}
 
-	<InputPort name="input" edgeTypeId="synapse">
-	  <OnReceive><![CDATA[
-	  deviceState->Icount++;
-	  if(message->fired){
-	    deviceState->I += edgeProperties->weight;
-	    }
+		  if(deviceState->Icount == deviceProperties->fanin){
+			deviceState->pendingFires++;
+			deviceState->Icount=0;
+		  }  
+		  handler_log(3, "Icount = %d, fanin=%d", deviceState->Icount, deviceProperties->fanin);
+		  ]]></OnReceive>
+		</InputPort>
 
-	  if(deviceState->Icount == deviceProperties->fanin){
-	    deviceState->pendingFires++;
-	    deviceState->Icount=0;
-	  }  
-
-          requestSend_fire = deviceState->pendingFires > 0;
-
-	  handler_log(3, "Icount = %d, fanin=%d, requestFire=%d", deviceState->Icount, deviceProperties->fanin, requestSend_fire);
-	  ]]></OnReceive>
-	</InputPort>
-
+		<ReadyToSend><![CDATA[
+		*readyToSend = (deviceState->pendingFires > 0) ? RTS_FLAG_fire : 0;
+		]]></ReadyToSend>
       </DeviceType>
-
 
     </DeviceTypes>
   </GraphType>

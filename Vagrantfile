@@ -59,7 +59,7 @@ Vagrant.configure(2) do |config|
   # Puppet, Chef, Ansible, Salt, and Docker are also available. Please see the
   # documentation for more information about their specific syntax and use.
   config.vm.provision "shell", inline: <<-SHELL
-     sudo apt-get install -y libxml2-dev gdb g++ make libxml++2.6-dev libboost-dev python3.4 zip default-jre-headless python3-lxml curl
+     sudo apt-get install -y libxml2-dev gdb g++ git make libxml++2.6-dev libboost-dev python3.4 zip default-jre-headless python3-lxml curl
      
      # Visualisation
      sudo apt-get install -y graphviz

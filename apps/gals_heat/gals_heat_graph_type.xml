@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
 <Graph xmlns="http://TODO.org/POETS/virtual-graph-schema-v1">
-  <GraphType id="gals_heat" nativeDimension="2">
+  <GraphType id="gals_heat">
     <!-- Locally synchronous heat.
 	 Each cell i has a time t, and all cells start at t=0.
 	 Initially each cell knows its own state, but not its
@@ -26,6 +26,10 @@
          and essentially need two copies. When we advance, the t+1 copy becomes
 	 the t version and t+1 is empty.
     -->
+	
+	<MetaData>
+	"native_dimension" : 2
+	</MetaData>
 
     <Properties>
       <Scalar type="uint32_t" name="maxTime" value="1000" />
@@ -47,12 +51,12 @@
 	
     ]]></SharedCode>
 
-    <EdgeTypes>
-      <EdgeType id="__init__">
+    <MessageTypes>
+      <MessageType id="__init__">
 		<!-- This doesn't have any properties -->
-      </EdgeType>
+      </MessageType>
 
-      <EdgeType id="update">
+      <MessageType id="update">
 		<Properties>
 			<Scalar type="fix16_t" name="w" />
 		</Properties>
@@ -60,9 +64,9 @@
 		  <Scalar type="uint32_t" name="t" />
 		  <Scalar type="fix16_t" name="v" />
 		</Message>
-      </EdgeType>
+      </MessageType>
 	  
-	  <EdgeType id="segment_add">
+	  <MessageType id="segment_add">
 		<Documentation>
 			This is used to send a new segment to a dirichlet boundary.
 		</Documentation>
@@ -74,8 +78,8 @@
 			<Scalar type="fix16_t" name="c1" />
 			<Scalar type="fix16_t" name="c2" />
 		</Message>
-	  </EdgeType>
-    </EdgeTypes>
+	  </MessageType>
+    </MessageTypes>
 
     <DeviceTypes>
 
@@ -154,7 +158,7 @@
 
 		</State>
 
-		<InputPort name="__init__" edgeTypeId="__init__">
+		<InputPort name="__init__" messageTypeId="__init__">
 		  <OnReceive><![CDATA[
 		  deviceState->t=0;
 		  deviceState->cs=deviceProperties->neighbours;
@@ -167,13 +171,13 @@
 		  ]]></OnReceive>
 		</InputPort>
 
-		<InputPort name="__print__" edgeTypeId="__init__">
+		<InputPort name="__print__" messageTypeId="__init__">
 		  <OnReceive><![CDATA[
 		  handler_log(0, "t = %d, v=%8g (seenNow=%d, seenNext=%d)", deviceState->t, deviceState->v, deviceState->cs, deviceState->ns);
 		  ]]></OnReceive>
 		</InputPort>
 
-		<InputPort name="in" edgeTypeId="update">
+		<InputPort name="in" messageTypeId="update">
 		  <OnReceive><![CDATA[
 		  if(message->t==deviceState->t){
 			deviceState->cs++;
@@ -185,7 +189,7 @@
 		  ]]></OnReceive>
 		</InputPort>
 
-		<OutputPort name="out" edgeTypeId="update">
+		<OutputPort name="out" messageTypeId="update">
 		  <OnSend><![CDATA[
 		  if(deviceState->t > graphProperties->maxTime){
 			 *cancelSend=true;
@@ -228,7 +232,7 @@
 		  <Scalar type="uint32_t" name="ns" />
 		</State>
 
-		<InputPort name="__init__" edgeTypeId="__init__">
+		<InputPort name="__init__" messageTypeId="__init__">
 		  <OnReceive><![CDATA[
 		  deviceState->v=0;
 		  deviceState->t=0;
@@ -244,14 +248,14 @@
 		  ]]></OnReceive>
 		</InputPort>
 
-		<InputPort name="__print__" edgeTypeId="__init__">
+		<InputPort name="__print__" messageTypeId="__init__">
 		  <OnReceive><![CDATA[
 		  handler_log(0, "t = %d, v=%8g (seenNow=%d, seenNext=%d)", deviceState->t, deviceState->v, deviceState->cs, deviceState->ns);
 		  ]]></OnReceive>
 		</InputPort>
 
 
-		<InputPort name="in" edgeTypeId="update">
+		<InputPort name="in" messageTypeId="update">
 		  <OnReceive><![CDATA[
 		  if(message->t==deviceState->t){
 			deviceState->ca = add(deviceState->ca, mul( edgeProperties->w , message->v ) );
@@ -268,7 +272,7 @@
 		  ]]></OnReceive>
 		</InputPort>
 
-		<OutputPort name="out" edgeTypeId="update">
+		<OutputPort name="out" messageTypeId="update">
 		  <OnSend><![CDATA[
 
 		  handler_log(3, "tNow=%d, sNow=%d, aNow=%.4f, sNext=%d, aNext=%f", deviceState->t, deviceState->cs, deviceState->ca, deviceState->ns, deviceState->na);

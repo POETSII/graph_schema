@@ -10,7 +10,7 @@ import random
 urand=random.random
 
 src=sys.argv[1]
-(graphTypes,graphInstances)=load_graph_types_and_instances(src)
+(graphTypes,graphInstances)=load_graph_types_and_instances(src, "<stdin>")
 
 Ne=80
 Ni=20

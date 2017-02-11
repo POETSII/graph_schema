@@ -1,0 +1,32 @@
+graph x[
+    device y[
+        
+        on_recv/y {{ 0 }}
+        
+        send/x {{
+            x=1;
+            y[x];
+            if(x){
+            
+            }
+        }}
+        on_recv/y/disable
+        
+        wait (( x==y ))
+        
+    ]
+    
+    device z[
+        input x : wibble;
+        output y : wobble;
+        
+        input z : kfjlsdkj [
+            property x : int32_t;
+        ]
+        
+        input zzz:kfjlsdkj [
+            property x : int32_t;
+            state f:float ;
+        ]
+    ]
+]
