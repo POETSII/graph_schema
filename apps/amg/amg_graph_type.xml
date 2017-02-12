@@ -1,6 +1,46 @@
 <?xml version="1.0"?>
-<Graphs>
+<Graphs xmlns="...">
+<GraphType id="amg">
+
+<MessageTypes>
+    <MessageType id="fine_to_coarse_msg">
+        <Scalar type="float" name="x" ><Doc>Current guess (may well be zero, but on lowest level is not)</Doc></Scalar>
+        <Scalar type="float" name="b" ><Doc>Value to solve for</Doc></Scalar>
+        <Scalar type="float" name="max_r"><Doc>Max residual of all finer nodes (though not for whole network)</Doc></Scalar>
+    </MessageType>
+</MessageTypes>
+
+<DeviceTypes>
+
+    <DeviceType id="root">
+        <Properties>
+            <Scalar type="int32_t" name="coarsePeers" />
+            <Scalar type="float" name="inv_Adiag" />
+        </Properties>
+        
+        <State>
+            <Scalar type="int32_t" name="coarseSeen" />
+            <Scalar type="float" name="coarseAcc" />
+            <Scalar type="float" name="maxResidual" />
+        </State>
+    
+        <ReadyToSend><![CDATA[
+        *readyToSend = deviceState->coarseSeen == deviceProperties->coarsePeers ? RTS_FLAG_coarse_out : 0;
+        ]]></ReadyToSend>
+        
+        <InputPort name="coarse_in" >
+            <Properties>
+                <Scalar type="float" name="AP" ><Doc>The component of A*P for this edge.</Doc></Scalar>
+            </Properties>
+            <SendHandler><![CDATA[
+            assert(deviceState->coarseSeen < deviceProperties->coarsePeers);
+            
+            ]]></SendHandler>
+        </InputPort>
+    </DeviceType>
+
+</DeviceTypes>
 
 
-
+</GraphType>
 </Graphs>

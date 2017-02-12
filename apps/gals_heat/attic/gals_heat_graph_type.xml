@@ -1,9 +1,7 @@
 <?xml version="1.0"?>
 <Graph xmlns="http://TODO.org/POETS/virtual-graph-schema-v1">
-  <GraphType id="gals_heat" >
-	<Doc><![CDATA[
-    Locally synchronous heat.
-	 
+  <GraphType id="gals_heat">
+    <!-- Locally synchronous heat.
 	 Each cell i has a time t, and all cells start at t=0.
 	 Initially each cell knows its own state, but not its
 	 neighbours, so all cells want to broadcast their state and move to t=1.
@@ -27,14 +25,30 @@
          So at a given time t we need to deal with messages for both t=1 and t=2,
          and essentially need two copies. When we advance, the t+1 copy becomes
 	 the t version and t+1 is empty.
-    ]]></Doc>
+    -->
+	
+	<MetaData>
+	"native_dimension" : 2
+	</MetaData>
 
-	<Properties>
+    <Properties>
       <Scalar type="uint32_t" name="maxTime" value="1000" />
     </Properties>
 
     <SharedCode><![CDATA[
     #include <cmath>
+	
+	/* We have a problem if we have to do fixed-point and
+	only have 32x32->32 multiplication, as it only allows
+	us to have a really tiny number of fractional bits.
+	
+	For now let's assume 16 fractional bits, and some method
+	of doing a wide multiply plus round and shift. This is
+	almost guaranteed to be the wrong range, especially with
+	non-equal time-steps...
+	*/
+
+	
     ]]></SharedCode>
 
     <MessageTypes>
@@ -43,41 +57,110 @@
       </MessageType>
 
       <MessageType id="update">
+		<Properties>
+			<Scalar type="fix16_t" name="w" />
+		</Properties>
 		<Message>
 		  <Scalar type="uint32_t" name="t" />
-		  <Scalar type="float" name="v" />
+		  <Scalar type="fix16_t" name="v" />
 		</Message>
       </MessageType>
+	  
+	  <MessageType id="segment_add">
+		<Documentation>
+			This is used to send a new segment to a dirichlet boundary.
+		</Documentation>
+		<Message>
+			<Scalar type="uint32_t" name="seqId" />
+			<Scalar type="uint32_t" name="len" />
+			<Scalar type="bool" name="repeat" />
+			<Scalar type="fix16_t" name="c0" />
+			<Scalar type="fix16_t" name="c1" />
+			<Scalar type="fix16_t" name="c2" />
+		</Message>
+	  </MessageType>
     </MessageTypes>
 
     <DeviceTypes>
 
       <DeviceType id="dirichlet_variable">
+		<Doc><![CDATA[
+			A dirichlet variable provides a forcing value, so it
+			is like an active source with some kind of feedback loop.
+			
+			The values forced in each time-step are determined by the
+			current forcing segment. Each segment is a 2nd degree polynomial,
+			given by three values: c0, c1 and c2
+			
+			At the start of a segment we set c0 to the constant coefficient:
+			
+			    v=c0
+			
+			At each following time-step it does the following:
+			
+			    v=v+c1
+				c1=c1+c2;
+				
+			[st,et) - Time range of the segment
+				The segment will not be started until st. It is valid to choose st=0, then the segment is always ready.
+				The segment will not continue beyond et, blocking if necessary
+			
+			len - the length or period of the segment in updates
+			
+			endaction - what to do after len updates:
+				
+				0=Repeat : run the same segment again, unless a newer segment has been loaded
+				
+				1=Flip : at the end of the segment, negate c2
+				
+				2=Constant : Hold a constant value for the rest of the segment
+				
+			The complete segment is a tuple (st,et,len,endAction,c0,c1,c2)
+			
+			If a new segment is received where (st &lte; t) then it will immediately
+			switch to that segment (this is the purpose of c0, so that we can jump
+			to a value).
+			
+			Examples of segments:
+			- (0,MAX_UINT,8,2, 5,0,0) - Immediately jump to value 5, and hold it
+			- (100,1000,8,2, 5,0,0) - Immediately jump to value 5, and hold it
+		]]></Doc>
 		<Properties>
-			<Scalar type="int32_t" name="dt" value="1" />
-		
-		  <Scalar type="float" name="amplitude" />
-		  <Scalar type="float" name="phase" />
-		  <Scalar type="float" name="frequency" />
-		  <Scalar type="float" name="bias" />
+			<Scalar type="int32_t" name="dt" />
+
+			<Scalar type="fix16" name="iC0" />
+			<Scalar type="fix16_t" name="iC1" />
+			<Scalar type="fix16_t" name="iC2" />
+			<Scalar type="uint32_t" name="iLen" />
+			<Scalar type="bool" name="iRepeat" />
 		  
 		  <Scalar type="uint32_t" name="neighbours" /> <!-- We need to know the neighbour count in order to sync -->
 		</Properties>
 
 		<State>
-		  <Scalar type="float" name="v" />
+		  <Scalar type="fix16_t" name="v" />
 		  <Scalar type="uint32_t" name="t" />
 		  
 		  <Scalar type="uint32_t" name="cs" />
 		  <Scalar type="uint32_t" name="ns" />
+		  
+		  <Scalar type="fix16_t" name="c1" />
+		  <Scalar type="fix16_t" name="c2" />
+		  <Scalar type="uint32_t" name="endTime" />
+		  <Scalar type="uint32_t" name="seqId" />
+		  
+		  <Scalar type="uint32_t" name="segSeqId" />
+		  <Scalar type="uint32_t" name="segLen" />
+		  <Scalar type="bool" name="segRepeat" />
+		  <Scalar type="fix16_t" name="segC0" />
+		  <Scalar type="fix16_t" name="segC1" />
+		  <Scalar type="fix16_t" name="segC2" />
+
 		</State>
 		
-		<ReadyToSend><![CDATA[
-		*readyToSend		= 0;
-		if(deviceState->t <= graphProperties->maxTime && deviceState->cs==deviceProperties->neighbours){
-			*readyToSend = RTS_FLAG_out;
-		}
-		]]></ReadyToSend>
+		<ReadyToSend>
+		
+		</ReadyToSend>
 
 		<InputPort name="__init__" messageTypeId="__init__">
 		  <OnReceive><![CDATA[
@@ -87,6 +170,8 @@
 		  
 		  deviceState->v=deviceProperties->bias + deviceProperties->amplitude
 			     * sin(deviceProperties->phase + deviceProperties->frequency * deviceState->t);
+
+		  requestSend_out = true;
 		  ]]></OnReceive>
 		</InputPort>
 
@@ -101,17 +186,18 @@
 		  if(message->t==deviceState->t){
 			deviceState->cs++;
 		  }else{
+			assert(deviceState->t + deviceProperties->dt == message->t);
 			deviceState->ns++;
-		  			assert(deviceState->t + deviceProperties->dt == message->t);
-					
 		  }
+		  requestSend_out = deviceState->cs==deviceProperties->neighbours;
 		  ]]></OnReceive>
 		</InputPort>
 
 		<OutputPort name="out" messageTypeId="update">
 		  <OnSend><![CDATA[
 		  if(deviceState->t > graphProperties->maxTime){
-			 *doSend=false;
+			 *cancelSend=true;
+			requestSend_out=false;
 		  }else{
 			  assert(deviceState->cs==deviceProperties->neighbours);
 
@@ -124,6 +210,7 @@
 			  
 			  message->t = deviceState->t;
 			  message->v = deviceState->v;
+				requestSend_out = deviceState->cs==deviceProperties->neighbours;
 			}
 		  ]]></OnSend>
 		</OutputPort>
@@ -132,30 +219,22 @@
       <DeviceType id="cell">
 		<!-- This is a common-or-garden 2d cell, with no boundary stuff -->
 		<Properties>
-		  <Scalar type="float" name="iv" />
+		  <Scalar type="fix16_t" name="iv" />
 		  <Scalar type="uint32_t" name="nhood" />
-		  <Scalar type="float" name="wSelf" />
+		  <Scalar type="fix16_t" name="wSelf" />
 		  <Scalar type="uint32_t" name="dt" value="1" />
 		</Properties>
 
 		<State>
-		  <Scalar type="float" name="v" />
+		  <Scalar type="fix16_t" name="v" />
 		  <Scalar type="uint32_t" name="t" />
 		  
-		  <Scalar type="float" name="ca" /> <!-- w_self * s_self + sum( w_o * s_o for o in seenNow)  -->
+		  <Scalar type="fix16_t" name="ca" /> <!-- w_self * s_self + sum( w_o * s_o for o in seenNow)  -->
 		  <Scalar type="uint32_t" name="cs" />
 
-		  <Scalar type="float" name="na" /> <!-- sum(w_o * s_o for o in seenNext) -->
+		  <Scalar type="fix16_t" name="na" /> <!-- sum(w_o * s_o for o in seenNext) -->
 		  <Scalar type="uint32_t" name="ns" />
 		</State>
-		
-		<ReadyToSend><![CDATA[
-		*readyToSend = 0;
-		if(deviceState->t <= graphProperties->maxTime && deviceState->cs==deviceProperties->nhood){
-			*readyToSend = RTS_FLAG_out;
-		}
-		]]></ReadyToSend>
-
 
 		<InputPort name="__init__" messageTypeId="__init__">
 		  <OnReceive><![CDATA[
@@ -168,6 +247,8 @@
 		  deviceState->na=0;
 
 		  handler_log(3, "value = %f", deviceState->v);
+
+		  requestSend_out=deviceState->cs==deviceProperties->nhood;
 		  ]]></OnReceive>
 		</InputPort>
 
@@ -179,21 +260,19 @@
 
 
 		<InputPort name="in" messageTypeId="update">
-			<Properties>
-				<Scalar type="float" name="w" />
-			</Properties>
-			
 		  <OnReceive><![CDATA[
 		  if(message->t==deviceState->t){
-			deviceState->ca += edgeProperties->w * message->v;
+			deviceState->ca = add(deviceState->ca, mul( edgeProperties->w , message->v ) );
 			deviceState->cs++;
 		  }else{
 			assert(deviceState->t + deviceProperties->dt == message->t);
-			deviceState->na += edgeProperties->w * message->v;
+			deviceState->na = add(deviceState->na, mul(edgeProperties->w , message->v ) );
 			deviceState->ns++;
 			}
 
 			  handler_log(3, "(t=%d,v=%.4f) tNow=%d, sNow=%d, aNow=%.4f, sNext=%d, aNext=%f", message->t, message->v, deviceState->t, deviceState->cs, deviceState->ca, deviceState->ns, deviceState->na);
+
+		  requestSend_out = deviceState->cs==deviceProperties->nhood;
 		  ]]></OnReceive>
 		</InputPort>
 
@@ -203,14 +282,15 @@
 		  handler_log(3, "tNow=%d, sNow=%d, aNow=%.4f, sNext=%d, aNext=%f", deviceState->t, deviceState->cs, deviceState->ca, deviceState->ns, deviceState->na);
 
 		  if(deviceState->t > graphProperties->maxTime){
-			*doSend=false;
+			*cancelSend=true;
+			requestSend_out=false;
 		  }else{
 			  assert(deviceState->cs == deviceProperties->nhood);
 
 			  deviceState->t += deviceProperties->dt;
 			  deviceState->v=deviceState->ca;
 
-			  deviceState->ca = deviceProperties->wSelf * deviceState->v + deviceState->na;
+			  deviceState->ca = add(mul(deviceProperties->wSelf , deviceState->v ) , deviceState->na);
 			  deviceState->cs = deviceState->ns;
 
 			  deviceState->na=0;
@@ -221,6 +301,7 @@
 			
 			// It is possible that all our neighbours are ahead and have broadcast, so
 			// we could immediately be ready to go.
+			requestSend_out = deviceState->cs == deviceProperties->nhood;
 		  }
 		  ]]></OnSend>
 		</OutputPort>

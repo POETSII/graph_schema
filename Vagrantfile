@@ -38,6 +38,9 @@ Vagrant.configure(2) do |config|
   # the path on the guest to mount the folder. And the optional third
   # argument is a set of non-required options.
   # config.vm.synced_folder "../data", "/vagrant_data"
+  
+  # If the POETS repos are in the parent folder, this gives access to them all
+  config.vm.synced_folder "..", "/POETS"
 
   # Provider-specific configuration so you can fine-tune various
   # backing providers for Vagrant. These expose provider-specific options.
@@ -59,7 +62,7 @@ Vagrant.configure(2) do |config|
   # Puppet, Chef, Ansible, Salt, and Docker are also available. Please see the
   # documentation for more information about their specific syntax and use.
   config.vm.provision "shell", inline: <<-SHELL
-     sudo apt-get install -y libxml2-dev gdb g++ git make libxml++2.6-dev libboost-dev python3.4 zip default-jre-headless python3-lxml curl
+     sudo apt-get install -y libxml2-dev gdb g++ git make libxml++2.6-dev libboost-dev python3.4 zip default-jre-headless python3-lxml curl mpich
      
      # Visualisation
      sudo apt-get install -y graphviz

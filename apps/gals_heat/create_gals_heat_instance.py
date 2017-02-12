@@ -53,28 +53,32 @@ nodes={}
 for x in range(0,n):
     sys.stderr.write(" Devices : Row {} of {}\n".format(x, n))
     for y in range(0,n):
+        meta={"x":x,"y":y}
         edgeX = x==0 or x==n-1
         edgeY = y==0 or y==n-1
         if x==n//2 and y==n//2:
             props={ "bias":0, "amplitude":1.0, "phase":1.5, "frequency": 100*dt, "neighbours":4 }
-            di=DeviceInstance(res,"v_{}_{}".format(x,y), dirichletType, [x,y], props)
+            di=DeviceInstance(res,"v_{}_{}".format(x,y), dirichletType, props, meta)
             nodes[(x,y)]=di
             res.add_device_instance(di)
         elif edgeX != edgeY:
             props={ "bias":0, "amplitude":1.0, "phase":1, "frequency": 70*dt*((x/float(n))+(y/float(n))), "neighbours":1 }
-            di=DeviceInstance(res,"v_{}_{}".format(x,y), dirichletType, [x,y], props)
+            di=DeviceInstance(res,"v_{}_{}".format(x,y), dirichletType, props, meta)
             nodes[(x,y)]=di
             res.add_device_instance(di)
         elif not (edgeX or edgeY):
             props={ "iv":urand()*2-1, "nhood":4, "wSelf":weightSelf }
-            di=DeviceInstance(res,"c_{}_{}".format(x,y), devType, [x,y], props)
+            di=DeviceInstance(res,"c_{}_{}".format(x,y), devType, props, meta)
             nodes[(x,y)]=di
             res.add_device_instance(di)
             
 def add_channel(x,y,dx,dy):
     dst=nodes[ (x,y) ]
     src=nodes[ ( (x+dx+n)%n, (y+dy+n)%n ) ]
-    props={"w":weightOther}
+    if dst.device_type.id=="cell":
+        props={"w":weightOther}
+    else:
+        props=None  
     ei=EdgeInstance(res,dst,"in", src,"out", props)
     res.add_edge_instance(ei)
 

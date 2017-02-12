@@ -477,7 +477,7 @@ def render_device_type_as_cpp(dt,dst):
     
     subs={
         "indent"                        : "    ",
-        "graphPropertiesStructName"     : "{}_properties_t".format(dt.id), 
+        "graphPropertiesStructName"     : "{}_properties_t".format(dt.parent.id), 
         "deviceTypeId"                  : dt.id,
         "devicePropertiesStructName"    : "{}_properties_t".format(dt.id),
         "deviceStateStructName"         : "{}_state_t".format(dt.id),
