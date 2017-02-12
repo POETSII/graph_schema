@@ -41,20 +41,20 @@
     float erng(uint32_t &state)
     { return -log(frng(state)); }
 
-    void chooseNextEvent(const ising_spin_properties_t *graphProperties, cell_state_t *deviceState)
+    void chooseNextEvent(const float *probabilities, uint32_t &rng, int32_t *spins, float *times)
     {
       int sumStates=0;
       for(unsigned i=1; i<5; i++){ // Only sum neighbours
-        sumStates+=deviceState->spins[i];
+        sumStates+=spins[i];
       }
 
-      unsigned index=(sumStates+4)/2 + 5*(deviceState->spins[0]+1)/2;
-      float prob=graphProperties->probabilities[index];
+      unsigned index=(sumStates+4)/2 + 5*(spins[0]+1)/2;
+      float prob=probabilities[index];
 
-      if( frng(deviceState->rng) < prob){
-        deviceState->spins[0] *= -1; // Flip
+      if( frng(rng) < prob){
+        spins[0] *= -1; // Flip
       }
-      deviceState->times[0] += erng(deviceState->rng);
+      times[0] += erng(rng);
     }
 
     ]]></SharedCode>
@@ -194,7 +194,7 @@
 
 	  float prevTime=deviceState->times[0];
 	  auto prevSpin=deviceState->spins[0];
-          chooseNextEvent(graphProperties, deviceState);
+          chooseNextEvent(graphProperties->probabilities, deviceState->rng, deviceState->spins, deviceState->times);
           message->spin = deviceState->spins[0];
 	  message->time = deviceState->times[0];
 

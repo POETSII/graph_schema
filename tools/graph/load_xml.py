@@ -279,11 +279,11 @@ def load_edge_instance(graph,eiNode):
     src_device=graph.device_instances[src_device_id]
 
     properties=None
-    propertiesNode=eiNode.find("p:Properties",ns)
+    propertiesNode=eiNode.find("p:P",ns)
     if propertiesNode is not None:
         spec=dst_device.device_type.inputs[dst_port_name].properties
-        properties=load_struct_instance(spec, propertiesNode[0])
-
+        properties=load_struct_instance(spec, propertiesNode)
+    
     metadata=load_metadata(eiNode,"p:M")
         
     return EdgeInstance(graph,dst_device,dst_port_name,src_device,src_port_name,properties,metadata)

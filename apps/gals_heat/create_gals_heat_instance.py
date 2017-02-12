@@ -12,7 +12,7 @@ import os
 appBase=os.path.dirname(os.path.realpath(__file__))
 
 src=appBase+"/gals_heat_graph_type.xml"
-(graphTypes,graphInstances)=load_graph_types_and_instances(src)
+(graphTypes,graphInstances)=load_graph_types_and_instances(src,src)
 
 urand=random.random
 

@@ -84,7 +84,7 @@
     <DeviceTypes>
 
       <DeviceType id="dirichlet_variable">
-		<Doc>
+		<Doc><![CDATA[
 			A dirichlet variable provides a forcing value, so it
 			is like an active source with some kind of feedback loop.
 			
@@ -124,7 +124,7 @@
 			Examples of segments:
 			- (0,MAX_UINT,8,2, 5,0,0) - Immediately jump to value 5, and hold it
 			- (100,1000,8,2, 5,0,0) - Immediately jump to value 5, and hold it
-		</Doc>
+		]]></Doc>
 		<Properties>
 			<Scalar type="int32_t" name="dt" />
 
@@ -157,6 +157,10 @@
 		  <Scalar type="fix16_t" name="segC2" />
 
 		</State>
+		
+		<ReadyToSend>
+		
+		</ReadyToSend>
 
 		<InputPort name="__init__" messageTypeId="__init__">
 		  <OnReceive><![CDATA[

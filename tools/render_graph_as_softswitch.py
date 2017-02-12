@@ -8,9 +8,11 @@ import sys
 import os
 
 def render_typed_data_as_type_decl(td,dst,indent,name=None):
-    name=name or td.name
+    if name==None:
+        name=td.name
+    assert(name!="_")
     if isinstance(td,ScalarTypedDataSpec):
-        dst.write("{}{} {}".format(indent, td.type, name))
+        dst.write("{0}{1} {2} /*indent={0},type={1},name={2}*/".format(indent, td.type, name))
     elif isinstance(td,TupleTypedDataSpec):
         dst.write("{}struct {{\n".format(indent))
         for e in td.elements_by_index:
@@ -19,7 +21,7 @@ def render_typed_data_as_type_decl(td,dst,indent,name=None):
         dst.write("{}}} {}".format(indent,name))
     elif isinstance(td,ArrayTypedDataSpec):
         render_typed_data_as_type_decl(td.type,dst,indent,name="")
-        dst.write("{}[{}]".format(name, td.length))
+        dst.write("{}[{}] /*{}*/".format(name, td.length,name))
     else:
         raise RuntimeError("Unknown data type.");
 
@@ -31,6 +33,40 @@ def render_typed_data_as_struct(td,dst,name):
     else:
         dst.write("typedef struct {{}} {};\n".format(name))
 
+def render_typed_data_inst_contents(td,ti,dst):
+    if isinstance(td,ScalarTypedDataSpec):
+        if ti is None:
+            dst.write("0")
+        else:
+            dst.write("{}".format(ti))
+    elif isinstance(td,TupleTypedDataSpec):
+        dst.write("{")
+        first=True
+        for e in td.elements_by_index:
+            if first:
+                first=False
+            else:
+                dst.write(",")
+            render_typed_data_inst_contents(e,ti and ti.get(e.name,None),dst)
+        dst.write("}")
+    elif isinstance(td,ArrayTypedDataSpec):
+        dst.write("{")
+        first=True
+        for i in range(td.length):
+            if i!=0:
+                dst.write(",")
+            render_typed_data_inst_contents(td.type,ti and ti[i],dst)
+        dst.write("}")
+    else:
+        raise RuntimeError("Unknkown type.")
+
+def render_typed_data_inst(td,tName,ti,iName,dst,const=False):
+    if const:
+        dst.write("const ")
+    dst.write("{} {} = ".format(tName,iName))
+    render_typed_data_inst_contents(td,ti,dst)
+    dst.write(";\n")
+
 def render_graph_type_as_softswitch_decls(gt,dst):
     gtProps=make_graph_type_properties(gt)
     dst.write("""
@@ -40,6 +76,9 @@ def render_graph_type_as_softswitch_decls(gt,dst):
     #include <cstdint>
     
     #include "softswitch.hpp"
+    
+    
+    
     
     ///////////////////////////////////////////////
     // Graph type stuff
@@ -88,7 +127,6 @@ def render_rts_handler_as_softswitch(dev,dst,devProps):
     devProps=add_props(devProps, {
         "DEVICE_TYPE_C_LOCAL_CONSTANTS" : calc_device_type_c_locals(dev,devProps)
     })
-    print(devProps)
     
     dst.write("""
     uint32_t {GRAPH_TYPE_ID}_{DEVICE_TYPE_ID}_ready_to_send_handler(
@@ -199,6 +237,8 @@ def render_graph_type_as_softswitch_defs(gt,dst):
     
     dst.write("void (*handler_log)(int level, const char *msg, ...) = softswitch_handler_log;\n");
     
+    dst.write(calc_graph_type_c_globals(gt))
+    
     if gt.shared_code:
         for c in gt.shared_code:
             dst.write(c)
@@ -226,6 +266,186 @@ def render_graph_type_as_softswitch_defs(gt,dst):
         }}
         """.format(**make_device_type_properties(dt)))
     dst.write("};\n")
+
+def render_graph_instance_as_thread_context(
+    dst,
+    gi,
+    thread_index, # Thread index we are working on
+    devices_to_thread,      # Map from device:thread
+    thread_to_devices,      # Map from thread:[device]
+    edges_in,               # Map from di:{ip:ei}
+    edges_out,              # Map from ei:{op:ei}
+    props   # Map from graph and device types to properties
+    ):
+        
+    dst.write("//////// Thread {}\n".format(thread_index))    
+    
+    for di in thread_to_devices[thread_index]:
+        if di.device_type.properties:
+            render_typed_data_inst(di.device_type.properties, props[di.device_type]["DEVICE_TYPE_PROPERTIES_T"], di.properties, di.id+"_properties", dst,True)
+        if di.device_type.state:
+            render_typed_data_inst(di.device_type.state, props[di.device_type]["DEVICE_TYPE_STATE_T"], None, di.id+"_state",dst)
+        
+        for op in di.device_type.outputs_by_index:
+            dst.write("address_t {}_{}_addresses[]={{\n".format(di.id, op.name))
+            first=True
+            for ei in edges_out[di][op]:
+                if first:
+                    first=False
+                else:
+                    dst.write(",")
+                tIndex=devices_to_thread[ei.dst_device]
+                tOffset=thread_to_devices[tIndex].index(ei.dst_device)
+                dst.write("{{{},{},INPUT_INDEX_{}_{}_{}}}".format(tIndex,tOffset,di.device_type.parent.id,di.device_type.id,ei.dst_port.name))
+            dst.write("};\n")
+        
+        dst.write("OutputPortTargets {}_targets[]={{".format(di.id))
+        first=True
+        for ei in edges_out[di][op]:
+            if first:
+                first=False
+            else:
+                dst.write(",")
+            dst.write("{{ {}, {}_{}_addresses }}".format( len(edges_out[di][op]), di.id, op.name ))
+        dst.write("};\n")
+        
+        for ip in di.device_type.inputs_by_index:
+            if ip.properties==None and ip.state==None:
+                continue
+            for ei in edges_in[di][ip]:
+                name="{}_{}_{}_{}".format(ei.dst_device.id,ei.dst_port.name,ei.src_device.id,ei.src_port.name)
+                if ip.properties:
+                    render_typed_data_inst(ip.properties, props[ip]["INPUT_PORT_PROPERTIES_T"], ei.properties, name+"_properties", dst,True)
+                if ip.state:
+                    render_typed_data_inst(ip.state, props[ip]["INPUT_PORT_STATE_T"], None, name+"_state", dst)
+
+        for ip in di.device_type.inputs_by_index:
+            if ip.properties==None and ip.state==None:
+                continue
+            if len(edges_in[di][ip])==0:
+                continue
+            dst.write("InputPortBinding {}_{}_bindings[]={{\n".format(di.id,ip.name))
+            first=True
+            for ei in edges_in[di][ip]:
+                if first:
+                    first=False
+                else:
+                    dst.write(",\n")
+                name="{}_{}_{}_{}".format(ei.dst_device.id,ei.dst_port.name,ei.src_device.id,ei.src_port.name)
+                eProps={
+                    "SRC_THREAD_INDEX": devices_to_thread[ei.src_device],
+                    "SRC_THREAD_OFFSET": thread_to_devices[devices_to_thread[ei.src_device]].index(ei.src_device),
+                    "SRC_PORT_INDEX": props[ei.src_port]["OUTPUT_PORT_INDEX"],
+                    "EDGE_PROPERTIES":0,
+                    "EDGE_STATE":0
+                }
+                if ip.properties:
+                    eProps["EDGE_PROPERTIES"]="&{}_properties".format(name)
+                if ip.state:
+                    eProps["EDGE_STATE"]="&{}_state".format(name)
+                dst.write("""
+                    {{
+                        {{
+                            {SRC_THREAD_INDEX}, // thread id
+                            {SRC_THREAD_OFFSET}, // thread offset
+                            {SRC_PORT_INDEX} // port
+                        }},
+                        {EDGE_PROPERTIES},
+                        {EDGE_STATE}
+                    }}
+                    """.format(**eProps))
+            dst.write("};\n");
+
+        dst.write("InputPortSources {}_sources[]={{".format(di.id))
+        first=True
+        for ip in di.device_type.inputs_by_index:
+            if first:
+                first=False
+            else:
+                dst.write(",")
+            if ip.properties==None and ip.state==None:
+                dst.write("{0,0}\n")
+            else:
+                dst.write("{{ {}, {}_{}_bindings }}\n".format( len(edges_in[di][ip]), di.id, ip.name ))
+        dst.write("};\n")
+        
+
+    dst.write("""
+    DeviceContext DEVICE_INSTANCE_CONTEXTS_thread{THREAD_INDEX}[DEVICE_INSTANCE_COUNT_thread{THREAD_INDEX}]={{
+    """.format(THREAD_INDEX=thread_index))
+    
+    first=True
+    for di in thread_to_devices[thread_index]:
+        if first:
+            first=False
+        else:
+            dst.write(",")
+        diProps={
+            "DEVICE_TYPE_FULL_ID" : props[di.device_type]["DEVICE_TYPE_FULL_ID"],
+            "DEVICE_INSTANCE_ID" : di.id,
+            "DEVICE_INSTANCE_THREAD_OFFSET" : thread_to_devices[thread_index].index(di),
+            "DEVICE_INSTANCE_PROPERTIES" : 0,
+            "DEVICE_INSTANCE_STATE" : 0
+        }   
+        if di.device_type.properties:
+            diProps["DEVICE_INSTANCE_PROPERTIES"]="&{}_properties".format(di.id)
+        if di.device_type.state:
+            diProps["DEVICE_INSTANCE_STATE"]="&{}_state".format(di.id)
+        dst.write("""
+        {{
+            DEVICE_TYPE_VTABLES+DEVICE_TYPE_INDEX_{DEVICE_TYPE_FULL_ID}, // vtable
+            {DEVICE_INSTANCE_PROPERTIES},
+            {DEVICE_INSTANCE_STATE},
+            {DEVICE_INSTANCE_THREAD_OFFSET}, // device index
+            {DEVICE_INSTANCE_ID}_targets, // address lists for ports
+            {DEVICE_INSTANCE_ID}_sources, // source list for inputs
+            0, // rtsFlags
+            false, // rtc
+            0,  // prev
+            0   // next
+        }}
+        """.format(**diProps))
+    dst.write("};\n")
+
+def render_graph_instance_as_softswitch(gi,dst,num_threads,device_to_thread):
+    props={
+        gi.graph_type:make_graph_type_properties(gi.graph_type)
+    }
+    for dt in gi.graph_type.device_types.values():
+        props[dt]=make_device_type_properties(dt)
+        for ip in dt.inputs_by_index:
+            props[ip]=make_input_port_properties(ip)
+        for op in dt.outputs_by_index:
+            props[op]=make_output_port_properties(op)
+        
+    edgesIn={ di:{ port:[] for port in di.device_type.inputs_by_index  } for di in gi.device_instances.values() }
+    edgesOut={ di:{ port:[] for port in di.device_type.outputs_by_index } for di in gi.device_instances.values() }
+    
+    for ei in gi.edge_instances.values():
+        edgesIn[ei.dst_device][ei.dst_port].append(ei)
+        edgesOut[ei.src_device][ei.src_port].append(ei)
+    
+    thread_to_devices=[[] for i in range(num_threads)]
+    devices_to_thread={}
+    for d in gi.device_instances.values():
+        t=device_to_thread(d)
+        assert(t>=0 and t<num_threads)
+        thread_to_devices[t].append(d)
+        devices_to_thread[d]=t
+    
+    dst.write("""
+    #include "{GRAPH_TYPE_ID}.hpp"
+
+    const unsigned THREAD_COUNT={NUM_THREADS};
+
+    const unsigned DEVICE_INSTANCE_COUNT={TOTAL_INSTANCES};
+    """.format(GRAPH_TYPE_ID=gi.graph_type.id, NUM_THREADS=num_threads, TOTAL_INSTANCES=len(gi.device_instances)))
+
+    for ti in range(num_threads):
+        dst.write("    const unsigned DEVICE_INSTANCE_COUNT_thread{}={};\n".format(ti,len(thread_to_devices[ti])))
+    
+    for ti in range(num_threads):
+        render_graph_instance_as_thread_context(dst,gi,ti,devices_to_thread, thread_to_devices,edgesIn,edgesOut,props)
 
     
 source=sys.stdin
@@ -286,3 +506,20 @@ class OutputWithPreProcLineNum:
 
 render_graph_type_as_softswitch_decls(graph, OutputWithPreProcLineNum(destHpp, destHppPath))
 render_graph_type_as_softswitch_defs(graph, OutputWithPreProcLineNum(destCpp, destCppPath))
+
+if(len(instances)>0):
+    inst=None
+    for g in instances.values():
+        inst=g
+        break
+        
+    assert(inst.graph_type.id==graph.id)
+    
+    nThreads=3
+    def device_to_thread(dev):
+        return hash(dev.id) % nThreads
+
+    destInstPath=os.path.abspath(destPrefix+"_{}.cpp".format(inst.id))
+    destInst=open(destInstPath,"wt")
+        
+    render_graph_instance_as_softswitch(inst,destInst,nThreads,device_to_thread)

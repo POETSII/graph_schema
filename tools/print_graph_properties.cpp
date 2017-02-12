@@ -73,8 +73,7 @@ public:
    uint64_t graphId,
    const DeviceTypePtr &dt,
    const std::string &id,
-   const TypedDataPtr &properties,
-   const double *nativeLocation
+   const TypedDataPtr &properties
    ) override {
     fprintf(stderr, "  onDeviceInstance(%s)\n", id.c_str());
 

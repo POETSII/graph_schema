@@ -9,7 +9,7 @@ define ising_spin_instance_template
 
 demos/ising_spin/ising_spin_$1.xml : apps/ising_spin/create_ising_spin_instance.py apps/ising_spin/ising_spin_graph_type.xml
 	mkdir -p $$(dir $$@)
-	$$(PYTHON) apps/ising_spin/create_ising_spin_instance.py apps/ising_spin/ising_spin_graph_type.xml $$(subst _, ,$1) > $$@
+	$$(PYTHON) apps/ising_spin/create_ising_spin_instance.py  $$(subst _, ,$1) > $$@
 
 demos/ising_spin/ising_spin_$1.snap : demos/ising_spin/ising_spin_$1.xml bin/epoch_sim providers/ising_spin.graph.so demos/ising_spin/ising_spin_$1.checked
 	bin/epoch_sim --max-steps $2 --snapshots 1 $$@  demos/ising_spin/ising_spin_$1.xml

@@ -620,7 +620,7 @@ struct QueueSim
     return hf(id) % m_queues.size();
   }
 
-  virtual uint64_t onDeviceInstance(uint64_t gId, const DeviceTypePtr &dt, const std::string &id, const TypedDataPtr &deviceProperties, const double */*nativeLocation*/) override
+  virtual uint64_t onDeviceInstance(uint64_t gId, const DeviceTypePtr &dt, const std::string &id, const TypedDataPtr &deviceProperties) override
   {
     unsigned index=-1;
     
