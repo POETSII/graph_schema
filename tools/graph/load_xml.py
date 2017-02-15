@@ -138,8 +138,12 @@ def load_device_type(graph,dtNode,sourceFile):
         properties=load_struct_spec(id+"_properties", propertiesNode)
 
     metadata=load_metadata(dtNode,"p:MetaData")
+    
+    shared_code=[]
+    for s in dtNode.findall("p:SharedCode",ns):
+        shared_code.append(s.text)
 
-    dt=DeviceType(graph,id,properties,state,metadata)
+    dt=DeviceType(graph,id,properties,state,metadata,shared_code)
         
     for p in dtNode.findall("p:InputPort",ns):
         name=get_attrib(p,"name")

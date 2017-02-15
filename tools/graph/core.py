@@ -133,7 +133,7 @@ class ArrayTypedDataSpec(TypedDataSpec):
 
     def __str__(self):
         
-        return "Array:{}[{}*{}]\n".format(self.name,self.types,self.length)
+        return "Array:{}[{}*{}]\n".format(self.name,self.type,self.length)
 
     def create_default(self):
         return [self.type.create_default() for i in range(self.length)]
@@ -217,7 +217,7 @@ class OutputPort(Port):
     
             
 class DeviceType(object):
-    def __init__(self,parent,id,properties,state,metadata=None):
+    def __init__(self,parent,id,properties,state,metadata=None,shared_code=[]):
         self.id=id
         self.parent=parent
         self.state=state
@@ -228,6 +228,7 @@ class DeviceType(object):
         self.outputs_by_index=[]
         self.ports={}
         self.metadata=metadata
+        self.shared_code=shared_code
 
     def add_input(self,name,message_type,properties,state,metadata,receive_handler,source_file=None,source_line={}):
         if name in self.ports:

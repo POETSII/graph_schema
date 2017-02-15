@@ -144,6 +144,8 @@ include apps/clocked_izhikevich/makefile.inc
 include apps/gals_izhikevich/makefile.inc
 include apps/gals_heat/makefile.inc
 
+include apps/amg/makefile.inc
+
 demos : $(ALL_DEMOS)
 
 

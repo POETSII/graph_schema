@@ -2,6 +2,8 @@ import pyamg
 import numpy as np
 import scipy.sparse
 
+import sys
+
 class MultiGrid:
     class Level:
         def __init__(self, pyamgLevel, iterations, omega):
@@ -54,7 +56,7 @@ class MultiGrid:
         
         self.A=A
     
-        print("Creating pyamg")
+        sys.stderr.write("Creating pyamg\n")
         self.ml = pyamg.ruge_stuben_solver(A,
             max_coarse=1,
             max_levels=100,
@@ -62,7 +64,7 @@ class MultiGrid:
             postsmoother=('jacobi', {"withrho":True, "omega": omega} )
         )                    
 
-        print("Creating MultiGrid")
+        sys.stderr.write("Creating MultiGrid\n")
         self.levels=[]
         for L in self.ml.levels:
             self.levels.append( MultiGrid.Level( L, iterations, omega ) )
@@ -148,46 +150,47 @@ class MultiGrid:
 
         L.smooth(x,b)
         
-        
-    
-def test(n=100):
-    omega=1.0
-    iterations=1
-    print("Creating A")
-    A = pyamg.gallery.poisson((n,n), format='csr')  # 2D Poisson problem on nxn grid
-    print("Creating ref")
-    ml = pyamg.ruge_stuben_solver(A,
-        max_coarse=1,
-        max_levels=100,
-        presmoother=('jacobi', {"withrho":True, "omega":omega}),
-        postsmoother=('jacobi', {"withrho":True, "omega":omega})
-        )                    # construct the multigrid hierarchy
-    
-    mg=MultiGrid(A, omega=omega, iterations=iterations)
-        
-    b = np.random.rand(A.shape[0])                      # pick a random right hand side
-    x0 = np.random.rand(A.shape[0])
-    xP = x0.copy()
-    xV = x0.copy()
-    xVa = x0.copy()
-    xVa2 = x0.copy()
-    xW = x0.copy()
-    i=0
-    print("residuals : ", n, i, np.linalg.norm(b-A*xP), np.linalg.norm(b-A*xV), np.linalg.norm(b-A*xW))
-    while True:
-        i=i+1
-        xP = ml.solve(b, tol=1e-9, maxiter=iterations, x0=xP)
-        mg.vcycle(xV, b)
-        mg.vcycle_alt(xVa, b)
-        mg.vcycle_alt2(xVa2, b)
-        mg.wcycle(xW, b)        
-        print("residuals: ", n, i, np.linalg.norm(b-A*xP), np.linalg.norm(b-A*xV),np.linalg.norm(b-A*xVa),np.linalg.norm(b-A*xVa2), np.linalg.norm(b-A*xW))
-        if np.linalg.norm(b-A*xV) < 1e-3:
-            break
 
-test(50)
-test(100)
-test(200)
-test(400)
-test(800)
-test(1600)
+if __name__=="__main__":
+        
+    def test(n=100):
+        omega=1.0
+        iterations=1
+        print("Creating A")
+        A = pyamg.gallery.poisson((n,n), format='csr')  # 2D Poisson problem on nxn grid
+        print("Creating ref")
+        ml = pyamg.ruge_stuben_solver(A,
+            max_coarse=1,
+            max_levels=100,
+            presmoother=('jacobi', {"withrho":True, "omega":omega}),
+            postsmoother=('jacobi', {"withrho":True, "omega":omega})
+            )                    # construct the multigrid hierarchy
+        
+        mg=MultiGrid(A, omega=omega, iterations=iterations)
+            
+        b = np.random.rand(A.shape[0])                      # pick a random right hand side
+        x0 = np.random.rand(A.shape[0])
+        xP = x0.copy()
+        xV = x0.copy()
+        xVa = x0.copy()
+        xVa2 = x0.copy()
+        xW = x0.copy()
+        i=0
+        print("residuals : ", n, i, np.linalg.norm(b-A*xP), np.linalg.norm(b-A*xV), np.linalg.norm(b-A*xW))
+        while True:
+            i=i+1
+            xP = ml.solve(b, tol=1e-9, maxiter=iterations, x0=xP)
+            mg.vcycle(xV, b)
+            mg.vcycle_alt(xVa, b)
+            mg.vcycle_alt2(xVa2, b)
+            mg.wcycle(xW, b)        
+            print("residuals: ", n, i, np.linalg.norm(b-A*xP), np.linalg.norm(b-A*xV),np.linalg.norm(b-A*xVa),np.linalg.norm(b-A*xVa2), np.linalg.norm(b-A*xW))
+            if np.linalg.norm(b-A*xV) < 1e-3:
+                break
+
+    test(50)
+    test(100)
+    test(200)
+    test(400)
+    test(800)
+    test(1600)

@@ -83,7 +83,10 @@ def save_typed_struct_instance(node,childTagName,type,inst):
     assert type.is_refinement_compatible(inst)
     if len(inst) is 0:
         return
-    text=json.dumps(inst)
+    try:
+        text=json.dumps(inst)
+    except BaseException:
+        raise RuntimeError("Exception while serialising '{}'".format(inst))
     assert text.startswith('{') and text.endswith('}')
     r=etree.Element(toNS(childTagName))
     r.text=text[1:-1] # Get rid of brackets
@@ -120,6 +123,12 @@ def save_device_type(dt):
     save_typed_struct_spec(n, "p:Properties", dt.properties)
     save_typed_struct_spec(n, "p:State", dt.state)
     save_metadata(n, "p:MetaData", dt.metadata)
+    
+    if dt.shared_code:
+        for s in dt.shared_code:
+            sn=etree.Element(toNS("p:SharedCode"))
+            sn.text=etree.CDATA(s)
+            n.append(sn)
         
     for p in dt.inputs_by_index:
         pn=_type_to_element(p)

@@ -47,3 +47,5 @@ make progress and not deadlock.
 Proof: well, we can just choose alpha=1. This means
 that we broadcast everything. Bit useless though.
 
+Alternative: what if we choose a ratio between incoming
+spikes and 

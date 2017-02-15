@@ -385,6 +385,7 @@ struct QueueSim
 	    // do nothing. It is eiter still ready or still not ready
 	  }else if(device->readyIndex==-1){
 	    // it was previously not ready
+        assert(device->rtsFlags);
 	    device->readyIndex = lmo(device->rtsFlags);
 	    readyAdd(device);
 	  }else{
@@ -410,24 +411,25 @@ struct QueueSim
       output.port->onSend(&services, parent->m_graphProperties.get(), device->properties.get(), device->state.get(), message.get(), &doSend);
 
       if(logLevel>3){
-	fprintf(stderr, "  Send %s\n", device->id);
+        fprintf(stderr, "  Send %s\n", device->id);
       }
 
       device->rtsFlags = device->type->calcReadyToSend(&services, parent->m_graphProperties.get(), device->properties.get(), device->state.get());
 
       if(device->rtsFlags==0){
-	device->readyIndex=-1;
+        device->readyIndex=-1;
       }else{
-	device->readyIndex=lmo(device->rtsFlags);
-	readyAdd(device);
+        assert(device->rtsFlags);
+        device->readyIndex=lmo(device->rtsFlags);
+        readyAdd(device);
       }
 
       
       if(!doSend){
-	if(logLevel>3){
-	  fprintf(stderr, "    Cancelled\n");
-	}
-	return;
+        if(logLevel>3){
+          fprintf(stderr, "    Cancelled\n");
+        }
+        return;
       }
 
       parent->m_queuedMessages+=output.batches.size();
@@ -478,6 +480,8 @@ struct QueueSim
 
   QueueSim(unsigned nQueues)
   {
+    
+    m_queuedMessages=0;
     for(unsigned i=0;i<nQueues;i++){
       m_queues.emplace_back(this, i);
     }
@@ -507,30 +511,35 @@ struct QueueSim
     // despatching received messages yet, so this must be the
     // first thing they get
     for(auto *device : queue.devices){
-
+      ReceiveOrchestratorServicesImpl services(logLevel, stderr, device->id, "__init__");
+      
       if(logLevel>3){
-	fprintf(stderr, "  queue %u: trying __init__ on %p=%s, type=%p\n", queue.index, device, device->id, device->type.get());
+        fprintf(stderr, "  queue %u: trying __init__ on %p=%s, type=%p\n", queue.index, device, device->id, device->type.get());
       }
       auto init=device->type->getInput("__init__");
       if(!init){
-	if(logLevel>3){
-	  fprintf(stderr,"  No init on %s\n", device->id);
-	}
+        if(logLevel>3){
+          fprintf(stderr,"  No init on %s\n", device->id);
+        }
       }else{
-	if(logLevel>3){
-	  fprintf(stderr,"  Init %s\n", device->id);
-	}
+        if(logLevel>3){
+          fprintf(stderr,"  Init %s\n", device->id);
+        }
 
-	ReceiveOrchestratorServicesImpl services(logLevel, stderr, device->id, init->getName().c_str());
-	
-	init->onReceive(&services, graphPropertiesPtr, device->properties.get(), device->state.get(), 0, 0, 0);
+        init->onReceive(&services, graphPropertiesPtr, device->properties.get(), device->state.get(), 0, 0, 0);
 
-	
-	device->rtsFlags = device->type->calcReadyToSend( &services, graphPropertiesPtr, device->properties.get(), device->state.get());
-	device->readyIndex=lmo(device->rtsFlags);
-	if(device->readyIndex!=-1){
-	  queue.readyAdd(device);
-	}
+      }
+      device->rtsFlags = device->type->calcReadyToSend( &services, graphPropertiesPtr, device->properties.get(), device->state.get());
+      if(device->rtsFlags){
+        device->readyIndex=lmo(device->rtsFlags);
+      }else{
+        device->readyIndex=-1;
+      }
+      if(logLevel>3){
+        fprintf(stderr,"  Initial RTS of %s = %x, index=%d\n", device->id, device->rtsFlags, device->readyIndex);
+      }
+      if(device->readyIndex!=-1){
+        queue.readyAdd(device);
       }
     }
 

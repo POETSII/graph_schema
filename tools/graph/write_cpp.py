@@ -286,7 +286,7 @@ def render_input_port_as_cpp(ip,dst):
     
     dst.write(
 """
-MessageTypePtr {messageTypeId}_Spec_get();
+//MessageTypePtr {messageTypeId}_Spec_get();
 
 static const char *{deviceTypeId}_{portName}_handler_code=R"CDATA({handlerCode})CDATA";
 
@@ -382,7 +382,7 @@ def render_output_port_as_cpp(op,dst):
         subst["preProcLinePragma"]="// No line/file information for handler"
 
 
-    dst.write('MessageTypePtr {}_Spec_get();\n\n'.format(op.message_type.id))
+    #dst.write('MessageTypePtr {}_Spec_get();\n\n'.format(op.message_type.id))
 
     dst.write('static const char *{}_{}_handler_code=R"CDATA({})CDATA";\n'.format(dt.id, op.name, op.send_handler))
 
@@ -443,6 +443,12 @@ def render_device_type_as_cpp_fwd(dt,dst):
         render_typed_data_as_spec(ip.state, "{}_{}_state_t".format(dt.id,ip.name), "pp:State", dst)
 
 def render_device_type_as_cpp(dt,dst):
+    dst.write("namespace {}{{\n".format(dt.id));
+    
+    if dt.shared_code:
+        for i in dt.shared_code:
+            dst.write(i)
+    
     dst.write("DeviceTypePtr {}_Spec_get();\n".format(dt.id))
 
     for ip in dt.inputs.values():
@@ -527,7 +533,10 @@ def render_device_type_as_cpp(dt,dst):
     dst.write("  static DeviceTypePtr singleton(new {}_Spec);\n".format(dt.id))
     dst.write("  return singleton;\n")
     dst.write("}\n")
-    registrationStatements.append('registry->registerDeviceType({}_Spec_get());'.format(dt.id,dt.id))
+    
+    dst.write("}}; //namespace {}\n\n".format(dt.id));
+    
+    registrationStatements.append('registry->registerDeviceType({}::{}_Spec_get());'.format(dt.id,dt.id,dt.id))
 
 def render_graph_as_cpp(graph,dst, destPath):
     dst.write('#include "graph.hpp"\n')
@@ -561,8 +570,8 @@ def render_graph_as_cpp(graph,dst, destPath):
     dst.write('  public: {}_Spec() : GraphTypeImpl("{}", {}_properties_t_Spec_get()) {{\n'.format(gt.id,gt.id,gt.id))
     for et in gt.message_types.values():
         dst.write('    addMessageType({}_Spec_get());\n'.format(et.id))
-    for et in gt.device_types.values():
-        dst.write('    addDeviceType({}_Spec_get());\n'.format(et.id))
+    for dt in gt.device_types.values():
+        dst.write('    addDeviceType({}::{}_Spec_get());\n'.format(dt.id,dt.id))
     dst.write("  };\n")
     dst.write("};\n");
     dst.write("GraphTypePtr {}_Spec_get(){{\n".format(gt.id))
