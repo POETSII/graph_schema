@@ -128,17 +128,17 @@ struct EpochSim
   {
     if(bits==0)
       return (unsigned)-1;
-      
+
     for(unsigned i=0;i<n;i++){
       unsigned s=(i+rot)%n;
       if( (bits>>s)&1 )
         return s;
     }
-    
+
     assert(0);
     return (unsigned)-1;
   }
-  
+
 
   void writeSnapshot(SnapshotWriter *dst, double orchestratorTime, unsigned sequenceNumber)
   {
@@ -154,23 +154,23 @@ struct EpochSim
         }
       }
     }
-	  
+
     dst->endSnapshot();
   }
 
   void init()
   {
     for(auto &dev : m_devices){
+      ReceiveOrchestratorServicesImpl receiveServices{logLevel, stderr, dev.name, "__init__"  };
       auto init=dev.type->getInput("__init__");
       if(init){
         if(logLevel>2){
           fprintf(stderr, "  init device %d = %s\n", dev.index, dev.id.c_str());
         }
 
-        ReceiveOrchestratorServicesImpl receiveServices{logLevel, stderr, dev.name, "__init__"  };
         init->onReceive(&receiveServices, m_graphProperties.get(), dev.properties.get(), dev.state.get(), 0, 0, 0);
-        dev.readyToSend = dev.type->calcReadyToSend(&receiveServices, m_graphProperties.get(), dev.properties.get(), dev.state.get());
       }
+      dev.readyToSend = dev.type->calcReadyToSend(&receiveServices, m_graphProperties.get(), dev.properties.get(), dev.state.get());
     }
   }
 
@@ -183,7 +183,7 @@ struct EpochSim
     // Within each step every object gets the chance to send a message with probability probSend
 
     std::uniform_real_distribution<> udist;
-    
+
     ReceiveOrchestratorServicesImpl receiveServices{logLevel, stderr, 0, 0};
     {
       std::stringstream tmp;
@@ -216,7 +216,7 @@ struct EpochSim
 
     uint32_t threshSend=(uint32_t)ldexp(probSend, 32);
     uint32_t threshRng=rng();
-    
+
     for(unsigned i=0;i<m_devices.size();i++){
       unsigned index=(i+rot)%m_devices.size();
 
@@ -260,10 +260,10 @@ struct EpochSim
         uint32_t check=src.type->calcReadyToSend(&sendServices, m_graphProperties.get(), src.properties.get(), src.state.get());
         assert(check);
         assert( (check>>sel) & 1);
-        
+
         sendServices.setSender(src.name, src.outputNames[sel]);
         output->onSend(&sendServices, m_graphProperties.get(), src.properties.get(), src.state.get(), message.get(), &doSend);
-        
+
         src.readyToSend = src.type->calcReadyToSend(&sendServices, m_graphProperties.get(), src.properties.get(), src.state.get());
       }
 
@@ -293,7 +293,7 @@ struct EpochSim
         receiveServices.setReceiver(out.dstDeviceId, out.dstInputName);
         port->onReceive(&receiveServices, m_graphProperties.get(), dst.properties.get(), dst.state.get(), slot.properties.get(), slot.state.get(), message.get());
         dst.readyToSend = dst.type->calcReadyToSend(&receiveServices, m_graphProperties.get(), dst.properties.get(), dst.state.get());
-        
+
         anyReady = anyReady || dst.anyReady();
       }
     }
@@ -430,7 +430,7 @@ int main(int argc, char *argv[])
       bool running = graph.step(rng, probSend);
 
       if(logLevel>2 || i==nextStats){
-        fprintf(stderr, "Epoch %u : sends/device/epoch = %f (%f / %u)\n", i, graph.m_statsSends / graph.m_devices.size() / statsDelta, graph.m_statsSends/statsDelta, (unsigned)graph.m_devices.size());
+        fprintf(stderr, "Epoch %u : sends/device/epoch = %f (%f / %u)\n\n", i, graph.m_statsSends / graph.m_devices.size() / statsDelta, graph.m_statsSends/statsDelta, (unsigned)graph.m_devices.size());
       }
       if(i==nextStats){
         nextStats=nextStats+statsDelta;
