@@ -38,7 +38,7 @@ Vagrant.configure(2) do |config|
   # the path on the guest to mount the folder. And the optional third
   # argument is a set of non-required options.
   # config.vm.synced_folder "../data", "/vagrant_data"
-  
+
   # If the POETS repos are in the parent folder, this gives access to them all
   config.vm.synced_folder "..", "/POETS"
 
@@ -63,15 +63,18 @@ Vagrant.configure(2) do |config|
   # documentation for more information about their specific syntax and use.
   config.vm.provision "shell", inline: <<-SHELL
      sudo apt-get install -y libxml2-dev gdb g++ git make libxml++2.6-dev libboost-dev python3.4 zip default-jre-headless python3-lxml curl mpich
-     
+
+     # RISC-V toolchain (not sure exactly how much is needed)
+	sudo apt-get install -y autoconf automake autotools-dev curl libmpc-dev libmpfr-dev libgmp-dev gawk build-essential bison flex texinfo gperf libtool patchutils bc zlib1g-dev
+
      # Visualisation
      sudo apt-get install -y graphviz
-     
+
      # Editors
      sudo apt-get install -y emacs-nox screen
-     
+
      # Used to support generation of documentation from schema
      sudo apt-get install -y xsltproc ant libsaxon-java docbook docbook-xsl-ns pandoc
-     
+
   SHELL
 end
