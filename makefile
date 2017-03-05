@@ -34,7 +34,7 @@ JING = external/jing-20081028/bin/jing.jar
 RNG_SVG = external/rng-svg/build.xml
 
 # TODO : OS X specific
-PYTHON = python3.4
+PYTHON = python3
 
 $(TRANG) : external/trang-20091111.zip
 	(cd external && unzip -o trang-20091111.zip)
@@ -118,6 +118,12 @@ bin/epoch_sim.s : tools/epoch_sim.cpp
 	$(CXX) -S $(CPPFLAGS) $< -o $@ $(LDFLAGS) $(LDLIBS)
 
 bin/queue_sim : tools/queue_sim.cpp
+	mkdir -p bin
+	$(CXX) $(CPPFLAGS) $< -o $@ $(LDFLAGS) $(LDLIBS)
+
+
+# Temporary - delete
+bin/test_graph_log_api : tools/test_graph_log_api.cpp
 	mkdir -p bin
 	$(CXX) $(CPPFLAGS) $< -o $@ $(LDFLAGS) $(LDLIBS)
 
