@@ -443,7 +443,7 @@ def render_device_type_as_cpp_fwd(dt,dst):
         render_typed_data_as_spec(ip.state, "{}_{}_state_t".format(dt.id,ip.name), "pp:State", dst)
 
 def render_device_type_as_cpp(dt,dst):
-    dst.write("namespace {}{{\n".format(dt.id));
+    dst.write("namespace ns_{}{{\n".format(dt.id));
     
     if dt.shared_code:
         for i in dt.shared_code:
@@ -534,9 +534,9 @@ def render_device_type_as_cpp(dt,dst):
     dst.write("  return singleton;\n")
     dst.write("}\n")
     
-    dst.write("}}; //namespace {}\n\n".format(dt.id));
+    dst.write("}}; //namespace ns_{}\n\n".format(dt.id));
     
-    registrationStatements.append('registry->registerDeviceType({}::{}_Spec_get());'.format(dt.id,dt.id,dt.id))
+    registrationStatements.append('registry->registerDeviceType(ns_{}::{}_Spec_get());'.format(dt.id,dt.id,dt.id))
 
 def render_graph_as_cpp(graph,dst, destPath):
     dst.write('#include "graph.hpp"\n')
@@ -571,7 +571,7 @@ def render_graph_as_cpp(graph,dst, destPath):
     for et in gt.message_types.values():
         dst.write('    addMessageType({}_Spec_get());\n'.format(et.id))
     for dt in gt.device_types.values():
-        dst.write('    addDeviceType({}::{}_Spec_get());\n'.format(dt.id,dt.id))
+        dst.write('    addDeviceType(ns_{}::{}_Spec_get());\n'.format(dt.id,dt.id))
     dst.write("  };\n")
     dst.write("};\n");
     dst.write("GraphTypePtr {}_Spec_get(){{\n".format(gt.id))
