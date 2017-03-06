@@ -1,0 +1,278 @@
+/*
+
+Time is split into quantums.
+
+The state of a device d at quantum i is s_{d,i}, with s_{d,1},s_{d,2},.....
+The accumulated input of a device a at quantum i is a_{d,i}, with a_{d,1},a_{d,2}, ...
+
+Each message is tagged with the quantum j in which it should arrive. When a message
+is recieved by a device at quantum i, the possibilities are:
+- if j>=i, then we just do a_{d,j} += m
+- if j<i, then we need to incorporate the new data into the
+  already exists states. If that changes whether we fired or
+  not, then we should roll back.
+  
+*/
+
+struct neuron
+{
+    // We have two windows of length K.
+    // - Current working accumulation time
+    // - Future working accumulation time.
+    // We are only allowed to advance into the current accumulation time,
+    // but others are allowed to send us input from the future working
+    // window (that we'll need to hold onto). The global master ensures
+    // that everyone is within K of each other, so everyone has enough
+    // input buffer space
+    
+    /* Assume K=4
+    
+    Startup:
+    
+            
+       gvt: 0123
+    states: S???
+    inputs: 0000|0000
+    outputs:0000
+            ^
+            LVT=0
+    
+    After moving forwards once and not sending:
+    
+       gvt: 0123
+    states: SS??
+    outputs:0000
+    inputs: 0000|0000
+             ^
+            LVT=1
+            
+    After moving forwards again and firing:
+    
+       gvt: 0123
+    states: SSS?
+    outputs:0100
+    inputs: 0000|0000
+              ^
+            LVT=2
+            
+    After moving forwards again and not firing:
+    
+       gvt: 0123
+    states: SSSS
+    outputs:0100
+    inputs: 0000|0000
+               ^
+            LVT=3
+            
+    Now blocked unless gvt moves forwards.
+    
+    Assume receive new inhibitory input for t=1
+    
+       gvt: 0123
+    states: SS??
+    outputs:0100
+    inputs: 0-00|0000
+             ^
+            LVT=1
+    
+    Inhibitory input means we shouldn't have send message
+    till one step later. Next step we send the anti-message for
+    time t=1, cancelling previous message:
+    
+       gvt: 0123
+    states: SSS?
+    outputs:0000
+    inputs: 0-00|0000
+              ^
+            LVT=2
+    
+    We now step forwards again, and send the output one cycle later.
+
+       gvt: 0123
+    states: SSSS
+    outputs:0010
+    inputs: 0-00|0000
+               ^
+            LVT=3
+            
+    Assume we get input for time t=4
+    
+       gvt: 0123
+    states: SSSS
+    outputs:0010
+    inputs: 0-00|+000
+               ^
+            LVT=3
+    
+    Then we get told gvt has moved forwards by 2:
+    
+       gvt: 2345
+    states: SS??
+    outputs:1000
+    inputs: 000+|0000
+             ^
+            LVT=3
+    
+    
+    
+    In order to manage GVT, each device tracks how many
+    messages it has sent and received in each time step.
+    
+    We can advance GVT if:
+    - sum(sent(gvt))==sum(recv(gvt))
+      and
+    - gvt<min(lvt)
+    To support this, each device will need to send:
+    - (gvt,lvt,sent(gvt),recv(gvt),sent(gvt+1),recv(gvt+1),...)
+    - For simplicity, assume it just sends:
+    - (gvt,lvt,sent(gvt),recv(gvt))
+    
+    Let's assume that all devices are at (lvt=gvt+1) and
+    there is a message in flight destined for gvt. At that
+    point the global sum(sent(gvt)) > sum(recv(gvt)). The
+    question is whether the master statistics could still
+    show that time could be advanced.
+    
+    Inductively working from time gvt=0 just after initialisation.
+    
+    One possibility is that a device does not send a message,
+    and moves to lvt=gvt+1. In which case it will eventually
+    need to send (gvt=0,lvt=1,0,0) to the master. Until that
+    message is received the master cannot show that gvt<min(lvt).
+    
+    Another possibility is that a device does send a message,
+    and moves to lvt=gvt+1. There are now 1 (or more) messages
+    in flight. Eventually the device will have to send (gvt=0,lvt=1,n,0)
+    to the master. Until that message is received the master cannot
+    show that gvt<min(lvt), and once it receives that message
+    it will know that sent(gvt)>recv(gvt)
+    
+    As each of those message is delivered it could cause the
+    following:
+    - No change: doesn't actually change what the device should
+      have done, though state may change. Eventually device
+      notifies master it received the message, and receipt of
+      message balanced for that time-stamp.
+    - Message-sent: a new message needs to be sent (e.g. a cancellation
+      for something at time gvt). The device first sends the new
+      message, then later on sents the update message to master. From
+      the masters point of view, it could see:
+      - (gvt=0,lvt=1,a,b) : Before the message is received. The fact that the message is in 
+                            flight means that there will be a send/recv imbalance.
+      - (gvt=0,lvt=0,a,b+1) : After message received, before next is sent. This might make it
+                              appear that messages balance, but won't show that gvt<min(lvt)
+      - (gvt=0,lvt=1,a+n,b+1) : After message is seen, after message is sent.
+      
+    (Can this be formalised?)  
+      
+    An intermediate layer can be added where some node manages a sub-set of
+    N nodes. They would need to track:
+    - K send times
+    - K recv times
+    - N lvts
+    The messages sent upwards would be the same as those from the neurons.
+
+*/
+
+    int gvt; // Current view of global virtual time. This is the committed, irreversible time.
+    int lvt; // Currect local time, with gvt <= lvt < gvt+K
+    int dvt; // If dvt < lvt then we need to update master about [dvt..lvt)
+    
+    state_t states[K];  // Holds state for gvt,...,gvt+K-1
+    bool output[K];     // Have we sent message for quantum in window?
+    uint32_t sent[K];
+    
+    fixed_t inputs[2*K];  // Holds input for gvt,...,gvt+2*K-1
+    uint32_t received[2*K];
+    
+    void check()
+    {
+        assert(gvt<=lvt);
+        assert(lvt < gvt+K);
+        
+    }
+    
+    template<class T>
+    void shift(T *data, int d, int n)
+    {
+        std::copy(data+d, data+n, data);
+        std::fill(data+n-d, data+n, T());
+    }
+    
+    bool recv_advance(int ngvt)
+    {
+        assert(gvt <= ngvt);
+        assert(nvgt <= lvt);
+        assert(ngvt <= dvt);
+        
+        int d=ngvt-gvt;
+        
+        shift(states, d, K);
+        shift(output, d, K);
+        shift(sent, d, K);
+        
+        shift(inputs, d, 2*K);
+        shift(received, d, 2*K);
+        
+        gvt=ngvt;
+    }
+    
+    void recv_spike(int t, fixed_t contrib)
+    {
+        // Constraints we have:
+        //    gvt <  t          < gt+K
+        //    gvt <= lvt <= rvt < gt+K
+        
+        assert(gvt < t); // Can't change committed time
+        assert(gvt+K > t);
+        
+        // NOTE: we could optimise by checking whether the input
+        // actually changes the output spikes, rather than always resetting.
+        // This makes receive more expensive, but send cheaper, so not
+        // nesc a clear win.
+        
+        dvt=t;
+        lvt=t;
+        received[t-gvt]++;
+        inputs[t-gvt] += contrib;
+    }
+    
+    bool send_update(
+        int &ogvt, // Current global time of device
+        int &odvt, // Local time we are talking about, with gaurantee that odvt<=lvt
+        uint32_t &osent,
+        uint32_t &orecv
+    ){
+        if(dvt==lvt){
+            return false; // Nothing to update
+        }
+        
+        ogvt=gvt;
+        odvt=dvt;
+        osent=sent[dvt];
+        orecv=recv[dvt];
+        dvt++;
+        return true;
+    }
+    
+    bool send_spike(
+        int &t,
+        bool isAnti
+    )
+    {
+        while(lvt<gvt+K-1)
+        {
+            lvt++;
+            bool doFire;
+            std::tie(states[lvt],doFire)=step(states[lvt-gvt-1], inputs[lvt-gvt-1]);
+            
+            if(doFire!=outputs[lvt]){
+                t=lvt;
+                isAnti=!doFire;
+                sent[lvt-gvt] += OUTPUT_COUNT;
+                return true;
+            }
+        }
+        return false; // Can't advance any further
+    }
+};

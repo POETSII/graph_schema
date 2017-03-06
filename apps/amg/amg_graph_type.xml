@@ -121,11 +121,8 @@
 
         enum State{
             State_Idle,
-            State_PreSmoothBegin,
-            State_PreSmoothEnd,
-            State_WaitingForCoarse,
-            State_PostSmoothBegin,
-            State_PostSmoothEnd
+            State_Pre,
+            State_Coarse
         };
 
         ]]></SharedCode>
@@ -146,8 +143,8 @@
             <Scalar type="float" name="x"><Doc>Current problem guess</Doc></Scalar>
             <Scalar type="float" name="r"><Doc>Global worst residual</Doc></Scalar>
 
-            <Scalar type="int32_t" name="preSmoothSeen" />
-            <Scalar type="float" name="preSmoothAcc" />
+            <Scalar type="int32_t" name="peerSeen" />
+            <Scalar type="float" name="peerAcc" />
 
             <Scalar type="int32_t" name="coarseSeen" />
             <Scalar type="float" name="coarseAcc" />
@@ -177,14 +174,7 @@
 
             deviceState->b = message->b;
             deviceState->x = message->x;
-
-            // We have to do the exchange in order to work out the residual
-            deviceState->peerSeen=0;
-            deviceState->preSmoothAcc=0;
-            deviceState->coarseSeen=0;
-            deviceState->coarseAcc=0;
-            deviceState->postSmoothSeen=0;
-            deviceState->postSmoothAcc=0;
+            deviceState->r = FLT_MAX;
 
             deviceState->state=State_PreSmoothBegin;
             ]]></OnReceive>

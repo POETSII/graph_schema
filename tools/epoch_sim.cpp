@@ -71,7 +71,14 @@ struct EpochSim
   std::string m_id;
   TypedDataPtr m_graphProperties;
   std::vector<device> m_devices;
+  std::shared_ptr<LogWriter> m_log;
 
+  uint64_t m_unq;
+  
+  uint64_t nextSeqUnq()
+  {
+    return ++m_unq;
+  }
 
   virtual uint64_t onBeginGraphInstance(const GraphTypePtr &graphType, const std::string &id, const TypedDataPtr &graphProperties) override
   {
@@ -171,6 +178,22 @@ struct EpochSim
         init->onReceive(&receiveServices, m_graphProperties.get(), dev.properties.get(), dev.state.get(), 0, 0, 0);
       }
       dev.readyToSend = dev.type->calcReadyToSend(&receiveServices, m_graphProperties.get(), dev.properties.get(), dev.state.get());
+      
+      if(m_log){
+        auto id=nextSeqUnq();
+        auto idStr=std::to_string(id);
+        m_log->onInitEvent(
+          idStr.c_str(),
+          0.0,
+          0.0,
+          dev.type,
+          dev.name,
+          dev.readyToSend,
+          id,
+          std::vector<std::string>(),
+          dev.state
+        );
+      }
     }
   }
 
@@ -254,7 +277,9 @@ struct EpochSim
 
       const OutputPortPtr &output=src.type->getOutput(sel);
       TypedDataPtr message(output->getMessageType()->getMessageSpec()->create());
-
+      
+      std::string idSend;      
+      
       bool doSend=true;
       {
         uint32_t check=src.type->calcReadyToSend(&sendServices, m_graphProperties.get(), src.properties.get(), src.state.get());
@@ -265,6 +290,29 @@ struct EpochSim
         output->onSend(&sendServices, m_graphProperties.get(), src.properties.get(), src.state.get(), message.get(), &doSend);
 
         src.readyToSend = src.type->calcReadyToSend(&sendServices, m_graphProperties.get(), src.properties.get(), src.state.get());
+        
+        if(m_log){
+          auto id=nextSeqUnq();
+          auto idStr=std::to_string(id);
+          idSend=idStr;
+
+          m_log->onSendEvent(
+            idStr.c_str(),
+            m_epoch,
+            0.0,
+            src.type,
+            src.name,
+            src.readyToSend,
+            id,
+            std::vector<std::string>(),
+            src.state,
+            output,
+            !doSend,
+            doSend ? src.outputs.size() : 0,
+            message
+          );
+        }
+
       }
 
       if(!doSend){
@@ -294,6 +342,25 @@ struct EpochSim
         port->onReceive(&receiveServices, m_graphProperties.get(), dst.properties.get(), dst.state.get(), slot.properties.get(), slot.state.get(), message.get());
         dst.readyToSend = dst.type->calcReadyToSend(&receiveServices, m_graphProperties.get(), dst.properties.get(), dst.state.get());
 
+        if(m_log){
+          auto id=nextSeqUnq();
+          auto idStr=std::to_string(id);
+          
+          m_log->onRecvEvent(
+            idStr.c_str(),
+            m_epoch,
+            0.0,
+            dst.type,
+            dst.name,
+            dst.readyToSend,
+            id,
+            std::vector<std::string>(),
+            dst.state,
+            port,
+            idSend.c_str()
+          );
+        }
+        
         anyReady = anyReady || dst.anyReady();
       }
     }
@@ -313,6 +380,7 @@ void usage()
   fprintf(stderr, "  --log-level n\n");
   fprintf(stderr, "  --max-steps n\n");
   fprintf(stderr, "  --snapshots interval destFile\n");
+  fprintf(stderr, "  --log-events destFile\n");
   fprintf(stderr, "  --prob-send probability\n");
   exit(1);
 }
@@ -325,6 +393,8 @@ int main(int argc, char *argv[])
 
     std::string snapshotSinkName;
     unsigned snapshotDelta=0;
+    
+    std::string logSinkName;
 
     unsigned statsDelta=1;
 
@@ -372,6 +442,13 @@ int main(int argc, char *argv[])
         snapshotDelta=strtoul(argv[ia+1], 0, 0);
         snapshotSinkName=argv[ia+2];
         ia+=3;
+      }else if(!strcmp("--log-events",argv[ia])){
+        if(ia+1 >= argc){
+          fprintf(stderr, "Missing two arguments to --log-events destination \n");
+          usage();
+        }
+        logSinkName=argv[ia+1];
+        ia+=2;
       }else{
         srcFilePath=argv[ia];
         ia++;
@@ -404,6 +481,10 @@ int main(int argc, char *argv[])
     }
 
     EpochSim graph;
+    
+    if(!logSinkName.empty()){
+      graph.m_log.reset(new LogWriterToFile(logSinkName.c_str()));
+    }
 
     loadGraph(&registry, parser.get_document()->get_root_node(), &graph);
     if(logLevel>1){
