@@ -84,7 +84,7 @@ public:
     
     void writeElement(const char *name, const std::string &contents)
     { xmlTextWriterWriteElement(m_dst, (const xmlChar*)name,(const xmlChar *)contents.c_str()); }
-    
+        
     void writeElementRaw(const char *name, const std::string &contents)
     { 
         writeElementRaw(name,contents.c_str());
@@ -170,6 +170,15 @@ private:
   { return std::shared_ptr<xmlChar>(xmlCharStrdup(v), free); }
 
   XMLWriter m_dst;
+  
+  std::string toStr(const TypedDataSpecPtr &spec, const TypedDataPtr &data)
+  {
+      std::string res=spec->toJSON(data);
+      if(!res.empty()){
+        res=res.substr(1,res.size()-2);
+      }
+      return res;
+  }
     
     struct event_t
     {
@@ -322,7 +331,7 @@ public:
         ev.rts=rts;
         ev.seq=seq;
         ev.L=logs;
-        ev.S=dt->getStateSpec()->toJSON(state);
+        ev.S=toStr(dt->getStateSpec(), state);
         
         ev.write(m_dst);
     }
@@ -356,13 +365,13 @@ public:
         ev.rts=rts;
         ev.seq=seq;
         ev.L=logs;
-        ev.S=dt->getStateSpec()->toJSON(state);
+        ev.S=toStr(dt->getStateSpec(), state);
         // message event
         ev.port=port->getName();
         // send event
         ev.cancel=cancel;
         ev.fanout=fanout;
-        ev.M=port->getMessageType()->getMessageSpec()->toJSON(msg);
+        ev.M=toStr(port->getMessageType()->getMessageSpec(), msg);
         
         ev.write(m_dst);
     }
@@ -394,7 +403,7 @@ public:
         ev.rts=rts;
         ev.seq=seq;
         ev.L=logs;
-        ev.S=dt->getStateSpec()->toJSON(state);
+        ev.S=toStr(dt->getStateSpec(), state);
         // message event
         ev.port=port->getName();
         // send event

@@ -68,7 +68,7 @@ grammar {
     element L { text } *,
     
     ### State _after_ the event happened
-    element S { typedDataValue  }
+    element S { typedDataValue  } ?
   ),
   
   message_event = (

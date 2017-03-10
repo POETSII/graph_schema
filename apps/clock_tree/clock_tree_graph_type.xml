@@ -39,7 +39,7 @@
 		</State>
 		
 		<ReadyToSend><![CDATA[
-			*requestSendFlags = deviceState->pending==0 ? OUTPUT_FLAG_root_tick_out : 0;
+			*readyToSend = deviceState->pending==0 ? OUTPUT_FLAG_root_tick_out : 0;
 		]]></ReadyToSend>
 		
 		<OutputPort name="tick_out" messageTypeId="tick">
@@ -74,13 +74,13 @@
 	  
 	  <ReadyToSend><![CDATA[
 			if(deviceState->status==0){
-				*requestSendFlags=0;
+				*readyToSend=0;
 			}else if(deviceState->status==1){
-				*requestSendFlags = OUTPUT_FLAG_branch_tick_out;
+				*readyToSend = OUTPUT_FLAG_branch_tick_out;
 			}else if(deviceState->status==2){
-				*requestSendFlags = OUTPUT_FLAG_branch_ack_out;
+				*readyToSend = OUTPUT_FLAG_branch_ack_out;
 			}else{
-				*requestSendFlags=0;
+				*readyToSend=0;
 			}
 		]]></ReadyToSend>
 	  
@@ -115,7 +115,7 @@
 		</State>
 		
 		<ReadyToSend><![CDATA[
-		*requestSendFlags = deviceState->ready ? OUTPUT_FLAG_leaf_ack_out : 0;
+		*readyToSend = deviceState->ready ? OUTPUT_FLAG_leaf_ack_out : 0;
 		]]></ReadyToSend>
 	
 		  <InputPort name="tick_in" messageTypeId="tick">

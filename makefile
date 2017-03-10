@@ -140,7 +140,7 @@ providers/$1.graph.so : providers/$1.graph.cpp
 
 $1_provider : providers/$1.graph.so
 
-all_providers : clock_tree_provider
+all_providers : $1_provider
 
 endef
 

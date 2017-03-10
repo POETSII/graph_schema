@@ -51,7 +51,7 @@ for i in range(N):
     props={
         "a":a, "b":b, "c":c, "d":d, "fanin":K
     }
-    nodes[i]=DeviceInstance(res, "n_{}".format(i), neuronType, None, props)
+    nodes[i]=DeviceInstance(res, "n_{}".format(i), neuronType, props)
     res.add_device_instance(nodes[i])
 
 for dst in range(N):

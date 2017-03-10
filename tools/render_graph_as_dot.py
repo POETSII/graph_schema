@@ -192,7 +192,7 @@ if args.snapshots==None:
     dst=sys.stdout
     if args.output!="-":
         dst=open(args.output,"wt")
-        write_graph(dst,graph)
+    write_graph(dst,graph)
 else:
     dstPath=args.output
     if dstPath=="-":

@@ -117,6 +117,8 @@
 		  deviceState->Icount=0;
 
 		  deviceState->pendingFires--;
+		  
+		  handler_log(3, "fanin=%d", deviceProperties->fanin);
 		  ]]></OnSend>
 		</OutputPort>
 
