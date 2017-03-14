@@ -7,57 +7,57 @@
 ]]></SharedCode>
 
 <Properties>
-    <Scalar type="float" name="residualTol"><Doc>The tolerance for the maximum absolute residual.</Doc></Scalar>
+    <Scalar type="float" name="residualTol"><Documentation>The tolerance for the maximum absolute residual.</Documentation></Scalar>
 </Properties>
 
 <MessageTypes>
     <MessageType id="linear_problem">
-        <Doc>Provides a problem $A x = b$, with $A$ a known matrix encoded in the edge weights.</Doc>
+        <Documentation>Provides a problem $A x = b$, with $A$ a known matrix encoded in the edge weights.</Documentation>
         <Message>
-            <Scalar type="float" name="x" ><Doc>Guess at solution. Part of $x=x_(1)$.</Doc></Scalar>
-            <Scalar type="float" name="b" ><Doc>Value to solve for. Part of $b=b_(1)$.</Doc></Scalar>
+            <Scalar type="float" name="x" ><Documentation>Guess at solution. Part of $x=x_(1)$.</Documentation></Scalar>
+            <Scalar type="float" name="b" ><Documentation>Value to solve for. Part of $b=b_(1)$.</Documentation></Scalar>
         </Message>
     </MessageType>
 
     <MessageType id="linear_solution">
-        <Doc>Provides a solution to $A x = b$.</Doc>
+        <Documentation>Provides a solution to $A x = b$.</Documentation>
         <Message>
-            <Scalar type="float" name="x"><Doc>Solution. Part of $x=x_(1)$.</Doc></Scalar>
-            <Scalar type="float" name="r"><Doc>Global residual of the solution. $r = max(A x - b)$.</Doc></Scalar>
-            <Scalar type="int32_t" name="i"><Doc>Number of iterations used.</Doc></Scalar>
+            <Scalar type="float" name="x"><Documentation>Solution. Part of $x=x_(1)$.</Documentation></Scalar>
+            <Scalar type="float" name="r"><Documentation>Global residual of the solution. $r = max(A x - b)$.</Documentation></Scalar>
+            <Scalar type="int32_t" name="i"><Documentation>Number of iterations used.</Documentation></Scalar>
         </Message>
     </MessageType>
 
     <MessageType id="jacobi_exchange">
-        <Doc>Shares a current solution to $A_(i) x_(i) = b_(i)$.</Doc>
+        <Documentation>Shares a current solution to $A_(i) x_(i) = b_(i)$.</Documentation>
         <Message>
-            <Scalar type="float" name="x"><Doc>Solution. Part of $x=x_(i)$.</Doc></Scalar>
-            <Scalar type="int32_t" name="stage"><Doc>Identifies which stage this is (e.g. pre-smooth vs post-smooth)</Doc></Scalar>
+            <Scalar type="float" name="x"><Documentation>Solution. Part of $x=x_(i)$.</Documentation></Scalar>
+            <Scalar type="int32_t" name="stage"><Documentation>Identifies which stage this is (e.g. pre-smooth vs post-smooth)</Documentation></Scalar>
         </Message>
     </MessageType>
 
 
     <MessageType id="fine_to_coarse">
-        <Doc>Messages being sent up the grid, in order to solve $A_(i) x_(i) = b_(i)$, where $A_(i)$ is some restricted
+        <Documentation>Messages being sent up the grid, in order to solve $A_(i) x_(i) = b_(i)$, where $A_(i)$ is some restricted
             version of $A_(i) = R_(i) A_(i-1)$, and $b_(i)$ is a restricted version of the residual $R_(i) (A_(i-1) x_(i-1) - b_(i-1))$.
 
             $max(r)$ is the _local_ maximum residual, i.e. it is a part of $max( A_0 x_0 - b_0) on the
             finest level, but only covers the parts of the cone the device is connected to.
-            </Doc>
+            </Documentation>
         <Message>
-            <Scalar type="float" name="b" ><Doc>Value to solve for. Part of b_(i-1)</Doc></Scalar>
-            <Scalar type="float" name="max_r"><Doc>Max residual of all finer nodes (though not for whole network)</Doc></Scalar>
+            <Scalar type="float" name="b" ><Documentation>Value to solve for. Part of b_(i-1)</Documentation></Scalar>
+            <Scalar type="float" name="max_r"><Documentation>Max residual of all finer nodes (though not for whole network)</Documentation></Scalar>
         </Message>
     </MessageType>
 
     <MessageType id="coarse_to_fine">
-        <Doc>Corrections sent down the grid. These will be prolonged back onto the finer
+        <Documentation>Corrections sent down the grid. These will be prolonged back onto the finer
         solution, so $x_(i) = x_(i) + P_(i+1) x_(i+1)$.
         $max(r)$ is the _global_ maximum residual for the original version of x at the finest level of the grid.
-        </Doc>
+        </Documentation>
         <Message>
-            <Scalar type="float" name="x" ><Doc>Best guess for $x_(i+1)$</Doc></Scalar>
-            <Scalar type="float" name="max_r"><Doc>Max residual of all nodes (for the whole network)</Doc></Scalar>
+            <Scalar type="float" name="x" ><Documentation>Best guess for $x_(i+1)$</Documentation></Scalar>
+            <Scalar type="float" name="max_r"><Documentation>Max residual of all nodes (for the whole network)</Documentation></Scalar>
         </Message>
     </MessageType>
 
@@ -67,7 +67,7 @@
 
     <DeviceType id="root">
         <Properties>
-            <Scalar type="int32_t" name="fineTotal" ><Doc>Number of fine that we receive from (not nesc. that we send to)</Doc></Scalar>
+            <Scalar type="int32_t" name="fineTotal" ><Documentation>Number of fine that we receive from (not nesc. that we send to)</Documentation></Scalar>
             <Scalar type="float" name="inv_Adiag" />
         </Properties>
 
@@ -84,7 +84,7 @@
 
         <InputPort name="fine_up" messageTypeId="fine_to_coarse">
             <Properties>
-                <Scalar type="float" name="R" ><Doc>The component of R for this edge.</Doc></Scalar>
+                <Scalar type="float" name="R" ><Documentation>The component of R for this edge.</Documentation></Scalar>
             </Properties>
             <OnReceive><![CDATA[
             assert(deviceState->fineSeen < deviceProperties->fineTotal);
@@ -111,11 +111,11 @@
     </DeviceType>
 
     <DeviceType id="leaf">
-        <Doc>This is the finest level linear solver, with one device per element in
+        <Documentation>This is the finest level linear solver, with one device per element in
         the original problem matrix. The finest is not the same as the middle-tier
         nodes, as it needs to control the iteration until residual is met (though this
         could be controlled by a property and a state).
-        </Doc>
+        </Documentation>
 
         <SharedCode><![CDATA[
 
@@ -128,8 +128,8 @@
         ]]></SharedCode>
 
         <Properties>
-            <Scalar type="int32_t" name="peerCount" ><Doc>Number of peers that we receive from (not nesc. send to).</Doc></Scalar>
-            <Scalar type="int32_t" name="coarseCount"><Doc>Number of coarse that we receive from (not nesc. send to).</Doc></Scalar>
+            <Scalar type="int32_t" name="peerCount" ><Documentation>Number of peers that we receive from (not nesc. send to).</Documentation></Scalar>
+            <Scalar type="int32_t" name="coarseCount"><Documentation>Number of coarse that we receive from (not nesc. send to).</Documentation></Scalar>
             <Scalar type="float" name="Ad" />
             <Scalar type="float" name="AdInvOmega" />
             <Scalar type="float" name="omega" />
@@ -137,11 +137,11 @@
 
         <State>
             <Scalar type="int32_t" name="state" />
-            <Scalar type="int32_t" name="i"><Doc>Number of iterations</Doc></Scalar>
+            <Scalar type="int32_t" name="i"><Documentation>Number of iterations</Documentation></Scalar>
 
-            <Scalar type="float" name="b"><Doc>Current problem RHS</Doc></Scalar>
-            <Scalar type="float" name="x"><Doc>Current problem guess</Doc></Scalar>
-            <Scalar type="float" name="r"><Doc>Global worst residual</Doc></Scalar>
+            <Scalar type="float" name="b"><Documentation>Current problem RHS</Documentation></Scalar>
+            <Scalar type="float" name="x"><Documentation>Current problem guess</Documentation></Scalar>
+            <Scalar type="float" name="r"><Documentation>Global worst residual</Documentation></Scalar>
 
             <Scalar type="int32_t" name="peerSeen" />
             <Scalar type="float" name="peerAcc" />

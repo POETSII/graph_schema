@@ -1,5 +1,5 @@
 <?xml version="1.0"?>
-<Graph xmlns="http://TODO.org/POETS/virtual-graph-schema-v1">
+<Graphs xmlns="http://TODO.org/POETS/virtual-graph-schema-v1">
   <GraphType id="clocked_izhikevich">
 
     <Properties>
@@ -46,25 +46,25 @@
 
     <DeviceTypes>
       <DeviceType id="neuron">
-      
+
           <Documentation><![CDATA[
-        
+
         Overall neuron flow is:
-        
+
         while(1){
             // ICount==fanin && !waitTick && sentSpike
             RTS={tick}
-        
+
             send tick [
               // Update state and firing
               ICount=0;
               sentSpike=false;
               waitTick=true;
             ]
-            
-            // ICount==0 && waitTick  && !sentSpike 
+
+            // ICount==0 && waitTick  && !sentSpike
             RTS={}
-            
+
             par{
                 seq{
                     // waitTick && !sentSpike
@@ -80,7 +80,7 @@
                     // !waitTick && sentSpike
                     RTS={}
                 }
-                
+
                 // Icount==0
                 while(incomingSpikes < fanIn){
                     // Icount<fanin
@@ -88,19 +88,19 @@
                 }
                 // Icount==fanin
             }
-            
+
             // ICount==fanin && !waitTick && sentSpike
         }
-        
+
         ]]></Documentation>
-      
+
         <Properties>
           <Scalar type="uint32_t" name="seed" />
 
-          <Scalar type="float" name="a" value="0" />
-          <Scalar type="float" name="b" value="0" />
-          <Scalar type="float" name="c" value="0" />
-          <Scalar type="float" name="d" value="0" />
+          <Scalar type="float" name="a" default="0" />
+          <Scalar type="float" name="b" default="0" />
+          <Scalar type="float" name="c" default="0" />
+          <Scalar type="float" name="d" default="0" />
           <Scalar type="float" name="Ir" />
 
           <Scalar type="uint32_t" name="fanin" />
@@ -115,12 +115,12 @@
           <Scalar name="I" type="float" />
           <Scalar name="Icount" type="uint32_t" />
           <Scalar name="fireValue" type="int8_t" />
-          
+
           <Scalar name="waitTick" type="int8_t" />
           <Scalar name="sentSpike" type="int8_t" />
         </State>
-        
-        
+
+
         <InputPort name="__init__" messageTypeId="__init__">
           <OnReceive><![CDATA[
           deviceState->rng = deviceProperties->seed;
@@ -134,12 +134,12 @@
           deviceState->Icount=deviceProperties->fanin;
           deviceState->waitTick=false;
           deviceState->sentSpike=true;
-          
+
           handler_log(3, "sentSpike=%d, waitTick=%d, Icount = %d, fanin=%d", deviceState->sentSpike, deviceState->waitTick, deviceState->Icount, deviceProperties->fanin);
           ]]>
           </OnReceive>
         </InputPort>
-    
+
         <ReadyToSend><![CDATA[
         *readyToSend=0;
         if(deviceState->Icount==deviceProperties->fanin && !deviceState->waitTick && deviceState->sentSpike ){
@@ -148,12 +148,12 @@
             *readyToSend |= OUTPUT_FLAG_fire;
         }
         ]]></ReadyToSend>
-        
+
         <OutputPort name="tock" messageTypeId="tick">
           <OnSend><![CDATA[
           assert(deviceState->Icount==deviceProperties->fanin);
           assert(!deviceState->waitTick && deviceState->sentSpike);
-          
+
           float &v=deviceState->v;
           float &u=deviceState->u;
           float &I=deviceState->I;
@@ -165,7 +165,7 @@
           deviceState->fireValue = v >= 30;
           if(deviceState->fireValue){
             handler_log(1, "FIRE!");
-          
+
             v=deviceProperties->c;
             u += deviceProperties->d;
           }
@@ -192,7 +192,7 @@
         <OutputPort name="fire" messageTypeId="spike">
           <OnSend><![CDATA[
           handler_log(3, "sentSpike=%d, waitTick=%d, Icount = %d, fanin=%d", deviceState->sentSpike, deviceState->waitTick, deviceState->Icount, deviceProperties->fanin);
-          
+
           assert(!deviceState->waitTick);
           assert(!deviceState->sentSpike);
           message->fired=deviceState->fireValue;
@@ -204,10 +204,10 @@
             <Properties>
                 <Scalar type="float" name="weight" />
             </Properties>
-        
+
           <OnReceive><![CDATA[
           assert(deviceState->Icount < deviceProperties->fanin);
-          
+
           deviceState->Icount++;
           if(message->fired){
             deviceState->I += edgeProperties->weight;
@@ -227,7 +227,7 @@
         <State>
           <Scalar type="uint32_t" name="waitCount" />
         </State>
-        
+
         <InputPort name="__init__" messageTypeId="__init__">
           <OnReceive><![CDATA[
           deviceState->waitCount = deviceProperties->neuronCount;
@@ -258,4 +258,4 @@
       </DeviceType>
     </DeviceTypes>
   </GraphType>
-</Graph>
+</Graphs>

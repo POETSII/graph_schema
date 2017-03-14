@@ -27,7 +27,7 @@
     to the connected device, which will then pass it on, and
     so on.
     </Documentation>
-    
+
     <!-- This element contains all message types used in
          this particular graph type. The message ids are
          indicating meaning as well as structure. For example,
@@ -44,9 +44,9 @@
             receiving the token. There is no information
             associated with the pulse.
             </Documentation>
-        </MessageType>        
+        </MessageType>
     </MessageTypes>
-    
+
     <DeviceTypes>
       <DeviceType id="dev">
           <Documentation>
@@ -56,10 +56,10 @@
           - one output port called "out"
           - a single boolean property called "leader"
           - a single boolean state variable called "hot"
-          
+
           Graphically, the cell looks something like this:
-          ````        
-                  type:"dev"             
+          ````
+                  type:"dev"
               +----------------+
               |   input:"in"   +->
               +----------------+
@@ -81,11 +81,11 @@
             "in", it will go hot.
           - The "out" port is ready to send iff the cell
             is hot
-          
+
           The state machine is then:
           ````
                 __init__          +-----------+
-                leader=1  .------>| hot=1     |                                
+                leader=1  .------>| hot=1     |
                         /         | rts={out} |
           +---------+  /          +---------+-+
           | startup +-'            ^        | send/out
@@ -102,31 +102,31 @@
           it can use is the graph and device properties.
           The init can be calculated ahead of time if desired,
           then the pre-initialised stateloaded instead)
-          
+
           If no device instance is set up to be leader, the
           entire graph will remain quiescent forever.
           </Documentation>
-          
+
           <Properties>
             <Scalar type="int8_t" name="leader" />
           </Properties>
-          
+
           <State>
             <Scalar type="int8_t" name="hot" />
           </State>
-          
+
           <InputPort name="in" messageTypeId="update">
             <OnReceive><![CDATA[
             deviceState->hot=1;
             ]]></OnReceive>
           </InputPort>
-          
+
           <OutputPort name="out" messageTypeId="update">
             <OnSend><![CDATA[
             deviceState->hot=0;
             ]]></OnSend>
           </OutputPort>
-          
+
           <ReadyToSend><![CDATA[
           *readyToSend = deviceState->hot ? RTS_INDEX_out : 0;
           ]]></ReadyToSend>

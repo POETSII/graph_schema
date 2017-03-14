@@ -79,7 +79,7 @@ def load_typed_data_instance(dt,spec):
         return None
     value=json.loads(dt.text)
     assert(spec.is_refinement_compatible(value))
-    return value
+    return spec.expand(value)
 
 
 def load_struct_spec(name, members):
@@ -96,7 +96,7 @@ def load_struct_instance(spec,dt):
     text="{"+dt.text+"}"
     value=json.loads(text)
     assert(spec.is_refinement_compatible(value))
-    return value
+    return spec.expand(value)
 
 def load_metadata(parent, name):
     metadata=None

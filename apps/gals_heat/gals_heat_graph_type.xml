@@ -1,9 +1,9 @@
 <?xml version="1.0"?>
-<Graph xmlns="http://TODO.org/POETS/virtual-graph-schema-v1">
+<Graphs xmlns="http://TODO.org/POETS/virtual-graph-schema-v1">
   <GraphType id="gals_heat" >
-	<Doc><![CDATA[
+	<Documentation><![CDATA[
     Locally synchronous heat.
-	 
+
 	 Each cell i has a time t, and all cells start at t=0.
 	 Initially each cell knows its own state, but not its
 	 neighbours, so all cells want to broadcast their state and move to t=1.
@@ -27,10 +27,10 @@
          So at a given time t we need to deal with messages for both t=1 and t=2,
          and essentially need two copies. When we advance, the t+1 copy becomes
 	 the t version and t+1 is empty.
-    ]]></Doc>
+    ]]></Documentation>
 
 	<Properties>
-      <Scalar type="uint32_t" name="maxTime" value="1000" />
+      <Scalar type="uint32_t" name="maxTime" default="1000" />
     </Properties>
 
     <SharedCode><![CDATA[
@@ -54,24 +54,24 @@
 
       <DeviceType id="dirichlet_variable">
 		<Properties>
-			<Scalar type="int32_t" name="dt" value="1" />
-		
+			<Scalar type="int32_t" name="dt" default="1" />
+
 		  <Scalar type="float" name="amplitude" />
 		  <Scalar type="float" name="phase" />
 		  <Scalar type="float" name="frequency" />
 		  <Scalar type="float" name="bias" />
-		  
+
 		  <Scalar type="uint32_t" name="neighbours" /> <!-- We need to know the neighbour count in order to sync -->
 		</Properties>
 
 		<State>
 		  <Scalar type="float" name="v" />
 		  <Scalar type="uint32_t" name="t" />
-		  
+
 		  <Scalar type="uint32_t" name="cs" />
 		  <Scalar type="uint32_t" name="ns" />
 		</State>
-		
+
 		<ReadyToSend><![CDATA[
 		*readyToSend		= 0;
 		if(deviceState->t <= graphProperties->maxTime && deviceState->cs==deviceProperties->neighbours){
@@ -84,7 +84,7 @@
 		  deviceState->t=0;
 		  deviceState->cs=deviceProperties->neighbours;
 		  deviceState->ns=0;
-		  
+
 		  deviceState->v=deviceProperties->bias + deviceProperties->amplitude
 			     * sin(deviceProperties->phase + deviceProperties->frequency * deviceState->t);
 		  ]]></OnReceive>
@@ -103,7 +103,7 @@
 		  }else{
 			deviceState->ns++;
 		  			assert(deviceState->t + deviceProperties->dt == message->t);
-					
+
 		  }
 		  ]]></OnReceive>
 		</InputPort>
@@ -117,38 +117,38 @@
 
 			  deviceState->v=deviceProperties->bias + deviceProperties->amplitude
 			     * sin(deviceProperties->phase + deviceProperties->frequency * deviceState->t);
-			
+
 			  deviceState->t = deviceState->t + deviceProperties->dt;
 			  deviceState->cs = deviceState->ns;
 			  deviceState->ns = 0;
-			  
+
 			  message->t = deviceState->t;
 			  message->v = deviceState->v;
 			}
 		  ]]></OnSend>
 		</OutputPort>
       </DeviceType>
-      
+
       <DeviceType id="cell">
 		<!-- This is a common-or-garden 2d cell, with no boundary stuff -->
 		<Properties>
 		  <Scalar type="float" name="iv" />
 		  <Scalar type="uint32_t" name="nhood" />
 		  <Scalar type="float" name="wSelf" />
-		  <Scalar type="uint32_t" name="dt" value="1" />
+		  <Scalar type="uint32_t" name="dt" default="1" />
 		</Properties>
 
 		<State>
 		  <Scalar type="float" name="v" />
 		  <Scalar type="uint32_t" name="t" />
-		  
+
 		  <Scalar type="float" name="ca" /> <!-- w_self * s_self + sum( w_o * s_o for o in seenNow)  -->
 		  <Scalar type="uint32_t" name="cs" />
 
 		  <Scalar type="float" name="na" /> <!-- sum(w_o * s_o for o in seenNext) -->
 		  <Scalar type="uint32_t" name="ns" />
 		</State>
-		
+
 		<ReadyToSend><![CDATA[
 		*readyToSend = 0;
 		if(deviceState->t <= graphProperties->maxTime && deviceState->cs==deviceProperties->nhood){
@@ -182,7 +182,7 @@
 			<Properties>
 				<Scalar type="float" name="w" />
 			</Properties>
-			
+
 		  <OnReceive><![CDATA[
 		  if(message->t==deviceState->t){
 			deviceState->ca += edgeProperties->w * message->v;
@@ -218,7 +218,7 @@
 
 			  message->t=deviceState->t;
 			  message->v=deviceState->ca;
-			
+
 			// It is possible that all our neighbours are ahead and have broadcast, so
 			// we could immediately be ready to go.
 		  }
@@ -227,4 +227,4 @@
       </DeviceType>
     </DeviceTypes>
   </GraphType>
-</Graph>
+</Graphs>

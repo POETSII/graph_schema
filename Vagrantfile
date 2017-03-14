@@ -53,9 +53,13 @@ Vagrant.configure(2) do |config|
   #   # Customize the amount of memory on the VM:
      vb.memory = "2048"
   end
-  #
-  # View the documentation for the provider you are using for more
-  # information on available options.
+
+
+  config.vm.provider "virtualbox" do |v|
+    # If clock drifts more than 500ms, then force it (instead of smooth adjust)
+    v.customize ["guestproperty","set", :id, "/VirtualBox/GuestAdd/VBoxService/--timesync-set-threshold", "500"]
+  end
+
 
 
   # Enable provisioning with a shell script. Additional provisioners such as
@@ -68,7 +72,7 @@ Vagrant.configure(2) do |config|
 	sudo apt-get install -y autoconf automake autotools-dev curl libmpc-dev libmpfr-dev libgmp-dev gawk build-essential bison flex texinfo gperf libtool patchutils bc zlib1g-dev
 
      # Visualisation
-     sudo apt-get install -y graphviz
+     sudo apt-get install -y graphviz imagemagick ffmpeg
 
      # Editors
      sudo apt-get install -y emacs-nox screen
@@ -77,4 +81,6 @@ Vagrant.configure(2) do |config|
      sudo apt-get install -y xsltproc ant libsaxon-java docbook docbook-xsl-ns pandoc
 
   SHELL
+
+
 end

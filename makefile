@@ -32,6 +32,7 @@ CPPFLAGS += -std=c++11 -g
 TRANG = external/trang-20091111/trang.jar
 JING = external/jing-20081028/bin/jing.jar
 RNG_SVG = external/rng-svg/build.xml
+RAPIDJSON = external/rapidjson-master/include/rapidjson/rapidjson.h
 
 # TODO : OS X specific
 PYTHON = python3
@@ -49,10 +50,11 @@ $(RNG_SVG) : external/rng-svg-latest.zip
 	(cd external/rng-svg && unzip -o ../rng-svg-latest)
 	touch $@
 
-external/rapidjson-master/include/rapidjson/rapidjson.h : external/rapidjson-master.zip
+$(RAPIDJSON) : external/rapidjson-master.zip
 	(cd external && unzip -o rapidjson-master)
+	touch $@
 
-rapidjson : external/rapidjson-master/include/rapidjson/rapidjson.h
+
 
 CPPFLAGS += -I external/rapidjson-master/include
 
@@ -102,7 +104,7 @@ output/%.graph.cpp : apps/%.xml graph_library
 	mkdir -p $(dir output/$*)
 	$(PYTHON) tools/render_graph_as_cpp.py apps/$*.xml output/$*.graph.cpp
 
-output/%.graph.so : output/%.graph.cpp rapidjson
+output/%.graph.so : output/%.graph.cpp $(RAPIDJSON)
 	g++ $(CPPFLAGS) $(SO_CPPFLAGS) $< -o $@ $(LDFLAGS)
 
 bin/print_graph_properties : tools/print_graph_properties.cpp
@@ -130,9 +132,9 @@ bin/test_graph_log_api : tools/test_graph_log_api.cpp
 
 define provider_rules_template
 
-providers/$1.graph.cpp : apps/$1/$1_graph_type.xml
+providers/$1.graph.cpp : apps/$1/$1_graph_type.xml $(JING) $(RAPIDJSON)
 	mkdir -p providers
-	java -jar $(JING) -c master/virtual-graph-schema-v1.rnc $<
+	java -jar $(JING) -c master/virtual-graph-schema-v1.rnc apps/$1/$1_graph_type.xml
 	$$(PYTHON) tools/render_graph_as_cpp.py apps/$1/$1_graph_type.xml providers/$1.graph.cpp
 
 providers/$1.graph.so : providers/$1.graph.cpp
