@@ -28,7 +28,7 @@ def _type_to_element(t):
     tag=_type_to_tag[type(t)]
     return etree.Element(tag)
 
-def save_typed_data_spec(dt):    
+def save_typed_data_spec(dt):
     if isinstance(dt,TupleTypedDataSpec):
         n=etree.Element(toNS("p:Tuple"))
         n.attrib["name"]=dt.name
@@ -39,8 +39,8 @@ def save_typed_data_spec(dt):
         n.attrib["name"]=dt.name
         n.attrib["type"]=dt.type
 
-        if dt.value is not None and dt.value is not 0:
-            n.attrib["default"]=str(dt.value)
+        if dt.default is not None and dt.default is not 0:
+            n.attrib["default"]=str(dt.default)
     elif isinstance(dt,ArrayTypedDataSpec):
         n=etree.Element(toNS("p:Array"))
         n.attrib["name"]=dt.name
@@ -51,11 +51,11 @@ def save_typed_data_spec(dt):
         raise RuntimeError("Unknown data type.")
 
     return n
-    
+
 def save_typed_struct_spec_contents(node,tuple):
     if tuple is None:
         return
-    
+
     assert isinstance(tuple,TupleTypedDataSpec), "Expected tuple, got {}".format(tuple)
     if len(tuple.elements_by_index)==0:
         return
@@ -67,13 +67,13 @@ def save_typed_struct_spec_contents(node,tuple):
 def save_typed_struct_spec(node,childTagName,tuple):
     if tuple is None:
         return
-    
+
     assert isinstance(tuple,TupleTypedDataSpec), "Expected tuple, got {}".format(tuple)
     if len(tuple.elements_by_index)==0:
         return
 
     r=etree.Element(toNS(childTagName))
-    save_typed_struct_spec_contents(r, tuple)   
+    save_typed_struct_spec_contents(r, tuple)
     node.append(r)
     return r
 
@@ -104,8 +104,8 @@ def save_metadata(node,childTagName,value):
     r.text=text[1:-1] # Get rid of brackets
     node.append(r)
     return r
-    
-    
+
+
 def save_message_type(mt):
     n=_type_to_element(mt)
 
@@ -123,13 +123,13 @@ def save_device_type(dt):
     save_typed_struct_spec(n, "p:Properties", dt.properties)
     save_typed_struct_spec(n, "p:State", dt.state)
     save_metadata(n, "p:MetaData", dt.metadata)
-    
+
     if dt.shared_code:
         for s in dt.shared_code:
             sn=etree.Element(toNS("p:SharedCode"))
             sn.text=etree.CDATA(s)
             n.append(sn)
-        
+
     for p in dt.inputs_by_index:
         pn=_type_to_element(p)
         pn.attrib["name"]=p.name
@@ -153,7 +153,7 @@ def save_device_type(dt):
         pn.attrib["messageTypeId"]=p.message_type.id
 
         save_metadata(pn, "p:MetaData", p.metadata)
-        
+
         h=etree.Element(toNS("p:OnSend"))
         h.text = etree.CDATA(p.send_handler)
         #h.text = p.send_handler
@@ -164,7 +164,7 @@ def save_device_type(dt):
     pn.text=etree.CDATA(dt.ready_to_send_handler)
     n.append(pn)
 
-    return n     
+    return n
 
 
 def save_device_instance(di):
@@ -189,7 +189,7 @@ def save_edge_instance(ei):
         n.attrib["dstPortName"]=ei.dst_port.name
         n.attrib["srcDeviceId"]=ei.src_device.id
         n.attrib["srcPortName"]=ei.src_port.name
-    
+
     save_typed_struct_instance(n, "p:P", ei.dst_port.properties, ei.properties)
 
     save_metadata(n, "p:M", ei.metadata)
@@ -233,7 +233,7 @@ def save_graph_instance(graph):
     save_typed_struct_instance(gn, "p:Properties", graph.graph_type.properties ,graph.properties)
 
     save_metadata(gn, "p:MetaData", graph.metadata)
-    
+
     din = etree.Element(toNS("p:DeviceInstances"))
     gn.append(din)
     for di in graph.device_instances.values():
@@ -249,7 +249,7 @@ def save_graph_instance(graph):
 def save_graph(graph,dst):
     nsmap = { None : "http://TODO.org/POETS/virtual-graph-schema-v1" }
     root=etree.Element(toNS("p:Graphs"), nsmap=nsmap)
-    
+
     root.append(save_graph_type(graph.graph_type))
     root.append(save_graph_instance(graph))
 
