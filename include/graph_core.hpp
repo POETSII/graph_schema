@@ -9,6 +9,7 @@
 #include <cstring>
 #include <atomic>
 #include <cassert>
+#include <type_traits>
 
 #include "poets_hash.hpp"
 
@@ -56,16 +57,22 @@ struct typed_data_t
 };
 #pragma pack(pop)
 
-class TypedDataPtr
+template<class T>
+class DataPtr
 {
+  template<class TO>
+  friend class DataPtr;
+  
+  static_assert(std::is_base_of<typed_data_t,T>::value, "This class only handles things derived from typed_data_t");
+  
 private:
-  typed_data_t *m_p;
+  T *m_p;
 public:
-  TypedDataPtr()
+  DataPtr()
     : m_p(0)
   {}
 
-  TypedDataPtr(typed_data_t *p)
+  DataPtr(T *p)
     : m_p(p)
   {
     if(p){
@@ -74,7 +81,17 @@ public:
     }
   }
 
-  TypedDataPtr(const TypedDataPtr &o)
+  template<class TO>
+  DataPtr(TO *p)
+    : m_p(p)
+  {
+    if(p){
+      assert(p->_ref_count==0);
+      p->_ref_count=1;
+    }
+  }
+
+  DataPtr(const DataPtr &o)
     : m_p(o.m_p)
   {
     if(m_p){
@@ -82,7 +99,16 @@ public:
     }
   }
 
-  TypedDataPtr &operator=(const TypedDataPtr &o)
+  template<class TO>
+  DataPtr(const DataPtr<TO> &o)
+    : m_p(o.m_p)
+  {
+    if(m_p){
+      std::atomic_fetch_add(&m_p->_ref_count, 1u);
+    }
+  }
+
+  DataPtr &operator=(const DataPtr &o)
   {
     if(m_p!=o.m_p){
       release();
@@ -94,29 +120,55 @@ public:
     return *this;
   }
 
-  TypedDataPtr(TypedDataPtr &&o)
+  template<class TO>
+  DataPtr &operator=(const DataPtr<TO> &o)
+  {
+    if(m_p!=o.m_p){
+      release();
+      m_p=o.m_p;
+      if(m_p){
+	std::atomic_fetch_add(&m_p->_ref_count, 1u);
+      }
+    }
+    return *this;
+  }
+
+  DataPtr(DataPtr &&o)
     : m_p(o.m_p)
   {
     o.m_p=0;
   }
 
-  const typed_data_t *get() const
+  template<class TO>
+  DataPtr(DataPtr<TO> &&o)
+    : m_p(o.m_p)
+  {
+    o.m_p=0;
+  }
+
+  const T *get() const
   { return m_p; }
 
-  typed_data_t *get()
+  T *get()
+  { return m_p; }
+
+  const T *operator->() const
+  { return m_p; }
+
+  T *operator->()
   { return m_p; }
 
   operator bool() const
   { return m_p!=0; }
 
-  typed_data_t *detach()
+  T *detach()
   {
-    typed_data_t *res=m_p;
+    T *res=m_p;
     m_p=0;
     return res;
   }
 
-  void attach(typed_data_t *p)
+  void attach(T *p)
   {
     release();
     m_p=p;
@@ -138,7 +190,7 @@ public:
     }
   }
     
-  ~TypedDataPtr()
+  ~DataPtr()
   {
     release();
   }
@@ -214,6 +266,14 @@ namespace std
     }
   };
 };
+
+template<class T>
+DataPtr<T> make_data_ptr()
+{
+  return DataPtr<T>(new T);
+}
+
+typedef DataPtr<typed_data_t> TypedDataPtr;
 
 class TypedDataSpec;
 class MessageType;

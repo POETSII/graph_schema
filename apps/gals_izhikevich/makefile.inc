@@ -2,7 +2,7 @@
 
 $(eval $(call provider_rules_template,gals_izhikevich))
 
-define gals_izhikevich_instance_template	
+define gals_izhikevich_instance_template
 # $1 = params
 # $2 = snapshotdelta
 # $3 = maxsteps
@@ -23,10 +23,10 @@ demos/gals_izhikevich/gals_izhikevich_$1.mp4 : demos/gals_izhikevich/gals_izhike
 		$4
 	(cd demos/gals_izhikevich/gals_izhikevich_$1.tmp/  &&  for i in *.dot; do echo $$$$i; neato -Gsize=5,5\! -Gdpi=100 -Tpng $$$$i > $$$$i.png; done )
 	(cd demos/gals_izhikevich/gals_izhikevich_$1.tmp/  && convert -delay 20 -loop 0 *.dot.png ../gals_izhikevich_$1.gif)
-	(cd demos/gals_izhikevich/gals_izhikevich_$1.tmp/  && ffmpeg -y -r 10 -i out_%06d.dot.png -c:v libx264 -crf 18 ../gals_izhikevich_$1.mp4)	
-	
+	(cd demos/gals_izhikevich/gals_izhikevich_$1.tmp/  && $(FFMPEG) -y -r 10 -i out_%06d.dot.png -vf "scale=trunc(iw/2)*2:trunc(ih/2)*2" -c:v libx264 -crf 18 ../gals_izhikevich_$1.mp4)
+
 ALL_GALS_IZHIKEVICH_DEMOS += demos/gals_izhikevich/gals_izhikevich_$1.mp4
-	
+
 endef
 
 
@@ -36,7 +36,7 @@ GALS_IZHIKEVICH_FILTERS = \
 
 GALS_IZHIKEVICH_FILTERS_I = \
   --bind-dev "neuron" "state" "Icount" "color" "blend_colors( (255,255,0), (255,0,255), 0, 20, value)" \
-   --bind-edge "synapse" "firings" "relative" "color" "blend_colors( (255,0,0,10), (255,0,0,150), 0, 1, value)" 
+   --bind-edge "synapse" "firings" "relative" "color" "blend_colors( (255,0,0,10), (255,0,0,150), 0, 1, value)"
 
 
 

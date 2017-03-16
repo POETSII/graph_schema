@@ -1,0 +1,46 @@
+<?xml version="1.0"?>
+<Graph xmlns="http://TODO.org/POETS/virtual-graph-schema-v0">
+  <GraphType id="spatial_ssa" nativeDimension="2">
+    <!--
+	A stochastic simulation algorithm (SSA) with cells distributed
+	on a grid. The intention is that cells that are doing nothing
+	can jump forwards with large time-steps, whereas those with lots
+	of molecules take small steps.
+
+        Each cell has N neighbours, and at the outset does not know the
+        times of its neighbours. So first there is an exchange period, where
+	all that happens is sharing of times. Eventually the neighbour with
+	the earliest time will know it is the earliest, perform its reaction,
+	and broadcast its new reaction time.
+
+        Events to neighbours may purely contain updates to next reaction time,
+        or they may also contain a molecule that is being delivered. If an
+	event arrives with a molecule, then it could change the next event
+	time, including making it happen sooner than expected or later. However,
+	the next time will never be updated to be before the time of arrival of
+	the event due to the waiting/memory-less property.
+
+        The problem comes that the arrival of an event t_e could cause a cell
+        to choose a time t_n' where t_n > t_n' > t_e. This means that everyone
+	elses idea of when the cell will next fire is now wrong. Potentially
+	this is quite bad, as we could have had t_n = \infty and t_n' finite
+	(for example if there were previously no molecules in the cell and
+	now there is one).
+
+        We could try to organise some safety bounds around this, by choosing
+        t_n - eps where eps somehow gives us enough safety, but a guaranteed
+	safety factor seems very difficult to calculate.
+
+        We can take the notion of "critical" cells, which have a small
+        number of molecules, and potentially switch between tau-leaping
+	(everyone jumps forwards) and strict lock-step on the critical
+	parts.
+
+        One possibility is some kind of agreed neighbourhood lock-step,
+        where the neighbourhood shares a (t,tau) pair. Each cell then
+	steps forwards by the smallest tau in the neighbourhood?
+	
+    -->
+
+  </GraphType>
+</Graph>

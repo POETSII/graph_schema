@@ -25,8 +25,9 @@ def render_typed_data_init(proto,dst,prefix):
     if proto is None:
         pass
     elif isinstance(proto,ScalarTypedDataSpec):
-        if proto.value:
-            value=proto.value
+
+        if proto.default:
+            value=proto.default
             if proto.type=="bool":
                 value = 1 if value else 0
             dst.write('{}{} = {};\n'.format(prefix,proto.name,value))
@@ -38,8 +39,9 @@ def render_typed_data_init(proto,dst,prefix):
     elif isinstance(proto,ArrayTypedDataSpec):
         assert isinstance(proto.type,ScalarTypedDataSpec), "Haven't implemented arrays of non-scalars yet."
         for i in range(0,proto.length):
-            if proto.type.value is not None:
-                dst.write('{}{}[{}] = {};\n'.format(prefix,proto.name,i,proto.type.value))
+
+            if proto.type.default is not None:
+                dst.write('{}{}[{}] = {};\n'.format(prefix,proto.name,i,proto.type.default))
             else:
                 dst.write('{}{}[{}] = 0;\n'.format(prefix,proto.name,i))
 
@@ -69,10 +71,13 @@ def render_typed_data_load_v4_tuple(proto,dst,prefix,indent):
         dst.write('{}if(document.HasMember("{}")){{\n'.format(indent,elt.name))
         dst.write('{}  const rapidjson::Value &n=document["{}"];\n'.format(indent,elt.name))
         if isinstance(elt,ScalarTypedDataSpec):
+
             if elt.type=="int32_t" or elt.type=="int16_t" or elt.type=="int8_t" :
                 dst.write('{}  {}{}=n.GetInt();\n'.format(indent, prefix, elt.name))
+
             elif elt.type=="uint32_t" or elt.type=="uint16_t" or elt.type=="uint8_t":
                 dst.write('{}  {}{}=n.GetUint();\n'.format(indent, prefix, elt.name))
+
             elif elt.type=="float":
                 dst.write('{}  {}{}=n.GetDouble();\n'.format(indent, prefix, elt.name))
             else:
@@ -83,12 +88,15 @@ def render_typed_data_load_v4_tuple(proto,dst,prefix,indent):
             assert isinstance(elt.type,ScalarTypedDataSpec), "Haven't implemented non-scalar arrays yet."
             dst.write('{}  assert(n.IsArray());\n')
             for i in range(0,elt.length):
+
                 if elt.type.type=="int32_t" or elt.type.type=="int16_t" or elt.type.type=="int8_t":
                     dst.write('{}  assert(n[{}].IsInt());\n'.format(indent,i))
                     dst.write('{}  {}{}[{}]=n[{}].GetInt();\n'.format(indent, prefix, elt.name,i,i))
+
                 elif elt.type.type=="uint32_t" or elt.type.type=="uint16_t" or elt.type.type=="uint8_t":
                     dst.write('{}  assert(n[{}].IsUint());\n'.format(indent,i))
                     dst.write('{}  {}{}[{}]=n[{}].GetUint();\n'.format(indent, prefix,elt.name,i,i))
+
                 elif elt.type.type=="float":
                     dst.write('{}  assert(n[{}].IsDouble());\n'.format(indent,i))
                     dst.write('{}  {}{}[{}]=n[{}].GetDouble();\n'.format(indent, prefix,elt.name,i,i))
@@ -125,14 +133,15 @@ def render_typed_data_save_v4(proto,dst,elt,prefix,indent):
 
 def render_typed_data_save(proto, dst, prefix, indent):
     if isinstance(proto,ScalarTypedDataSpec):
-        if proto.type=="uint32_t" or proto.type=="uint16_t" or proto.type=="uint8_t": 
-            dst.write('{}if({}{} != {}){{ if(sep){{ dst<<","; }}; dst<<"\\"{}\\":"<<(uint32_t){}{}; sep=true; }}\n'.format(indent, prefix, proto.name, proto.value, proto.name, prefix, proto.name))
+
+        if proto.type=="uint32_t" or proto.type=="uint16_t" or proto.type=="uint8_t":
+            dst.write('{}if({}{} != {}){{ if(sep){{ dst<<","; }}; dst<<"\\"{}\\":"<<(uint32_t){}{}; sep=true; }}\n'.format(indent, prefix, proto.name, proto.default, proto.name, prefix, proto.name))
         elif proto.type=="int32_t" or proto.type=="int16_t" or proto.type=="int8_t":
-            dst.write('{}if({}{} != {}){{ if(sep){{ dst<<","; }}; dst<<"\\"{}\\":"<<(int32_t){}{}; sep=true; }}\n'.format(indent, prefix, proto.name, proto.value, proto.name, prefix, proto.name))
+            dst.write('{}if({}{} != {}){{ if(sep){{ dst<<","; }}; dst<<"\\"{}\\":"<<(int32_t){}{}; sep=true; }}\n'.format(indent, prefix, proto.name, proto.default, proto.name, prefix, proto.name))
         else:
-            dst.write('{}if({}{} != {}){{ if(sep){{ dst<<","; }}; dst<<"\\"{}\\":"<<{}{}; sep=true; }}\n'.format(indent, prefix, proto.name, proto.value, proto.name, prefix, proto.name))
-            
-            
+            dst.write('{}if({}{} != {}){{ if(sep){{ dst<<","; }}; dst<<"\\"{}\\":"<<{}{}; sep=true; }}\n'.format(indent, prefix, proto.name, proto.default, proto.name, prefix, proto.name))
+
+
     elif isinstance(proto,ArrayTypedDataSpec):
         assert isinstance(proto.type,ScalarTypedDataSpec), "Haven't implemented non-scalar arrays yet."
         dst.write('{}if(sep){{ dst<<","; }}; dst<<"\\"{}\\":[";'.format(indent,proto.name))
@@ -152,7 +161,8 @@ def render_typed_data_save(proto, dst, prefix, indent):
     else:
         assert False, "Unknown data-type"
 
-def render_typed_data_as_spec(proto,name,elt_name,dst):
+
+def render_typed_data_as_spec(proto,name,elt_name,dst,asHeader=False):
     dst.write("#pragma pack(push,1)\n")
     dst.write("struct {} : typed_data_t{{\n".format(name))
     if proto:
@@ -163,6 +173,9 @@ def render_typed_data_as_spec(proto,name,elt_name,dst):
         dst.write("  //empty\n")
     dst.write("};\n")
     dst.write("#pragma pack(pop)\n")
+    if asHeader:
+        return
+
     dst.write("class {}_Spec : public TypedDataSpec {{\n".format(name))
     dst.write("public:\n")
     dst.write("  size_t totalSize() const override {{ return sizeof({})-sizeof(typed_data_t); }}\n".format(name))
@@ -183,6 +196,7 @@ def render_typed_data_as_spec(proto,name,elt_name,dst):
         dst.write("    return TypedDataPtr();\n")
     else:
         dst.write("    xmlpp::Node::PrefixNsMap ns;\n")
+
         dst.write('    ns["g"]="TODO/POETS/virtual-graph-schema-v1";\n')
         dst.write("    {} *res=({}*)malloc(sizeof({}));\n".format(name,name,name))
         dst.write("    res->_ref_count=0;\n")
@@ -233,7 +247,7 @@ def emit_device_global_constants(dt,subs,indent):
 {indent}const unsigned RTC_INDEX_{deviceTypeId}=31;
 {indent}const unsigned RTC_FLAG_{deviceTypeId}=0x80000000ul;
 """.format(**subs)
-    
+
     currPortIndex=0
     for ip in dt.inputs_by_index:
         res=res+"""
@@ -243,7 +257,7 @@ def emit_device_global_constants(dt,subs,indent):
 {indent}const unsigned INPUT_FLAG_{currPortName}=1ul<<{currPortIndex};
 """.format(currPortName=ip.name,currPortIndex=currPortIndex,**subs)
         currPortIndex+=1
-    
+
     currPortIndex=0
     for ip in dt.outputs_by_index:
         res=res+"""
@@ -257,9 +271,9 @@ def emit_device_global_constants(dt,subs,indent):
 {indent}const unsigned RTS_FLAG_{currPortName}=1ul<<{currPortIndex};
 """.format(currPortName=ip.name,currPortIndex=currPortIndex,**subs)
         currPortIndex+=1
-    
+
     return res
-    
+
 def emit_device_local_constants(dt,subs,indent=""):
     return """
 {indent}typedef {graphPropertiesStructName} GRAPH_PROPERTIES_T;
@@ -280,7 +294,7 @@ def emit_output_port_local_constants(dt,subs,indent=""):
 """.format(**subs)
 
 
-   
+
 def render_input_port_as_cpp(ip,dst):
     dt=ip.parent
     gt=dt.parent
@@ -289,9 +303,9 @@ def render_input_port_as_cpp(ip,dst):
     for index in range(len(dt.inputs_by_index)):
         if ip==dt.inputs_by_index[index]:
             break
-            
+
     subs={
-        "graphPropertiesStructName"     : "{}_properties_t".format(dt.parent.id), 
+        "graphPropertiesStructName"     : "{}_properties_t".format(dt.parent.id),
         "deviceTypeId"                  : dt.id,
         "devicePropertiesStructName"    : "{}_properties_t".format(dt.id),
         "deviceStateStructName"         : "{}_state_t".format(dt.id),
@@ -306,17 +320,17 @@ def render_input_port_as_cpp(ip,dst):
         "outputCount"                   : len(dt.outputs),
         "indent"                        : "  "
     }
-    
+
     subs["deviceGlobalConstants"]=emit_device_global_constants(dt,subs,"    ")
     subs["deviceLocalConstants"]=emit_device_local_constants(dt,subs, "    ")
     subs["pinLocalConstants"]=emit_input_port_local_constants(dt,subs, "    ")
 
-    
-    if ip.source_line and ip.source_file: 
-        subs["preProcLinePragma"]= '#line {} "{}"\n'.format(ip.source_line-1,ip.source_file) 
+
+    if ip.source_line and ip.source_file:
+        subs["preProcLinePragma"]= '#line {} "{}"\n'.format(ip.source_line-1,ip.source_file)
     else:
         subst["preProcLinePragma"]="// No line/file information for handler"
-    
+
     dst.write(
 """
 //MessageTypePtr {messageTypeId}_Spec_get();
@@ -328,7 +342,7 @@ class {deviceTypeId}_{portName}_Spec
 public:
   {deviceTypeId}_{portName}_Spec()
     : InputPortImpl(
-        {deviceTypeId}_Spec_get,  // 
+        {deviceTypeId}_Spec_get,  //
         "{portName}",
         {portIndex},
         {messageTypeId}_Spec_get(),
@@ -346,11 +360,11 @@ public:
         typed_data_t *gEdgeState,
         const typed_data_t *gMessage
     ) const override {{
-    
+
     {deviceGlobalConstants}
     {deviceLocalConstants}
     {pinLocalConstants}
-    
+
     auto graphProperties=cast_typed_properties<{graphPropertiesStructName}>(gGraphProperties);
     auto deviceProperties=cast_typed_properties<{devicePropertiesStructName}>(gDeviceProperties);
     auto deviceState=cast_typed_data<{deviceStateStructName}>(gDeviceState);
@@ -358,7 +372,7 @@ public:
     auto edgeState=cast_typed_data<{pinPropertiesStructName}>(gEdgeState);
     auto message=cast_typed_properties<{messageStructName}>(gMessage);
     HandlerLogImpl handler_log(orchestrator);
-    
+
     // Begin custom handler
     {preProcLinePragma}
     {handlerCode}
@@ -373,7 +387,7 @@ InputPortPtr {deviceTypeId}_{portName}_Spec_get(){{
   return singleton;
 }}
 """.format(**subs))
-    
+
     #    end of render_input_port_as_cpp
     return None
 
@@ -386,9 +400,9 @@ def render_output_port_as_cpp(op,dst):
 
     mt=op.message_type
 
-        
+
     subs={
-        "graphPropertiesStructName"     : "{}_properties_t".format(dt.parent.id), 
+        "graphPropertiesStructName"     : "{}_properties_t".format(dt.parent.id),
         "deviceTypeId"                  : dt.id,
         "devicePropertiesStructName"    : "{}_properties_t".format(dt.id),
         "deviceStateStructName"         : "{}_state_t".format(dt.id),
@@ -403,14 +417,14 @@ def render_output_port_as_cpp(op,dst):
         "outputCount"                   : len(dt.outputs),
         "indent"                        : "  "
     }
-    
+
     subs["deviceGlobalConstants"]=emit_device_global_constants(dt,subs,"    ")
     subs["deviceLocalConstants"]=emit_device_local_constants(dt,subs, "    ")
     subs["pinLocalConstants"]=emit_output_port_local_constants(dt,subs, "    ")
 
-    
-    if op.source_line and op.source_file: 
-        subs["preProcLinePragma"]= '#line {} "{}"\n'.format(op.source_line-1,op.source_file) 
+
+    if op.source_line and op.source_file:
+        subs["preProcLinePragma"]= '#line {} "{}"\n'.format(op.source_line-1,op.source_file)
     else:
         subst["preProcLinePragma"]="// No line/file information for handler"
 
@@ -432,7 +446,7 @@ def render_output_port_as_cpp(op,dst):
     dst.write('    {deviceGlobalConstants}\n'.format(**subs));
     dst.write('    {deviceLocalConstants}\n'.format(**subs));
     dst.write('    {pinLocalConstants}\n'.format(**subs));
-     
+
     dst.write('    auto graphProperties=cast_typed_properties<{}_properties_t>(gGraphProperties);\n'.format( graph.id ))
     dst.write('    auto deviceProperties=cast_typed_properties<{}_properties_t>(gDeviceProperties);\n'.format( dt.id ))
     dst.write('    auto deviceState=cast_typed_data<{}_state_t>(gDeviceState);\n'.format( dt.id ))
@@ -440,7 +454,7 @@ def render_output_port_as_cpp(op,dst):
     dst.write('    HandlerLogImpl handler_log(orchestrator);\n')
 
     dst.write('    // Begin custom handler\n')
-    if op.source_line and op.source_file: 
+    if op.source_line and op.source_file:
         dst.write('#line {} "{}"\n'.format(op.source_line,op.source_file))
     for line in op.send_handler.splitlines():
         dst.write('    {}\n'.format(line))
@@ -454,8 +468,8 @@ def render_output_port_as_cpp(op,dst):
     dst.write("  return singleton;\n")
     dst.write("}\n")
 
-def render_message_type_as_cpp_fwd(et,dst):
-    render_typed_data_as_spec(et.message, "{}_message_t".format(et.id), "pp:Message", dst)
+def render_message_type_as_cpp_fwd(et,dst,asHeader):
+    render_typed_data_as_spec(et.message, "{}_message_t".format(et.id), "pp:Message", dst, asHeader)
 
 def render_message_type_as_cpp(et,dst):
     dst.write("class {}_Spec : public MessageTypeImpl {{\n".format(et.id))
@@ -468,20 +482,20 @@ def render_message_type_as_cpp(et,dst):
     dst.write("}\n")
     registrationStatements.append('registry->registerMessageType({}_Spec_get());'.format(et.id,et.id))
 
-def render_device_type_as_cpp_fwd(dt,dst):
-    render_typed_data_as_spec(dt.properties, "{}_properties_t".format(dt.id), "pp:Properties", dst)
-    render_typed_data_as_spec(dt.state, "{}_state_t".format(dt.id), "pp:State", dst)
+def render_device_type_as_cpp_fwd(dt,dst, asHeader):
+    render_typed_data_as_spec(dt.properties, "{}_properties_t".format(dt.id), "pp:Properties", dst, asHeader)
+    render_typed_data_as_spec(dt.state, "{}_state_t".format(dt.id), "pp:State", dst, asHeader)
     for ip in dt.inputs.values():
         render_typed_data_as_spec(ip.properties, "{}_{}_properties_t".format(dt.id,ip.name), "pp:Properties", dst)
         render_typed_data_as_spec(ip.state, "{}_{}_state_t".format(dt.id,ip.name), "pp:State", dst)
 
 def render_device_type_as_cpp(dt,dst):
     dst.write("namespace ns_{}{{\n".format(dt.id));
-    
+
     if dt.shared_code:
         for i in dt.shared_code:
             dst.write(i)
-    
+
     dst.write("DeviceTypePtr {}_Spec_get();\n".format(dt.id))
 
     for ip in dt.inputs.values():
@@ -513,10 +527,10 @@ def render_device_type_as_cpp(dt,dst):
         dst.write('{}_{}_Spec_get()'.format(dt.id,o.name))
     dst.write('}))\n')
     dst.write("  {}\n")
-    
+
     subs={
         "indent"                        : "    ",
-        "graphPropertiesStructName"     : "{}_properties_t".format(dt.parent.id), 
+        "graphPropertiesStructName"     : "{}_properties_t".format(dt.parent.id),
         "deviceTypeId"                  : dt.id,
         "devicePropertiesStructName"    : "{}_properties_t".format(dt.id),
         "deviceStateStructName"         : "{}_state_t".format(dt.id),
@@ -524,14 +538,14 @@ def render_device_type_as_cpp(dt,dst):
         "inputCount"                    : len(dt.inputs),
         "outputCount"                   : len(dt.outputs)
     }
-    if dt.ready_to_send_source_line and dt.ready_to_send_source_file: 
-        subs["preProcLinePragma"]= '#line {} "{}"\n'.format(dt.ready_to_send_source_line-1,dt.ready_to_send_source_file) 
+    if dt.ready_to_send_source_line and dt.ready_to_send_source_file:
+        subs["preProcLinePragma"]= '#line {} "{}"\n'.format(dt.ready_to_send_source_line-1,dt.ready_to_send_source_file)
     else:
         subst["preProcLinePragma"]="// No line/file information for handler"
 
     subs["deviceGlobalConstants"]=emit_device_global_constants(dt,subs,"    ")
     subs["deviceLocalConstants"]=emit_device_local_constants(dt,subs, "    ")
-    
+
     dst.write(
 """
   virtual uint32_t calcReadyToSend(
@@ -544,19 +558,19 @@ def render_device_type_as_cpp(dt,dst):
     auto deviceProperties=cast_typed_properties<{devicePropertiesStructName}>(gDeviceProperties);
     auto deviceState=cast_typed_properties<{deviceStateStructName}>(gDeviceState);
     HandlerLogImpl handler_log(orchestrator);
-    
+
     {deviceGlobalConstants}
     {deviceLocalConstants}
 
     uint32_t fReadyToSend=0;
     uint32_t *readyToSend=&fReadyToSend;
-    
+
     // Begin custom handler
     {preProcLinePragma}
     {handlerCode}
     __POETS_REVERT_PREPROC_DETOUR__
     // End custom handler
-    
+
     return fReadyToSend;
   }}
 """.format(**subs))
@@ -566,30 +580,37 @@ def render_device_type_as_cpp(dt,dst):
     dst.write("  static DeviceTypePtr singleton(new {}_Spec);\n".format(dt.id))
     dst.write("  return singleton;\n")
     dst.write("}\n")
-    
+
     dst.write("}}; //namespace ns_{}\n\n".format(dt.id));
-    
+
     registrationStatements.append('registry->registerDeviceType(ns_{}::{}_Spec_get());'.format(dt.id,dt.id,dt.id))
 
-def render_graph_as_cpp(graph,dst, destPath):
-    dst.write('#include "graph.hpp"\n')
-    dst.write('#include "rapidjson/document.h"\n')
-    
+def render_graph_as_cpp(graph,dst, destPath, asHeader=False):
     gt=graph
 
-    render_typed_data_as_spec(gt.properties, "{}_properties_t".format(gt.id),"pp:Properties",dst)
+    if asHeader:
+        dst.write('#ifndef {}_header\n'.format(gt.id))
+        dst.write('#define {}_header\n'.format(gt.id))
+
+    dst.write('#include "graph.hpp"\n')
+    dst.write('#include "rapidjson/document.h"\n')
+
+    render_typed_data_as_spec(gt.properties, "{}_properties_t".format(gt.id),"pp:Properties",dst,asHeader)
 
     dst.write("/////////////////////////////////\n")
     dst.write("// FWD\n")
     for et in gt.message_types.values():
-        render_message_type_as_cpp_fwd(et,dst)
+        render_message_type_as_cpp_fwd(et,dst, asHeader)
 
     for dt in gt.device_types.values():
-        render_device_type_as_cpp_fwd(dt, dst)
 
-    if gt.shared_code:
-        for code in gt.shared_code:
-            dst.write(code)
+        render_device_type_as_cpp_fwd(dt, dst, asHeader)
+
+
+    if not asHeader:
+        if gt.shared_code:
+            for code in gt.shared_code:
+                dst.write(code)
 
     dst.write("/////////////////////////////////\n")
     dst.write("// DEF\n")
@@ -612,11 +633,12 @@ def render_graph_as_cpp(graph,dst, destPath):
     dst.write("  return singleton;\n")
     dst.write("}\n")
 
-
     registrationStatements.append('registry->registerGraphType({}_Spec_get());'.format(gt.id))
-
 
     dst.write('extern "C" void registerGraphTypes(Registry *registry){\n')
     for r in registrationStatements:
         dst.write("  {}\n".format(r))
     dst.write("}\n");
+
+    if asHeader:
+        dst.write("#endif\n")

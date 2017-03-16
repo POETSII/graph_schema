@@ -23,7 +23,7 @@ class XMLSyntaxError(Exception):
             Exception.__init__(self, "Parse error at line {} : {} in element {}".format(node.sourceline,msg,str(node)))
         self.node=node
         self.outer=outer
-        
+
 
 def get_attrib(node,name):
     if name not in node.attrib:
@@ -69,8 +69,8 @@ def load_typed_data_spec(dt):
         return ArrayTypedDataSpec(name,length,type)
     elif tag=="p:Scalar":
         type=get_attrib(dt, "type")
-        value=get_attrib_optional(dt, "value")
-        return ScalarTypedDataSpec(name,type,value)
+        default=get_attrib_optional(dt, "default")
+        return ScalarTypedDataSpec(name,type,default)
     else:
         raise XMLSyntaxError("Unknown data type '{}'.".format(tag), dt)
 
@@ -79,9 +79,9 @@ def load_typed_data_instance(dt,spec):
         return None
     value=json.loads(dt.text)
     assert(spec.is_refinement_compatible(value))
-    return value
-    
-    
+    return spec.expand(value)
+
+
 def load_struct_spec(name, members):
     elts=[]
     for eltNode in members.findall("p:*",ns): # Anything from this namespace must be a member
@@ -96,7 +96,7 @@ def load_struct_instance(spec,dt):
     text="{"+dt.text+"}"
     value=json.loads(text)
     assert(spec.is_refinement_compatible(value))
-    return value
+    return spec.expand(value)
 
 def load_metadata(parent, name):
     metadata=None
@@ -106,7 +106,7 @@ def load_metadata(parent, name):
 
     return metadata
 
-    
+
 def load_message_type(parent,dt):
     id=get_attrib(dt,"id")
     try:
@@ -138,20 +138,20 @@ def load_device_type(graph,dtNode,sourceFile):
         properties=load_struct_spec(id+"_properties", propertiesNode)
 
     metadata=load_metadata(dtNode,"p:MetaData")
-    
+
     shared_code=[]
     for s in dtNode.findall("p:SharedCode",ns):
         shared_code.append(s.text)
 
     dt=DeviceType(graph,id,properties,state,metadata,shared_code)
-        
+
     for p in dtNode.findall("p:InputPort",ns):
         name=get_attrib(p,"name")
         message_type_id=get_attrib(p,"messageTypeId")
         if message_type_id not in graph.message_types:
             raise XMLSyntaxError("Unknown messageTypeId {}".format(message_type_id),p)
         message_type=graph.message_types[message_type_id]
-        
+
         try:
             state=None
             stateNode=p.find("p:State",ns)
@@ -169,7 +169,7 @@ def load_device_type(graph,dtNode,sourceFile):
             raise XMLSyntaxError("Error while parsing properties of pin {} : {}".format(id,e),p,e)
 
         pinMetadata=load_metadata(p,"p:MetaData")
-        
+
         (handler,sourceLine)=get_child_text(p,"p:OnReceive")
         dt.add_input(name,message_type,properties,state,pinMetadata, handler,sourceFile,sourceLine)
 
@@ -182,13 +182,13 @@ def load_device_type(graph,dtNode,sourceFile):
         pinMetadata=load_metadata(p,"p:MetaData")
         (handler,sourceLine)=get_child_text(p,"p:OnSend")
         dt.add_output(name,message_type,pinMetadata,handler,sourceFile,sourceLine)
-        
+
     (handler,sourceLine)=get_child_text(dtNode,"p:ReadyToSend")
     dt.ready_to_send_handler=handler
     dt.ready_to_send_source_line=sourceLine
     dt.ready_to_send_source_file=sourceFile
 
-    return dt            
+    return dt
 
 def load_graph_type(graphNode, sourcePath):
     id=get_attrib(graphNode,"id")
@@ -199,13 +199,13 @@ def load_graph_type(graphNode, sourcePath):
         properties=load_struct_spec(id+"_properties", propertiesNode)
 
     metadata=load_metadata(graphNode,"p:MetaData")
-        
+
     shared_code=[]
     for n in graphNode.findall("p:SharedCode",ns):
         shared_code.append(n.text)
 
     graphType=GraphType(id,properties,metadata,shared_code)
-        
+
     for etNode in graphNode.findall("p:MessageTypes/p:*",ns):
         et=load_message_type(graphType,etNode)
         graphType.add_message_type(et)
@@ -223,11 +223,11 @@ def load_graph_type_reference(graphNode,basePath):
     if src:
         fullSrc=os.path.join(basePath, src)
         print("  basePath = {}, src = {}, fullPath = {}".format(basePath,src,fullSrc))
-        
+
         tree = etree.parse(fullSrc)
         doc = tree.getroot()
         graphsNode = doc;
-    
+
         for gtNode in graphsNode.findall("p:GraphType",ns):
             gt=load_graph_type(gtNode, fullSrc)
             if gt.id==id:
@@ -235,8 +235,8 @@ def load_graph_type_reference(graphNode,basePath):
 
         raise XMLSyntaxError("Couldn't load graph type '{}' from src '{}'".format(id,src))
     else:
-        return GraphTypeReference(id)        
-        
+        return GraphTypeReference(id)
+
 
 def load_device_instance(graph,diNode):
     id=get_attrib(diNode,"id")
@@ -260,7 +260,7 @@ def split_endpoint(endpoint,node):
     if len(parts)!=2:
         raise XMLSyntaxError("Path does not contain exactly two elements",node)
     return (parts[0],parts[1])
-    
+
 
 def split_path(path,node):
     """Splits a path up into (dstDevice,dstPort,srcDevice,srcPort)"""
@@ -287,9 +287,9 @@ def load_edge_instance(graph,eiNode):
     if propertiesNode is not None:
         spec=dst_device.device_type.inputs[dst_port_name].properties
         properties=load_struct_instance(spec, propertiesNode)
-    
+
     metadata=load_metadata(eiNode,"p:M")
-        
+
     return EdgeInstance(graph,dst_device,dst_port_name,src_device,src_port_name,properties,metadata)
 
 def load_graph_instance(graphTypes, graphNode):
@@ -319,14 +319,14 @@ def load_graph_instance(graphTypes, graphNode):
 
 
 def load_graph_types_and_instances(src,basePath):
-    
+
     tree = etree.parse(src)
     doc = tree.getroot()
     graphsNode = doc;
 
     graphTypes={}
     graphs={}
-    
+
     try:
         for gtNode in graphsNode.findall("p:GraphType",ns):
             sys.stderr.write("Loading graph type\n")
@@ -337,8 +337,8 @@ def load_graph_types_and_instances(src,basePath):
             sys.stderr.write("Loading graph reference\n")
             gt=load_graph_type_reference(gtRefNode,basePath)
             graphTypes[gt.id]=gt
-            
-        for giNode in graphsNode.findall("p:GraphInstance",ns): 
+
+        for giNode in graphsNode.findall("p:GraphInstance",ns):
             sys.stderr.write("Loading graph\n")
             g=load_graph_instance(graphTypes, giNode)
             graphs[g.id]=g

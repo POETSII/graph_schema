@@ -1,0 +1,144 @@
+<?xml version="1.0"?>
+<Graph xmlns="http://TODO.org/POETS/virtual-graph-schema-v0">
+  <GraphType id="async_heat_ts" nativeDimension="2">
+    <!--
+
+	This is based on the TS method from "A survey of asynchronous finite-difference
+methods for parabolic PDEs on multiprocessors *",
+	which is filed as amitai-93-survey-of-async-finite-difference.pdf
+
+
+
+    -->
+
+    <Properties>
+      <Scalar type="float" name="dt" />
+      <Scalar type="float" name="tStop" value="1000" />
+    </Properties>
+
+    <SharedCode><![CDATA[
+    #include <cmath>
+    ]]></SharedCode>
+
+    <EdgeTypes>
+      <EdgeType id="__init__">
+	<!-- This doesn't have any properties -->
+      </EdgeType>
+
+      <EdgeType id="update">
+	<Message>
+	  <Scalar type="float" name="time" />
+	  <Scalar type="float" name="value" />
+	</Message>
+      </EdgeType>
+    </EdgeTypes>
+
+    <DeviceTypes>
+
+      <DeviceType id="dirichlet_variable">
+	<Properties>
+	  <Scalar type="float" name="amplitude" />
+	  <Scalar type="float" name="phase" />
+	  <Scalar type="float" name="frequency" />
+	  <Scalar type="float" name="bias" />
+	</Properties>
+
+	<State>
+	  <Scalar type="float" name="time" />
+	  <Scalar type="float" name="value" />
+	</State>
+
+	<InputPort name="__init__" edgeTypeId="__init__">
+	  <OnReceive><![CDATA[
+	  deviceState->time=0;
+	  deviceState->value=deviceProperties->bias + deviceProperties->amplitude
+	    * sin(deviceProperties->phase + deviceProperties->frequency * deviceState->timeNow);
+
+	  handler_log(3, "value = %f", deviceState->value);
+
+	  requestSend_out = true;
+	  ]]></OnReceive>
+	</InputPort>
+
+	<InputPort name="in" edgeTypeId="update">
+	  <OnReceive><![CDATA[
+	  deviceState->time = message->time;
+	  requestSend_out = true;
+	  ]]></OnReceive>
+	</InputPort>
+
+	<OutputPort name="out" edgeTypeId="update">
+	  <OnSend><![CDATA[
+
+	  deviceState->time += graphProperties->dt;
+	  deviceState->value=deviceProperties->bias + deviceProperties->amplitude
+	      * sin(deviceProperties->phase + deviceProperties->frequency * deviceState->time);
+
+	    message->time=deviceState->time;
+		message->value=deviceState->value;
+
+	    requestSend_out = false;
+	  }
+	  ]]></OnSend>
+	</OutputPort>
+      </DeviceType>
+
+      <DeviceType id="cell">
+	<!-- This is a common-or-garden 2d cell, with no boundary stuff -->
+	<Properties>
+	  <Scalar type="float" name="initValue" />
+	</Properties>
+
+	<State>
+	  <Array type="float" name="u" length="5" />
+	  <Array type="float" name="t" length="5" />
+	</State>
+
+	<InputPort name="__init__" edgeTypeId="__init__">
+	  <OnReceive><![CDATA[
+	  deviceState->u[0] = deviceProperties->initValue;
+	  deviceState->t[0] = dt;
+
+	  for(int i=1;i<=4;i++){
+		deviceState->t[1] = 0f;
+	  }
+
+	  requestSend_out=true;
+	  ]]></OnReceive>
+	</InputPort>
+
+	<InputPort name="in" edgeTypeId="update">
+	  <OnReceive><![CDATA[
+
+        auto index=edgeProperties->index;
+		if(deviceState->t[index] < message->time){
+		  deviceState->t[index]=message->time;
+		  deviceState->u[index]=message->value;
+		}
+
+	    requestSend_out = true;
+	  ]]></OnReceive>
+	</InputPort>
+
+	<OutputPort name="out" edgeTypeId="update">
+	  <OnSend><![CDATA[
+
+	  if(deviceState->t[0] > graphProperties->tStop){
+	    *cancelSend=true;
+	    requestSend_out=false;
+	  }else{
+		float tA=0f, uA=0f;
+		for(int i=1; i<=4; i++){
+		   tA += deviceState->t[i];
+		   uA += deviceState->u[i];
+		}
+		deviceState->t[0] = tA*0.25f + graphProperties->dt;
+		deviceState->u[0] = uA*0.25f;
+	    requestSend_out = true;
+	  }
+	  ]]></OnSend>
+	</OutputPort>
+      </DeviceType>
+    </DeviceTypes>
+  </GraphType>
+</Graph>

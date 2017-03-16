@@ -7,8 +7,10 @@ SHELL=/bin/bash
 CPPFLAGS += -I include -W -Wall -Wno-unused-parameter -Wno-unused-variable
 CPPFLAGS += $(shell pkg-config --cflags libxml++-2.6)
 CPPFLAGS += -Wno-unused-local-typedefs
+CPPFLAGS += -I providers
 
-LDFLAGS += $(shell pkg-config --libs libxml++-2.6)
+LDLIBS += $(shell pkg-config --libs-only-l libxml++-2.6)
+LDFLAGS += $(shell pkg-config --libs-only-L --libs-only-other libxml++-2.6)
 
 ifeq ($(OS),Windows_NT)
 SO_CPPFLAGS += -shared
@@ -32,6 +34,15 @@ CPPFLAGS += -std=c++11 -g
 TRANG = external/trang-20091111/trang.jar
 JING = external/jing-20081028/bin/jing.jar
 RNG_SVG = external/rng-svg/build.xml
+RAPIDJSON = external/rapidjson-master/include/rapidjson/rapidjson.h
+
+FFMPEG := $(shell which ffmpeg)
+ifeq ($(FFMPEG),)
+FFMPEG := $(shell which avconv)
+endif
+
+ff :
+	echo $(FFMPEG)
 
 # TODO : OS X specific
 PYTHON = python3
@@ -49,10 +60,11 @@ $(RNG_SVG) : external/rng-svg-latest.zip
 	(cd external/rng-svg && unzip -o ../rng-svg-latest)
 	touch $@
 
-external/rapidjson-master/include/rapidjson/rapidjson.h : external/rapidjson-master.zip
+$(RAPIDJSON) : external/rapidjson-master.zip
 	(cd external && unzip -o rapidjson-master)
+	touch $@
 
-rapidjson : external/rapidjson-master/include/rapidjson/rapidjson.h
+
 
 CPPFLAGS += -I external/rapidjson-master/include
 
@@ -102,7 +114,7 @@ output/%.graph.cpp : apps/%.xml graph_library
 	mkdir -p $(dir output/$*)
 	$(PYTHON) tools/render_graph_as_cpp.py apps/$*.xml output/$*.graph.cpp
 
-output/%.graph.so : output/%.graph.cpp rapidjson
+output/%.graph.so : output/%.graph.cpp $(RAPIDJSON)
 	g++ $(CPPFLAGS) $(SO_CPPFLAGS) $< -o $@ $(LDFLAGS)
 
 bin/print_graph_properties : tools/print_graph_properties.cpp
@@ -121,22 +133,26 @@ bin/queue_sim : tools/queue_sim.cpp
 	mkdir -p bin
 	$(CXX) $(CPPFLAGS) $< -o $@ $(LDFLAGS) $(LDLIBS)
 
+bin/create_gals_heat_instance : apps/gals_heat/create_gals_heat_instance.cpp
+	mkdir -p bin
+	$(CXX) $(CPPFLAGS) $< -o $@ $(LDFLAGS) $(LDLIBS)
 
-# Temporary - delete
-bin/test_graph_log_api : tools/test_graph_log_api.cpp
+bin/% : tools/%.cpp
 	mkdir -p bin
 	$(CXX) $(CPPFLAGS) $< -o $@ $(LDFLAGS) $(LDLIBS)
 
 
 define provider_rules_template
 
-providers/$1.graph.cpp : apps/$1/$1_graph_type.xml
+providers/$1.graph.cpp providers/$1.graph.hpp : apps/$1/$1_graph_type.xml $(JING) $(RAPIDJSON)
+
 	mkdir -p providers
-	java -jar $(JING) -c master/virtual-graph-schema-v1.rnc $<
+	java -jar $(JING) -c master/virtual-graph-schema-v1.rnc apps/$1/$1_graph_type.xml
 	$$(PYTHON) tools/render_graph_as_cpp.py apps/$1/$1_graph_type.xml providers/$1.graph.cpp
+	$$(PYTHON) tools/render_graph_as_cpp.py --header < apps/$1/$1_graph_type.xml > providers/$1.graph.hpp
 
 providers/$1.graph.so : providers/$1.graph.cpp
-	g++ $$(CPPFLAGS) $$(SO_CPPFLAGS) $$< -o $$@ $$(LDFLAGS)
+	g++ $$(CPPFLAGS) $$(SO_CPPFLAGS) $$< -o $$@ $$(LDFLAGS) $(LDLIBS)
 
 $1_provider : providers/$1.graph.so
 
@@ -151,6 +167,8 @@ include apps/gals_izhikevich/makefile.inc
 include apps/gals_heat/makefile.inc
 
 include apps/amg/makefile.inc
+
+include tools/partitioner.inc
 
 demos : $(ALL_DEMOS)
 

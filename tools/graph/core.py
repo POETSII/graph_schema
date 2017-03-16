@@ -34,14 +34,14 @@ class ScalarTypedDataSpec(TypedDataSpec):
         else:
             assert False, "Unknown data type {}.".format(self.type)
         return res
-    
-    def __init__(self,name,type,value=None):
+
+    def __init__(self,name,type,default=None):
         TypedDataSpec.__init__(self,name)
         self.type=type
-        if value is not None:
-            self.value=self._check_value(value)
+        if default is not None:
+            self.default=self._check_value(default)
         else:
-            self.value=0
+            self.default=0
 
     def is_refinement_compatible(self,inst):
         if inst is None:
@@ -53,16 +53,16 @@ class ScalarTypedDataSpec(TypedDataSpec):
         return True
 
     def create_default(self):
-        return self.value
+        return self.default
 
     def expand(self,inst):
         if inst is None:
             return self.create_default()
         else:
             return self._check_value(inst)
-        
+
     def __str__(self):
-        return "{}:{}".format(self.type,self.name,self.value)
+        return "{}:{}={}".format(self.type,self.name,self.default)
 
 class TupleTypedDataSpec(TypedDataSpec):
     def __init__(self,name,elements):
@@ -84,7 +84,7 @@ class TupleTypedDataSpec(TypedDataSpec):
         return self._elts_by_index
 
     def __str__(self):
-        
+
         acc="Tuple:{}[\n".format(self.name)
         for i in range(len(self._elts_by_index)):
             if i!=0:
@@ -107,7 +107,7 @@ class TupleTypedDataSpec(TypedDataSpec):
     def is_refinement_compatible(self,inst):
         if inst is None:
             return True;
-        
+
         if not isinstance(inst,dict):
             return False
 
@@ -132,7 +132,7 @@ class ArrayTypedDataSpec(TypedDataSpec):
         self.length=length
 
     def __str__(self):
-        
+
         return "Array:{}[{}*{}]\n".format(self.name,self.type,self.length)
 
     def create_default(self):
@@ -150,7 +150,7 @@ class ArrayTypedDataSpec(TypedDataSpec):
     def is_refinement_compatible(self,inst):
         if inst is None:
             return True;
-        
+
         if not isinstance(inst,list):
             return False
 
@@ -183,7 +183,7 @@ def is_refinement_compatible(proto,inst):
     if inst is None:
         return True;
     return proto.is_refinement_compatible(inst)
-    
+
 
 class MessageType(object):
     def __init__(self,parent,id,message,metadata):
@@ -191,7 +191,7 @@ class MessageType(object):
         self.parent=parent
         self.message=message
         self.metadata=metadata
-    
+
 
 class Port(object):
     def __init__(self,parent,name,message_type,metadata,source_file,source_line):
@@ -201,8 +201,8 @@ class Port(object):
         self.metadata=metadata
         self.source_file=source_file
         self.source_line=source_line
-        
-    
+
+
 class InputPort(Port):
     def __init__(self,parent,name,message_type,properties,state,metadata,receive_handler,source_file=None,source_line=None):
         Port.__init__(self,parent,name,message_type,metadata,source_file,source_line)
@@ -214,8 +214,8 @@ class OutputPort(Port):
     def __init__(self,parent,name,message_type,metadata,send_handler,source_file,source_line):
         Port.__init__(self,parent,name,message_type,metadata,source_file,source_line)
         self.send_handler=send_handler
-    
-            
+
+
 class DeviceType(object):
     def __init__(self,parent,id,properties,state,metadata=None,shared_code=[]):
         self.id=id
@@ -275,12 +275,12 @@ class GraphType(object):
         if device_type.id in self.device_types:
             raise GraphDescriptionError("Device type already exists.")
         self.device_types[device_type.id]=device_type
-        
+
 class GraphTypeReference(object):
     def __init__(self,id,src):
         self.id=id
         self.src=src
-        
+
         self.properties=properties
         self.metadata=metadata
         self.device_types={}
@@ -308,7 +308,7 @@ class GraphTypeReference(object):
     def add_device_type(self,device_type):
         raise RuntimeError("Cannot add to unresolved GraphTypeReference.")
 
-        
+
 class DeviceInstance(object):
     def __init__(self,parent,id,device_type,properties,metadata=None):
         if not is_refinement_compatible(device_type.properties,properties):
@@ -320,7 +320,7 @@ class DeviceInstance(object):
         self.properties=properties
         self.metadata=metadata
 
-        
+
 class EdgeInstance(object):
     def __init__(self,parent,dst_device,dst_port_name,src_device,src_port_name,properties=None,metadata=None):
         self.parent=parent
@@ -332,7 +332,7 @@ class EdgeInstance(object):
 
         dst_port=dst_device.device_type.inputs[dst_port_name]
         src_port=src_device.device_type.outputs[src_port_name]
-        
+
         if dst_port.message_type != src_port.message_type:
             raise GraphDescriptionError("Dest port has type {}, source port type {}".format(dst_port.id,src_port.id))
 
@@ -340,7 +340,7 @@ class EdgeInstance(object):
             raise GraphDescriptionError("Properties are not compatible: proto={}, value={}.".format(dst_port.properties, properties))
 
         self.id = dst_device.id+":"+dst_port_name+"-"+src_device.id+":"+src_port_name
-        
+
         self.dst_device=dst_device
         self.src_device=src_device
         self.message_type=dst_port.message_type
@@ -348,7 +348,7 @@ class EdgeInstance(object):
         self.src_port=src_port
         self.properties=properties
         self.metadata=metadata
-        
+
 
 class GraphInstance:
     def __init__(self,id,graph_type,properties=None,metadata=None):
@@ -379,12 +379,12 @@ class GraphInstance:
 
         if not is_refinement_compatible(di.device_type.properties,di.properties):
             raise GraphDescriptionError("DeviceInstance properties don't match device type.")
-            
+
 
     def _validate_edge_instance(self,ei):
         pass
 
-            
+
     def add_device_instance(self,di,validate=True):
         if di.id in self.device_instances:
             raise GraphDescriptionError("Duplicate deviceInstance id {}".format(id))
@@ -410,7 +410,7 @@ class GraphInstance:
     def validate(self):
         if self._validated:
             return True
-        
+
         for et in self.message_types:
             self._validate_message_type(et)
         for dt in self.device_types:

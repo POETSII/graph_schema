@@ -1,0 +1,111 @@
+<?xml version='1.0' encoding='ASCII'?>
+<Graph xmlns="http://TODO.org/POETS/virtual-graph-schema-v0">
+  <GraphType id="multigrid">
+    <Properties>
+      <Scalar name="h2" type="float" /> <!-- h2=h*h, which is the mesh delta -->
+      <Scalar name="rn" type="uint32_t" /> <!--How many times we relax at each level -->
+    </Properties>
+
+
+    <EdgeTypes>
+      <EdgeType id="relax">
+        <Message>
+          <Scalar name="iteration" type="uint32_t"/>
+          <Scalar name="value" type="float"/>
+        </Message>
+      </EdgeType>
+
+      <EdgeType id="injection">
+        <Message>
+          <Scalar name="value" type="float"/>
+        </Message>
+      </EdgeType>
+
+      <EdgeType id="interpolation">
+        <Message>
+          <Scalar name="value" type="float"/>
+        </Message>
+      </EdgeType>
+    </EdgeTypes>
+
+
+    <DeviceTypes>
+      <DeviceType id="leaf">
+        <Properties>
+          <Scalar name="x" type="uint32_t"/>
+          <Scalar name="y" type="uint32_t"/>
+        </Properties>
+
+        <State>
+          <Scalar name="state" /> <!--
+            0 = relaxing
+            1 = ready to inject
+            2 = waiting for interpolation
+          -->
+          <Scalar name="currIteration" type="uint32_t" /> <!-- Relaxation that we are currently doing. -->
+          <Scalar name="currCount" type="uint32_t" /> <!-- Number of values for current relaxation. -->
+          <Scalar name="currAcc" type="float" /> <!-- Sum of values for current relaxation. -->
+          <Scalar name="nextCount" type="uint32_t" /> <!-- Sum of values for current relaxation. -->
+          <Scalar name="nextAcc" type="float" /> <!-- Sum of values for next relaxation. -->
+        </State>
+        <InputPort name="__init__" edgeTypeId="__init__">
+          <OnReceive><![CDATA[
+	  ]]></OnReceive>
+        </InputPort>
+        <InputPort name="relax_in" edgeTypeId="relax">
+          <OnReceive><![CDATA[
+          assert(deviceState->state==0);
+
+          if(message->iteration==deviceState->currIteration){
+            deviceState->currCount++;
+            deviceState->currAcc += message->value;
+          }else{
+            assert(message->iteration==deviceState->currIteration+1);
+            deviceState->nextCount++;
+            deviceState->nextAcc += message->value;
+          }
+
+          if(deviceState->currCount==4){
+            deviceState->value = (deviceState->currAcc + deviceState->rhs * graphProperties->h2) / 4;
+
+            if( (deviceState->currIteration%graphProperties->rn) == (deviceState->currIteration-1)){
+              deviceState->state=1;
+              requestSend_inject=true;
+            }else{
+              requestSend_relax_out=true;
+            }
+          }
+          ]]></OnReceive>
+        </InputPort>
+        <OutputPort name="relax_out" edgeTypeId="relax">
+          <OnSend><![CDATA[
+          assert(deviceState->state==0);
+
+          message->value=deviceState->value;
+          message->iteration=deviceState->currIteration;
+
+          deviceState->currCount=deviceState->nextCount;
+          deviceState->currAcc=deviceState->nextAcc;
+          deviceState->currIteration++;
+
+          requestSend_relax_out=false;
+          ]]></OnSend>
+        </OutputPort>
+        <OutputPort name="injection_out" edgeTypeId="injection">
+          <OnSend><![CDATA[
+          assert(deviceState->state==1);
+
+          message->value=deviceState->value;
+          message->iteration=deviceState->currIteration;
+
+          deviceState->currCount=deviceState->nextCount;
+          deviceState->currAcc=deviceState->nextAcc;
+          deviceState->currIteration++;
+
+          requestSend_injection_out=false;
+          ]]></OnSend>
+        </OutputPort>
+      </DeviceType>
+    </DeviceTypes>
+  </GraphType>
+</Graph>

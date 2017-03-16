@@ -37,7 +37,7 @@ for b in args.bind_edge:
     f=bind_f
     bind_edge.append( (b[0], b[1], b[2], b[3], f ) )
 
-    
+
 if len(graph.graph_type.device_types) <= len(shapes):
     for id in graph.graph_type.device_types.keys():
         deviceTypeToShape[id]=shapes.pop(0)
@@ -64,14 +64,14 @@ def blend_colors(colStart,colEnd,valStart,valEnd,val):
             return color_to_str( (
                 colStart[0] + (colEnd[0]-colStart[0]) * interp,
                 colStart[1] + (colEnd[1]-colStart[1]) * interp,
-                colStart[2] + (colEnd[2]-colStart[2]) * interp, 
+                colStart[2] + (colEnd[2]-colStart[2]) * interp,
             ) )
         else:
             return color_to_str( (
                 colStart[0] + (colEnd[0]-colStart[0]) * interp,
                 colStart[1] + (colEnd[1]-colStart[1]) * interp,
                 colStart[2] + (colEnd[2]-colStart[2]) * interp,
-                colStart[3] + (colEnd[3]-colStart[3]) * interp 
+                colStart[3] + (colEnd[3]-colStart[3]) * interp
             ) )
 
 def color_to_str(col):
@@ -91,8 +91,8 @@ def heat(valLow,valHigh,value):
         return blend_colors( (0,0,255), (255,255,255), valLow, valMid, value)
     else:
         return blend_colors( (255,255,255), (255,0,0), valMid, valHigh, value)
-    
-        
+
+
 def write_graph(dst, graph,devStates=None,edgeStates=None):
     def out(string):
         print(string,file=dst)
@@ -106,34 +106,41 @@ def write_graph(dst, graph,devStates=None,edgeStates=None):
         maxFirings[et]=max(firings,  maxFirings.get(et,firings))
 
     sys.stderr.write("min = {}, max = {}\n".format(minFirings,maxFirings))
-    
+
     out('digraph "{}"{{'.format(graph.id))
     out('  sep="+10,10";');
     out('  overlap=false;');
     out('  spline=true;');
-    
+
     for di in graph.device_instances.values():
         dt=di.device_type
-        
+
         stateTuple=devStates.get(di.id,None)
         if stateTuple:
             state=stateTuple[0]
             rts=stateTuple[1]
-        
 
-        props=[]        
+
+        props=[]
         shape=deviceTypeToShape[di.device_type.id]
         props.append('shape={}'.format(shape))
-        
+
         #pos=di.native_location
         #if pos:
         #    props.append('pos="{},{}"'.format(pos[0]*0.25,pos[1]*0.25))
 
         for b in bind_dev:
+            #print("Type : {}".format(di.device_type.state))
+            #print("Pre-expand : {}".format(state))
+            state=di.device_type.state.expand(state)
+            #print("Post-expand : {}".format(state))
+
             if b[0]=="*" or b[0]==di.device_type.id:
                 if b[1]=="property":
                     value=di.properties[b[2]]
                 elif b[1]=="state":
+                    if b[2] not in state:
+                        raise RuntimeError("No state element called {} in device {} of device type {}. State = {}".format(b[2],di.id,di.device_type.id, state))
                     value=state[b[2]]
                 elif b[1]=="rts":
                     value=rts
@@ -142,7 +149,7 @@ def write_graph(dst, graph,devStates=None,edgeStates=None):
                 strValue=b[4](value)
                 props.append('{}="{}"'.format(b[3],strValue))
                 props.append('style="filled"')
-                
+
         out('  "{}" [{}];'.format(di.id, ",".join(props)))
 
     addLabels=len(graph.edge_instances) < 50
@@ -153,7 +160,7 @@ def write_graph(dst, graph,devStates=None,edgeStates=None):
             state=stateTuple[0]
             firings=stateTuple[1]
             queue=stateTuple[2]
-        
+
         props={}
         props["color"]=edgeTypeToColor[ei.message_type.id]
         if addLabels:
@@ -184,7 +191,7 @@ def write_graph(dst, graph,devStates=None,edgeStates=None):
         props=",".join([ '{}="{}"'.format(k,v) for (k,v) in props.items()])
 
         out('  "{}" -> "{}" [{}];'.format(ei.src_device.id,ei.dst_device.id,props))
-            
+
 
     out("}")
 
@@ -199,7 +206,7 @@ else:
         raise RuntimeError("Output path can't be stdout for snapshots, as multiple files are needed.")
 
     edgeFirings={ ei.id : 0 for ei in graph.edge_instances.values() }
-    
+
     def onSnapshot(graphType,graphInst,orchTime,seqNum,devStates,edgeStates):
         print("graphInst = {}, orchTime = {}, seqNum = {}, numdevs = {}, numedges = {}\n".format(
             graphInst.id, orchTime, seqNum, len(graphInst.device_instances), len(graphInst.edge_instances))
