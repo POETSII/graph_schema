@@ -20,6 +20,7 @@ def render_typed_data_as_decl(proto,dst,indent=""):
     else:
         raise RuntimeError("Unknown data type {}.".format(type(proto)))
 
+
 def render_typed_data_init(proto,dst,prefix):
     if proto is None:
         pass
@@ -42,6 +43,22 @@ def render_typed_data_init(proto,dst,prefix):
             else:
                 dst.write('{}{}[{}] = 0;\n'.format(prefix,proto.name,i))
 
+    else:
+        raise RuntimeError("Unknown data type {}.".format(type(proto)))
+
+def render_typed_data_add_hash(proto,dst,prefix):
+    if proto is None:
+        pass
+    elif isinstance(proto,ScalarTypedDataSpec):
+        dst.write('hash.add({}{});\n'.format(prefix,proto.name))
+    elif isinstance(proto,TupleTypedDataSpec):
+        for elt in proto.elements_by_index:
+            render_typed_data_add_hash(elt,dst,prefix+proto.name+".")
+    elif isinstance(proto,ArrayTypedDataSpec):
+        assert isinstance(proto.type,ScalarTypedDataSpec), "Haven't implemented arrays of non-scalars yet."
+        for i in range(0,proto.length):
+            dst.write('  hash.add({}{}[{}]);\n'.format(prefix,proto.name,i))
+            
     else:
         raise RuntimeError("Unknown data type {}.".format(type(proto)))
 
@@ -136,6 +153,7 @@ def render_typed_data_save(proto, dst, prefix, indent):
         assert False, "Unknown data-type"
 
 def render_typed_data_as_spec(proto,name,elt_name,dst):
+    dst.write("#pragma pack(push,1)\n")
     dst.write("struct {} : typed_data_t{{\n".format(name))
     if proto:
         assert isinstance(proto, TupleTypedDataSpec)
@@ -144,11 +162,16 @@ def render_typed_data_as_spec(proto,name,elt_name,dst):
     else:
         dst.write("  //empty\n")
     dst.write("};\n")
+    dst.write("#pragma pack(pop)\n")
     dst.write("class {}_Spec : public TypedDataSpec {{\n".format(name))
-    dst.write("  public: TypedDataPtr create() const override {\n")
+    dst.write("public:\n")
+    dst.write("  size_t totalSize() const override {{ return sizeof({})-sizeof(typed_data_t); }}\n".format(name))
+    dst.write("  size_t payloadSize() const override {{ return sizeof({}); }}\n".format(name))
+    dst.write("  TypedDataPtr create() const override {\n")
     if proto:
         dst.write("    {} *res=({}*)malloc(sizeof({}));\n".format(name,name,name))
         dst.write("    res->_ref_count=0;\n")
+        dst.write("    res->_total_size_bytes=sizeof({});\n".format(name))
         for elt in proto.elements_by_index:
             render_typed_data_init(elt, dst, "    res->");
         dst.write("    return TypedDataPtr(res);\n")
@@ -163,6 +186,7 @@ def render_typed_data_as_spec(proto,name,elt_name,dst):
         dst.write('    ns["g"]="TODO/POETS/virtual-graph-schema-v1";\n')
         dst.write("    {} *res=({}*)malloc(sizeof({}));\n".format(name,name,name))
         dst.write("    res->_ref_count=0;\n")
+        dst.write("    res->_total_size_bytes=sizeof({});\n".format(name))
         for elt in proto.elements_by_index:
             render_typed_data_init(elt,dst,"    res->")
         dst.write("    if(elt){\n")
@@ -187,6 +211,15 @@ def render_typed_data_as_spec(proto,name,elt_name,dst):
         dst.write('    dst<<"}";\n')
         dst.write("    return dst.str();\n")
     dst.write('  }\n')
+    dst.write('  void addDataHash(const TypedDataPtr &data, POETSHash &hash) const override\n')
+    dst.write('  {\n')
+    dst.write("    const {0} *src=(const {0} *)data.get();\n".format(name));
+    dst.write("    if(!src) return;\n")
+    if proto is not None:
+        for elt in proto.elements_by_index:
+            render_typed_data_add_hash(elt, dst, "src->")
+    dst.write('  }\n')
+    
     dst.write("};\n")
     dst.write("TypedDataSpecPtr {}_Spec_get(){{\n".format(name))
     dst.write("  static TypedDataSpecPtr singleton(new {}_Spec);\n".format(name))
