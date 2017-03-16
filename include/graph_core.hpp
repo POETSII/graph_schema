@@ -62,9 +62,9 @@ class DataPtr
 {
   template<class TO>
   friend class DataPtr;
-  
+
   static_assert(std::is_base_of<typed_data_t,T>::value, "This class only handles things derived from typed_data_t");
-  
+
 private:
   T *m_p;
 public:
@@ -113,8 +113,9 @@ public:
     if(m_p!=o.m_p){
       release();
       m_p=o.m_p;
+      assert(m_p!=(T*)1);
       if(m_p){
-	std::atomic_fetch_add(&m_p->_ref_count, 1u);
+        std::atomic_fetch_add(&m_p->_ref_count, 1u);
       }
     }
     return *this;
@@ -173,11 +174,11 @@ public:
     release();
     m_p=p;
   }
-  
+
   bool is_unique() const
   {
     assert(m_p);
-    return m_p->std::atomic_fetch(&m_p->_ref_count)==1;
+    return m_p->_ref_count.load()==1;
   }
 
   void release()
@@ -189,12 +190,12 @@ public:
       m_p=0;
     }
   }
-    
+
   ~DataPtr()
   {
     release();
   }
-  
+
   const uint8_t *payloadPtr() const
   {
     if(m_p){
@@ -203,7 +204,7 @@ public:
       return 0;
     }
   }
-  
+
   size_t payloadSize() const
   {
     if(m_p){
@@ -212,18 +213,18 @@ public:
       return -1;
     }
   }
-  
+
   POETSHash::hash_t payloadHash() const
   {
     POETSHash hash;
     if(m_p){
-      hash.add(payloadData(), payloadSize());
+      hash.add(payloadPtr(), payloadSize());
     }
     return hash.getHash();
   }
-  
+
   // null pointers compare less than non-null
-  bool operator < (const TypedDataPtr &o) const
+  bool operator < (const DataPtr &o) const
   {
     if(!m_p){
       return o.m_p!=0;
@@ -235,8 +236,8 @@ public:
     assert(payloadSize()==o.payloadSize());
     return memcmp(payloadPtr(), o.payloadPtr(), payloadSize()) < 0;
   }
-  
-  bool operator == (const TypedDataPtr &o) const
+
+  bool operator == (const DataPtr &o) const
   {
     if(m_p == o.m_p)
       return false;
@@ -248,18 +249,18 @@ public:
 
 namespace std
 {
-  template<>
-  struct hash<TypedDataPtr>
+  template<class T>
+  struct hash<DataPtr<T>>
   {
-    typedef TypeDataPtr argument_type;
-    
+    typedef DataPtr<T> argument_type;
+
     typedef std::size_t result_type;
-    
+
     result_type operator()(argument_type const& s) const
     {
       auto h=s.payloadHash();
-      if(sizeof(hash::hash_t) > sizeof(size_t)){
-        static_assert(sizeof(size_t)==4);
+      if(sizeof(h) > sizeof(size_t)){
+        static_assert( sizeof(h) == sizeof(size_t) ||  sizeof(size_t)==4,"Assuming size_t is uint32_t");
         h=h ^ (h>>32);
       }
       return h;
@@ -290,10 +291,10 @@ class TypedDataSpec
 public:
   virtual ~TypedDataSpec()
   {}
-  
+
   //! Size of the actual content, not including typed_data_t header
   virtual size_t payloadSize() const=0;
-  
+
   //! Size of the entire typed_data_t instance, including standard header
   virtual size_t totalSize() const=0;
 
@@ -304,7 +305,7 @@ public:
   virtual void save(xmlpp::Element *parent, const TypedDataPtr &data) const=0;
 
   virtual std::string toJSON(const TypedDataPtr &data) const=0;
-  
+
   virtual void addDataHash(const TypedDataPtr &data, POETSHash &hash) const=0;
 
   POETSHash::hash_t getDataHash(const TypedDataPtr &data) const
@@ -368,7 +369,7 @@ class OrchestratorServices
 {
 protected:
  unsigned m_logLevel;
-  
+
   OrchestratorServices(unsigned logLevel)
     : m_logLevel(logLevel)
   {
@@ -443,7 +444,7 @@ public:
   virtual const OutputPortPtr &getOutput(unsigned index) const=0;
   virtual OutputPortPtr getOutput(const std::string &name) const=0;
   virtual const std::vector<OutputPortPtr> &getOutputs() const=0;
-  
+
   virtual uint32_t calcReadyToSend(
     OrchestratorServices *orchestrator,
     const typed_data_t *graphProperties,
