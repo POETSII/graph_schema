@@ -121,8 +121,13 @@
 
         enum State{
             State_Idle,
-            State_Pre,
-            State_Coarse
+            State_PreSmoothBegin,
+            State_PreSmoothEnd,
+            
+            
+            State_WaitingForCoarse,
+            State_PostSmoothBegin,
+            State_PostSmoothEnd   
         };
 
         ]]></SharedCode>
@@ -149,6 +154,9 @@
             <Scalar type="int32_t" name="coarseSeen" />
             <Scalar type="float" name="coarseAcc" />
             <Scalar type="float" name="coarseMaxResidual" />
+
+            <Scalar type="int32_t" name="preSmoothSeen" />
+            <Scalar type="float" name="preSmoothAcc" />
 
             <Scalar type="int32_t" name="postSmoothSeen" />
             <Scalar type="float" name="postSmoothAcc" />

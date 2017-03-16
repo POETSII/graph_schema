@@ -11,6 +11,8 @@
 #include <cassert>
 #include <type_traits>
 
+#include "poets_hash.hpp"
+
 /* What is the point of all this?
 
    - C/C++ doesn't support introspection, so there is no way of getting at data-structures
@@ -46,11 +48,14 @@ virtual dispatch (usually quick), plus the loss of cross-function optimisation
 */
 
 
+#pragma pack(push,1)
 struct typed_data_t
 {
   // This is opaque data, and should be a POD
   std::atomic<unsigned> _ref_count; // This is exposed in order to allow cross-module optimisations
+  uint32_t _total_size_bytes;  // All typed data instances must be a POD, and this is the total size, including header
 };
+#pragma pack(pop)
 
 template<class T>
 class DataPtr
@@ -168,12 +173,18 @@ public:
     release();
     m_p=p;
   }
+  
+  bool is_unique() const
+  {
+    assert(m_p);
+    return m_p->std::atomic_fetch(&m_p->_ref_count)==1;
+  }
 
   void release()
   {
     if(m_p){
       if(std::atomic_fetch_sub(&m_p->_ref_count, 1u)==1){
-	free(m_p);
+        free(m_p);
       }
       m_p=0;
     }
@@ -183,6 +194,77 @@ public:
   {
     release();
   }
+  
+  const uint8_t *payloadPtr() const
+  {
+    if(m_p){
+      return ((const uint8_t*)m_p)+sizeof(typed_data_t);
+    }else{
+      return 0;
+    }
+  }
+  
+  size_t payloadSize() const
+  {
+    if(m_p){
+      return m_p->_total_size_bytes-sizeof(typed_data_t);
+    }else{
+      return -1;
+    }
+  }
+  
+  POETSHash::hash_t payloadHash() const
+  {
+    POETSHash hash;
+    if(m_p){
+      hash.add(payloadData(), payloadSize());
+    }
+    return hash.getHash();
+  }
+  
+  // null pointers compare less than non-null
+  bool operator < (const TypedDataPtr &o) const
+  {
+    if(!m_p){
+      return o.m_p!=0;
+    }
+    if(!o.m_p){
+      return false;
+    }
+    // otherwise we need a byte-wise compare
+    assert(payloadSize()==o.payloadSize());
+    return memcmp(payloadPtr(), o.payloadPtr(), payloadSize()) < 0;
+  }
+  
+  bool operator == (const TypedDataPtr &o) const
+  {
+    if(m_p == o.m_p)
+      return false;
+    if(!m_p || !o.m_p)
+      return false;
+    return 0==memcmp(payloadPtr(), o.payloadPtr(), payloadSize());
+  }
+};
+
+namespace std
+{
+  template<>
+  struct hash<TypedDataPtr>
+  {
+    typedef TypeDataPtr argument_type;
+    
+    typedef std::size_t result_type;
+    
+    result_type operator()(argument_type const& s) const
+    {
+      auto h=s.payloadHash();
+      if(sizeof(hash::hash_t) > sizeof(size_t)){
+        static_assert(sizeof(size_t)==4);
+        h=h ^ (h>>32);
+      }
+      return h;
+    }
+  };
 };
 
 template<class T>
@@ -208,6 +290,12 @@ class TypedDataSpec
 public:
   virtual ~TypedDataSpec()
   {}
+  
+  //! Size of the actual content, not including typed_data_t header
+  virtual size_t payloadSize() const=0;
+  
+  //! Size of the entire typed_data_t instance, including standard header
+  virtual size_t totalSize() const=0;
 
   virtual TypedDataPtr create() const=0;
 
@@ -216,7 +304,15 @@ public:
   virtual void save(xmlpp::Element *parent, const TypedDataPtr &data) const=0;
 
   virtual std::string toJSON(const TypedDataPtr &data) const=0;
+  
+  virtual void addDataHash(const TypedDataPtr &data, POETSHash &hash) const=0;
 
+  POETSHash::hash_t getDataHash(const TypedDataPtr &data) const
+  {
+    POETSHash hash;
+    addDataHash(data,hash);
+    return hash.getHash();
+  }
 
 
   virtual uint64_t getTypeHash() const
