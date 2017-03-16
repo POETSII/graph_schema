@@ -1,0 +1,207 @@
+%skeleton "lalr1.cc" /* -*- C++ -*- */
+%require "3.0.4"
+%defines
+%define parser_class_name {device_dsl_parser}
+
+/*
+This example will use genuine C++ objects as semantic values, therefore, we require the variant-based interface. To make sure we properly use it, we enable assertions. To fully benefit from type-safety and more natural definition of “symbol”, we enable api.token.constructor.
+*/
+
+%define api.token.constructor
+%define api.value.type variant
+%define parse.assert
+
+/*
+Then come the declarations/inclusions needed by the semantic values. Because the parser uses the parsing driver and reciprocally, both would like to include the header of the other, which is, of course, insane. This mutual dependency will be broken using forward declarations. Because the driver’s header needs detailed knowledge about the parser class (in particular its inner types), it is the parser’s header which will use a forward declaration of the driver. See %code Summary.
+*/
+
+%code requires
+{
+# include <string>
+#include "device_dsl_ast.hpp"
+class device_dsl_driver;
+}
+/*
+The driver is passed by reference to the parser and to the scanner. This provides a simple but effective pure interface, not relying on global variables.
+*/
+
+// The parsing context.
+%param { device_dsl_driver& driver }
+/*
+Then we request location tracking, and initialize the first location’s file name. Afterward new locations are computed relatively to the previous locations: the file name will be propagated.
+*/
+
+%locations
+%initial-action
+{
+  // Initialize the initial location.
+  @$.begin.filename = @$.end.filename = &driver.file;
+};
+/*
+Use the following two directives to enable parser tracing and verbose error messages. However, verbose error messages can contain incorrect information (see LAC).
+*/
+
+%define parse.trace
+%define parse.error verbose
+/*
+The code between ‘%code {’ and ‘}’ is output in the *.cc file; it needs detailed knowledge about the driver.
+*/
+
+%code
+{
+# include "device_dsl_driver.hpp"
+}
+/*
+The token numbered as 0 corresponds to end of file; the following line allows for nicer error messages referring to “end of file” instead of “$end”. Similarly user friendly names are provided for each symbol. To avoid name clashes in the generated files (see Calc++ Scanner), prefix tokens with TOK_ (see api.token.prefix).
+*/
+
+%define api.token.prefix {TOK_}
+%token
+    END  0  "end of file"
+    CSTART "{{"
+    CEND "}}"
+    CSTARTR "(("
+    CENDR "))"
+    LSQUARE  "[" 
+    RSQUARE  "]"
+    FSLASH  "/"
+    COLON       ":"
+    SEMICOLON  ";"
+    GRAPH "graph"
+    DEVICE "device"
+    INPUT "input"
+    OUTPUT "output"
+    PROPERTY "property"
+    STATE "state"
+    SEND "send"
+    RECV "recv"
+    ON_RECV "on_recv"
+    ENABLE "enable"
+    DISABLE "disable"
+    WAIT "wait"
+    INT32_t "int32_t"
+    FLOAT "float"
+;
+/*
+Since we use variant-based semantic values, %union is not used, and both %type and %token expect genuine types, as opposed to type tags.
+*/
+
+%token <std::string> ID "identifier"
+%token <std::string> CCODE "embedded_c_statements"
+%token <std::string> CCODER  "embedded_c_expression"
+%type <GraphTypePtr> GRAPH_TYPE GRAPH_TYPE_HEAD
+%type <DeviceTypePtr> DEVICE_TYPE DEVICE_TYPE_HEAD
+%type <DataTypePtr> TYPE
+%type <std::string> SCALAR_TYPE
+%type <ClausePtr> CLAUSE CLAUSE_INST SEND_CLAUSE RECV_CLAUSE WAIT_CLAUSE LOOP_CLAUSE
+%type <SeqClausePtr> LOOP_CLAUSE_HEAD
+%type <OutputPinPtr> OUTPUT_PIN
+%type <InputPinPtr> INPUT_PIN INPUT_PIN_HEAD INPUT_PIN_EXT INPUT_PIN_EXT_HEAD
+/*
+No %destructor is needed to enable memory deallocation during error recovery; the memory, for strings for instance, will be reclaimed by the regular destructors. All the values are printed using their operator<< (see Printing Semantic Values).
+*/
+
+//%printer { yyoutput << $$; } <*>;
+/*
+The grammar itself is straightforward (see Location Tracking Calculator - ltcalc).
+*/
+
+%%
+
+%start GRAPH_TYPE;
+
+GRAPH_TYPE
+    : GRAPH_TYPE_HEAD "]" { $$=$1; driver.graph=$1; }
+    ;
+    
+GRAPH_TYPE_HEAD
+    : "graph" ID "["    { $$ = std::make_shared<GraphType>($2); }
+    | GRAPH_TYPE_HEAD DEVICE_TYPE      { $1->addDeviceType($2); $$=$1; }
+    ;
+    
+DEVICE_TYPE
+    : DEVICE_TYPE_HEAD "]"   { $$=$1; }
+    ;
+    
+DEVICE_TYPE_HEAD
+    : "device" ID "["   { $$ = std::make_shared<DeviceType>($2); }
+    | DEVICE_TYPE_HEAD "property" ID ":" TYPE ";"  { $1->addProperty($3,$5); $$=$1; }
+    | DEVICE_TYPE_HEAD "state"    ID ":" TYPE ";"  { $1->addState($3,$5); $$=$1; }
+    | DEVICE_TYPE_HEAD INPUT_PIN  { $1->addInput($2); $$=$1; }
+    | DEVICE_TYPE_HEAD OUTPUT_PIN  { $1->addOutput($2); $$=$1; }
+    | DEVICE_TYPE_HEAD CLAUSE { $1->addClause($2); $$=$1; }
+    ;
+
+OUTPUT_PIN
+    : "output" ID ":" ID ";" { $$=std::make_shared<OutputPin>($2,$4); }
+    ;
+    
+INPUT_PIN
+    : INPUT_PIN_HEAD ";" { $$=$1; }
+    | INPUT_PIN_EXT ";"  { $$=$1; }
+    | INPUT_PIN_EXT   { $$=$1; }
+    ;
+    
+INPUT_PIN_EXT
+    : INPUT_PIN_EXT_HEAD "]"  { $$=$1; }
+    
+INPUT_PIN_EXT_HEAD
+    : INPUT_PIN_HEAD "["  { $$=$1; }
+    | INPUT_PIN_EXT_HEAD "property" ID ":" TYPE ";"  { $$=$1; $1->addProperty($3,$5); }
+    | INPUT_PIN_EXT_HEAD "state" ID ":" TYPE ";"     { $$=$1; $1->addState($3,$5); }
+    ;
+    
+INPUT_PIN_HEAD
+    : "input" ID ":" ID   { $$=std::make_shared<InputPin>($2,$4); }
+    
+CLAUSE
+    : CLAUSE_INST ";"  { $$=$1; }
+    | CLAUSE_INST      { $$=$1; }
+    ;
+    
+CLAUSE_INST
+    : SEND_CLAUSE
+    | RECV_CLAUSE
+    | WAIT_CLAUSE
+    | LOOP_CLAUSE
+    ;
+    
+SEND_CLAUSE
+    : "send" "/" ID "{{" CCODE "}}"  { $$=std::make_shared<SendClause>($3,$5); }
+    ;
+    
+RECV_CLAUSE
+    : "on_recv" "/" ID "{{" CCODE "}}"  { $$=std::make_shared<OnRecvClause>($3,$5); }
+    | "on_recv" "/" ID "/" "disable"     { $$=std::make_shared<OnRecvDisableClause>($3); }
+    ;
+
+WAIT_CLAUSE
+    : "wait" "((" CCODE "))"  { $$=std::make_shared<WaitClause>($3); }
+    ;
+
+LOOP_CLAUSE
+    : LOOP_CLAUSE_HEAD "]"    { $$=std::make_shared<LoopClause>($1); } 
+    
+LOOP_CLAUSE_HEAD
+    : "loop" "["                { $$=std::make_shared<SeqClause>(); }
+    | LOOP_CLAUSE_HEAD CLAUSE   { $1->addClause($2); $$=$1; }
+    
+TYPE
+    : SCALAR_TYPE { $$=std::make_shared<DataTypeScalar>($1); }
+    
+SCALAR_TYPE
+    : "int32_t"  { $$="int32_t"; }
+    | "float"    { $$="float"; }
+    ;
+    
+%%
+/*
+Finally the error member function registers the errors to the driver.
+*/
+
+void
+yy::device_dsl_parser::error (const location_type& l,
+                          const std::string& m)
+{
+  driver.error (l, m);
+}

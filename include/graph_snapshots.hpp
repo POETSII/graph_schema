@@ -25,12 +25,12 @@ public:
      const DeviceTypePtr &dt,
      const char *id,
      const TypedDataPtr &state,
-     const bool *readyToSendFlags
+     uint32_t readyToSendFlags
      ) =0;
 
     virtual void writeEdgeInstance
     (
-     const EdgeTypePtr &dt,
+     const InputPortPtr &dt,
      const char *id,
      const TypedDataPtr &state,
      uint64_t firings,
@@ -131,18 +131,13 @@ public:
      const DeviceTypePtr &dt,
      const char *id,
      const TypedDataPtr &state,
-     const bool *readyToSendFlags
+     uint32_t readyToSendFlags
      ) override
     {
       unsigned numOutputs=dt->getOutputCount();
       if(numOutputs>32)
-	throw std::runtime_error("Not supported.");
-      uint32_t flags=0;
-      for(unsigned i=0;i<numOutputs;i++){
-	if(readyToSendFlags[i])
-	  flags |= (1ul << i);
-      }
-
+        throw std::runtime_error("Not supported.");
+      uint32_t flags=readyToSendFlags;
 
       std::string stateJSON;
       
@@ -177,7 +172,7 @@ public:
 
     virtual void writeEdgeInstance
     (
-     const EdgeTypePtr &et,
+     const InputPortPtr &et,
      const char *id,
      const TypedDataPtr &state,
      uint64_t firings,
@@ -188,16 +183,16 @@ public:
       std::string stateJSON;
       
       if(state){
-	stateJSON=et->getStateSpec()->toJSON(state);
-	if(stateJSON.size()>0){
-	  assert(stateJSON.size() >= 2);
-	  stateJSON=stateJSON.substr(0,stateJSON.size()-1);
-	  stateJSON=stateJSON.substr(1);
-	}
+        stateJSON=et->getStateSpec()->toJSON(state);
+        if(stateJSON.size()>0){
+          assert(stateJSON.size() >= 2);
+          stateJSON=stateJSON.substr(0,stateJSON.size()-1);
+          stateJSON=stateJSON.substr(1);
+        }
       }
 
       if(stateJSON.empty() && firings==0 && nMessagesInFlight==0){
-	return;
+        return;
       }
 
       
@@ -206,13 +201,13 @@ public:
       xmlTextWriterWriteAttribute(m_dst, (const xmlChar *)"id", (const xmlChar *)id);
 
       if(firings!=0){
-	xmlTextWriterWriteFormatAttribute(m_dst, (const xmlChar *)"firings", "%llx", firings);
+        xmlTextWriterWriteFormatAttribute(m_dst, (const xmlChar *)"firings", "%llx", (long long unsigned)firings);
       }
 
       if(!stateJSON.empty()){
-	xmlTextWriterStartElement(m_dst, (const xmlChar *)"S");
-	xmlTextWriterWriteRaw(m_dst, (const xmlChar *)stateJSON.c_str());
-	xmlTextWriterEndElement(m_dst);
+        xmlTextWriterStartElement(m_dst, (const xmlChar *)"S");
+        xmlTextWriterWriteRaw(m_dst, (const xmlChar *)stateJSON.c_str());
+        xmlTextWriterEndElement(m_dst);
       }
 
       if(nMessagesInFlight>0){
@@ -220,7 +215,7 @@ public:
 	for(unsigned i=0; i<nMessagesInFlight; i++){
 	  xmlTextWriterStartElement(m_dst, (const xmlChar *)"M");
 	  auto message=pMessagesInFlight[i];
-	  std::string payload=et->getMessageSpec()->toJSON(message);
+	  std::string payload=et->getMessageType()->getMessageSpec()->toJSON(message);
 	  if(payload.size()>0){
 	    assert(payload.size() >= 2);
 	    payload=stateJSON.substr(0,payload.size()-1);

@@ -19,22 +19,40 @@ void split_path(const std::string &src, std::string &dstDevice, std::string &dst
 }
 
 
+rapidjson::Document parse_meta_data(xmlpp::Element *parent, const char *name, xmlpp::Node::PrefixNsMap &ns)
+{
+  auto *eMetaData=find_single(parent, name, ns);
+  if(eMetaData){
+    std::string text="{"+eMetaData->get_child_text()->get_content()+"}";
+    rapidjson::Document document;
+    document.Parse(text.c_str());
+    assert(document.IsObject());
+    return document;
+  }else{
+    rapidjson::Document res;
+    res.SetObject();
+    return res;
+  }
+}
+
 void loadGraph(Registry *registry, xmlpp::Element *parent, GraphLoadEvents *events)
 {
   xmlpp::Node::PrefixNsMap ns;
-  ns["g"]="http://TODO.org/POETS/virtual-graph-schema-v0";
+  ns["g"]="http://TODO.org/POETS/virtual-graph-schema-v1";
 
   auto *eGraph=find_single(parent, "./g:GraphInstance", ns);
   if(eGraph==0)
     throw std::runtime_error("No graph element.");
+
+  bool parseMetaData=events->parseMetaData();
 
   std::string graphId=get_attribute_required(eGraph, "id");
   std::string graphTypeId=get_attribute_required(eGraph, "graphTypeId");
 
   auto graphType=registry->lookupGraphType(graphTypeId);
 
-  for(auto et : graphType->getEdgeTypes()){
-    events->onEdgeType(et);
+  for(auto et : graphType->getMessageTypes()){
+    events->onMessageType(et);
   }
   for(auto dt : graphType->getDeviceTypes()){
     events->onDeviceType(dt);
@@ -51,7 +69,13 @@ void loadGraph(Registry *registry, xmlpp::Element *parent, GraphLoadEvents *even
     graphProperties=graphType->getPropertiesSpec()->create();
   }
 
-  auto gId=events->onBeginGraphInstance(graphType, graphId, graphProperties);
+  uint64_t gId;
+  if(parseMetaData){
+    auto metadata=parse_meta_data(eGraph, "g:MetaData", ns);
+    gId=events->onBeginGraphInstance(graphType, graphId, graphProperties);
+  }else{
+    gId=events->onBeginGraphInstance(graphType, graphId, graphProperties);
+  }
 
   std::unordered_map<std::string, std::pair<uint64_t,DeviceTypePtr> > devices;
 
@@ -60,34 +84,12 @@ void loadGraph(Registry *registry, xmlpp::Element *parent, GraphLoadEvents *even
     throw std::runtime_error("No DeviceInstances element");
 
   events->onBeginDeviceInstances(gId);
-  
+
   for(auto *nDevice : eDeviceInstances->find("./g:DevI", ns)){
     auto *eDevice=(xmlpp::Element *)nDevice;
 
     std::string id=get_attribute_required(eDevice, "id");
     std::string deviceTypeId=get_attribute_required(eDevice, "type");
-
-    std::vector<double> nativeLocation;
-    const double *nativeLocationPtr = 0;
-    std::string nativeLocationStr=get_attribute_optional(eDevice, "nativeLocation");
-    if(!nativeLocationStr.empty()){
-      size_t start=0;
-      while(start<nativeLocationStr.size()){
-	size_t end=nativeLocationStr.find(',',start);
-	std::string part=nativeLocationStr.substr(start, end==std::string::npos ? end : end-start);
-	nativeLocation.push_back(std::stod(part));
-	if(end==std::string::npos)
-	  break;
-
-	start=end+1;
-      }
-
-      if(nativeLocation.size()!=graphType->getNativeDimension()){
-	throw std::runtime_error("Device instance location does not match dimension of problem.");
-      }
-
-      nativeLocationPtr = &nativeLocation[0];
-    }
 
     auto dt=graphType->getDeviceType(deviceTypeId);
 
@@ -99,7 +101,13 @@ void loadGraph(Registry *registry, xmlpp::Element *parent, GraphLoadEvents *even
       deviceProperties=dt->getPropertiesSpec()->create();
     }
 
-    uint64_t dId=events->onDeviceInstance(gId, dt, id, deviceProperties, nativeLocationPtr);
+    uint64_t dId;
+    if(parseMetaData){
+      rapidjson::Document metadata=parse_meta_data(eGraph, "g:M", ns);
+      dId=events->onDeviceInstance(gId, dt, id, deviceProperties, std::move(metadata));
+    }else{
+      dId=events->onDeviceInstance(gId, dt, id, deviceProperties);
+    }
 
     devices.insert(std::make_pair( id, std::make_pair(dId, dt)));
   }
@@ -137,11 +145,10 @@ void loadGraph(Registry *registry, xmlpp::Element *parent, GraphLoadEvents *even
     auto srcPort=srcDevice.second->getOutput(srcPortName);
     auto dstPort=dstDevice.second->getInput(dstPortName);
 
-    if(srcPort->getEdgeType()!=dstPort->getEdgeType())
+    if(srcPort->getMessageType()!=dstPort->getMessageType())
       throw std::runtime_error("Edge type mismatch on ports.");
 
-    auto et=srcPort->getEdgeType();
-
+    auto et=dstPort->getPropertiesSpec();
 
 
     TypedDataPtr edgeProperties;
@@ -149,29 +156,39 @@ void loadGraph(Registry *registry, xmlpp::Element *parent, GraphLoadEvents *even
     {
       const auto &children=eEdge->get_children();
       if(children.size()<10){
-	for(const auto &nChild : children){
-	  assert(nChild->get_name().is_ascii());
+        for(const auto &nChild : children){
+          assert(nChild->get_name().is_ascii());
 
-	  if(!strcmp(nChild->get_name().c_str(),"P")){
-	    eProperties=(xmlpp::Element*)nChild;
-	    break;
-	  }
-	}
+          if(!strcmp(nChild->get_name().c_str(),"P")){
+            eProperties=(xmlpp::Element*)nChild;
+            break;
+          }
+        }
       }else{
-	eProperties=find_single(eEdge, "./g:P", ns);
+        eProperties=find_single(eEdge, "./g:P", ns);
       }
     }
     if(eProperties){
-      edgeProperties=et->getPropertiesSpec()->load(eProperties);
+      edgeProperties=et->load(eProperties);
     }else{
-      edgeProperties=et->getPropertiesSpec()->create();
+      edgeProperties=et->create();
     }
 
 
-    events->onEdgeInstance(gId,
-			   dstDevice.first, dstDevice.second, dstPort,
-			   srcDevice.first, srcDevice.second, srcPort,
-			   edgeProperties);
+    if(parseMetaData){
+      auto metadata=parse_meta_data(eGraph, "g:M", ns);
+      events->onEdgeInstance(gId,
+                 dstDevice.first, dstDevice.second, dstPort,
+                 srcDevice.first, srcDevice.second, srcPort,
+                 edgeProperties,
+                 std::move(metadata)
+      );
+    }else{
+      events->onEdgeInstance(gId,
+                 dstDevice.first, dstDevice.second, dstPort,
+                 srcDevice.first, srcDevice.second, srcPort,
+                 edgeProperties);
+    }
   }
 
   events->onBeginEdgeInstances(gId);

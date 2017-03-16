@@ -14,24 +14,34 @@ class ScalarTypedDataSpec(TypedDataSpec):
         if self.type=="int32_t":
             res=int(value)
             assert(-2**31 <= res < 2**31)
+        elif self.type=="int16_t":
+            res=int(value)
+            assert(-2**15 <= res < 2**15)
+        elif self.type=="int8_t":
+            res=int(value)
+            assert(-2**7 <= res < 2**7)
         elif self.type=="uint32_t":
             res=int(value)
             assert(0 <= res < 2**32)
+        elif self.type=="uint16_t":
+            res=int(value)
+            assert(0 <= res < 2**16)
+        elif self.type=="uint8_t":
+            res=int(value)
+            assert(0 <= res < 2**8)
         elif self.type=="float":
             res=float(value)
-        elif self.type=="bool":
-            res=bool(value)
         else:
             assert False, "Unknown data type {}.".format(self.type)
         return res
-    
-    def __init__(self,name,type,value=None):
+
+    def __init__(self,name,type,default=None):
         TypedDataSpec.__init__(self,name)
         self.type=type
-        if value is not None:
-            self.value=self._check_value(value)
+        if default is not None:
+            self.default=self._check_value(default)
         else:
-            self.value=0
+            self.default=0
 
     def is_refinement_compatible(self,inst):
         if inst is None:
@@ -43,16 +53,16 @@ class ScalarTypedDataSpec(TypedDataSpec):
         return True
 
     def create_default(self):
-        return self.value
+        return self.default
 
     def expand(self,inst):
         if inst is None:
             return self.create_default()
         else:
             return self._check_value(inst)
-        
+
     def __str__(self):
-        return "{}:{}".format(self.type,self.name,self.value)
+        return "{}:{}={}".format(self.type,self.name,self.default)
 
 class TupleTypedDataSpec(TypedDataSpec):
     def __init__(self,name,elements):
@@ -74,7 +84,7 @@ class TupleTypedDataSpec(TypedDataSpec):
         return self._elts_by_index
 
     def __str__(self):
-        
+
         acc="Tuple:{}[\n".format(self.name)
         for i in range(len(self._elts_by_index)):
             if i!=0:
@@ -97,7 +107,7 @@ class TupleTypedDataSpec(TypedDataSpec):
     def is_refinement_compatible(self,inst):
         if inst is None:
             return True;
-        
+
         if not isinstance(inst,dict):
             return False
 
@@ -122,8 +132,8 @@ class ArrayTypedDataSpec(TypedDataSpec):
         self.length=length
 
     def __str__(self):
-        
-        return "Array:{}[{}*{}]\n".format(self.name,self.types,self.length)
+
+        return "Array:{}[{}*{}]\n".format(self.name,self.type,self.length)
 
     def create_default(self):
         return [self.type.create_default() for i in range(self.length)]
@@ -140,7 +150,7 @@ class ArrayTypedDataSpec(TypedDataSpec):
     def is_refinement_compatible(self,inst):
         if inst is None:
             return True;
-        
+
         if not isinstance(inst,list):
             return False
 
@@ -173,40 +183,41 @@ def is_refinement_compatible(proto,inst):
     if inst is None:
         return True;
     return proto.is_refinement_compatible(inst)
-    
 
-class EdgeType(object):
-    def __init__(self,parent,id,message,state,properties):
+
+class MessageType(object):
+    def __init__(self,parent,id,message,metadata):
         self.id=id
         self.parent=parent
         self.message=message
-        self.state=state
-        self.properties=properties
-    
+        self.metadata=metadata
+
 
 class Port(object):
-    def __init__(self,parent,name,edge_type,source_file,source_line):
+    def __init__(self,parent,name,message_type,metadata,source_file,source_line):
         self.parent=parent
         self.name=name
-        self.edge_type=edge_type
+        self.message_type=message_type
+        self.metadata=metadata
         self.source_file=source_file
         self.source_line=source_line
 
-    
+
 class InputPort(Port):
-    def __init__(self,parent,name,edge_type,receive_handler,source_file=None,source_line=None):
-        Port.__init__(self,parent,name,edge_type,source_file,source_line)
+    def __init__(self,parent,name,message_type,properties,state,metadata,receive_handler,source_file=None,source_line=None):
+        Port.__init__(self,parent,name,message_type,metadata,source_file,source_line)
+        self.properties=properties
+        self.state=state
         self.receive_handler=receive_handler
 
-    
 class OutputPort(Port):
-    def __init__(self,parent,name,edge_type,send_handler,source_file,source_line):
-        Port.__init__(self,parent,name,edge_type,source_file,source_line)
+    def __init__(self,parent,name,message_type,metadata,send_handler,source_file,source_line):
+        Port.__init__(self,parent,name,message_type,metadata,source_file,source_line)
         self.send_handler=send_handler
-    
-            
+
+
 class DeviceType(object):
-    def __init__(self,parent,id,state,properties):
+    def __init__(self,parent,id,properties,state,metadata=None,shared_code=[]):
         self.id=id
         self.parent=parent
         self.state=state
@@ -216,62 +227,64 @@ class DeviceType(object):
         self.outputs={}
         self.outputs_by_index=[]
         self.ports={}
+        self.metadata=metadata
+        self.shared_code=shared_code
 
-    def add_input(self,name,edge_type,receive_handler,source_file=None,source_line={}):
+    def add_input(self,name,message_type,properties,state,metadata,receive_handler,source_file=None,source_line={}):
         if name in self.ports:
             raise GraphDescriptionError("Duplicate port {} on device type {}".format(name,self.id))
-        if edge_type.id not in self.parent.edge_types:
-            raise GraphDescriptionError("Unregistered edge type {} on port {} of device type {}".format(edge_type.id,name,self.id))
-        if edge_type != self.parent.edge_types[edge_type.id]:
-            raise GraphDescriptionError("Incorrect edge type object {} on port {} of device type {}".format(edge_type.id,name,self.id))
-        p=InputPort(self, name, self.parent.edge_types[edge_type.id], receive_handler, source_file, source_line)
+        if message_type.id not in self.parent.message_types:
+            raise GraphDescriptionError("Unregistered message type {} on port {} of device type {}".format(message_type.id,name,self.id))
+        if message_type != self.parent.message_types[message_type.id]:
+            raise GraphDescriptionError("Incorrect message type object {} on port {} of device type {}".format(message_type.id,name,self.id))
+        p=InputPort(self, name, self.parent.message_types[message_type.id], properties, state, metadata, receive_handler, source_file, source_line)
         self.inputs[name]=p
         self.inputs_by_index.append(p)
         self.ports[name]=p
 
-    def add_output(self,name,edge_type,send_handler,source_file=None,source_line=None):
+    def add_output(self,name,message_type,metadata,send_handler,source_file=None,source_line=None):
         if name in self.ports:
             raise GraphDescriptionError("Duplicate port {} on device type {}".format(name,self.id))
-        if edge_type.id not in self.parent.edge_types:
-            raise GraphDescriptionError("Unregistered edge type {} on port {} of device type {}".format(edge_type.id,name,self.id))
-        if edge_type != self.parent.edge_types[edge_type.id]:
-            raise GraphDescriptionError("Incorrect edge type object {} on port {} of device type {}".format(edge_type.id,name,self.id))
-        p=OutputPort(self, name, self.parent.edge_types[edge_type.id], send_handler, source_file, source_line)
+        if message_type.id not in self.parent.message_types:
+            raise GraphDescriptionError("Unregistered message type {} on port {} of device type {}".format(message_type.id,name,self.id))
+        if message_type != self.parent.message_types[message_type.id]:
+            raise GraphDescriptionError("Incorrect message type object {} on port {} of device type {}".format(message_type.id,name,self.id))
+        p=OutputPort(self, name, self.parent.message_types[message_type.id], metadata, send_handler, source_file, source_line)
         self.outputs[name]=p
         self.outputs_by_index.append(p)
         self.ports[name]=p
 
 
 class GraphType(object):
-    def __init__(self,id,native_dimension,properties,shared_code):
+    def __init__(self,id,properties,metadata,shared_code):
         self.id=id
-        self.native_dimension=native_dimension
         if properties:
             assert isinstance(properties,TupleTypedDataSpec), "Expected TupleTypedDataSpec, got={}".format(properties)
         self.properties=properties
+        self.metadata=metadata
         self.shared_code=shared_code
         self.device_types={}
-        self.edge_types={}
+        self.message_types={}
 
-    def add_edge_type(self,edge_type):
-        if edge_type.id in self.edge_types:
-            raise GraphDescriptionError("Edge type already exists.")
-        self.edge_types[edge_type.id]=edge_type
+    def add_message_type(self,message_type):
+        if message_type.id in self.message_types:
+            raise GraphDescriptionError("message type already exists.")
+        self.message_types[message_type.id]=message_type
 
     def add_device_type(self,device_type):
         if device_type.id in self.device_types:
             raise GraphDescriptionError("Device type already exists.")
         self.device_types[device_type.id]=device_type
-        
+
 class GraphTypeReference(object):
     def __init__(self,id,src):
         self.id=id
         self.src=src
-        
-        self.native_dimension=native_dimension
+
         self.properties=properties
+        self.metadata=metadata
         self.device_types={}
-        self.edge_types={}
+        self.message_types={}
 
     @property
     def native_dimension(self):
@@ -286,30 +299,30 @@ class GraphTypeReference(object):
         raise RuntimeError("Cannot get device_types of unresolved GraphTypeReference.")
 
     @property
-    def edge_types(self):
-        raise RuntimeError("Cannot get edge_types of unresolved GraphTypeReference.")
+    def message_types(self):
+        raise RuntimeError("Cannot get message_types of unresolved GraphTypeReference.")
 
-    def add_edge_type(self,edge_type):
+    def add_message_type(self,message_type):
         raise RuntimeError("Cannot add to unresolved GraphTypeReference.")
 
     def add_device_type(self,device_type):
         raise RuntimeError("Cannot add to unresolved GraphTypeReference.")
 
-        
+
 class DeviceInstance(object):
-    def __init__(self,parent,id,device_type,native_location,properties):
+    def __init__(self,parent,id,device_type,properties,metadata=None):
         if not is_refinement_compatible(device_type.properties,properties):
             raise GraphDescriptionError("Properties not compatible with device type properties: proto={}, value={}".format(device_type.properties, properties))
 
         self.parent=parent
         self.id=id
         self.device_type=device_type
-        self.native_location=native_location
         self.properties=properties
+        self.metadata=metadata
 
-        
+
 class EdgeInstance(object):
-    def __init__(self,parent,dst_device,dst_port_name,src_device,src_port_name,properties):
+    def __init__(self,parent,dst_device,dst_port_name,src_device,src_port_name,properties=None,metadata=None):
         self.parent=parent
 
         if dst_port_name not in dst_device.device_type.inputs:
@@ -319,42 +332,44 @@ class EdgeInstance(object):
 
         dst_port=dst_device.device_type.inputs[dst_port_name]
         src_port=src_device.device_type.outputs[src_port_name]
-        
-        if dst_port.edge_type != src_port.edge_type:
+
+        if dst_port.message_type != src_port.message_type:
             raise GraphDescriptionError("Dest port has type {}, source port type {}".format(dst_port.id,src_port.id))
 
-        if not is_refinement_compatible(dst_port.edge_type.properties,properties):
-            raise GraphDescriptionError("Properties are not compatible: proto={}, value={}.".format(dst_port.edge_type.properties, properties))
+        if not is_refinement_compatible(dst_port.properties,properties):
+            raise GraphDescriptionError("Properties are not compatible: proto={}, value={}.".format(dst_port.properties, properties))
 
         self.id = dst_device.id+":"+dst_port_name+"-"+src_device.id+":"+src_port_name
-        
+
         self.dst_device=dst_device
         self.src_device=src_device
-        self.edge_type=dst_port.edge_type
+        self.message_type=dst_port.message_type
         self.dst_port=dst_port
         self.src_port=src_port
         self.properties=properties
-        
+        self.metadata=metadata
+
 
 class GraphInstance:
-    def __init__(self,id,graph_type,properties=None):
+    def __init__(self,id,graph_type,properties=None,metadata=None):
         self.id=id
         self.graph_type=graph_type
         assert is_refinement_compatible(graph_type.properties,properties), "value {} is not a refinement of {}".format(properties,graph_type.properties)
         self.properties=properties
+        self.metadata=metadata
         self.device_instances={}
         self.edge_instances={}
         self._validated=True
 
-    def _validate_edge_type(self,et):
+    def _validate_message_type(self,et):
         pass
 
     def _validate_device_type(self,dt):
         for p in dt.ports.values():
-            if p.edge_type.id not in self.graph_type.edge_types:
-                raise GraphDescriptionError("DeviceType uses an edge type that is uknown.")
-            if p.edge_type != self.graph_type.edge_types[p.edge_type.id]:
-                raise GraphDescriptionError("DeviceType uses an edge type object that is not part of this graph.")
+            if p.message_type.id not in self.graph_type.message_types:
+                raise GraphDescriptionError("DeviceType uses an message type that is uknown.")
+            if p.message_type != self.graph_type.message_types[p.message_type.id]:
+                raise GraphDescriptionError("DeviceType uses an message type object that is not part of this graph.")
 
     def _validate_device_instance(self,di):
         if di.device_type.id not in self.graph_type.device_types:
@@ -364,12 +379,12 @@ class GraphInstance:
 
         if not is_refinement_compatible(di.device_type.properties,di.properties):
             raise GraphDescriptionError("DeviceInstance properties don't match device type.")
-            
+
 
     def _validate_edge_instance(self,ei):
         pass
 
-            
+
     def add_device_instance(self,di,validate=True):
         if di.id in self.device_instances:
             raise GraphDescriptionError("Duplicate deviceInstance id {}".format(id))
@@ -395,9 +410,9 @@ class GraphInstance:
     def validate(self):
         if self._validated:
             return True
-        
-        for et in self.edge_types:
-            self._validate_edge_type(et)
+
+        for et in self.message_types:
+            self._validate_message_type(et)
         for dt in self.device_types:
             self._validate_device_type(et)
         for di in self.device_instances:

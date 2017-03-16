@@ -1,0 +1,63 @@
+/* [wxMaxima batch file version 1] [ DO NOT EDIT BY HAND! ]*/
+/* [ Created with wxMaxima version 12.01.0 ] */
+
+/* [wxMaxima: input   start ] */
+idx(x,L,l,off) := if (L=1) then (
+    x[off]
+) else if (L=2) then (
+    if l=1 then
+      x[off,0]
+    else
+      x[0,off]
+) else if (L=3) then (
+    if l=1 then
+      x[off,0,0]
+    else if l=2 then
+      x[0,off,0]
+    else
+      x[0,0,off]
+) else [];
+/* [wxMaxima: input   end   ] */
+
+/* [wxMaxima: input   start ] */
+idx(a,2,1,-1);
+/* [wxMaxima: input   end   ] */
+
+/* [wxMaxima: input   start ] */
+deltaSqr(v,L,l) := idx(v,L,l,+1) - 2*idx(v,L,l,0) + idx(v,L,l,-1);
+/* [wxMaxima: input   end   ] */
+
+/* [wxMaxima: input   start ] */
+K(L) := 1 + sum(a[l]^2*deltaSqr(t,L,l) / (dx[l]^2), l, 1, L);
+/* [wxMaxima: input   end   ] */
+
+/* [wxMaxima: input   start ] */
+uplusCA(L) := u + dt / K(L) * sum( a[l]^2 * deltaSqr(u,L,l) / (dx[l]^2), l, 1, L);
+/* [wxMaxima: input   end   ] */
+
+/* [wxMaxima: input   start ] */
+(uplus(2));
+/* [wxMaxima: input   end   ] */
+
+/* [wxMaxima: input   start ] */
+mu(v,L,l) := (idx(v,L,l,+1)+idx(v,L,l,-1))/2;
+/* [wxMaxima: input   end   ] */
+
+/* [wxMaxima: input   start ] */
+uplusTS(L,c) := (1-c)*u + c / sum(a[l]^2 / (dx[l]^2),l,1,L) * sum(a[l]^2*mu(u,L,l)/(dx[l]^2),l,1,L);
+/* [wxMaxima: input   end   ] */
+
+/* [wxMaxima: input   start ] */
+tplusTS(L,c) := (1-c)*t + c / (2*sum(a[l]^2/(dx[l]^2),l,1,L)) + c / sum(a[l]^2/dx[l]^2,l,1,L) * sum(a[l]^2*mu(t,L,l)/(dx[l]^2),l,1,L);
+/* [wxMaxima: input   end   ] */
+
+/* [wxMaxima: input   start ] */
+fullratsimp(subst([dx[1]=dxx,dx[2]=dxx,a[1]=aa,a[2]=aa],uplusTS(2,1)));
+/* [wxMaxima: input   end   ] */
+
+/* [wxMaxima: input   start ] */
+fullratsimp(subst([dx[1]=dxx,dx[2]=dxx,a[1]=aa,a[2]=aa],tplusTS(2,1)));
+/* [wxMaxima: input   end   ] */
+
+/* Maxima can't load/batch files which end with a comment! */
+"Created with wxMaxima"$

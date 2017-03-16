@@ -9,7 +9,7 @@ import math
 
 
 src=sys.argv[1]
-(graphTypes,graphInstances)=load_graph_types_and_instances(src)
+(graphTypes,graphInstances)=load_graph_types_and_instances(src,src)
 
 d=4
 b=2
@@ -51,8 +51,8 @@ def create(prefix, parent,depth):
             res.add_edge_instance(EdgeInstance(res,parent,"ack_in", node,"ack_out", None))
 
     return node
-            
+
 
 create("root",None,d)
 
-save_graph(res,sys.stdout)        
+save_graph(res,sys.stdout)

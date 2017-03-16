@@ -1,3 +1,5 @@
+#!/usr/bin/python3
+
 from graph.core import *
 
 from graph.load_xml import load_graph_types_and_instances
@@ -9,8 +11,11 @@ import random
 
 urand=random.random
 
-src=sys.argv[1]
-(graphTypes,graphInstances)=load_graph_types_and_instances(src)
+import os
+appBase=os.path.dirname(os.path.realpath(__file__))
+
+src=appBase+"/clocked_izhikevich_graph_type.xml"
+(graphTypes,graphInstances)=load_graph_types_and_instances(src,src)
 
 Ne=80
 Ni=20
@@ -35,7 +40,7 @@ instName="sparse_{}_{}_{}".format(Ne,Ni,K)
 properties={}
 res=GraphInstance(instName, graphType, properties)
 
-clock=DeviceInstance(res, "clock", clockType, None, {"neuronCount":N})
+clock=DeviceInstance(res, "clock", clockType, {"neuronCount":N})
 res.add_device_instance(clock)
 
 nodes=[None]*N
@@ -57,7 +62,7 @@ for i in range(N):
     props={
         "a":a, "b":b, "c":c, "d":d, "Ir":Ir, "fanin":K, "seed":int(urand()*2**32)
     }
-    nodes[i]=DeviceInstance(res, "n_{}".format(i), neuronType, None, props)
+    nodes[i]=DeviceInstance(res, "n_{}".format(i), neuronType, props)
     res.add_device_instance(nodes[i])
 
     res.add_edge_instance(EdgeInstance(res,nodes[i],"tick",clock,"tick",None))

@@ -9,62 +9,69 @@ class GraphInfo : public GraphLoadEvents
 {
 public:
   GraphTypePtr graphType;
-  
+
   std::string id;
   TypedDataPtr properties;
+  rapidjson::Document metadata;
 
   struct edge
   {
     uint64_t dstDevice;
     unsigned dstPort;
     TypedDataPtr properties;
-    TypedDataPtr state;
+    rapidjson::Document metadata;
   };
-  
+
   struct output
   {
-    EdgeTypePtr edgeType;
+    MessageTypePtr messageType;
     std::vector<edge> edges;
   };
-  
+
   struct instance{
     uint64_t index;
     std::string id;
     DeviceTypePtr deviceType;
     TypedDataPtr properties;
-    TypedDataPtr state;
+    rapidjson::Document metadata;
 
     std::vector<output> outputs;
   };
-  
+
   std::vector<instance> instances;
 
-  virtual void onGraphType(const GraphTypePtr &graph) override 
+  virtual bool parseMetaData() const override
+  { return true; }
+
+  virtual void onGraphType(const GraphTypePtr &graph) override
   {
     fprintf(stderr, "  onGraphType(%s)\n", graph->getId().c_str());
   }
-  
+
   virtual void onDeviceType(const DeviceTypePtr &device) override
   {
     fprintf(stderr, "  onDeviceType(%s)\n", device->getId().c_str());
   }
 
-  virtual void onEdgeType(const EdgeTypePtr &edge) override
+  virtual void onMessageType(const MessageTypePtr &message) override
   {
-    fprintf(stderr, "  onEdgeType(%s)\n", edge->getId().c_str());
+    fprintf(stderr, "  onMessageType(%s)\n", message->getId().c_str());
   }
 
-  
+
   virtual uint64_t onBeginGraphInstance(const GraphTypePtr &graphType,
 				 const std::string &id,
-				 const TypedDataPtr &properties) override
+				 const TypedDataPtr &properties,
+                 rapidjson::Document &&metadata
+  ) override
   {
     this->graphType=graphType;
     this->id=id;
     this->properties=properties;
+    this->metadata=std::move(metadata);
     return 0;
   }
-  
+
   // Tells the consumer that a new instance is being added
   /*! The return value is a unique identifier that means something
     to the consumer. */
@@ -74,21 +81,25 @@ public:
    const DeviceTypePtr &dt,
    const std::string &id,
    const TypedDataPtr &properties,
-   const double *nativeLocation
+   rapidjson::Document &&metadata
    ) override {
     fprintf(stderr, "  onDeviceInstance(%s)\n", id.c_str());
 
     std::vector<output> outputs;
-    for(auto o : dt->getOutputs()){
-      output to{ o->getEdgeType(), {} };
-      outputs.emplace_back(std::move(to));
+    for(auto &o : dt->getOutputs()){
+      output to{ o->getMessageType(), {} };
+      outputs.push_back(std::move(to));
     }
 
-    TypedDataPtr state;
-    
     uint64_t index=instances.size();
-    instance inst{ index, id, dt, properties, state, outputs   };
-    instances.emplace_back(std::move(inst));
+    instance inst;
+    inst.index=index;
+    inst.id=id;
+    inst.deviceType=dt;
+    inst.properties=properties;
+    inst.metadata=std::move(metadata);
+    inst.outputs=std::move(outputs);
+    instances.push_back(std::move(inst));
     return index;
   }
 
@@ -101,19 +112,19 @@ public:
    uint64_t graphInst,
    uint64_t dstDevInst, const DeviceTypePtr &dstDevType, const InputPortPtr &dstPort,
    uint64_t srcDevInst,  const DeviceTypePtr &srcDevType, const OutputPortPtr &srcPort,
-   const TypedDataPtr &properties
+   const TypedDataPtr &properties,
+  rapidjson::Document &&metadata
   ) override
-  { 
-    auto dst=instances.at(dstDevInst);
-    auto src=instances.at(srcDevInst);
+  {
+    auto &dst=instances.at(dstDevInst);
+    auto &src=instances.at(srcDevInst);
 
     fprintf(stderr, "  onEdgeInstance(%s.%s <- %s.%s)\n",
 	    dst.id.c_str(), dstPort->getName().c_str(),
 	    src.id.c_str(), srcPort->getName().c_str());
 
-    TypedDataPtr state;
-    
-    edge e{ dstDevInst, srcPort->getIndex(), properties, state };
+
+    edge e{ dstDevInst, srcPort->getIndex(), properties, rapidjson::Document() };
     src.outputs.at(srcPort->getIndex()).edges.emplace_back(std::move(e));
   }
 };
@@ -123,19 +134,19 @@ int main(int argc, char *argv[])
 {
   try{
     RegistryImpl registry;
-    
+
     xmlpp::DomParser parser;
-    
+
     std::istream *src=&std::cin;
     std::ifstream srcFile;
-    
+
     if(argc>1){
       fprintf(stderr,"Reading from '%s'\n", argv[1]);
       srcFile.open(argv[1]);
       if(!srcFile.is_open())
 	throw std::runtime_error(std::string("Couldn't open '")+argv[1]+"'");
       src=&srcFile;
-      
+
     }
 
     fprintf(stderr, "Parsing XML\n");
@@ -143,7 +154,7 @@ int main(int argc, char *argv[])
     fprintf(stderr, "Parsed XML\n");
 
     GraphInfo graph;
-    
+
     loadGraph(&registry, parser.get_document()->get_root_node(), &graph);
 
     fprintf(stderr, "Done\n");

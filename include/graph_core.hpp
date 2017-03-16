@@ -9,6 +9,9 @@
 #include <cstring>
 #include <atomic>
 #include <cassert>
+#include <type_traits>
+
+#include "poets_hash.hpp"
 
 /* What is the point of all this?
 
@@ -45,22 +48,31 @@ virtual dispatch (usually quick), plus the loss of cross-function optimisation
 */
 
 
+#pragma pack(push,1)
 struct typed_data_t
 {
   // This is opaque data, and should be a POD
   std::atomic<unsigned> _ref_count; // This is exposed in order to allow cross-module optimisations
+  uint32_t _total_size_bytes;  // All typed data instances must be a POD, and this is the total size, including header
 };
+#pragma pack(pop)
 
-class TypedDataPtr
+template<class T>
+class DataPtr
 {
+  template<class TO>
+  friend class DataPtr;
+
+  static_assert(std::is_base_of<typed_data_t,T>::value, "This class only handles things derived from typed_data_t");
+
 private:
-  typed_data_t *m_p;
+  T *m_p;
 public:
-  TypedDataPtr()
+  DataPtr()
     : m_p(0)
   {}
 
-  TypedDataPtr(typed_data_t *p)
+  DataPtr(T *p)
     : m_p(p)
   {
     if(p){
@@ -69,7 +81,17 @@ public:
     }
   }
 
-  TypedDataPtr(const TypedDataPtr &o)
+  template<class TO>
+  DataPtr(TO *p)
+    : m_p(p)
+  {
+    if(p){
+      assert(p->_ref_count==0);
+      p->_ref_count=1;
+    }
+  }
+
+  DataPtr(const DataPtr &o)
     : m_p(o.m_p)
   {
     if(m_p){
@@ -77,7 +99,30 @@ public:
     }
   }
 
-  TypedDataPtr &operator=(const TypedDataPtr &o)
+  template<class TO>
+  DataPtr(const DataPtr<TO> &o)
+    : m_p(o.m_p)
+  {
+    if(m_p){
+      std::atomic_fetch_add(&m_p->_ref_count, 1u);
+    }
+  }
+
+  DataPtr &operator=(const DataPtr &o)
+  {
+    if(m_p!=o.m_p){
+      release();
+      m_p=o.m_p;
+      assert(m_p!=(T*)1);
+      if(m_p){
+        std::atomic_fetch_add(&m_p->_ref_count, 1u);
+      }
+    }
+    return *this;
+  }
+
+  template<class TO>
+  DataPtr &operator=(const DataPtr<TO> &o)
   {
     if(m_p!=o.m_p){
       release();
@@ -89,57 +134,155 @@ public:
     return *this;
   }
 
-  TypedDataPtr(TypedDataPtr &&o)
+  DataPtr(DataPtr &&o)
     : m_p(o.m_p)
   {
     o.m_p=0;
   }
 
-  const typed_data_t *get() const
+  template<class TO>
+  DataPtr(DataPtr<TO> &&o)
+    : m_p(o.m_p)
+  {
+    o.m_p=0;
+  }
+
+  const T *get() const
   { return m_p; }
 
-  typed_data_t *get()
+  T *get()
+  { return m_p; }
+
+  const T *operator->() const
+  { return m_p; }
+
+  T *operator->()
   { return m_p; }
 
   operator bool() const
   { return m_p!=0; }
 
-  typed_data_t *detach()
+  T *detach()
   {
-    typed_data_t *res=m_p;
+    T *res=m_p;
     m_p=0;
     return res;
   }
 
-  void attach(typed_data_t *p)
+  void attach(T *p)
   {
     release();
     m_p=p;
+  }
+
+  bool is_unique() const
+  {
+    assert(m_p);
+    return m_p->_ref_count.load()==1;
   }
 
   void release()
   {
     if(m_p){
       if(std::atomic_fetch_sub(&m_p->_ref_count, 1u)==1){
-	free(m_p);
+        free(m_p);
       }
       m_p=0;
     }
   }
-    
-  ~TypedDataPtr()
+
+  ~DataPtr()
   {
     release();
   }
+
+  const uint8_t *payloadPtr() const
+  {
+    if(m_p){
+      return ((const uint8_t*)m_p)+sizeof(typed_data_t);
+    }else{
+      return 0;
+    }
+  }
+
+  size_t payloadSize() const
+  {
+    if(m_p){
+      return m_p->_total_size_bytes-sizeof(typed_data_t);
+    }else{
+      return -1;
+    }
+  }
+
+  POETSHash::hash_t payloadHash() const
+  {
+    POETSHash hash;
+    if(m_p){
+      hash.add(payloadPtr(), payloadSize());
+    }
+    return hash.getHash();
+  }
+
+  // null pointers compare less than non-null
+  bool operator < (const DataPtr &o) const
+  {
+    if(!m_p){
+      return o.m_p!=0;
+    }
+    if(!o.m_p){
+      return false;
+    }
+    // otherwise we need a byte-wise compare
+    assert(payloadSize()==o.payloadSize());
+    return memcmp(payloadPtr(), o.payloadPtr(), payloadSize()) < 0;
+  }
+
+  bool operator == (const DataPtr &o) const
+  {
+    if(m_p == o.m_p)
+      return false;
+    if(!m_p || !o.m_p)
+      return false;
+    return 0==memcmp(payloadPtr(), o.payloadPtr(), payloadSize());
+  }
 };
 
+namespace std
+{
+  template<class T>
+  struct hash<DataPtr<T>>
+  {
+    typedef DataPtr<T> argument_type;
+
+    typedef std::size_t result_type;
+
+    result_type operator()(argument_type const& s) const
+    {
+      auto h=s.payloadHash();
+      if(sizeof(h) > sizeof(size_t)){
+        static_assert( sizeof(h) == sizeof(size_t) ||  sizeof(size_t)==4,"Assuming size_t is uint32_t");
+        h=h ^ (h>>32);
+      }
+      return h;
+    }
+  };
+};
+
+template<class T>
+DataPtr<T> make_data_ptr()
+{
+  return DataPtr<T>(new T);
+}
+
+typedef DataPtr<typed_data_t> TypedDataPtr;
+
 class TypedDataSpec;
-class EdgeType;
+class MessageType;
 class DeviceType;
 class GraphType;
 
 typedef std::shared_ptr<TypedDataSpec> TypedDataSpecPtr;
-typedef std::shared_ptr<EdgeType> EdgeTypePtr;
+typedef std::shared_ptr<MessageType> MessageTypePtr;
 typedef std::shared_ptr<DeviceType> DeviceTypePtr;
 typedef std::shared_ptr<GraphType> GraphTypePtr;
 
@@ -149,6 +292,12 @@ public:
   virtual ~TypedDataSpec()
   {}
 
+  //! Size of the actual content, not including typed_data_t header
+  virtual size_t payloadSize() const=0;
+
+  //! Size of the entire typed_data_t instance, including standard header
+  virtual size_t totalSize() const=0;
+
   virtual TypedDataPtr create() const=0;
 
   virtual TypedDataPtr load(xmlpp::Element *parent) const=0;
@@ -157,6 +306,14 @@ public:
 
   virtual std::string toJSON(const TypedDataPtr &data) const=0;
 
+  virtual void addDataHash(const TypedDataPtr &data, POETSHash &hash) const=0;
+
+  POETSHash::hash_t getDataHash(const TypedDataPtr &data) const
+  {
+    POETSHash hash;
+    addDataHash(data,hash);
+    return hash.getHash();
+  }
 
 
   virtual uint64_t getTypeHash() const
@@ -169,19 +326,17 @@ public:
 
 
 
-class EdgeType
+class MessageType
 {
 public:
-  virtual ~EdgeType()
+  virtual ~MessageType()
   {}
 
-  static void registerEdgeType(const std::string &name, EdgeTypePtr dev);
-  static EdgeTypePtr lookupEdgeType(const std::string &name);
+  static void registerMessageType(const std::string &name, MessageTypePtr dev);
+  static MessageTypePtr lookupMessageType(const std::string &name);
 
   virtual const std::string &getId() const=0;
 
-  virtual const TypedDataSpecPtr &getPropertiesSpec() const=0;
-  virtual const TypedDataSpecPtr &getStateSpec() const=0;
   virtual const TypedDataSpecPtr &getMessageSpec() const=0;
 };
 
@@ -196,7 +351,7 @@ public:
   virtual const std::string &getName() const=0;
   virtual unsigned getIndex() const=0;
 
-  virtual const EdgeTypePtr &getEdgeType() const=0;
+  virtual const MessageTypePtr &getMessageType() const=0;
 };
 typedef std::shared_ptr<Port> PortPtr;
 
@@ -214,7 +369,7 @@ class OrchestratorServices
 {
 protected:
  unsigned m_logLevel;
-  
+
   OrchestratorServices(unsigned logLevel)
     : m_logLevel(logLevel)
   {
@@ -243,9 +398,11 @@ public:
 			 typed_data_t *deviceState,
 			 const typed_data_t *edgeProperties,
 			 typed_data_t *edgeState,
-			 const typed_data_t *message,
-			 bool *requestSendPerOutput
+			 const typed_data_t *message
 		      ) const=0;
+
+    virtual const TypedDataSpecPtr &getPropertiesSpec() const=0;
+    virtual const TypedDataSpecPtr &getStateSpec() const=0;
 
     virtual const std::string &getHandlerCode() const=0;
 };
@@ -260,8 +417,7 @@ public:
 		      const typed_data_t *deviceProperties,
 		      typed_data_t *deviceState,
 		      typed_data_t *message,
-		      bool *requestSendPerOutput,
-		      bool *abortThisSend
+		      bool *doSend
 		      ) const=0;
 
   virtual const std::string &getHandlerCode() const=0;
@@ -288,6 +444,13 @@ public:
   virtual const OutputPortPtr &getOutput(unsigned index) const=0;
   virtual OutputPortPtr getOutput(const std::string &name) const=0;
   virtual const std::vector<OutputPortPtr> &getOutputs() const=0;
+
+  virtual uint32_t calcReadyToSend(
+    OrchestratorServices *orchestrator,
+    const typed_data_t *graphProperties,
+    const typed_data_t *deviceProperties,
+    const typed_data_t *deviceState
+  ) const=0;
 };
 
 class GraphType
@@ -298,8 +461,6 @@ public:
 
   virtual const std::string &getId() const=0;
 
-  virtual unsigned getNativeDimension() const=0;
-
   virtual const TypedDataSpecPtr getPropertiesSpec() const=0;
 
   virtual const std::string &getSharedCode() const=0;
@@ -309,10 +470,10 @@ public:
   virtual const DeviceTypePtr &getDeviceType(const std::string &name) const=0;
   virtual const std::vector<DeviceTypePtr> &getDeviceTypes() const=0;
 
-  virtual unsigned getEdgeTypeCount() const=0;
-  virtual const EdgeTypePtr &getEdgeType(unsigned index) const=0;
-  virtual const EdgeTypePtr &getEdgeType(const std::string &name) const=0;
-  virtual const std::vector<EdgeTypePtr> &getEdgeTypes() const=0;
+  virtual unsigned getMessageTypeCount() const=0;
+  virtual const MessageTypePtr &getMessageType(unsigned index) const=0;
+  virtual const MessageTypePtr &getMessageType(const std::string &name) const=0;
+  virtual const std::vector<MessageTypePtr> &getMessageTypes() const=0;
 };
 
 /* These allow registration/discovery of different data types at run-time */
@@ -326,8 +487,8 @@ public:
   virtual void registerGraphType(GraphTypePtr graph) =0;
   virtual GraphTypePtr lookupGraphType(const std::string &id) const=0;
 
-  virtual void registerEdgeType(EdgeTypePtr edge) =0;
-  virtual EdgeTypePtr lookupEdgeType(const std::string &id) const=0;
+  virtual void registerMessageType(MessageTypePtr edge) =0;
+  virtual MessageTypePtr lookupMessageType(const std::string &id) const=0;
 
   virtual void registerDeviceType(DeviceTypePtr dev) =0;
   virtual DeviceTypePtr lookupDeviceType(const std::string &id) const=0;

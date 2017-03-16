@@ -10,7 +10,7 @@ import random
 urand=random.random
 
 src=sys.argv[1]
-(graphTypes,graphInstances)=load_graph_types_and_instances(src)
+(graphTypes,graphInstances)=load_graph_types_and_instances(src, "<stdin>")
 
 Ne=80
 Ni=20
@@ -51,7 +51,7 @@ for i in range(N):
     props={
         "a":a, "b":b, "c":c, "d":d, "fanin":K
     }
-    nodes[i]=DeviceInstance(res, "n_{}".format(i), neuronType, None, props)
+    nodes[i]=DeviceInstance(res, "n_{}".format(i), neuronType, props)
     res.add_device_instance(nodes[i])
 
 for dst in range(N):

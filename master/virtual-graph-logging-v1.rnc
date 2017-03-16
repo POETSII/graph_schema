@@ -1,0 +1,123 @@
+# BEGIN_SCHEMA
+
+# This section establishes some ambient declarations
+# for the grammar
+#
+# This is used to bring in things like integers, as XML
+# Schema doesn't support many primitive types.
+datatypes xsd = "http://www.w3.org/2001/XMLSchema-datatypes"
+  
+# This is the XML namespace within which the graphs live.
+# If a breaking change is made to the graph specification,
+# then the namespace identifier will change.
+default namespace = "http://TODO.org/POETS/virtual-graph-schema-v0"
+
+include "virtual-graph-schema-v0.rnc"
+  
+  
+# The intent is that the event grammar captures sufficient detail
+# that the entire execution graph can be recovered. Information
+# is recorded in sufficient detail that the state of each device
+# can be recovered before and after each event, though only the
+# post-event state is recovered. Message sends and receives can
+# be paired up, but the message is only included in the send side.
+#
+# Information that is available from the graph type or instance is not
+# included, as it is assumed that it will be available by looking
+# up the relevant id.
+#
+# Here begins the actual grammar itself
+grammar {
+
+  event = (
+    ### Globally unique id for this event. Format is unstructured,
+    ### and there is no requirement that event ids can be ordered
+    ### in a way related to devices, time, or causality.
+    attribute eventId { text },
+    
+    ### Notional wall-clock time when the event started. (For send events, it is when the handler started)
+    ### Time does not need to be globally consistent, though for a given
+    ### device it should be non-strict monotonically increasing.
+    attribute time { xsd:float },
+    
+    ### Notional wall-clock elapsed time during processing
+    ### There is no requirement that this actually makes sense,
+    ### as it may just be an estimate.
+    attribute elapsed { xsd:float }
+  ),
+
+  device_event = (
+    event,
+    
+    ### Device instance id
+    attribute dev { identifier },
+    
+    ### RTS flags _after_ the event happened
+    ### In principle this can be recovered from the state,
+    ### but it is convenient to have it here explicitly so
+    ### that handlers don't need to be executed in visualisers.
+    attribute rts { text },
+    
+    ### An incrementing sequence number, tracking events as seen by this device.
+    ### This only tracks ordering for the local device, and sequence
+    ### ids can be shared amongst device. Sequence id must be monotonically
+    ### increasing, though there can be gaps.
+    attribute seq { xsd:integer },
+      
+    ### Any logging that happened during the event processing
+    element L { text } *,
+    
+    ### State _after_ the event happened
+    element S { typedDataValue  } ?
+  ),
+  
+  message_event = (
+    device_event,
+    
+    ### Port name the message is being send or received on
+    attribute port { identifier }
+  ),
+
+  element GraphLog {
+    attribute graphInstanceId { identifier },
+    attribute graphTypeId { identifier },
+    
+    element InitEvent {
+      device_event
+    },
+    
+    element SendEvent {
+      message_event,
+    
+      (
+        ### An event that was cancelled
+        attribute cancel { "1" },
+        
+        ### Anything cancelled went to no-one...
+        attribute fanout { "0" }
+      )
+      |
+      (
+        ### Message that was sent
+        attribute cancel { "0" },
+        attribute fanout { xsd:integer },
+        
+        element M {  typedDataValue  } ?
+      )
+    },
+    
+    element RecvEvent {
+      message_event,
+      
+      ### Identifies the event of the send event that created the
+      ### message. This can be used to actually get the contents of
+      ### the message.
+      attribute sendEventId { text }
+    }
+  }
+
+    
+# Here endeth the grammar
+}
+
+# END_SCHEMA

@@ -12,7 +12,7 @@ Vagrant.configure(2) do |config|
 
   # Every Vagrant development environment requires a box. You can search for
   # boxes at https://atlas.hashicorp.com/search.
-  config.vm.box = "debian/contrib-jessie64"
+  config.vm.box = "ubuntu/xenial64"
 
   # Disable automatic box update checking. If you disable this, then
   # boxes will only be checked for updates when the user runs
@@ -39,6 +39,9 @@ Vagrant.configure(2) do |config|
   # argument is a set of non-required options.
   # config.vm.synced_folder "../data", "/vagrant_data"
 
+  # If the POETS repos are in the parent folder, this gives access to them all
+  config.vm.synced_folder "..", "/POETS"
+
   # Provider-specific configuration so you can fine-tune various
   # backing providers for Vagrant. These expose provider-specific options.
   # Example for VirtualBox:
@@ -50,21 +53,34 @@ Vagrant.configure(2) do |config|
   #   # Customize the amount of memory on the VM:
      vb.memory = "2048"
   end
-  #
-  # View the documentation for the provider you are using for more
-  # information on available options.
 
-  # Define a Vagrant Push strategy for pushing to Atlas. Other push strategies
-  # such as FTP and Heroku are also available. See the documentation at
-  # https://docs.vagrantup.com/v2/push/atlas.html for more information.
-  # config.push.define "atlas" do |push|
-  #   push.app = "YOUR_ATLAS_USERNAME/YOUR_APPLICATION_NAME"
-  # end
+
+  config.vm.provider "virtualbox" do |v|
+    # If clock drifts more than 500ms, then force it (instead of smooth adjust)
+    v.customize ["guestproperty","set", :id, "/VirtualBox/GuestAdd/VBoxService/--timesync-set-threshold", "500"]
+  end
+
+
 
   # Enable provisioning with a shell script. Additional provisioners such as
   # Puppet, Chef, Ansible, Salt, and Docker are also available. Please see the
   # documentation for more information about their specific syntax and use.
   config.vm.provision "shell", inline: <<-SHELL
-     sudo apt-get install -y libxml2-dev g++ make libxml++2.6-dev libboost-dev python3.4 zip default-jre-headless python3-lxml
+     sudo apt-get install -y libxml2-dev gdb g++ git make libxml++2.6-dev libboost-dev python3.4 zip default-jre-headless python3-lxml curl mpich rapidjson-dev
+
+     # RISC-V toolchain (not sure exactly how much is needed)
+	sudo apt-get install -y autoconf automake autotools-dev curl libmpc-dev libmpfr-dev libgmp-dev gawk build-essential bison flex texinfo gperf libtool patchutils bc zlib1g-dev
+
+     # Visualisation
+     sudo apt-get install -y graphviz imagemagick ffmpeg
+
+     # Editors
+     sudo apt-get install -y emacs-nox screen
+
+     # Used to support generation of documentation from schema
+     sudo apt-get install -y xsltproc ant libsaxon-java docbook docbook-xsl-ns pandoc
+
   SHELL
+
+
 end

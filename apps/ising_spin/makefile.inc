@@ -9,7 +9,7 @@ define ising_spin_instance_template
 
 demos/ising_spin/ising_spin_$1.xml : apps/ising_spin/create_ising_spin_instance.py apps/ising_spin/ising_spin_graph_type.xml
 	mkdir -p $$(dir $$@)
-	$$(PYTHON) apps/ising_spin/create_ising_spin_instance.py apps/ising_spin/ising_spin_graph_type.xml $$(subst _, ,$1) > $$@
+	$$(PYTHON) apps/ising_spin/create_ising_spin_instance.py  $$(subst _, ,$1) > $$@
 
 demos/ising_spin/ising_spin_$1.snap : demos/ising_spin/ising_spin_$1.xml bin/epoch_sim providers/ising_spin.graph.so demos/ising_spin/ising_spin_$1.checked
 	bin/epoch_sim --max-steps $2 --snapshots 1 $$@  demos/ising_spin/ising_spin_$1.xml
@@ -22,7 +22,7 @@ demos/ising_spin/ising_spin_$1.gif : demos/ising_spin/ising_spin_$1.xml demos/is
 		$3
 	(cd demos/ising_spin/ising_spin_$1.tmp/  &&  for i in *.dot; do echo $$$$i; neato -Gsize=5,5\! -Gdpi=100 -Tpng $$$$i > $$$$i.png; done )
 	(cd demos/ising_spin/ising_spin_$1.tmp/  && convert -delay 20 -loop 0 *.dot.png ../ising_spin_$1.gif)
-	(cd demos/ising_spin/ising_spin_$1.tmp/  && $(FFMPEG) -r 10 -i out_%06d.dot.png -c:v libx264 -crf 18 ../ising_spin_$1.mp4)
+	(cd demos/ising_spin/ising_spin_$1.tmp/  && $(FFMPEG) -r 10 -i out_%06d.dot.png -vf "scale=trunc(iw/2)*2:trunc(ih/2)*2" -c:v libx264 -crf 18 ../ising_spin_$1.mp4)
 
 ALL_ISING_SPIN_DEMOS += demos/ising_spin/ising_spin_$1.gif
 

@@ -1,0 +1,51 @@
+Each neuron x has nIn(x) inputs and nOut(x) outputs.
+
+Time is discretised into integers.
+
+There is a delay between each neuron, which is
+a positive integer.
+
+Each neuron is currently at time t, and maintains
+a window of accumulated pulses for h steps into
+the future.
+
+When a neuron fires at time t, it sends a message
+to all connected neurons, and they will accumulate
+into {t+d}, where d is the delay of that connection.
+
+Assumption: lets's assume that messages from one
+device to another will never be re-ordered against
+each other.
+
+When a neuron fires, it has to send the time it
+fired, so the receiver knows that it will receive
+any stimulus for periods before that of the message.
+But if the neuron doesn't fire, the receiver doesn't
+know that the stimulus is empty for that time slot.
+
+Let's update the message format:
+- t : the time this message was sent
+- dt : the time since the last message
+- fire : whether or not the message represents a spike
+
+We can then send (t,8,1) to indicate that there was
+a firing at t, but no firings for t-7..t-1.. Or
+we could send (t,12,0) to indicate that there were
+no firings throughout t-11..t.
+
+Let's augment the window to be a list of pairs,
+(n_i,a_i), where a_i is the accumulation for t+i,
+and n is the number of values seen for t+i. If
+we have n_1=nIn(x), then neuron x can move forwards
+to t+1. 
+
+Hypothesis: there is some kind of critical value alpha
+where as long as we broadcast the "nothing happened"
+message every alpha steps, then the whole thing can
+make progress and not deadlock.
+
+Proof: well, we can just choose alpha=1. This means
+that we broadcast everything. Bit useless though.
+
+Alternative: what if we choose a ratio between incoming
+spikes and 

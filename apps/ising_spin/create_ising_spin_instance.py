@@ -7,9 +7,11 @@ import os
 import math
 
 
+import os
+appBase=os.path.dirname(os.path.realpath(__file__))
 
-src=sys.argv[1]
-(graphTypes,graphInstances)=load_graph_types_and_instances(src)
+src=appBase+"/ising_spin_graph_type.xml"
+(graphTypes,graphInstances)=load_graph_types_and_instances(src,src)
 
 endTime=1000
 T=1
@@ -17,10 +19,10 @@ J=1
 H=0
 
 n=4
+if len(sys.argv)>1:
+    n=int(sys.argv[1])
 if len(sys.argv)>2:
-    n=int(sys.argv[2])
-if len(sys.argv)>3:
-    T=float(sys.argv[3])
+    T=float(sys.argv[2])
     
 
 graphType=graphTypes["ising_spin"]
@@ -56,7 +58,7 @@ for x in range(0,n):
     sys.stderr.write(" Devices : Row {} of {}\n".format(x, n))
     for y in range(0,n):
         devProps={"x":x, "y":y}
-        di=DeviceInstance(res,"n_{}_{}".format(x,y), devType, [x,y], devProps)
+        di=DeviceInstance(res,"n_{}_{}".format(x,y), devType, devProps)
         nodes[(x,y)]=di
         res.add_device_instance(di)
         

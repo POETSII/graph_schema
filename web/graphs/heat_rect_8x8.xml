@@ -1,0 +1,875 @@
+<?xml version='1.0' encoding='ASCII'?>
+<Graph xmlns="http://TODO.org/POETS/virtual-graph-schema-v0">
+  <GraphType id="gals_heat" nativeDimension="2">
+    <Properties>
+      <Scalar name="maxTime" type="uint32_t" value="1000"/>
+    </Properties>
+    <SharedCode><![CDATA[
+    #include <cmath>
+    ]]></SharedCode>
+    <EdgeTypes>
+      <EdgeType id="update">
+        <Message>
+          <Scalar name="time" type="uint32_t"/>
+          <Scalar name="value" type="float"/>
+        </Message>
+        <Properties>
+          <Scalar name="w" type="float"/>
+        </Properties>
+      </EdgeType>
+      <EdgeType id="__init__"/>
+    </EdgeTypes>
+    <DeviceTypes>
+      <DeviceType id="dirichlet_variable">
+        <Properties>
+          <Scalar name="dt" type="int32_t"/>
+          <Scalar name="amplitude" type="float"/>
+          <Scalar name="phase" type="float"/>
+          <Scalar name="frequency" type="float"/>
+          <Scalar name="bias" type="float"/>
+          <Scalar name="neighbours" type="uint32_t"/>
+        </Properties>
+        <State>
+          <Scalar name="v" type="float"/>
+          <Scalar name="t" type="uint32_t"/>
+          <Scalar name="cs" type="uint32_t"/>
+          <Scalar name="ns" type="uint32_t"/>
+        </State>
+        <InputPort name="__init__" edgeTypeId="__init__">
+          <OnReceive><![CDATA[
+		  deviceState->t=0;
+		  deviceState->cs=deviceProperties->neighbours;
+		  deviceState->ns=0;
+		  
+		  deviceState->v=deviceProperties->bias + deviceProperties->amplitude
+			     * sin(deviceProperties->phase + deviceProperties->frequency * deviceState->t);
+
+		  requestSend_out = true;
+		  ]]></OnReceive>
+        </InputPort>
+        <InputPort name="__print__" edgeTypeId="__init__">
+          <OnReceive><![CDATA[
+		  handler_log(0, "t = %d, v=%8g (seenNow=%d, seenNext=%d)", deviceState->t, deviceState->v, deviceState->cs, deviceState->ns);
+		  ]]></OnReceive>
+        </InputPort>
+        <InputPort name="in" edgeTypeId="update">
+          <OnReceive><![CDATA[
+		  if(message->t==deviceState->t){
+			deviceState->cs++;
+		  }else{
+			assert(deviceState->t + deviceProperties->dt == message->t);
+			deviceState->ns++;
+		  }
+		  requestSend_out = deviceState->cs==deviceProperties->neighbours;
+		  ]]></OnReceive>
+        </InputPort>
+        <OutputPort name="out" edgeTypeId="update">
+          <OnSend><![CDATA[
+		  if(deviceState->t > graphProperties->maxTime){
+			 *cancelSend=true;
+			requestSend_out=false;
+		  }else{
+			  assert(deviceState->cs==deviceProperties->neighbours);
+
+			  deviceState->v=deviceProperties->bias + deviceProperties->amplitude
+			     * sin(deviceProperties->phase + deviceProperties->frequency * deviceState->t);
+			
+			  deviceState->t = deviceState->t + deviceProperties->dt;
+			  deviceState->cs = deviceState->ns;
+			  deviceState->ns = 0;
+			  
+			  message->t = deviceState->t;
+			  message->v = deviceState->v;
+			}
+			requestSend_out = deviceState->cs==deviceProperties->neighbours;
+		  }
+		  ]]></OnSend>
+        </OutputPort>
+      </DeviceType>
+      <DeviceType id="cell">
+        <Properties>
+          <Scalar name="iv" type="float"/>
+          <Scalar name="nhood" type="uint32_t"/>
+          <Scalar name="wSelf" type="float"/>
+          <Scalar name="dt" type="uint32_t" value="1"/>
+        </Properties>
+        <State>
+          <Scalar name="v" type="float"/>
+          <Scalar name="t" type="uint32_t"/>
+          <Scalar name="ca" type="float"/>
+          <Scalar name="cs" type="uint32_t"/>
+          <Scalar name="na" type="float"/>
+          <Scalar name="ns" type="uint32_t"/>
+        </State>
+        <InputPort name="__init__" edgeTypeId="__init__">
+          <OnReceive><![CDATA[
+		  float currTemp=deviceProperties->initValue;
+		  uint32_t currTime=0;
+
+		  deviceState->value=currTemp;
+
+		  deviceState->initial=true;
+
+		  deviceState->timeNow=currTime;
+		  deviceState->accNow=graphProperties->weightSelf * currTemp;
+		  deviceState->seenNow=0; // Forces the sending if we receive any updates
+
+		  deviceState->seenNext=0;
+		  deviceState->accNext=0;
+
+		  handler_log(3, "value = %f", deviceState->value);
+
+		  requestSend_out=true;
+		  ]]></OnReceive>
+        </InputPort>
+        <InputPort name="__print__" edgeTypeId="__init__">
+          <OnReceive><![CDATA[
+		  handler_log(0, "t = %d, v=%8g (seenNow=%d, seenNext=%d)", deviceState->timeNow, deviceState->value, deviceState->seenNow, deviceState->seenNext);
+		  ]]></OnReceive>
+        </InputPort>
+        <InputPort name="in" edgeTypeId="update">
+          <OnReceive><![CDATA[
+		  if(message->time==deviceState->timeNow){
+			deviceState->accNow += graphProperties->weightOther * message->value;
+			deviceState->seenNow++;
+		  }else{
+			assert(deviceState->timeNow+1 == message->time);
+			deviceState->accNext += graphProperties->weightOther * message->value;
+			deviceState->seenNext++;
+			}
+
+			  handler_log(3, "(t=%d,v=%.4f) tNow=%d, sNow=%d, aNow=%.4f, sNext=%d, aNext=%f", message->time, message->value, deviceState->timeNow, deviceState->seenNow, deviceState->accNow, deviceState->seenNext, deviceState->accNext);
+
+		  requestSend_out = deviceState->initial || deviceState->seenNow==4;
+		  ]]></OnReceive>
+        </InputPort>
+        <OutputPort name="out" edgeTypeId="update">
+          <OnSend><![CDATA[
+
+		  handler_log(3, "tNow=%d, sNow=%d, aNow=%.4f, sNext=%d, aNext=%f", deviceState->timeNow, deviceState->seenNow, deviceState->accNow, deviceState->seenNext, deviceState->accNext);
+
+		  if(deviceState->timeNow > graphProperties->maxTime){
+			*cancelSend=true;
+			requestSend_out=false;
+		  }else{
+			if(deviceState->initial){
+			  message->time=0;
+			  message->value=deviceState->value;
+			  deviceState->initial=false;
+			}else{
+			  assert(deviceState->seenNow==4);
+			
+			  float tempNow=deviceState->accNow;
+			  message->time=deviceState->timeNow+1;
+			  message->value=tempNow;
+
+			  deviceState->value=deviceState->accNow;
+
+			  deviceState->timeNow++;
+			  deviceState->accNow = graphProperties->weightSelf * tempNow + deviceState->accNext;
+			  deviceState->seenNow = deviceState->seenNext;
+
+			  deviceState->accNext=0;
+			  deviceState->seenNext=0;
+
+			}
+			// It is possible that all our neighbours are ahead and have broadcast, so
+			// we could immediately be ready to go.
+			requestSend_out = deviceState->seenNow==4;
+		  }
+		  ]]></OnSend>
+        </OutputPort>
+      </DeviceType>
+    </DeviceTypes>
+  </GraphType>
+  <GraphInstance id="heat_8_8" graphTypeId="gals_heat">
+    <DeviceInstances>
+      <DevI id="v_4_4" type="dirichlet_variable" nativeLocation="4,4">
+        <P>"bias": 0, "frequency": 0.1953125, "phase": 1.5, "neighbours": 4, "amplitude": 1.0</P>
+      </DevI>
+      <DevI id="c_2_4" type="cell" nativeLocation="2,4">
+        <P>"nhood": 4, "wSelf": 0.5, "iv": -0.7581822392261204</P>
+      </DevI>
+      <DevI id="c_2_5" type="cell" nativeLocation="2,5">
+        <P>"nhood": 4, "wSelf": 0.5, "iv": 0.23357268613465965</P>
+      </DevI>
+      <DevI id="c_5_3" type="cell" nativeLocation="5,3">
+        <P>"nhood": 4, "wSelf": 0.5, "iv": 0.022269895632126113</P>
+      </DevI>
+      <DevI id="v_6_0" type="dirichlet_variable" nativeLocation="6,0">
+        <P>"bias": 0, "frequency": 0.1025390625, "phase": 1, "neighbours": 1, "amplitude": 1.0</P>
+      </DevI>
+      <DevI id="c_2_3" type="cell" nativeLocation="2,3">
+        <P>"nhood": 4, "wSelf": 0.5, "iv": -0.4875274556044671</P>
+      </DevI>
+      <DevI id="c_5_1" type="cell" nativeLocation="5,1">
+        <P>"nhood": 4, "wSelf": 0.5, "iv": 0.4677446199427431</P>
+      </DevI>
+      <DevI id="c_2_6" type="cell" nativeLocation="2,6">
+        <P>"nhood": 4, "wSelf": 0.5, "iv": -0.5867699124634957</P>
+      </DevI>
+      <DevI id="v_7_3" type="dirichlet_variable" nativeLocation="7,3">
+        <P>"bias": 0, "frequency": 0.1708984375, "phase": 1, "neighbours": 1, "amplitude": 1.0</P>
+      </DevI>
+      <DevI id="c_6_2" type="cell" nativeLocation="6,2">
+        <P>"nhood": 4, "wSelf": 0.5, "iv": 0.2799364870087526</P>
+      </DevI>
+      <DevI id="c_3_2" type="cell" nativeLocation="3,2">
+        <P>"nhood": 4, "wSelf": 0.5, "iv": -0.3143790538227875</P>
+      </DevI>
+      <DevI id="c_4_6" type="cell" nativeLocation="4,6">
+        <P>"nhood": 4, "wSelf": 0.5, "iv": 0.5972535012232596</P>
+      </DevI>
+      <DevI id="c_3_1" type="cell" nativeLocation="3,1">
+        <P>"nhood": 4, "wSelf": 0.5, "iv": 0.5208788344160764</P>
+      </DevI>
+      <DevI id="c_6_6" type="cell" nativeLocation="6,6">
+        <P>"nhood": 4, "wSelf": 0.5, "iv": 0.2632739564384987</P>
+      </DevI>
+      <DevI id="v_0_2" type="dirichlet_variable" nativeLocation="0,2">
+        <P>"bias": 0, "frequency": 0.0341796875, "phase": 1, "neighbours": 1, "amplitude": 1.0</P>
+      </DevI>
+      <DevI id="v_1_7" type="dirichlet_variable" nativeLocation="1,7">
+        <P>"bias": 0, "frequency": 0.13671875, "phase": 1, "neighbours": 1, "amplitude": 1.0</P>
+      </DevI>
+      <DevI id="v_7_4" type="dirichlet_variable" nativeLocation="7,4">
+        <P>"bias": 0, "frequency": 0.18798828125, "phase": 1, "neighbours": 1, "amplitude": 1.0</P>
+      </DevI>
+      <DevI id="v_6_7" type="dirichlet_variable" nativeLocation="6,7">
+        <P>"bias": 0, "frequency": 0.22216796875, "phase": 1, "neighbours": 1, "amplitude": 1.0</P>
+      </DevI>
+      <DevI id="v_0_3" type="dirichlet_variable" nativeLocation="0,3">
+        <P>"bias": 0, "frequency": 0.05126953125, "phase": 1, "neighbours": 1, "amplitude": 1.0</P>
+      </DevI>
+      <DevI id="v_2_7" type="dirichlet_variable" nativeLocation="2,7">
+        <P>"bias": 0, "frequency": 0.15380859375, "phase": 1, "neighbours": 1, "amplitude": 1.0</P>
+      </DevI>
+      <DevI id="c_5_4" type="cell" nativeLocation="5,4">
+        <P>"nhood": 4, "wSelf": 0.5, "iv": -0.08892541563913436</P>
+      </DevI>
+      <DevI id="v_0_1" type="dirichlet_variable" nativeLocation="0,1">
+        <P>"bias": 0, "frequency": 0.01708984375, "phase": 1, "neighbours": 1, "amplitude": 1.0</P>
+      </DevI>
+      <DevI id="c_5_6" type="cell" nativeLocation="5,6">
+        <P>"nhood": 4, "wSelf": 0.5, "iv": -0.6801387860580381</P>
+      </DevI>
+      <DevI id="v_5_0" type="dirichlet_variable" nativeLocation="5,0">
+        <P>"bias": 0, "frequency": 0.08544921875, "phase": 1, "neighbours": 1, "amplitude": 1.0</P>
+      </DevI>
+      <DevI id="c_1_6" type="cell" nativeLocation="1,6">
+        <P>"nhood": 4, "wSelf": 0.5, "iv": 0.9085897922937163</P>
+      </DevI>
+      <DevI id="c_4_3" type="cell" nativeLocation="4,3">
+        <P>"nhood": 4, "wSelf": 0.5, "iv": 0.8318368312760311</P>
+      </DevI>
+      <DevI id="c_4_2" type="cell" nativeLocation="4,2">
+        <P>"nhood": 4, "wSelf": 0.5, "iv": 0.8871461281958304</P>
+      </DevI>
+      <DevI id="v_1_0" type="dirichlet_variable" nativeLocation="1,0">
+        <P>"bias": 0, "frequency": 0.01708984375, "phase": 1, "neighbours": 1, "amplitude": 1.0</P>
+      </DevI>
+      <DevI id="v_2_0" type="dirichlet_variable" nativeLocation="2,0">
+        <P>"bias": 0, "frequency": 0.0341796875, "phase": 1, "neighbours": 1, "amplitude": 1.0</P>
+      </DevI>
+      <DevI id="c_3_4" type="cell" nativeLocation="3,4">
+        <P>"nhood": 4, "wSelf": 0.5, "iv": -0.7138073258937132</P>
+      </DevI>
+      <DevI id="v_5_7" type="dirichlet_variable" nativeLocation="5,7">
+        <P>"bias": 0, "frequency": 0.205078125, "phase": 1, "neighbours": 1, "amplitude": 1.0</P>
+      </DevI>
+      <DevI id="c_4_1" type="cell" nativeLocation="4,1">
+        <P>"nhood": 4, "wSelf": 0.5, "iv": -0.8928541098852449</P>
+      </DevI>
+      <DevI id="c_1_4" type="cell" nativeLocation="1,4">
+        <P>"nhood": 4, "wSelf": 0.5, "iv": 0.8738686165056082</P>
+      </DevI>
+      <DevI id="v_7_1" type="dirichlet_variable" nativeLocation="7,1">
+        <P>"bias": 0, "frequency": 0.13671875, "phase": 1, "neighbours": 1, "amplitude": 1.0</P>
+      </DevI>
+      <DevI id="v_7_6" type="dirichlet_variable" nativeLocation="7,6">
+        <P>"bias": 0, "frequency": 0.22216796875, "phase": 1, "neighbours": 1, "amplitude": 1.0</P>
+      </DevI>
+      <DevI id="c_1_1" type="cell" nativeLocation="1,1">
+        <P>"nhood": 4, "wSelf": 0.5, "iv": -0.49737113291737023</P>
+      </DevI>
+      <DevI id="v_7_5" type="dirichlet_variable" nativeLocation="7,5">
+        <P>"bias": 0, "frequency": 0.205078125, "phase": 1, "neighbours": 1, "amplitude": 1.0</P>
+      </DevI>
+      <DevI id="c_2_2" type="cell" nativeLocation="2,2">
+        <P>"nhood": 4, "wSelf": 0.5, "iv": -0.01060511966533828</P>
+      </DevI>
+      <DevI id="c_5_5" type="cell" nativeLocation="5,5">
+        <P>"nhood": 4, "wSelf": 0.5, "iv": 0.2834822221068327</P>
+      </DevI>
+      <DevI id="c_6_1" type="cell" nativeLocation="6,1">
+        <P>"nhood": 4, "wSelf": 0.5, "iv": 0.9881434933642508</P>
+      </DevI>
+      <DevI id="v_0_5" type="dirichlet_variable" nativeLocation="0,5">
+        <P>"bias": 0, "frequency": 0.08544921875, "phase": 1, "neighbours": 1, "amplitude": 1.0</P>
+      </DevI>
+      <DevI id="c_6_4" type="cell" nativeLocation="6,4">
+        <P>"nhood": 4, "wSelf": 0.5, "iv": 0.1822001760037708</P>
+      </DevI>
+      <DevI id="v_7_2" type="dirichlet_variable" nativeLocation="7,2">
+        <P>"bias": 0, "frequency": 0.15380859375, "phase": 1, "neighbours": 1, "amplitude": 1.0</P>
+      </DevI>
+      <DevI id="v_4_0" type="dirichlet_variable" nativeLocation="4,0">
+        <P>"bias": 0, "frequency": 0.068359375, "phase": 1, "neighbours": 1, "amplitude": 1.0</P>
+      </DevI>
+      <DevI id="v_3_7" type="dirichlet_variable" nativeLocation="3,7">
+        <P>"bias": 0, "frequency": 0.1708984375, "phase": 1, "neighbours": 1, "amplitude": 1.0</P>
+      </DevI>
+      <DevI id="c_6_3" type="cell" nativeLocation="6,3">
+        <P>"nhood": 4, "wSelf": 0.5, "iv": 0.6364908286005675</P>
+      </DevI>
+      <DevI id="c_2_1" type="cell" nativeLocation="2,1">
+        <P>"nhood": 4, "wSelf": 0.5, "iv": 0.5525040554054368</P>
+      </DevI>
+      <DevI id="c_1_3" type="cell" nativeLocation="1,3">
+        <P>"nhood": 4, "wSelf": 0.5, "iv": 0.5856835173312893</P>
+      </DevI>
+      <DevI id="c_1_5" type="cell" nativeLocation="1,5">
+        <P>"nhood": 4, "wSelf": 0.5, "iv": 0.7455976319942292</P>
+      </DevI>
+      <DevI id="c_3_5" type="cell" nativeLocation="3,5">
+        <P>"nhood": 4, "wSelf": 0.5, "iv": 0.7109063749624098</P>
+      </DevI>
+      <DevI id="c_4_5" type="cell" nativeLocation="4,5">
+        <P>"nhood": 4, "wSelf": 0.5, "iv": 0.3793090003321702</P>
+      </DevI>
+      <DevI id="v_0_4" type="dirichlet_variable" nativeLocation="0,4">
+        <P>"bias": 0, "frequency": 0.068359375, "phase": 1, "neighbours": 1, "amplitude": 1.0</P>
+      </DevI>
+      <DevI id="c_6_5" type="cell" nativeLocation="6,5">
+        <P>"nhood": 4, "wSelf": 0.5, "iv": -0.01598728521753401</P>
+      </DevI>
+      <DevI id="c_3_3" type="cell" nativeLocation="3,3">
+        <P>"nhood": 4, "wSelf": 0.5, "iv": 0.7099102742408845</P>
+      </DevI>
+      <DevI id="c_5_2" type="cell" nativeLocation="5,2">
+        <P>"nhood": 4, "wSelf": 0.5, "iv": 0.33204222861368815</P>
+      </DevI>
+      <DevI id="v_3_0" type="dirichlet_variable" nativeLocation="3,0">
+        <P>"bias": 0, "frequency": 0.05126953125, "phase": 1, "neighbours": 1, "amplitude": 1.0</P>
+      </DevI>
+      <DevI id="v_4_7" type="dirichlet_variable" nativeLocation="4,7">
+        <P>"bias": 0, "frequency": 0.18798828125, "phase": 1, "neighbours": 1, "amplitude": 1.0</P>
+      </DevI>
+      <DevI id="v_0_6" type="dirichlet_variable" nativeLocation="0,6">
+        <P>"bias": 0, "frequency": 0.1025390625, "phase": 1, "neighbours": 1, "amplitude": 1.0</P>
+      </DevI>
+      <DevI id="c_3_6" type="cell" nativeLocation="3,6">
+        <P>"nhood": 4, "wSelf": 0.5, "iv": -0.2869339658499923</P>
+      </DevI>
+      <DevI id="c_1_2" type="cell" nativeLocation="1,2">
+        <P>"nhood": 4, "wSelf": 0.5, "iv": -0.5368718672949309</P>
+      </DevI>
+    </DeviceInstances>
+    <EdgeInstances>
+      <EdgeI path="c_6_1:in-c_5_1:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_6_3:in-c_6_4:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_3_1:in-c_3_2:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_3_5:in-c_3_4:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="v_0_5:in-c_1_5:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_2_3:in-c_2_2:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_3_4:in-v_4_4:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_3_3:in-c_3_2:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_4_5:in-c_4_6:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_3_4:in-c_2_4:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_5_1:in-c_5_2:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_5_1:in-c_6_1:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_5_4:in-c_5_5:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="v_4_7:in-c_4_6:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_6_4:in-v_7_4:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_2_4:in-c_1_4:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_6_1:in-v_7_1:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_4_3:in-c_4_2:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_3_4:in-c_3_3:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_3_2:in-c_3_1:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_2_2:in-c_3_2:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_2_6:in-c_3_6:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_4_3:in-v_4_4:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_6_2:in-c_5_2:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_2_6:in-v_2_7:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_1_4:in-c_1_3:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_1_3:in-c_2_3:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_1_6:in-c_1_5:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="v_4_4:in-c_4_5:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="v_7_6:in-c_6_6:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_1_3:in-c_1_4:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_5_2:in-c_5_3:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_1_1:in-v_1_0:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_3_6:in-c_2_6:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="v_4_0:in-c_4_1:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_3_2:in-c_4_2:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_6_3:in-c_6_2:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_5_3:in-c_5_2:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_4_6:in-c_5_6:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_6_5:in-c_5_5:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_5_3:in-c_5_4:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_2_4:in-c_2_5:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="v_4_4:in-c_3_4:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_2_4:in-c_3_4:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="v_6_0:in-c_6_1:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_3_3:in-c_4_3:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_2_2:in-c_2_3:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_6_4:in-c_6_3:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="v_1_7:in-c_1_6:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_6_5:in-c_6_6:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_3_3:in-c_2_3:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_4_5:in-c_5_5:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="v_4_4:in-c_4_3:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_3_3:in-c_3_4:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_1_3:in-c_1_2:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_5_4:in-c_6_4:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_3_5:in-c_2_5:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_1_5:in-c_1_4:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="v_7_2:in-c_6_2:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_3_6:in-c_4_6:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_6_4:in-c_5_4:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_4_1:in-c_3_1:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_4_5:in-c_3_5:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_4_3:in-c_3_3:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_4_6:in-c_3_6:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_3_1:in-v_3_0:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_2_3:in-c_1_3:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_2_5:in-c_2_6:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="v_0_2:in-c_1_2:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_1_6:in-v_1_7:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_5_5:in-c_4_5:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_2_6:in-c_1_6:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_1_5:in-v_0_5:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_1_2:in-c_1_1:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_5_2:in-c_4_2:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_2_6:in-c_2_5:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_2_1:in-c_1_1:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_1_2:in-c_1_3:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="v_3_0:in-c_3_1:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_6_6:in-v_6_7:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_1_6:in-v_0_6:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_1_2:in-v_0_2:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_6_6:in-c_6_5:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_5_5:in-c_6_5:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="v_0_4:in-c_1_4:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_4_2:in-c_4_1:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_6_1:in-c_6_2:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_5_6:in-c_4_6:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_4_2:in-c_4_3:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="v_2_7:in-c_2_6:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="v_7_5:in-c_6_5:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_3_2:in-c_2_2:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_6_4:in-c_6_5:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_2_1:in-c_3_1:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_5_1:in-v_5_0:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_6_3:in-c_5_3:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_5_3:in-c_4_3:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_5_5:in-c_5_4:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="v_0_6:in-c_1_6:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="v_7_1:in-c_6_1:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_4_6:in-c_4_5:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_2_3:in-c_3_3:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_5_3:in-c_6_3:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_5_4:in-v_4_4:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_1_1:in-c_2_1:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_1_3:in-v_0_3:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_1_1:in-c_1_2:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_1_5:in-c_1_6:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="v_4_4:in-c_5_4:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_5_5:in-c_5_6:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_6_2:in-v_7_2:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_3_6:in-v_3_7:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_5_6:in-c_6_6:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="v_1_0:in-c_1_1:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_3_6:in-c_3_5:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="v_7_4:in-c_6_4:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_4_2:in-c_5_2:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_4_6:in-v_4_7:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_4_1:in-c_5_1:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_3_2:in-c_3_3:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_4_3:in-c_5_3:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_3_5:in-c_3_6:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_1_2:in-c_2_2:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_3_4:in-c_3_5:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="v_0_1:in-c_1_1:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_6_6:in-c_5_6:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_2_3:in-c_2_4:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_5_2:in-c_6_2:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_6_5:in-c_6_4:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_2_1:in-c_2_2:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_3_1:in-c_2_1:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_2_2:in-c_1_2:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_5_1:in-c_4_1:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_2_4:in-c_2_3:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_2_1:in-v_2_0:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="v_0_3:in-c_1_3:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_3_1:in-c_4_1:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="v_5_7:in-c_5_6:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_1_4:in-c_2_4:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="v_6_7:in-c_6_6:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_6_2:in-c_6_1:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_3_5:in-c_4_5:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_1_1:in-v_0_1:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="v_7_3:in-c_6_3:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_2_5:in-c_3_5:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_6_5:in-v_7_5:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_6_6:in-v_7_6:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_2_5:in-c_1_5:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_5_6:in-v_5_7:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_4_1:in-v_4_0:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_1_5:in-c_2_5:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_1_6:in-c_2_6:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_5_6:in-c_5_5:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_1_4:in-c_1_5:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_5_4:in-c_5_3:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_1_4:in-v_0_4:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_6_2:in-c_6_3:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="v_5_0:in-c_5_1:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_4_5:in-v_4_4:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="v_2_0:in-c_2_1:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_2_5:in-c_2_4:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_4_2:in-c_3_2:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_2_2:in-c_2_1:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_6_1:in-v_6_0:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_6_3:in-v_7_3:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="v_3_7:in-c_3_6:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_5_2:in-c_5_1:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+      <EdgeI path="c_4_1:in-c_4_2:out">
+        <P>"w": 0.125</P>
+      </EdgeI>
+    </EdgeInstances>
+  </GraphInstance>
+</Graph>

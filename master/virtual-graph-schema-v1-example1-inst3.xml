@@ -1,0 +1,53 @@
+<?xml version="1.0"?>
+<Graphs xmlns="http://TODO.org/POETS/virtual-graph-schema-v1">
+  <GraphTypeReference id="dt10_graph_schema_example"
+    src="virtual-graph-schema-v1-example1.xml" />
+    
+  <GraphInstance id="inst3" graphTypeId="dt10_graph_schema_example">
+    <Documentation>
+    This is a pair of cells called x and y. x is a leader, and will
+    pass tokens on to y. y is a bit odd, and sends tokens both to
+    itself and to x.
+    <pre>
+    <![CDATA[
+    ````        
+            id:"x"                     id:"y"
+         +------------+            +------------+
+     .-->|     in     +       .--->|     in     +<--. 
+     |   +------------+      /     +------------+   | 
+     |   |P  leader=1 |     /      |P  leader=0 |   | 
+     |   |S  hot=?    |    /       |S  hot=?    |   | 
+     |   +------------+   /        +------------+   | 
+     |   |    out     |--'         |    out     |---+
+     |   +------------+            +------------+   |
+     |                                              | 
+     '----------------------------------------------'   
+    ````
+    ]]>
+    </pre>
+    When activated, device x will fire, which will make y hot
+    (and x cold). But when y fires, it will pass the token
+    both to itself and to x. Things now become non-deterministic,
+    as we don't know what order the messages will be delivered
+    to x and y. 
+    
+    </Documentation>
+    <DeviceInstances>
+      
+      <DevI id="x" type="cell">
+        <!-- Set the "leader" property to true. -->
+        <P>"leader":1</P> 
+      </DevI>
+      
+      <!-- For this instance we can let it default "leader"
+           to false. -->
+      <DevI id="y" type="cell" /> 
+    </DeviceInstances>
+    
+    <EdgeInstances>
+      <EdgeI path="x:in-y:out" />
+      <EdgeI path="y:in-x:out" />
+      <EdgeI path="y:in-y:out" /> <!-- This is the self-loop -->
+    </EdgeInstances>
+  </GraphInstance>
+</Graphs>
