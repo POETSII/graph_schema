@@ -34,7 +34,6 @@ CPPFLAGS += -std=c++11 -g
 TRANG = external/trang-20091111/trang.jar
 JING = external/jing-20081028/bin/jing.jar
 RNG_SVG = external/rng-svg/build.xml
-RAPIDJSON = external/rapidjson-master/include/rapidjson/rapidjson.h
 
 FFMPEG := $(shell which ffmpeg)
 ifeq ($(FFMPEG),)
@@ -60,13 +59,7 @@ $(RNG_SVG) : external/rng-svg-latest.zip
 	(cd external/rng-svg && unzip -o ../rng-svg-latest)
 	touch $@
 
-$(RAPIDJSON) : external/rapidjson-master.zip
-	(cd external && unzip -o rapidjson-master)
-	touch $@
 
-
-
-CPPFLAGS += -I external/rapidjson-master/include
 
 graph_library : $(wildcard tools/graph/*.py)
 
@@ -114,7 +107,7 @@ output/%.graph.cpp : apps/%.xml graph_library
 	mkdir -p $(dir output/$*)
 	$(PYTHON) tools/render_graph_as_cpp.py apps/$*.xml output/$*.graph.cpp
 
-output/%.graph.so : output/%.graph.cpp $(RAPIDJSON)
+output/%.graph.so : output/%.graph.cpp
 	g++ $(CPPFLAGS) $(SO_CPPFLAGS) $< -o $@ $(LDFLAGS)
 
 bin/print_graph_properties : tools/print_graph_properties.cpp
@@ -144,7 +137,7 @@ bin/% : tools/%.cpp
 
 define provider_rules_template
 
-providers/$1.graph.cpp providers/$1.graph.hpp : apps/$1/$1_graph_type.xml $(JING) $(RAPIDJSON)
+providers/$1.graph.cpp providers/$1.graph.hpp : apps/$1/$1_graph_type.xml $(JING)
 
 	mkdir -p providers
 	java -jar $(JING) -c master/virtual-graph-schema-v1.rnc apps/$1/$1_graph_type.xml
@@ -195,4 +188,3 @@ clean :
 	-rm -rf providers/*
 	-rm -rf external/trang-20091111
 	-rm -rf external/jing-20081028
-	-rm -rf rapidjson-master
