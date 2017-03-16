@@ -311,7 +311,7 @@
         </Properties>
 
         <State>
-            <Scalar type="int32_t" name="i" value="0" />
+            <Scalar type="int32_t" name="i" default="0" />
         </State>
 
         <ReadyToSend><![CDATA[

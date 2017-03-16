@@ -343,6 +343,12 @@ grammar {
 
           &
 
+          element SharedCode {
+            cxxSourceCode
+          } *
+
+          &
+
           ## Read-only properties that could be specified on the device. This element
           ## may not appear if the device has no properties. There may be default
           ## values specified for some or all components of the properties.
@@ -977,13 +983,21 @@ grammar {
         attribute type { primitiveScalarType },
 
         ## Gives the default for this thing
-        attribute default { text } ?
+        attribute default { text } ?,
+
+        element Documentation {
+          documentation
+        } ?
       }
       |
       element Tuple {
         attribute name { identifier },
 
-        typedDataMember +
+        typedDataMember +,
+
+        element Documentation {
+          documentation
+        } ?
       }
       |
       element Array {
@@ -1008,7 +1022,11 @@ grammar {
           ##
           ## The name of the typedDataSpec will be ignored.
           typedDataMember
-        )
+        ),
+
+        element Documentation {
+          documentation
+        } ?
       }
       |
       ## The first union member specified is always the default
@@ -1025,7 +1043,11 @@ grammar {
         ##
         ## The tag indices will be assigned in the order that
         ## the alternatives appear here.
-        typedDataMember +
+        typedDataMember +,
+
+        element Documentation {
+          documentation
+        } ?
       }
     )
 

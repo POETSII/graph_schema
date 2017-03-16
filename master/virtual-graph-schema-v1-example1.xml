@@ -28,6 +28,10 @@
     so on.
     </Documentation>
 
+    <MetaData>
+    "wibble.wobble":1
+    </MetaData>
+
     <!-- This element contains all message types used in
          this particular graph type. The message ids are
          indicating meaning as well as structure. For example,
@@ -106,6 +110,10 @@
           If no device instance is set up to be leader, the
           entire graph will remain quiescent forever.
           </Documentation>
+
+          <MetaData>
+          "wibble.wobble":[3,4,5]
+          </MetaData>
 
           <Properties>
             <Scalar type="int8_t" name="leader" />
