@@ -12,6 +12,7 @@ __pycache__/
 demos
 bin
 providers
+.vagrant
 
 # OS X profiling
 instruments*.trace
@@ -19,3 +20,4 @@ instruments*.trace
 # temporaries in root directory
 /*.xml
 /*.snap
+/*.gz

@@ -24,6 +24,7 @@ def render_typed_data_init(proto,dst,prefix):
     if proto is None:
         pass
     elif isinstance(proto,ScalarTypedDataSpec):
+
         if proto.default:
             value=proto.default
             if proto.type=="bool":
@@ -37,6 +38,7 @@ def render_typed_data_init(proto,dst,prefix):
     elif isinstance(proto,ArrayTypedDataSpec):
         assert isinstance(proto.type,ScalarTypedDataSpec), "Haven't implemented arrays of non-scalars yet."
         for i in range(0,proto.length):
+
             if proto.type.default is not None:
                 dst.write('{}{}[{}] = {};\n'.format(prefix,proto.name,i,proto.type.default))
             else:
@@ -52,10 +54,13 @@ def render_typed_data_load_v4_tuple(proto,dst,prefix,indent):
         dst.write('{}if(document.HasMember("{}")){{\n'.format(indent,elt.name))
         dst.write('{}  const rapidjson::Value &n=document["{}"];\n'.format(indent,elt.name))
         if isinstance(elt,ScalarTypedDataSpec):
+
             if elt.type=="int32_t" or elt.type=="int16_t" or elt.type=="int8_t" :
                 dst.write('{}  {}{}=n.GetInt();\n'.format(indent, prefix, elt.name))
+
             elif elt.type=="uint32_t" or elt.type=="uint16_t" or elt.type=="uint8_t":
                 dst.write('{}  {}{}=n.GetUint();\n'.format(indent, prefix, elt.name))
+
             elif elt.type=="float":
                 dst.write('{}  {}{}=n.GetDouble();\n'.format(indent, prefix, elt.name))
             else:
@@ -66,12 +71,15 @@ def render_typed_data_load_v4_tuple(proto,dst,prefix,indent):
             assert isinstance(elt.type,ScalarTypedDataSpec), "Haven't implemented non-scalar arrays yet."
             dst.write('{}  assert(n.IsArray());\n')
             for i in range(0,elt.length):
+
                 if elt.type.type=="int32_t" or elt.type.type=="int16_t" or elt.type.type=="int8_t":
                     dst.write('{}  assert(n[{}].IsInt());\n'.format(indent,i))
                     dst.write('{}  {}{}[{}]=n[{}].GetInt();\n'.format(indent, prefix, elt.name,i,i))
+
                 elif elt.type.type=="uint32_t" or elt.type.type=="uint16_t" or elt.type.type=="uint8_t":
                     dst.write('{}  assert(n[{}].IsUint());\n'.format(indent,i))
                     dst.write('{}  {}{}[{}]=n[{}].GetUint();\n'.format(indent, prefix,elt.name,i,i))
+
                 elif elt.type.type=="float":
                     dst.write('{}  assert(n[{}].IsDouble());\n'.format(indent,i))
                     dst.write('{}  {}{}[{}]=n[{}].GetDouble();\n'.format(indent, prefix,elt.name,i,i))
@@ -108,6 +116,7 @@ def render_typed_data_save_v4(proto,dst,elt,prefix,indent):
 
 def render_typed_data_save(proto, dst, prefix, indent):
     if isinstance(proto,ScalarTypedDataSpec):
+
         if proto.type=="uint32_t" or proto.type=="uint16_t" or proto.type=="uint8_t":
             dst.write('{}if({}{} != {}){{ if(sep){{ dst<<","; }}; dst<<"\\"{}\\":"<<(uint32_t){}{}; sep=true; }}\n'.format(indent, prefix, proto.name, proto.default, proto.name, prefix, proto.name))
         elif proto.type=="int32_t" or proto.type=="int16_t" or proto.type=="int8_t":
@@ -135,7 +144,8 @@ def render_typed_data_save(proto, dst, prefix, indent):
     else:
         assert False, "Unknown data-type"
 
-def render_typed_data_as_spec(proto,name,elt_name,dst):
+
+def render_typed_data_as_spec(proto,name,elt_name,dst,asHeader=False):
     dst.write("struct {} : typed_data_t{{\n".format(name))
     if proto:
         assert isinstance(proto, TupleTypedDataSpec)
@@ -144,6 +154,9 @@ def render_typed_data_as_spec(proto,name,elt_name,dst):
     else:
         dst.write("  //empty\n")
     dst.write("};\n")
+    if asHeader:
+        return
+
     dst.write("class {}_Spec : public TypedDataSpec {{\n".format(name))
     dst.write("  public: TypedDataPtr create() const override {\n")
     if proto:
@@ -160,6 +173,7 @@ def render_typed_data_as_spec(proto,name,elt_name,dst):
         dst.write("    return TypedDataPtr();\n")
     else:
         dst.write("    xmlpp::Node::PrefixNsMap ns;\n")
+
         dst.write('    ns["g"]="TODO/POETS/virtual-graph-schema-v1";\n')
         dst.write("    {} *res=({}*)malloc(sizeof({}));\n".format(name,name,name))
         dst.write("    res->_ref_count=0;\n")
@@ -421,8 +435,8 @@ def render_output_port_as_cpp(op,dst):
     dst.write("  return singleton;\n")
     dst.write("}\n")
 
-def render_message_type_as_cpp_fwd(et,dst):
-    render_typed_data_as_spec(et.message, "{}_message_t".format(et.id), "pp:Message", dst)
+def render_message_type_as_cpp_fwd(et,dst,asHeader):
+    render_typed_data_as_spec(et.message, "{}_message_t".format(et.id), "pp:Message", dst, asHeader)
 
 def render_message_type_as_cpp(et,dst):
     dst.write("class {}_Spec : public MessageTypeImpl {{\n".format(et.id))
@@ -435,9 +449,9 @@ def render_message_type_as_cpp(et,dst):
     dst.write("}\n")
     registrationStatements.append('registry->registerMessageType({}_Spec_get());'.format(et.id,et.id))
 
-def render_device_type_as_cpp_fwd(dt,dst):
-    render_typed_data_as_spec(dt.properties, "{}_properties_t".format(dt.id), "pp:Properties", dst)
-    render_typed_data_as_spec(dt.state, "{}_state_t".format(dt.id), "pp:State", dst)
+def render_device_type_as_cpp_fwd(dt,dst, asHeader):
+    render_typed_data_as_spec(dt.properties, "{}_properties_t".format(dt.id), "pp:Properties", dst, asHeader)
+    render_typed_data_as_spec(dt.state, "{}_state_t".format(dt.id), "pp:State", dst, asHeader)
     for ip in dt.inputs.values():
         render_typed_data_as_spec(ip.properties, "{}_{}_properties_t".format(dt.id,ip.name), "pp:Properties", dst)
         render_typed_data_as_spec(ip.state, "{}_{}_state_t".format(dt.id,ip.name), "pp:State", dst)
@@ -538,25 +552,32 @@ def render_device_type_as_cpp(dt,dst):
 
     registrationStatements.append('registry->registerDeviceType(ns_{}::{}_Spec_get());'.format(dt.id,dt.id,dt.id))
 
-def render_graph_as_cpp(graph,dst, destPath):
+def render_graph_as_cpp(graph,dst, destPath, asHeader=False):
+    gt=graph
+
+    if asHeader:
+        dst.write('#ifndef {}_header\n'.format(gt.id))
+        dst.write('#define {}_header\n'.format(gt.id))
+
     dst.write('#include "graph.hpp"\n')
     dst.write('#include "rapidjson/document.h"\n')
 
-    gt=graph
-
-    render_typed_data_as_spec(gt.properties, "{}_properties_t".format(gt.id),"pp:Properties",dst)
+    render_typed_data_as_spec(gt.properties, "{}_properties_t".format(gt.id),"pp:Properties",dst,asHeader)
 
     dst.write("/////////////////////////////////\n")
     dst.write("// FWD\n")
     for et in gt.message_types.values():
-        render_message_type_as_cpp_fwd(et,dst)
+        render_message_type_as_cpp_fwd(et,dst, asHeader)
 
     for dt in gt.device_types.values():
-        render_device_type_as_cpp_fwd(dt, dst)
 
-    if gt.shared_code:
-        for code in gt.shared_code:
-            dst.write(code)
+        render_device_type_as_cpp_fwd(dt, dst, asHeader)
+
+
+    if not asHeader:
+        if gt.shared_code:
+            for code in gt.shared_code:
+                dst.write(code)
 
     dst.write("/////////////////////////////////\n")
     dst.write("// DEF\n")
@@ -579,11 +600,12 @@ def render_graph_as_cpp(graph,dst, destPath):
     dst.write("  return singleton;\n")
     dst.write("}\n")
 
-
     registrationStatements.append('registry->registerGraphType({}_Spec_get());'.format(gt.id))
-
 
     dst.write('extern "C" void registerGraphTypes(Registry *registry){\n')
     for r in registrationStatements:
         dst.write("  {}\n".format(r))
     dst.write("}\n");
+
+    if asHeader:
+        dst.write("#endif\n")
