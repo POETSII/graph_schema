@@ -21,12 +21,12 @@ Ne=80
 Ni=20
 K=20
 
+if len(sys.argv)>1:
+    Ne=int(sys.argv[1])
 if len(sys.argv)>2:
-    Ne=int(sys.argv[2])
+    Ni=int(sys.argv[2])
 if len(sys.argv)>3:
-    Ni=int(sys.argv[3])
-if len(sys.argv)>4:
-    K=int(sys.argv[4])
+    K=int(sys.argv[3])
 
 N=Ne+Ni
 K=min(N,K)
