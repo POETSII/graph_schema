@@ -26,6 +26,8 @@ demos/ising_spin/ising_spin_$1.gif : demos/ising_spin/ising_spin_$1.xml demos/is
 
 ALL_ISING_SPIN_DEMOS += demos/ising_spin/ising_spin_$1.gif
 
+$(eval $(call softswitch_instance_template,ising_spin_$1,demos/ising_spin/ising_spin_$1.xml))
+
 endef
 
 
@@ -47,6 +49,4 @@ ising_spin_demos : $(ALL_ISING_SPIN_DEMOS)
 ALL_TESTS += ising_spin_tests
 
 ALL_DEMOS += ising_spin_demos
-
-
 
