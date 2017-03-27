@@ -158,6 +158,23 @@ all_providers : $1_provider
 
 endef
 
+SOFTSWITCH_DIR = ../toy_softswitch
+
+ALL_SOFTSWITCH = 
+
+define softswitch_instance_template
+# $1 = name
+# $2 = input-path.xml
+
+$(SOFTSWITCH_DIR)/generated/apps/$1/present : $2
+	mkdir -p $(SOFTSWITCH_DIR)/generated/apps/$1
+	tools/render_graph_as_softswitch.py $2 $(SOFTSWITCH_DIR)/generated/apps/$1
+	touch $$@
+
+ALL_SOFTSWITCH := $(ALL_SOFTSWITCH) $(SOFTSWITCH_DIR)/generated/apps/$1/present
+
+endef
+
 include apps/clock_tree/makefile.inc
 include apps/ising_spin/makefile.inc
 include apps/clocked_izhikevich/makefile.inc
@@ -182,6 +199,9 @@ tt :
 validate-virtual : $(foreach t,$(VIRTUAL_ALL_TESTS),validate-virtual/$(t) output/virtual/$(t).svg output/virtual/$(t).graph.cpp output/virtual/$(t).graph.so)
 
 test : all_tools $(ALL_TESTS)
+
+softswitch : test $(ALL_SOFTSWITCH)
+	echo $(ALL_SOFTSWITCH)
 
 demo : $(ALL_DEMOS)
 

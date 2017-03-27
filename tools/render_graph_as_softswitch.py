@@ -1,3 +1,6 @@
+#!/usr/bin/python3
+
+
 from graph.load_xml import load_graph_types_and_instances
 from graph.write_cpp import render_graph_as_cpp
 
@@ -212,7 +215,8 @@ def render_device_type_as_softswitch_defs(dt,dst,dtProps):
                 (receive_handler_t){INPUT_PORT_FULL_ID}_receive_handler,
                 sizeof(packet_t)+sizeof({INPUT_PORT_MESSAGE_T}),
                 sizeof({INPUT_PORT_PROPERTIES_T}),
-                sizeof({INPUT_PORT_STATE_T})
+                sizeof({INPUT_PORT_STATE_T}),
+                "{INPUT_PORT_FULL_ID}"
             }}
             """.format(**make_input_port_properties(ip)))
     dst.write("};\n");
@@ -225,7 +229,8 @@ def render_device_type_as_softswitch_defs(dt,dst,dtProps):
         dst.write("""
             {{
                 (send_handler_t){OUTPUT_PORT_FULL_ID}_send_handler,
-                sizeof(packet_t)+sizeof({OUTPUT_PORT_MESSAGE_T})
+                sizeof(packet_t)+sizeof({OUTPUT_PORT_MESSAGE_T}),
+                "{OUTPUT_PORT_FULL_ID}"
             }}
             """.format(**make_output_port_properties(op)))
     dst.write("};\n");
@@ -262,7 +267,8 @@ def render_graph_type_as_softswitch_defs(gt,dst):
             OUTPUT_VTABLES_{DEVICE_TYPE_FULL_ID},
             INPUT_COUNT_{DEVICE_TYPE_FULL_ID},
             INPUT_VTABLES_{DEVICE_TYPE_FULL_ID},
-            (compute_handler_t)0 // No compute handler
+            (compute_handler_t)0, // No compute handler
+            "{DEVICE_TYPE_FULL_ID}"
         }}
         """.format(**make_device_type_properties(dt)))
     dst.write("};\n")
@@ -399,6 +405,7 @@ def render_graph_instance_as_thread_context(
             {DEVICE_INSTANCE_THREAD_OFFSET}, // device index
             {DEVICE_INSTANCE_ID}_targets, // address lists for ports
             {DEVICE_INSTANCE_ID}_sources, // source list for inputs
+            "{DEVICE_INSTANCE_ID}", // id
             0, // rtsFlags
             false, // rtc
             0,  // prev
@@ -447,6 +454,37 @@ def render_graph_instance_as_softswitch(gi,dst,num_threads,device_to_thread):
     for ti in range(num_threads):
         render_graph_instance_as_thread_context(dst,gi,ti,devices_to_thread, thread_to_devices,edgesIn,edgesOut,props)
 
+    render_typed_data_inst(gi.graph_type.properties, props[gi.graph_type]["GRAPH_TYPE_PROPERTIES_T"], gi.properties, gi.id+"_properties", dst,True)
+
+    dst.write("\n")
+    dst.write("unsigned softswitch_pthread_count = THREAD_COUNT;\n\n")
+
+    dst.write("PThreadContext softswitch_pthread_contexts[THREAD_COUNT]=\n")
+    dst.write("{\n")
+    for ti in range(num_threads):
+        dst.write("""
+        {{
+            0,
+            &{}_properties,
+            DEVICE_TYPE_COUNT,
+            DEVICE_TYPE_VTABLES,
+            DEVICE_INSTANCE_COUNT_thread{},
+            DEVICE_INSTANCE_CONTEXTS_thread{},
+            0, // lamport
+            0, // rtsHead
+            0, // rtsTail
+            0, // rtcChecked
+            0,  // rtcOffset
+            0,  // logLevel
+            0,  // currentDevice
+            0,  // currentMode
+            0   // currentHandler
+        }}\n""".format(gi.id,ti,ti))
+        if ti+1<num_threads:
+            dst.write(",\n")
+            
+    dst.write("};\n")
+
 
 
 import argparse
@@ -455,6 +493,9 @@ import argparse
 parser = argparse.ArgumentParser(description='Render graph instance as softswitch.')
 parser.add_argument('source', type=str, help='source file (xml graph instance)')
 parser.add_argument('--threads', help='number of threads')
+    
+
+
     
 source=sys.stdin
 sourcePath="[graph-type-file]"
@@ -487,14 +528,14 @@ for g in types.values():
 destPrefix="./{}".format(graph.id)
 
 if len(sys.argv)>2:
-    sys.stderr.write("Setting graph file output prefix as '{}'\n".format(sys.argv[1]))
+    sys.stderr.write("Setting graph file output director to '{}'\n".format(sys.argv[2]))
     destPrefix=sys.argv[2]
 
-destHppPath=os.path.abspath(destPrefix+".hpp")
+destHppPath=os.path.abspath("{}/{}.hpp".format(destPrefix,graph.id))
 destHpp=open(destHppPath,"wt")
 sys.stderr.write("Using absolute path '{}' for header pre-processor directives\n".format(destHppPath))
 
-destCppPath=os.path.abspath(destPrefix+"_vtables.cpp")
+destCppPath=os.path.abspath("{}/{}_vtables.cpp".format(destPrefix,graph.id))
 destCpp=open(destCppPath,"wt")
 sys.stderr.write("Using absolute path '{}' for source pre-processor directives\n".format(destCppPath))
 
@@ -532,7 +573,7 @@ if(len(instances)>0):
     def device_to_thread(dev):
         return hash(dev.id) % nThreads
 
-    destInstPath=os.path.abspath(destPrefix+"_{}.cpp".format(inst.id))
+    destInstPath=os.path.abspath("{}/{}_{}_inst.cpp".format(destPrefix,graph.id,inst.id))
     destInst=open(destInstPath,"wt")
         
     render_graph_instance_as_softswitch(inst,destInst,nThreads,device_to_thread)
