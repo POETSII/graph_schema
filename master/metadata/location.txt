@@ -1,0 +1,7 @@
+GraphType:
+
+  "location.dimension" : dims
+  
+DeviceInstance:
+
+  "loc" : [x,y,z,...]

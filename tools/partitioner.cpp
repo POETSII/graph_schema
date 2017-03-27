@@ -7,6 +7,9 @@
 #include <fstream>
 
 
+#include "graph_persist_sax_writer.hpp"
+
+
 
 int main(int argc, char *argv[])
 {
@@ -16,6 +19,7 @@ int main(int argc, char *argv[])
     xmlpp::DomParser parser;
 
     std::string srcFileName;
+    std::string dstFileName;
 
     int partitions=2;
     int steps=1000000;
@@ -25,6 +29,8 @@ int main(int argc, char *argv[])
     int imbalanceExponent=2;
     int crossingWeight=4;
     std::string method="anneal";
+    
+    bool showGraph=false;
 
     int ai=1;
     while(ai < argc){
@@ -73,12 +79,24 @@ int main(int argc, char *argv[])
         }
         crossingWeight = atoi(argv[ai+1]);
         ai+=2;
-      }else{
-        if(!srcFileName.empty()){
-          fprintf(stderr, "Two input filenames.\n");
+      }else if(!strcmp(argv[ai], "--method")){
+        if(ai+1>=argc){
+          fprintf(stderr, "Not enough arguments for --method.");
           exit(1);
         }
-        srcFileName=argv[ai];
+        method = (argv[ai+1]);
+        ai+=2;
+      }else{
+        if(!srcFileName.empty()){
+          if(!dstFileName.empty()){
+            fprintf(stderr, "Three input filenames.\n");
+            exit(1);
+          }else{
+            dstFileName=argv[ai];
+          }
+        }else{
+          srcFileName=argv[ai];
+        }
         ai++;
       }
     }
@@ -96,9 +114,7 @@ int main(int argc, char *argv[])
         throw std::runtime_error(std::string("Couldn't open '")+srcFileName+"'");
       src=&srcFile;
     }
-
-
-
+    
     fprintf(stderr, "Parsing XML\n");
     parser.parse_stream(*src);
     fprintf(stderr, "Parsed XML\n");
@@ -120,9 +136,29 @@ int main(int argc, char *argv[])
     }else{
       throw std::runtime_error("Unknonwn method.");
     }
+    
+    if(dstFileName.empty())
+        dstFileName="-";
+    
+    if(showGraph){
+      std::ostream *dst=&std::cout;
+      std::ofstream dstFile;
+      
+      if(dstFileName!="-"){
+        fprintf(stderr,"Writing to '%s'\n", dstFileName.c_str());
+        dstFile.open(dstFileName);
+        if(!dstFile.is_open())
+          throw std::runtime_error(std::string("Couldn't open '")+dstFileName+"'");
+        dst=&dstFile;
+      }
 
-
-    graph.dump_dot(showClusters);
+      graph.dump_dot(*dst,showClusters);
+    }else{
+      
+      
+      std::shared_ptr<GraphLoadEvents> dst=createSAXWriterOnFile(dstFileName);
+      graph.write(dst.get());
+    }
 
     fprintf(stderr, "Done\n");
 

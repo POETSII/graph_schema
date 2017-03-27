@@ -447,17 +447,30 @@ def render_graph_instance_as_softswitch(gi,dst,num_threads,device_to_thread):
     for ti in range(num_threads):
         render_graph_instance_as_thread_context(dst,gi,ti,devices_to_thread, thread_to_devices,edgesIn,edgesOut,props)
 
+
+
+import argparse
+
+
+parser = argparse.ArgumentParser(description='Render graph instance as softswitch.')
+parser.add_argument('source', type=str, help='source file (xml graph instance)')
+parser.add_argument('--threads', help='number of threads')
     
 source=sys.stdin
 sourcePath="[graph-type-file]"
 
 sys.stderr.write("{}\n".format(sys.argv))
 
-if len(sys.argv)>1:
-    if sys.argv[1]!="-":
-        sys.stderr.write("Reading graph type from '{}'\n".format(sys.argv[1]))
-        source=open(sys.argv[1],"rt")
-        sourcePath=os.path.abspath(sys.argv[1])
+ia=1
+
+if ia<len(sys.argv):
+    if sys.argv[ia]=="--threads"
+
+if ia<len(sys.argv):
+    if sys.argv[ia]!="-":
+        sys.stderr.write("Reading graph type from '{}'\n".format(sys.argv[ia]))
+        source=open(sys.argv[ia],"rt")
+        sourcePath=os.path.abspath(sys.argv[ia])
         sys.stderr.write("Using absolute path '{}' for pre-processor directives\n".format(sourcePath))
 
 (types,instances)=load_graph_types_and_instances(source, sourcePath)

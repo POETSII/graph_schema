@@ -4,6 +4,9 @@
 #include "graph.hpp"
 
 #include "libxml/xmlwriter.h"
+#include "rapidjson/document.h"
+#include "rapidjson/writer.h"
+#include "rapidjson/stringbuffer.h"
 
 #include <unordered_set>
 
@@ -28,9 +31,11 @@ private:
 
   
   xmlTextWriterPtr m_dst;
+  bool m_parseMetaData;
 
   State m_state;
 
+  uint64_t m_gId=0;
   GraphTypePtr m_graphType;
 
   // This is use to sanity check what the client is giving us, and avoid duplicate ids.
@@ -74,9 +79,37 @@ private:
 	json.resize(json.size()-1); // Chop off the final '}'. Probably no realloc
 
 	// The +1 skips over the first '{'
-	xmlTextWriterWriteElement(m_dst, (const xmlChar *)name, (const xmlChar *)(json.c_str()+1));
+        xmlTextWriterStartElement(m_dst, (const xmlChar *)name);
+        xmlTextWriterWriteRaw(m_dst, (const xmlChar *)(json.c_str()+1));
+        xmlTextWriterEndElement(m_dst);
       }
     }
+  }
+  
+  void writeMetaData(const rapidjson::Document &data, const char *name)
+  {
+    if(data.IsNull())
+      return;
+    if(!data.IsObject())
+      throw std::runtime_error("Metadata must be null or an object.");
+    if(data.MemberCount()==0)
+      return;
+    
+    rapidjson::StringBuffer buffer;
+    rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
+    data.Accept(writer);
+    
+    std::string json(buffer.GetString(), buffer.GetSize());
+    assert(json.size()>2);
+    assert(json[json.size()-1]=='}');
+    assert(json[0]=='{');
+        
+    json.resize(json.size()-1); // Chop off the final '}'. Probably no realloc
+
+    // The +1 skips over the first '{'
+    xmlTextWriterStartElement(m_dst, (const xmlChar *)name);
+    xmlTextWriterWriteRaw(m_dst, (const xmlChar *)(json.c_str()+1));
+    xmlTextWriterEndElement(m_dst);
   }
 public:
     GraphSAXWriter(xmlTextWriterPtr dst)
@@ -99,7 +132,15 @@ public:
     }
   }
   
-  virtual void onBeginGraphInstance(const GraphTypePtr &graphType, const std::string &id, const TypedDataPtr &properties) override
+  virtual bool parseMetaData() const override
+  { return m_parseMetaData; }
+  
+  virtual uint64_t onBeginGraphInstance(
+    const GraphTypePtr &graphType,
+    const std::string &id,
+    const TypedDataPtr &properties,
+    rapidjson::Document &&metadata
+  ) override
   {
     moveState(State_Graph, State_GraphInstance);
     m_graphType=graphType;
@@ -109,22 +150,33 @@ public:
     xmlTextWriterWriteAttribute(m_dst, (const xmlChar *)"graphTypeId", (const xmlChar *)graphType->getId().c_str());
 
     writeTypedData(graphType->getPropertiesSpec(), properties, "Properties");
+    writeMetaData(metadata, "MetaData");
+    
+    return ++m_gId;
   }
 
-  virtual void onBeginDeviceInstances() override
+  virtual void onBeginDeviceInstances(uint64_t gId) override
   {
+    if(gId!=m_gId){
+      throw std::runtime_error("Incorrect graph id.");
+    }
+
     moveState(State_GraphInstance, State_DeviceInstances);
     xmlTextWriterStartElement(m_dst, (const xmlChar *)"DeviceInstances");
   }
 
   virtual uint64_t onDeviceInstance
   (
+   uint64_t gId,
    const DeviceTypePtr &dt,
    const std::string &id,
    const TypedDataPtr &properties,
-   const double *nativeLocation //! If null then no location, otherwise it will match graphType->getNativeDimension()
+   rapidjson::Document &&metadata
    ) override
   {
+    if(gId!=m_gId){
+      throw std::runtime_error("Incorrect graph id.");
+    }
     if(m_state!=State_DeviceInstances){
       throw std::runtime_error("Not in the DeviceInstances state.");
     }
@@ -139,43 +191,49 @@ public:
     xmlTextWriterStartElement(m_dst, (const xmlChar *)"DevI");
     xmlTextWriterWriteAttribute(m_dst, (const xmlChar *)"id", (const xmlChar *)id.c_str());
     xmlTextWriterWriteAttribute(m_dst, (const xmlChar *)"type", (const xmlChar *)dt->getId().c_str());
-    if(nativeLocation){
-      std::stringstream acc;
-      for(unsigned i=0;i<m_graphType->getNativeDimension();i++){
-	if(i!=0) acc<<",";
-	acc<<nativeLocation[i];
-      }
-      xmlTextWriterWriteAttribute(m_dst, (const xmlChar *)"nativeLocation", (const xmlChar *)acc.str().c_str());
-    }
-
+    
     writeTypedData(dt->getPropertiesSpec(), properties, "P");
+    
+    writeMetaData(metadata, "M");
 
     xmlTextWriterEndElement(m_dst);
 
     return idNum;
   }
 
-  virtual void onEndDeviceInstances() override
+  virtual void onEndDeviceInstances(uint64_t gId) override
   {
+    if(gId!=m_gId){
+      throw std::runtime_error("Incorrect graph id.");
+    }
+
     moveState(State_DeviceInstances, State_PostDeviceInstances);
     xmlTextWriterEndElement(m_dst);
 
     m_seenIds.clear(); // We're going to use it for edge instance ids
   }
 
-  virtual void onBeginEdgeInstances() override
+  virtual void onBeginEdgeInstances(uint64_t gId) override
   {
+    if(gId!=m_gId){
+      throw std::runtime_error("Incorrect graph id.");
+    }
     moveState(State_PostDeviceInstances, State_EdgeInstances);
     xmlTextWriterStartElement(m_dst, (const xmlChar *)"EdgeInstances");
   }
 
   virtual void onEdgeInstance
   (
+   uint64_t gId,
    uint64_t dstDevInst, const DeviceTypePtr &dstDevType, const InputPortPtr &dstPort,
    uint64_t srcDevInst,  const DeviceTypePtr &srcDevType, const OutputPortPtr &srcPort,
-   const TypedDataPtr &properties
+   const TypedDataPtr &properties,
+   rapidjson::Document &&metadata
   ) override
   {
+    if(gId!=m_gId){
+      throw std::runtime_error("Incorrect graph id.");
+    }
     if(m_state!=State_EdgeInstances){
       throw std::runtime_error("Not in the EdgeInstances state.");
     }
@@ -187,7 +245,7 @@ public:
 
     std::string id=m_deviceIds[dstDevInst]+":"+dstPort->getName()+"-"+m_deviceIds[srcDevInst]+":"+srcPort->getName();
 
-    if(dstPort->getEdgeType()->getId() != srcPort->getEdgeType()->getId())
+    if(dstPort->getMessageType()->getId() != srcPort->getMessageType()->getId())
       throw std::runtime_error("The port edge types do not match.");
 
     auto it_inserted=m_seenIds.insert(id);
@@ -199,21 +257,31 @@ public:
     xmlTextWriterStartElement(m_dst, (const xmlChar *)"EdgeI");
     xmlTextWriterWriteAttribute(m_dst, (const xmlChar *)"path", (const xmlChar *)id.c_str());
 
-    writeTypedData(dstPort->getEdgeType()->getPropertiesSpec(), properties, "P");
+    writeTypedData(dstPort->getPropertiesSpec(), properties, "P");
+    
+    writeMetaData(metadata, "M");
 
     xmlTextWriterEndElement(m_dst);
   }
 
-  virtual void onEndEdgeInstances() override
+  virtual void onEndEdgeInstances(uint64_t gId) override
   {
+    if(gId!=m_gId){
+      throw std::runtime_error("Incorrect graph id.");
+    }
+
     moveState(State_EdgeInstances, State_PostEdgeInstances);
     xmlTextWriterEndElement(m_dst);
 
     m_seenIds.clear();
   }
 
-  virtual void onEndGraphInstance() override
+  virtual void onEndGraphInstance(uint64_t gId) override
   {
+    if(gId!=m_gId){
+      throw std::runtime_error("Incorrect graph id.");
+    }
+
     moveState(State_PostEdgeInstances, State_Graph);
     m_graphType.reset();
   }

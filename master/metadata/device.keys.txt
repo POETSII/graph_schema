@@ -1,0 +1,12 @@
+GraphInstance:
+
+"device.keys" : {
+    KEY1 : USER1,              // Reserve a particular key for tagging device indices
+    KEY2 : USER2
+}
+
+DeviceInstance:
+
+"KEY" : <something>   // Short form for tagging a particular value
+
+

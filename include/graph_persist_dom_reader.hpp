@@ -72,7 +72,7 @@ void loadGraph(Registry *registry, xmlpp::Element *parent, GraphLoadEvents *even
   uint64_t gId;
   if(parseMetaData){
     auto metadata=parse_meta_data(eGraph, "g:MetaData", ns);
-    gId=events->onBeginGraphInstance(graphType, graphId, graphProperties);
+    gId=events->onBeginGraphInstance(graphType, graphId, graphProperties, std::move(metadata));
   }else{
     gId=events->onBeginGraphInstance(graphType, graphId, graphProperties);
   }

@@ -1,0 +1,15 @@
+GraphInstance:
+
+"device.keys" : [
+    KEY : "dt10.partitions.N" // Reserve a particular key for tagging device indices
+],
+"dt10.partitions.N" : { // N is the number of partitions
+    counts : [...], // How many devices in each partition. Should be N things in array
+    key : KEY      // Short key used in device instances. Should be unique amongst other keys
+}
+
+DeviceInstance:
+
+"KEY" : index         // Which partition is it in?
+
+
