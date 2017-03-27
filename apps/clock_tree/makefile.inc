@@ -26,6 +26,10 @@ clock_tree_demos : demos/clock_tree/clock_tree_$1.mp4
 
 ALL_DEMOS += clock_tree_demos
 
+$(eval $(call softswitch_instance_template,clock_tree_$1,demos/clock_tree/clock_tree_$1.xml,1))
+$(eval $(call softswitch_instance_template,clock_tree_$1,demos/clock_tree/clock_tree_$1.xml,4))
+$(eval $(call softswitch_instance_template,clock_tree_$1,demos/clock_tree/clock_tree_$1.xml,16))
+
 endef
 
 CLOCK_TREE_FILTERS = \

@@ -247,7 +247,7 @@ def load_device_instance(graph,diNode):
     device_type=graph.graph_type.device_types[device_type_id]
 
     properties=None
-    propertiesNode=diNode.find("p:Properties",ns)
+    propertiesNode=diNode.find("p:P",ns)
     if propertiesNode is not None:
         properties=load_struct_instance(device_type.properties, propertiesNode)
 

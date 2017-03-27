@@ -26,7 +26,7 @@ def render_typed_data_as_type_decl(td,dst,indent,name=None):
         render_typed_data_as_type_decl(td.type,dst,indent,name="")
         dst.write("{}[{}] /*{}*/".format(name, td.length,name))
     else:
-        raise RuntimeError("Unknown data type.");
+        raise RuntimeError("Unknown data type {}".format(td));
 
 def render_typed_data_as_struct(td,dst,name):
     if td:
@@ -61,13 +61,16 @@ def render_typed_data_inst_contents(td,ti,dst):
             render_typed_data_inst_contents(td.type,ti and ti[i],dst)
         dst.write("}")
     else:
-        raise RuntimeError("Unknkown type.")
+        raise RuntimeError("Unknkown type {}".format(td))
 
 def render_typed_data_inst(td,tName,ti,iName,dst,const=False):
     if const:
         dst.write("const ")
     dst.write("{} {} = ".format(tName,iName))
-    render_typed_data_inst_contents(td,ti,dst)
+    if td:
+        render_typed_data_inst_contents(td,ti,dst)
+    else:
+        dst.write("{}")
     dst.write(";\n")
 
 def render_graph_type_as_softswitch_decls(gt,dst):
@@ -80,7 +83,7 @@ def render_graph_type_as_softswitch_decls(gt,dst):
     
     #include "softswitch.hpp"
     
-    
+    #define handler_log softswitch_handler_log  
     
     
     ///////////////////////////////////////////////
@@ -208,6 +211,7 @@ def render_device_type_as_softswitch_defs(dt,dst,dtProps):
     dst.write("InputPortVTable INPUT_VTABLES_{DEVICE_TYPE_FULL_ID}[INPUT_COUNT_{DEVICE_TYPE_FULL_ID}]={{\n".format(**dtProps))
     i=0
     for i in range(len(dt.inputs_by_index)):
+        ip=dt.inputs_by_index[i]
         if i!=0:
             dst.write("  ,\n");
         dst.write("""
@@ -216,7 +220,7 @@ def render_device_type_as_softswitch_defs(dt,dst,dtProps):
                 sizeof(packet_t)+sizeof({INPUT_PORT_MESSAGE_T}),
                 sizeof({INPUT_PORT_PROPERTIES_T}),
                 sizeof({INPUT_PORT_STATE_T}),
-                "{INPUT_PORT_FULL_ID}"
+                "{INPUT_PORT_NAME}"
             }}
             """.format(**make_input_port_properties(ip)))
     dst.write("};\n");
@@ -230,7 +234,7 @@ def render_device_type_as_softswitch_defs(dt,dst,dtProps):
             {{
                 (send_handler_t){OUTPUT_PORT_FULL_ID}_send_handler,
                 sizeof(packet_t)+sizeof({OUTPUT_PORT_MESSAGE_T}),
-                "{OUTPUT_PORT_FULL_ID}"
+                "{OUTPUT_PORT_NAME}"
             }}
             """.format(**make_output_port_properties(op)))
     dst.write("};\n");
@@ -239,9 +243,7 @@ def render_device_type_as_softswitch_defs(dt,dst,dtProps):
 
 def render_graph_type_as_softswitch_defs(gt,dst):
     dst.write("""#include "{}.hpp"\n""".format(gt.id))
-    
-    dst.write("void (*handler_log)(int level, const char *msg, ...) = softswitch_handler_log;\n");
-    
+        
     dst.write(calc_graph_type_c_globals(gt))
     
     if gt.shared_code:
@@ -300,9 +302,10 @@ def render_graph_instance_as_thread_context(
                     first=False
                 else:
                     dst.write(",")
-                tIndex=devices_to_thread[ei.dst_device]
-                tOffset=thread_to_devices[tIndex].index(ei.dst_device)
-                dst.write("{{{},{},INPUT_INDEX_{}_{}_{}}}".format(tIndex,tOffset,di.device_type.parent.id,di.device_type.id,ei.dst_port.name))
+                dstDev=ei.dst_device
+                tIndex=devices_to_thread[dstDev]
+                tOffset=thread_to_devices[tIndex].index(dstDev)
+                dst.write("{{{},{},INPUT_INDEX_{}_{}_{}}}".format(tIndex,tOffset,dstDev.device_type.parent.id, dstDev.device_type.id, ei.dst_port.name))
             dst.write("};\n")
         
         dst.write("OutputPortTargets {}_targets[]={{".format(di.id))
@@ -332,7 +335,16 @@ def render_graph_instance_as_thread_context(
                 continue
             dst.write("InputPortBinding {}_{}_bindings[]={{\n".format(di.id,ip.name))
             first=True
-            for ei in edges_in[di][ip]:
+            
+            def edge_key(ei):
+                return ((devices_to_thread[ei.src_device]<<32) +
+                    (thread_to_devices[devices_to_thread[ei.src_device]].index(ei.src_device))<<16 +
+                    int(props[ei.src_port]["OUTPUT_PORT_INDEX"]))
+            
+            eiSorted=list(edges_in[di][ip])
+            eiSorted.sort(key=edge_key)
+            
+            for ei in eiSorted:
                 if first:
                     first=False
                 else:
@@ -364,6 +376,7 @@ def render_graph_instance_as_thread_context(
 
         dst.write("InputPortSources {}_sources[]={{".format(di.id))
         first=True
+        
         for ip in di.device_type.inputs_by_index:
             if first:
                 first=False
@@ -475,7 +488,9 @@ def render_graph_instance_as_softswitch(gi,dst,num_threads,device_to_thread):
             0, // rtsTail
             0, // rtcChecked
             0,  // rtcOffset
-            0,  // logLevel
+            0,  // applLogLevel
+            0,  // softLogLevel
+            0,  // hardLogLevel
             0,  // currentDevice
             0,  // currentMode
             0   // currentHandler
@@ -492,27 +507,22 @@ import argparse
 
 parser = argparse.ArgumentParser(description='Render graph instance as softswitch.')
 parser.add_argument('source', type=str, help='source file (xml graph instance)')
-parser.add_argument('--threads', help='number of threads')
-    
+parser.add_argument('--dest', help="Directory to write the output to", default=".")
+parser.add_argument('--threads', help='number of threads', type=int, default=2)
 
+args = parser.parse_args()
 
-    
-source=sys.stdin
-sourcePath="[graph-type-file]"
+nThreads=args.threads
 
-sys.stderr.write("{}\n".format(sys.argv))
+if args.source=="-":
+    source=sys.stdin
+    sourcePath="[graph-type-file]"
+else:
+    sys.stderr.write("Reading graph type from '{}'\n".format(args.source))
+    source=open(args.source,"rt")
+    sourcePath=os.path.abspath(args.source)
+    sys.stderr.write("Using absolute path '{}' for pre-processor directives\n".format(sourcePath))
 
-ia=1
-
-if ia<len(sys.argv):
-    if sys.argv[ia]=="--threads"
-
-if ia<len(sys.argv):
-    if sys.argv[ia]!="-":
-        sys.stderr.write("Reading graph type from '{}'\n".format(sys.argv[ia]))
-        source=open(sys.argv[ia],"rt")
-        sourcePath=os.path.abspath(sys.argv[ia])
-        sys.stderr.write("Using absolute path '{}' for pre-processor directives\n".format(sourcePath))
 
 (types,instances)=load_graph_types_and_instances(source, sourcePath)
 
@@ -524,12 +534,7 @@ for g in types.values():
     graph=g
     break
 
-
-destPrefix="./{}".format(graph.id)
-
-if len(sys.argv)>2:
-    sys.stderr.write("Setting graph file output director to '{}'\n".format(sys.argv[2]))
-    destPrefix=sys.argv[2]
+destPrefix=args.dest
 
 destHppPath=os.path.abspath("{}/{}.hpp".format(destPrefix,graph.id))
 destHpp=open(destHppPath,"wt")
@@ -569,7 +574,6 @@ if(len(instances)>0):
         
     assert(inst.graph_type.id==graph.id)
     
-    nThreads=3
     def device_to_thread(dev):
         return hash(dev.id) % nThreads
 
