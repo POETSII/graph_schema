@@ -1,21 +1,17 @@
 #!/usr/bin/python3
 
 from graph.load_xml import load_graph
-from graph.snapshots import extractSnapshotInstances
+from graph.save_xml import save_graph, save_metadata_patch
+from graph.metadata import *
 import sys
 import os
 import argparse
 
 
-        
-    
-    
-
 def render_graph_as_metis(graph,dst):
-    """ Output is (mapping,partitions,key)
-       mapping : id to (zero-based) graph index.
-       partitions : number of partitions
-       graphMetadata : metadata to attach to graph (including key)
+    """ Output is:
+    
+        idToIndex : mapping from device id to zero-based index in metis graph
     """
     idToIndex={}
     indexToId=[]
@@ -50,7 +46,7 @@ def render_graph_as_metis(graph,dst):
     n=len(idToIndex)
     m=len(edges)
     
-    dst.write("{} {}\n".format(n,m))  # No edge or vertex weights
+    dst.write("{} {}\n".format(n,m))  # No   edge or vertex weights
     eCount=0
     for id in indexToId:
         first=True
@@ -69,19 +65,18 @@ def render_graph_as_metis(graph,dst):
             dst.write("{}".format(idToIndex[e]+1)) # one-based vertex indices
             eCount=eCount+1
         dst.write("\n")
+        
+    dst.flush()
 
     assert eCount==2*m-nSame, "m={},eCount={}, nSame={}".format(2*m,eCount,nSame)
     
-    keyTag="dt10.partitions.{}".format(partitions)
-    (graph.metadata,key)=create_device_instance_metadata_key(graph.metadata,keyTag)
-
-    return (idToIndex
+    return idToIndex
     
 
 def read_metis_partition(graph,partitions,idToIndex,graphFileName):
     partitionFileName=graphFileName+".part.{}".format(partitions)
     mapping=[]
-    with open(outputName,"rt") as partitionFile:
+    with open(partitionFileName,"rt") as partitionFile:
         for line in partitionFile:
             p=int(line)
             if p<0 or p>=partitions:
@@ -93,19 +88,61 @@ def read_metis_partition(graph,partitions,idToIndex,graphFileName):
     return { id:mapping[idToIndex[id]] for id in graph.device_instances }
 
 def create_metis_partition(graph,partitions):
-    tempfile.mkstemp(suffix=".metis", prefix=None, dir=None, text=True)
+    import tempfile
+    
+    (metisHandle,metisName)=tempfile.mkstemp(suffix=".metis", prefix=None, dir=None, text=True)
+    metisStream=open(metisHandle,mode="wt")
+    idToIndex=render_graph_as_metis(graph,metisStream)
+    
+    import subprocess
+    subprocess.run( args=[ "gpmetis", metisName, str(partitions) ], check=True, stdout=sys.stderr )
+    
+    idToPartition=read_metis_partition(graph,partitions,idToIndex,metisName)
+    
+    counts=[0]*partitions
+    for p in idToPartition.values():
+        counts[p]+=1
+    
+    tagName="dt10.partitions.{}".format(partitions)
+    
+    (key,graphMeta)=create_device_instance_key(tagName, graph.metadata or {})
+    graphMeta[tagName]= {
+        "counts" : counts
+    }
+    deviceMeta={
+        id:{key:idToPartition[id]} for id in idToPartition
+    }
+    edgeMeta={}
+    
+   
+    return (graphMeta,deviceMeta,edgeMeta)
+    
+    
 
 if __name__=="__main__":
 
     parser=argparse.ArgumentParser("Render a graph as a metis partitioning problem.")
     parser.add_argument('graph', metavar="G", default="-", nargs="?")
+    parser.add_argument('partitions', metavar="P", default="2", nargs="?", type=int)
+    parser.add_argument('--patch', default=False, action='store_const', const=True)
 
     args=parser.parse_args()
+    
+    partitions=args.partitions
 
     if args.graph=="-":
         graph=load_graph(sys.stdin, "<stdin>")
     else:
         graph=load_graph(args.graph, args.graph)
 
+    (graphMeta,deviceMeta,edgeMeta)=create_metis_partition(graph, partitions)
+    
     dst=sys.stdout
-    render_graph_as_metis(graph,dst)
+    
+    if args.patch:
+        save_metadata_patch(graph.id, graphMeta, deviceMeta, edgeMeta, dst)
+    else:
+        sys.stderr.write("Merging\n")
+        merge_metadata_into_graph(graph, graphMeta, deviceMeta, edgeMeta)
+        sys.stderr.write("Saving\n")
+        save_graph(graph,dst)

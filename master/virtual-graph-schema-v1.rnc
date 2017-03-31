@@ -112,6 +112,8 @@ grammar {
       graphInstance *
       &
       graphInstanceReference *
+      &
+      graphMetadata *
     }
 
   graphType =
@@ -869,6 +871,46 @@ grammar {
      ## connect it up (for example, the id is a well-known GUID or an URN).
      attribute src { string } ?
    }
+
+  graphInstanceMetadataPatch =
+   ## This is a metadata patch against an existing graph (in this file or another)
+   element GraphInstanceMetadataPatch {
+
+    ## Id of the graph it is talking about
+    attribute id { identifier },
+
+    ## Patch against the graph metadata
+    element MetaData {
+      metaDataValue
+    } ? ,
+
+    element DeviceInstances {
+
+      element DevI {
+        ## A unique string
+        attribute id { identifier },
+
+        ## Any meta-data associated with the instance
+        element M {
+          metaDataValue
+        } ?
+      } *
+    },
+
+    element EdgeInstances {
+
+      element EdgeI {
+        attribute path { xsd:string { pattern="[_a-zA-Z0-9]*:[_a-zA-Z0-9]+-[_a-zA-Z0-9]*:[_a-zA-Z0-9]+" } } ?,
+
+        element M {
+          metaDataValue
+        } ?
+      } *
+    }
+  }
+
+
+
 
   #
   # Typed Data Specifications

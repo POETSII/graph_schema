@@ -97,8 +97,6 @@ def save_metadata(node,childTagName,value):
     if value is None:
         return
     text=json.dumps(value)
-    sys.stderr.write(str(value)+"\n")
-    sys.stderr.write(text+"\n")
     assert text.startswith('{') and text.endswith('}')
     r=etree.Element(toNS(childTagName))
     r.text=text[1:-1] # Get rid of brackets
@@ -235,16 +233,46 @@ def save_graph_instance(graph):
     save_metadata(gn, "p:MetaData", graph.metadata)
 
     din = etree.Element(toNS("p:DeviceInstances"))
+    din.attrib["sorted"]="1"
     gn.append(din)
-    for di in graph.device_instances.values():
-        din.append(save_device_instance(di))
+    for i in sorted(graph.device_instances.keys()):
+        din.append(save_device_instance( graph.device_instances[i] ))
 
     ein = etree.Element(toNS("p:EdgeInstances"))
+    ein.attrib["sorted"]="1"
     gn.append(ein)
-    for ei in graph.edge_instances.values():
-        ein.append(save_edge_instance(ei))
+    for i in sorted(graph.edge_instances.keys()):
+        ein.append(save_edge_instance( graph.edge_instances[i] ))
 
     return gn
+    
+
+def save_graph_instance_metadata_patch(id,graphMeta,deviceMeta,edgeMeta):
+    gn = etree.Element(toNS("p:GraphInstanceMetadataPatch"))
+    gn.attrib["id"]=id
+
+    save_metadata(gn, "p:MetaData", graphMeta)
+
+    din = etree.Element(toNS("p:DeviceInstances"))
+    din.attrib["sorted"]="1"
+    gn.append(din)
+    for di in sorted(deviceMeta.keys()):
+        n=etree.Element(toNS("p:DevI"))
+        n.attrib["id"]=di
+        save_metadata(n, "p:M", deviceMeta[id])
+        din.append(n)
+        
+    ein = etree.Element(toNS("p:EdgeInstances"))
+    ein.attrib["sorted"]="1"
+    gn.append(ein)
+    for ei in sorted(edgeMeta.keys()):
+        n=etree.Element(toNS("p:EdgeI"))
+        n.attrib["id"]=ei
+        save_metadata(n, "p:M", edgeMeta[ei])
+        ein.append(n)
+        
+    return gn    
+ 
 
 def save_graph(graph,dst):
     nsmap = { None : "http://TODO.org/POETS/virtual-graph-schema-v1" }
@@ -259,3 +287,18 @@ def save_graph(graph,dst):
     #s=etree.tostring(root,pretty_print=True,xml_declaration=True).decode("utf8")
     #dst.write(s)
     tree.write(dst.buffer, pretty_print=True, xml_declaration=True)
+
+def save_metadata_patch(id,graphMeta,deviceMeta,edgeMeta,dst):
+    nsmap = { None : "http://TODO.org/POETS/virtual-graph-schema-v1" }
+    root=etree.Element(toNS("p:Graphs"), nsmap=nsmap)
+
+    root.append(save_graph_instance_metadata_patch(id,graphMeta,deviceMeta,edgeMeta))
+
+    # The wierdness is because stdout is in text mode, so we send
+    # it via a string. Ideally it would write it straight to the file...
+    tree = etree.ElementTree(root)
+    #s=etree.tostring(root,pretty_print=True,xml_declaration=True).decode("utf8")
+    #dst.write(s)
+    tree.write(dst.buffer, pretty_print=True, xml_declaration=True)
+
+    

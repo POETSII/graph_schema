@@ -359,3 +359,4 @@ def load_graph(src,basePath):
         raise RuntimeError("File contained more than one graph instance.")
     for x in graphInstances.values():
         return x
+
