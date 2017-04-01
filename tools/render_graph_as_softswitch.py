@@ -448,7 +448,7 @@ def render_graph_instance_as_softswitch(gi,dst,num_threads,device_to_thread):
     thread_to_devices=[[] for i in range(num_threads)]
     devices_to_thread={}
     for d in gi.device_instances.values():
-        t=device_to_thread(d)
+        t=device_to_thread[d]
         assert(t>=0 and t<num_threads)
         thread_to_devices[t].append(d)
         devices_to_thread[d]=t
@@ -574,8 +574,16 @@ if(len(instances)>0):
         
     assert(inst.graph_type.id==graph.id)
     
-    def device_to_thread(dev):
-        return hash(dev.id) % nThreads
+    partitionInfoKey="dt10.partitions.{}".format(nThreads)
+    partitionInfo=(inst.metadata or {}).get(partitionInfoKey,None)
+    
+    if partitionInfo:
+        key=partitionInfo["key"]
+        logging.info("Reading partition info from metadata.")
+        device_to_thread = { di.id:int(di.metadata[key]) for di in inst.device_instances.values() }
+    else:
+        logging.info("Generating random partition.")
+        device_to_thread = { id:(hash(id)%nThreads) for id in inst.device_instances.keys() }
 
     destInstPath=os.path.abspath("{}/{}_{}_inst.cpp".format(destPrefix,graph.id,inst.id))
     destInst=open(destInstPath,"wt")

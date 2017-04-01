@@ -113,7 +113,7 @@ grammar {
       &
       graphInstanceReference *
       &
-      graphMetadata *
+      graphInstanceMetadataPatch *
     }
 
   graphType =

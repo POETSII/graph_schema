@@ -2,15 +2,19 @@
 <Graphs xmlns="http://TODO.org/POETS/virtual-graph-schema-v1">
 <GraphType id="amg">
 
+<Documentation>
+This works from a state machine point of view, but numerically fails.
+
+We need to send the true residual up the tree, otherwise it blows up,
+so it seems we can't avoid doing a full cycle.
+</Documentation>
+
 <SharedCode><![CDATA[
 #include <cmath>
 ]]></SharedCode>
 
 <Properties>
     <Scalar type="float" name="residualTol"><Documentation>The tolerance for the maximum absolute residual.</Documentation></Scalar>
-    <Scalar type="uint32_t" default="2" name="preIterCount"><Documentation>Number of pre-coarse smooths.</Documentation></Scalar>
-    <Scalar type="uint32_t" default="2" name="coarseIterCount"><Documentation>Number of coarse iterations (ie. V vs W pattern).</Documentation></Scalar>
-    <Scalar type="uint32_t" default="2" name="postIterCount"><Documentation>Number of post-coarse smooths.</Documentation></Scalar>
 </Properties>
 
 <MessageTypes>
@@ -35,8 +39,6 @@
         <Documentation>Shares a current solution to $A_(i) x_(i) = b_(i)$.</Documentation>
         <Message>
             <Scalar type="float" name="x"><Documentation>Solution. Part of $x=x_(i)$.</Documentation></Scalar>
-            <Scalar type="uint32_t" name="tag"><Documentation>Used to indicate what stage of the algorithm this is comging from.</Documentation></Scalar>
-            
         </Message>
     </MessageType>
 
@@ -131,19 +133,13 @@
 
         enum State{
             State_Idle,         // Waiting for a problem to solve
-                                // [fineSeen==fineCount] : send/peer_out -> State_PreSmooth
+                                // when valid : send/peer_out -> State_Pre
                                 
-            State_PreSmooth,    // Doing the first smoothing step
-                                // [preSmoothSeen==peerCount] : send/peer_out -> State_Pre
-                                
-            State_PreResidual,  // Exchange for residual
-                                // [preResidSeen==peerCount] : send/peer_out -> State_Pre
+            State_Pre,          // Waiting till we've seen all peer messages
+                                // when pseen==nhood :  send/coarse_up -> State_Coarse
             
-            State_Coarse,       // Waiting till we get a message back from coarse
-                                // [coarseSeen==coarseCount] : send/peer_out -> State_PostSmooth
-            
-            State_PostSmooth    // Doing final smoothing before returning
-                                // [postSmoothSeen==peerCount] : send/coarse_down -> State_Idle
+            State_Coarse        // Waiting till we get a message back from coarse
+                                // when r<INF : send/fine_down -> State_Idle
         };
 
         ]]></SharedCode>
@@ -168,17 +164,16 @@
             <Scalar type="float" name="fineAcc" />
             <Scalar type="float" name="fineMaxResidual" />
 
-            <Scalar type="int32_t" name="preSmoothSeen" />
-            <Scalar type="float" name="preSmoothAcc" />
-            
-            <Scalar type="int32_t" name="preResidualSeen" />
-            <Scalar type="float" name="preResidualAcc" />
-            
+            <Scalar type="int32_t" name="peerSeen" />
+            <Scalar type="float" name="peerAcc" />
+
             <Scalar type="int32_t" name="coarseSeen" />
             <Scalar type="float" name="coarseAcc" />
-
-            <Scalar type="int32_t" name="postSmoothSeen" />
-            <Scalar type="float" name="postSmoothAcc" />
+            
+            
+            <Scalar type="float" name="dx"><Documentation>DEBUG ONLY - take me out</Documentation></Scalar>
+            <Scalar type="float" name="Lomega_x"><Documentation>DEBUG ONLY - take me out</Documentation></Scalar>
+            <Scalar type="float" name="LHS"><Documentation>DEBUG ONLY - take me out</Documentation></Scalar>
         </State>
 
         <ReadyToSend><![CDATA[
@@ -189,24 +184,14 @@
                     *readyToSend |= RTS_FLAG_peer_out;
                 }
                 break;
-            case State_PreSmooth:
-                if(deviceState->preSmoothSeen==deviceProperties->peerCount){
-                    *readyToSend |= RTS_FLAG_peer_out; // exchange for the residual
-                }
-                break;
-            case State_PreResidual:
-                if(deviceState->preResidualSeen==deviceProperties->peerCount){
-                    *readyToSend |= RTS_FLAG_coarse_up; // send to the coarse refinement
+            case State_Pre:
+                if(deviceState->peerSeen==deviceProperties->peerCount){
+                    *readyToSend |= RTS_FLAG_coarse_up;
                 }
                 break;
             case State_Coarse:
                 if(deviceState->coarseSeen==deviceProperties->coarseCount){
-                    *readyToSend |= RTS_FLAG_peer_out; // exchange for final smooth
-                }
-                break;
-            case State_PostSmooth:
-                if(deviceState->postSmoothSeen==deviceProperties->peerCount){
-                    *readyToSend |= RTS_FLAG_fine_down; // Seen it back down tree
+                    *readyToSend |= RTS_FLAG_fine_down;
                 }
                 break;
             default:
@@ -227,58 +212,22 @@
             deviceState->fineSeen++;  // Might enable send on peer_out
             deviceState->fineAcc+=edgeProperties->R * message->b;
             deviceState->fineMaxResidual=std::max(deviceState->fineMaxResidual, message->max_r);
-            
-            handler_log(2, "fineSeen=%d, fineAcc=%f", deviceState->fineSeen, deviceState->fineAcc);
             ]]></OnReceive>
         </InputPort>
 
 
         <OutputPort name="peer_out" messageTypeId="jacobi_exchange">
             <OnSend><![CDATA[
+            assert(deviceState->state==State_Idle);
+            assert(deviceState->fineSeen == deviceProperties->fineCount);
             
-            if(deviceState->state==State_Idle){
-                assert(deviceState->fineSeen == deviceProperties->fineCount);
+            deviceState->x = deviceState->fineAcc;
+            deviceState->fineSeen=0;
+            deviceState->fineAcc=0;
+            deviceState->fineMaxResidual=0;
+            deviceState->state=State_Pre;
             
-                deviceState->x=0;
-                deviceState->b=deviceState->fineAcc;
-                deviceState->fineSeen=0;
-                deviceState->fineAcc=0;
-                
-                message->x=deviceState->x;
-                message->tag=State_PreSmooth;
-
-                deviceState->state=State_PreSmooth;
-                handler_log(2, "Idle->Pre");
-            }else if(deviceState->state==State_PreSmooth){
-                assert(deviceState->preSmoothSeen==deviceProperties->peerCount);
-                
-                float dx =(deviceState->b - deviceState->preSmoothAcc) * deviceProperties->AdInvOmega
-                                - deviceProperties->omega * deviceState->x;
-                
-                deviceState->x += dx; // We are only smoothing here, residual will be done on send/coarse_down or send/coarse_up
-                deviceState->preSmoothSeen=0;
-                deviceState->preSmoothAcc=0;
-
-                message->x=deviceState->x;
-                message->tag=State_PreResidual;
-
-                deviceState->state=State_PreResidual;
-                handler_log(2, "PreSmooth->PreResidual");
-            }else if(deviceState->state==State_Coarse){
-                assert(deviceState->coarseSeen == deviceProperties->coarseCount);
-                
-                deviceState->x += deviceState->coarseAcc;
-                deviceState->coarseSeen=0;
-                deviceState->coarseAcc=0;
-                
-                message->x=deviceState->x;
-                message->tag=State_PostSmooth;
-
-                handler_log(2, "Coarse->PostSmooth");
-                deviceState->state=State_PostSmooth;
-            }else{
-                assert(0);
-            }
+            message->x=deviceState->x;
             ]]></OnSend>
         </OutputPort>
 
@@ -288,48 +237,36 @@
             </Properties>
             <OnReceive><![CDATA[
             // This can happen in any state at all
-            switch(message->tag){
-            case State_PreSmooth:
-                assert(deviceState->preSmoothSeen < deviceProperties->peerCount);
-                deviceState->preSmoothSeen++;
-                deviceState->preSmoothAcc+=message->x * edgeProperties->A;
-                break;
-            case State_PreResidual:
-                assert(deviceState->preResidualSeen < deviceProperties->peerCount);
-                deviceState->preResidualSeen++;
-                deviceState->preResidualAcc+=message->x * edgeProperties->A;
-                break;
-            case State_PostSmooth:
-                assert(deviceState->postSmoothSeen < deviceProperties->peerCount);
-                deviceState->postSmoothSeen++;
-                deviceState->postSmoothAcc+=message->x * edgeProperties->A;
-                break;
-            default:
-                assert(0);
-                break;
-            }
+            assert(deviceState->peerSeen < deviceProperties->peerCount);
+            
+            deviceState->peerSeen ++;  // This will eventually allow a send/coarse_up
+            deviceState->peerAcc += edgeProperties->A * message->x;
+            
             ]]></OnReceive>
         </InputPort>
-    
+
 
         <OutputPort name="coarse_up" messageTypeId="fine_to_coarse">
             <OnSend><![CDATA[
-            assert(deviceState->state==State_PreResidual);
-            assert(deviceState->preResidualSeen==deviceProperties->peerCount);
+            assert(deviceState->state==State_Pre);
+            assert(deviceState->peerSeen==deviceProperties->peerCount);
 
-            float r  = deviceState->b - deviceState->preResidualAcc - deviceProperties->Ad * deviceState->x;
-            
-            message->b = r;  // local residual to solve
-            message->max_r = deviceState->fineMaxResidual; // This is propagating the worst from any point on the grid
+            float r  = deviceState->b - deviceState->peerAcc - deviceProperties->Ad * deviceState->x;
+            float dx =(deviceState->b - deviceState->peerAcc) * deviceProperties->AdInvOmega
+                        - deviceProperties->omega * deviceState->x;
 
-            deviceState->fineMaxResidual=0;
-            deviceState->preResidualSeen=0;
-            deviceState->preResidualAcc=0;
-            
-            deviceState->max_r = -1;
+            deviceState->LHS = (deviceState->b - deviceState->peerAcc) * deviceProperties->AdInvOmega;
+            deviceState->Lomega_x = deviceProperties->omega * deviceState->x; // DEBUG
+            deviceState->dx=dx; // DEBUG
+
+            message->b = r;               // Use the old residual
+            message->max_r = std::abs(r) ;          // ... for both
+
+            deviceState->x += dx;
+            deviceState->peerSeen=0;
+            deviceState->peerAcc=0;
+            deviceState->max_r=FLT_MAX;
             deviceState->state=State_Coarse;
-            
-            handler_log(2, "PreResidual->Coarse");
             ]]></OnSend>
         </OutputPort>
 
@@ -342,29 +279,26 @@
             assert(deviceState->coarseSeen < deviceProperties->coarseCount);
             
             // We should receive exactly the same max_r from _all_ coarse nodes, as it all comes from one root.
-            assert(deviceState->max_r == -1 || deviceState->max_r==message->max_r);
+            assert(deviceState->max_r == FLT_MAX || deviceState->max_r==message->max_r);
 
             deviceState->coarseSeen++;   // This may enable sending on fine_down
             deviceState->coarseAcc += edgeProperties->P * message->x;
             deviceState->max_r = message->max_r;
-            
-            handler_log(2, "coarseSeen=%d", deviceState->coarseSeen);
             ]]></OnReceive>
         </InputPort>
 
         <OutputPort name="fine_down" messageTypeId="coarse_to_fine">
             <OnSend><![CDATA[
-            assert(deviceState->state==State_PostSmooth);
-            assert(deviceState->postSmoothSeen==deviceProperties->peerCount);
+            assert(deviceState->state==State_Coarse);
+            assert(deviceState->coarseSeen==deviceProperties->coarseCount);
             
-            float dx =(deviceState->b - deviceState->postSmoothAcc) * deviceProperties->AdInvOmega
-                - deviceProperties->omega * deviceState->x;
-            
-            deviceState->x += dx;
-            deviceState->postSmoothSeen=0;
-            deviceState->postSmoothAcc=0;
+            // TODO: This is slightly dangerous, as it is looking at the residual from
+            // before both the previous smooth and correction. Should it select the old x?
+
+            deviceState->x += deviceState->coarseAcc;
+            deviceState->coarseSeen=0;
+            deviceState->coarseAcc=0;
             deviceState->state=State_Idle;
-            handler_log(2, "Post->Idle");
             
             message->x = deviceState->x;
             message->max_r = deviceState->max_r;
@@ -393,18 +327,14 @@
 
         enum State{
             State_Idle,         // Waiting for a problem to solve
-                                // [r > residualTolerance] : send/peer_out -> State_PreSmooth
+                                // when r > tol -> State_Pre
                                 
-            State_PreSmooth,    // Doing the first smoothing step
-                                // [preSmoothSeen==peerCount] : send/peer_out -> State_Pre
-                                
-            State_PreResidual,  // Exchange for residual
-                                // [preResidualSeen==peerCount] : send/peer_out -> State_Pre
+            State_Pre,          // Waiting till we've seen all peer messages
+                                // when pseen==nhood :  send/coarse_up -> State_Coarse
             
-            State_Coarse,       // Waiting till we get a message back from coarse
-                                // [coarseSeen==coarseCount ^ r <= residualTolerance] : send/fine_down -> State_Idle
-                                // [coarseSeen==coarseCount ^ r > residualTolerance]  : send/peer_out -> State_PreSmooth
-            
+            State_Coarse        // Waiting till we get a message back from coarse
+                                // when r<= tol   : send/peer_out -> State_Pre
+                                // when r<tol<INF : send/solution -> State_Idle
         };
 
         ]]></SharedCode>
@@ -425,14 +355,16 @@
             <Scalar type="float" name="x"><Documentation>Current problem guess</Documentation></Scalar>
             <Scalar type="float" name="r"><Documentation>Global worst residual</Documentation></Scalar>
 
-            <Scalar type="int32_t" name="preSmoothSeen" />
-            <Scalar type="float" name="preSmoothAcc" />
-            
-            <Scalar type="int32_t" name="preResidualSeen" />
-            <Scalar type="float" name="preResidualAcc" />
+            <Scalar type="int32_t" name="peerSeen" />
+            <Scalar type="float" name="peerAcc" />
 
             <Scalar type="int32_t" name="coarseSeen" />
             <Scalar type="float" name="coarseAcc" />
+            
+            
+            <Scalar type="float" name="dx"><Documentation>DEBUG ONLY - take me out</Documentation></Scalar>
+            <Scalar type="float" name="Lomega_x"><Documentation>DEBUG ONLY - take me out</Documentation></Scalar>
+            <Scalar type="float" name="LHS"><Documentation>DEBUG ONLY - take me out</Documentation></Scalar>
         </State>
 
         <ReadyToSend><![CDATA[
@@ -443,13 +375,8 @@
                     *readyToSend |= RTS_FLAG_peer_out;
                 }
                 break;
-            case State_PreSmooth:
-                if(deviceState->preSmoothSeen==deviceProperties->peerCount){
-                    *readyToSend |= RTS_FLAG_peer_out;
-                }
-                break;
-            case State_PreResidual:
-                if(deviceState->preResidualSeen==deviceProperties->peerCount){
+            case State_Pre:
+                if(deviceState->peerSeen==deviceProperties->peerCount){
                     *readyToSend |= RTS_FLAG_coarse_up;
                 }
                 break;
@@ -467,13 +394,14 @@
                 break;
             }
             handler_log(3, "state=%d, coarseSeen=%d, coarseCount=%d", deviceState->state, deviceState->coarseSeen, deviceProperties->coarseCount);
+            handler_log(2, "leaf RTS : 0x%x", *readyToSend);
         ]]></ReadyToSend>
 
 
         <InputPort name="problem" messageTypeId="linear_problem">
             <OnReceive><![CDATA[
             assert(deviceState->state==State_Idle);
-            assert(deviceState->r ==0 ); // Must have finished the previous problem...
+            assert(deviceState->r <= graphProperties->residualTol); // Condition for entering this state
 
             deviceState->b = message->b;
             deviceState->x = message->x;
@@ -484,45 +412,16 @@
 
         <OutputPort name="peer_out" messageTypeId="jacobi_exchange">
             <OnSend><![CDATA[
-            if(deviceState->state==State_Idle){
-                assert(deviceState->r >= graphProperties->residualTol);
+            assert(deviceState->state==State_Idle || deviceState->state==State_Coarse);
             
-                message->x=deviceState->x;
-                message->tag=State_PreSmooth;
-
-                deviceState->state=State_PreSmooth;
-                handler_log(2, "Idle->Pre");
-            }else if(deviceState->state==State_PreSmooth){
-                assert(deviceState->preSmoothSeen==deviceProperties->peerCount);
-                
-                float dx =(deviceState->b - deviceState->preSmoothAcc) * deviceProperties->AdInvOmega
-                                - deviceProperties->omega * deviceState->x;
-                
-                deviceState->x += dx; // We are only smoothing here, residual will be done on send/coarse_down or send/coarse_up
-                deviceState->preSmoothSeen=0;
-                deviceState->preSmoothAcc=0;
-
-                message->x=deviceState->x;
-                message->tag=State_PreResidual;
-
-                deviceState->state=State_PreResidual;
-                handler_log(2, "PreSmooth->PreResidual");
-            }else if(deviceState->state==State_Coarse){
-                assert(deviceState->coarseSeen == deviceProperties->coarseCount);
-                assert(deviceState->r > graphProperties->residualTol); // Otherwise we would be sending the solution down
-                
-                deviceState->x += deviceState->coarseAcc;
-                deviceState->coarseSeen=0;
-                deviceState->coarseAcc=0;
-                
-                message->x=deviceState->x;
-                message->tag=State_PreSmooth;
-
-                handler_log(2, "Coarse->PreSmooth");
-                deviceState->state=State_PreSmooth;
-            }else{
-                assert(0);
-            }
+            // Coming from idle -> Pre, we have coarseAcc=0
+            // Otherwise for coarse -> pre it is the correction 
+            deviceState->x = deviceState->x + deviceState->coarseAcc;
+            deviceState->coarseSeen=0;
+            deviceState->coarseAcc=0;
+            deviceState->state=State_Pre;
+            
+            message->x=deviceState->x;
             ]]></OnSend>
         </OutputPort>
 
@@ -532,37 +431,34 @@
             </Properties>
             <OnReceive><![CDATA[
             // This can happen in any state at all
-            switch(message->tag){
-            case State_PreSmooth:
-                assert(deviceState->preSmoothSeen < deviceProperties->peerCount);
-                deviceState->preSmoothSeen++;
-                deviceState->preSmoothAcc+=message->x * edgeProperties->A;
-                break;
-            case State_PreResidual:
-                assert(deviceState->preResidualSeen < deviceProperties->peerCount);
-                deviceState->preResidualSeen++;
-                deviceState->preResidualAcc+=message->x * edgeProperties->A;
-                break;
-            default:
-                assert(0);
-                break;
-            }
+            assert(deviceState->peerSeen < deviceProperties->peerCount);
+            
+            deviceState->peerSeen ++;  // This will eventually allow a send/coarse_up
+            deviceState->peerAcc += edgeProperties->A * message->x;
+            
             ]]></OnReceive>
         </InputPort>
 
 
         <OutputPort name="coarse_up" messageTypeId="fine_to_coarse">
             <OnSend><![CDATA[
-            assert(deviceState->state==State_PreResidual);
-            assert(deviceState->preResidualSeen ==deviceProperties->peerCount);
+            assert(deviceState->state==State_Pre);
+            assert(deviceState->peerSeen ==deviceProperties->peerCount);
 
-            float r  = deviceState->b - deviceState->preResidualAcc - deviceProperties->Ad * deviceState->x;
-            
-            message->b = r;
-            message->max_r = std::abs(r) ;
+            float r  = deviceState->b - deviceState->peerAcc - deviceProperties->Ad * deviceState->x;
+            float dx =(deviceState->b - deviceState->peerAcc) * deviceProperties->AdInvOmega
+                        - deviceProperties->omega * deviceState->x;
 
-            deviceState->preResidualSeen=0;
-            deviceState->preResidualAcc=0;
+            deviceState->LHS = (deviceState->b - deviceState->peerAcc) * deviceProperties->AdInvOmega;
+            deviceState->Lomega_x = deviceProperties->omega * deviceState->x; // DEBUG
+            deviceState->dx=dx; // DEBUG
+
+            message->b = r;               // Use the old residual
+            message->max_r = std::abs(r) ;          // ... for both
+
+            deviceState->x += dx;
+            deviceState->peerSeen=0;
+            deviceState->peerAcc=0;
             deviceState->r = FLT_MAX;
             deviceState->state=State_Coarse;
             ]]></OnSend>
@@ -579,7 +475,7 @@
             // We should receive exactly the same max_r from _all_ coarse nodes, as it all comes from one root.
             assert(deviceState->r == FLT_MAX || deviceState->r==message->max_r);
 
-            deviceState->coarseSeen++;   // This may enable sending on either peer_out, or solution
+            deviceState->coarseSeen++;   // This many enable sending on either peer_out, or solution
             deviceState->coarseAcc += edgeProperties->P * message->x;
             deviceState->r = message->max_r;
             ]]></OnReceive>
@@ -589,17 +485,18 @@
             <OnSend><![CDATA[
             assert(deviceState->state==State_Coarse);
             assert(deviceState->coarseSeen==deviceProperties->coarseCount);
-            assert(deviceState->r <= graphProperties->residualTol); // We must have found a solution
+            assert(deviceState->r <= graphProperties->residualTol);
             
-            // Note that we _don't_ add the coarseCorrection, as we might make the residual worse
-            // So we return the x for which we have calculated the worst residual
-            message->x = deviceState->x;
-            message->r = deviceState->r;
-            
+            // TODO: This is slightly dangerous, as it is looking at the residual from
+            // before both the previous smooth and correction. Should it select the old x?
+
+            deviceState->x += deviceState->coarseAcc;
             deviceState->coarseSeen=0;
             deviceState->coarseAcc=0;
-            deviceState->r=0;
             deviceState->state=State_Idle;
+            
+            message->x = deviceState->x;
+            message->r = deviceState->r;
             ]]></OnSend>
         </OutputPort>
 

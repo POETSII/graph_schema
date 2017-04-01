@@ -383,7 +383,6 @@ class SendOrchestratorServicesImpl
   : public OrchestratorServices
 {
 private:
-  unsigned m_logLevel;
   FILE *m_dst;
   std::string m_prefix;
   const char *m_device;

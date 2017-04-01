@@ -53,7 +53,10 @@ def write_graph(dst, src):
         for k in order:
             cv=curr[k]
             pv=prev.get(k,None)
-            res+="<TR><TD>{}</TD><TD {}>{}</TD></TR>".format(k, 'color="red"' if cv!=pv else "",  cv)
+            if cv==pv:
+                res+="<TR><TD>{}</TD><TD>{}</TD></TR>".format(k,  cv)
+            else:
+                res+="<TR><TD>{}</TD><TD color='red'>{} / {}</TD></TR>".format(k, pv, cv)
         return res
         
     def makeMessage(m):
@@ -76,11 +79,11 @@ def write_graph(dst, src):
             curr={k:v for (k,v) in e.S.items() }
             content='"{}" [ shape=none, margin=0, label=< <TABLE>'.format(e.eventId)
             if e.type=="init":
-                content+='<TR><TD colspan="2">__init__</TD></TR>'
+                content+='<TR><TD colspan="2">{} : __init__</TD></TR>'.format(e.dev)
             elif e.type=="send":
-                content+='<TR><TD colspan="2">Send : {}</TD></TR>'.format(e.port)
+                content+='<TR><TD colspan="2">{} : Send : {}</TD></TR>'.format(e.dev,e.port)
             elif e.type=="recv":
-                content+='<TR><TD colspan="2">Recv : {}</TD></TR>'.format(e.port)
+                content+='<TR><TD colspan="2">{} : Recv : {}</TD></TR>'.format(e.dev,e.port)
             else:
                 raise RuntimeError("Unknown type.")
             content+=makeState(curr,prev,ko)

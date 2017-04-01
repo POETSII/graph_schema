@@ -1,5 +1,7 @@
 #!/usr/bin/python3
 
+raise RuntimeError("Not debugged or tested yet.")
+
 import argparse
 import logging
 

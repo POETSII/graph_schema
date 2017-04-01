@@ -8,6 +8,7 @@
 #include <random>
 #include <unordered_set>
 #include <algorithm>
+#include <signal.h>
 
 #include <cstring>
 #include <cstdlib>
@@ -210,15 +211,15 @@ struct EpochSim
     ReceiveOrchestratorServicesImpl receiveServices{logLevel, stderr, 0, 0};
     {
       std::stringstream tmp;
-      tmp<<"Epoch "<<m_epoch<<", Send: ";
+      tmp<<"Epoch "<<m_epoch<<", Recv: ";
       receiveServices.setPrefix(tmp.str().c_str());
     }
 
     SendOrchestratorServicesImpl sendServices{logLevel, stderr, 0, 0};
     {
       std::stringstream tmp;
-      tmp<<"Epoch "<<m_epoch<<", Recv: ";
-      receiveServices.setPrefix(tmp.str().c_str());
+      tmp<<"Epoch "<<m_epoch<<", Send: ";
+      sendServices.setPrefix(tmp.str().c_str());
     }
 
     std::vector<int> sendSel(m_devices.size());
@@ -385,6 +386,23 @@ void usage()
   exit(1);
 }
 
+std::shared_ptr<LogWriter> g_pLog; // for flushing purposes on exit
+
+void atexit_close_log()
+{
+  if(g_pLog){
+    g_pLog->close();
+  }
+}
+
+void onsignal_close_log (int)
+{
+  if(g_pLog){
+    g_pLog->close();
+  }
+  exit(1);
+}
+
 int main(int argc, char *argv[])
 {
   try{
@@ -484,6 +502,10 @@ int main(int argc, char *argv[])
     
     if(!logSinkName.empty()){
       graph.m_log.reset(new LogWriterToFile(logSinkName.c_str()));
+      g_pLog=graph.m_log;
+      atexit(atexit_close_log);
+      signal(SIGABRT, onsignal_close_log);
+      signal(SIGINT, onsignal_close_log);
     }
 
     loadGraph(&registry, parser.get_document()->get_root_node(), &graph);
@@ -532,11 +554,13 @@ int main(int argc, char *argv[])
     if(logLevel>1){
       fprintf(stderr, "Done\n");
     }
-
+  
   }catch(std::exception &e){
+    g_pLog->close();
     std::cerr<<"Exception : "<<e.what()<<"\n";
     exit(1);
   }catch(...){
+    g_pLog->close();
     std::cerr<<"Exception of unknown type\n";
     exit(1);
   }
