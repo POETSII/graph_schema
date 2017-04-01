@@ -116,6 +116,7 @@ def make_poisson_graph_instance(instName,n,m):
         
         # Create the next coarser level
         coarseNodes=add_level(level+1)
+        sys.stderr.write("Wiring up level {}\n".format(level))
         
         # Add the fine to coarse
         for (dst,src,R) in enum_rcv(L.R): # Convert to co-ordinate form, for easier enumeration

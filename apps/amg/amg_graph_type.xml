@@ -8,9 +8,6 @@
 
 <Properties>
     <Scalar type="float" name="residualTol"><Documentation>The tolerance for the maximum absolute residual.</Documentation></Scalar>
-    <Scalar type="uint32_t" default="2" name="preIterCount"><Documentation>Number of pre-coarse smooths.</Documentation></Scalar>
-    <Scalar type="uint32_t" default="2" name="coarseIterCount"><Documentation>Number of coarse iterations (ie. V vs W pattern).</Documentation></Scalar>
-    <Scalar type="uint32_t" default="2" name="postIterCount"><Documentation>Number of post-coarse smooths.</Documentation></Scalar>
 </Properties>
 
 <MessageTypes>
@@ -419,7 +416,6 @@
 
         <State>
             <Scalar type="int32_t" name="state" />
-            <Scalar type="int32_t" name="i"><Documentation>Number of iterations</Documentation></Scalar>
 
             <Scalar type="float" name="b"><Documentation>Current problem RHS</Documentation></Scalar>
             <Scalar type="float" name="x"><Documentation>Current problem guess</Documentation></Scalar>

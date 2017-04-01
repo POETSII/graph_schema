@@ -24,9 +24,9 @@ _type_to_tag={
     DeviceInstance : toNS("p:DevI")
 }
 
-def _type_to_element(t):
+def _type_to_element(parent,t):
     tag=_type_to_tag[type(t)]
-    return etree.Element(tag)
+    return etree.SubElement(parent,tag)
 
 def save_typed_data_spec(dt):
     if isinstance(dt,TupleTypedDataSpec):
@@ -64,7 +64,7 @@ def save_typed_struct_spec_contents(node,tuple):
         node.append(save_typed_data_spec(elt))
     return node
 
-def save_typed_struct_spec(node,childTagName,tuple):
+def save_typed_struct_spec(node,childTagNameWithNS,tuple):
     if tuple is None:
         return
 
@@ -72,12 +72,12 @@ def save_typed_struct_spec(node,childTagName,tuple):
     if len(tuple.elements_by_index)==0:
         return
 
-    r=etree.Element(toNS(childTagName))
+    r=etree.Element(childTagNameWithNS)
     save_typed_struct_spec_contents(r, tuple)
     node.append(r)
     return r
 
-def save_typed_struct_instance(node,childTagName,type,inst):
+def save_typed_struct_instance(node,childTagNameWithNS,type,inst):
     if inst is None:
         return
     assert type.is_refinement_compatible(inst)
@@ -88,39 +88,37 @@ def save_typed_struct_instance(node,childTagName,type,inst):
     except BaseException:
         raise RuntimeError("Exception while serialising '{}'".format(inst))
     assert text.startswith('{') and text.endswith('}')
-    r=etree.Element(toNS(childTagName))
+    r=etree.SubElement(node, childTagNameWithNS)
     r.text=text[1:-1] # Get rid of brackets
-    node.append(r)
     return r
 
-def save_metadata(node,childTagName,value):
+def save_metadata(node,childTagNameWithNS,value):
     if value is None:
         return
     text=json.dumps(value)
     assert text.startswith('{') and text.endswith('}')
-    r=etree.Element(toNS(childTagName))
+    r=etree.SubElement(node, childTagNameWithNS)
     r.text=text[1:-1] # Get rid of brackets
-    node.append(r)
     return r
 
 
-def save_message_type(mt):
-    n=_type_to_element(mt)
+def save_message_type(parent,mt):
+    n=_type_to_element(parent,mt)
 
     n.attrib["id"]=mt.id
-    save_typed_struct_spec(n, "p:Message", mt.message)
-    save_metadata(n, "p:MetaData", mt.metadata)
+    save_typed_struct_spec(n, toNS("p:Message"), mt.message)
+    save_metadata(n, toNS("p:MetaData"), mt.metadata)
 
     return n
 
 
-def save_device_type(dt):
-    n=_type_to_element(dt)
+def save_device_type(parent,dt):
+    n=_type_to_element(parent,dt)
 
     n.attrib["id"]=dt.id
-    save_typed_struct_spec(n, "p:Properties", dt.properties)
-    save_typed_struct_spec(n, "p:State", dt.state)
-    save_metadata(n, "p:MetaData", dt.metadata)
+    save_typed_struct_spec(n, toNS("p:Properties"), dt.properties)
+    save_typed_struct_spec(n, toNS("p:State"), dt.state)
+    save_metadata(n, toNS("p:MetaData"), dt.metadata)
 
     if dt.shared_code:
         for s in dt.shared_code:
@@ -129,24 +127,23 @@ def save_device_type(dt):
             n.append(sn)
 
     for p in dt.inputs_by_index:
-        pn=_type_to_element(p)
+        pn=_type_to_element(n,p)
         pn.attrib["name"]=p.name
         pn.attrib["messageTypeId"]=p.message_type.id
         if(p.properties):
-            save_typed_struct_spec(pn, "p:Properties", p.properties)
+            save_typed_struct_spec(pn, toNS("p:Properties"), p.properties)
         if(p.state):
-            save_typed_struct_spec(pn, "p:State", p.state)
+            save_typed_struct_spec(pn, toNS("p:State"), p.state)
 
-        save_metadata(pn, "p:MetaData", p.metadata)
+        save_metadata(pn, toNS("p:MetaData"), p.metadata)
 
         h=etree.Element(toNS("p:OnReceive"))
         h.text = etree.CDATA(p.receive_handler)
         #h.txt = p.received_handler
         pn.append(h)
-        n.append(pn)
 
     for p in dt.outputs_by_index:
-        pn=_type_to_element(p)
+        pn=_type_to_element(n,p)
         pn.attrib["name"]=p.name
         pn.attrib["messageTypeId"]=p.message_type.id
 
@@ -156,7 +153,6 @@ def save_device_type(dt):
         h.text = etree.CDATA(p.send_handler)
         #h.text = p.send_handler
         pn.append(h)
-        n.append(pn)
 
     pn=etree.Element(toNS("ReadyToSend"))
     pn.text=etree.CDATA(dt.ready_to_send_handler)
@@ -165,45 +161,39 @@ def save_device_type(dt):
     return n
 
 
-def save_device_instance(di):
-    n=_type_to_element(di)
+_device_instance_tag_type=toNS("p:DevI")
+_device_instance_properties_type=toNS("p:P")
+_device_instance_metadata_type=toNS("p:M")
 
-    n.attrib["id"]=di.id
-    n.attrib["type"]=di.device_type.id
-    save_typed_struct_instance(n, "p:P", di.device_type.properties, di.properties)
 
-    save_metadata(n, "p:M", di.metadata)
+def save_device_instance(parent, di):
+    n=etree.SubElement(parent, _device_instance_tag_type, {"id":di.id,"type":di.device_type.id} )
+
+    save_typed_struct_instance(n, _device_instance_properties_type, di.device_type.properties, di.properties)
+    save_metadata(n, _device_instance_metadata_type, di.metadata)
+
+    return n
+
+_edge_instance_tag_type=toNS("p:EdgeI")
+_edge_instance_properties_type=toNS("p:P")
+_edge_instance_metadata_type=toNS("p:M")
+
+def save_edge_instance(parent, ei):
+    n=etree.SubElement(parent, _edge_instance_tag_type, {"path":ei.id } )
+
+    save_typed_struct_instance(n, _edge_instance_properties_type, ei.dst_port.properties, ei.properties)
+    save_metadata(n, _edge_instance_metadata_type, ei.metadata)
 
     return n
 
 
-def save_edge_instance(ei):
-    n=_type_to_element(ei)
-
-    if True:
-        n.attrib["path"]="{}:{}-{}:{}".format(ei.dst_device.id, ei.dst_port.name,ei.src_device.id,ei.src_port.name)
-    else:
-        n.attrib["dstDeviceId"]=ei.dst_device.id
-        n.attrib["dstPortName"]=ei.dst_port.name
-        n.attrib["srcDeviceId"]=ei.src_device.id
-        n.attrib["srcPortName"]=ei.src_port.name
-
-    save_typed_struct_instance(n, "p:P", ei.dst_port.properties, ei.properties)
-
-    save_metadata(n, "p:M", ei.metadata)
-
-
-    return n
-
-
-def save_graph_type(graph):
-    gn = _type_to_element(graph);
+def save_graph_type(parent, graph):
+    gn = _type_to_element(parent,graph)
     gn.attrib["id"]=graph.id
 
+    save_typed_struct_spec(gn, toNS("p:Properties"), graph.properties)
 
-    save_typed_struct_spec(gn, "p:Properties", graph.properties)
-
-    save_metadata(gn, "p:MetaData", graph.metadata)
+    save_metadata(gn, toNS("p:MetaData"), graph.metadata)
 
     if graph.shared_code:
         for code in graph.shared_code:
@@ -214,62 +204,62 @@ def save_graph_type(graph):
     etn = etree.Element(toNS("p:MessageTypes"))
     gn.append(etn)
     for et in graph.message_types.values():
-        etn.append(save_message_type(et))
+        save_message_type(parent, et)
 
     dtn = etree.Element(toNS("p:DeviceTypes"))
     gn.append(dtn)
     for dt in graph.device_types.values():
-        dtn.append(save_device_type(dt))
+        save_device_type(parent,dt)
 
     return gn
 
-def save_graph_instance(graph):
-    gn = _type_to_element(graph);
+def save_graph_instance(parent, graph):
+    gn = _type_to_element(parent, graph);
     gn.attrib["id"]=graph.id
     gn.attrib["graphTypeId"]=graph.graph_type.id
 
-    save_typed_struct_instance(gn, "p:Properties", graph.graph_type.properties ,graph.properties)
+    save_typed_struct_instance(gn, toNS("p:Properties"), graph.graph_type.properties ,graph.properties)
 
-    save_metadata(gn, "p:MetaData", graph.metadata)
+    save_metadata(gn, toNS("p:MetaData"), graph.metadata)
 
     din = etree.Element(toNS("p:DeviceInstances"))
     din.attrib["sorted"]="1"
     gn.append(din)
     for i in sorted(graph.device_instances.keys()):
-        din.append(save_device_instance( graph.device_instances[i] ))
+        save_device_instance(din, graph.device_instances[i] )
 
     ein = etree.Element(toNS("p:EdgeInstances"))
     ein.attrib["sorted"]="1"
     gn.append(ein)
     for i in sorted(graph.edge_instances.keys()):
-        ein.append(save_edge_instance( graph.edge_instances[i] ))
+        save_edge_instance(ein, graph.edge_instances[i] )
 
     return gn
     
 
-def save_graph_instance_metadata_patch(id,graphMeta,deviceMeta,edgeMeta):
+def save_graph_instance_metadata_patch(parent, id,graphMeta,deviceMeta,edgeMeta):
     gn = etree.Element(toNS("p:GraphInstanceMetadataPatch"))
     gn.attrib["id"]=id
+    parent.append(gn)
 
-    save_metadata(gn, "p:MetaData", graphMeta)
+    save_metadata(gn, toNS("p:MetaData"), graphMeta)
 
     din = etree.Element(toNS("p:DeviceInstances"))
     din.attrib["sorted"]="1"
     gn.append(din)
+    diTag=toNS("p:DevI")
     for di in sorted(deviceMeta.keys()):
-        n=etree.Element(toNS("p:DevI"))
-        n.attrib["id"]=di
-        save_metadata(n, "p:M", deviceMeta[id])
-        din.append(n)
+        n=etree.SubElement(din, diTag, {"id":di})
+        save_metadata(n, toNS("p:M"), deviceMeta[id])
+        
         
     ein = etree.Element(toNS("p:EdgeInstances"))
     ein.attrib["sorted"]="1"
     gn.append(ein)
+    eiTag=toNS("p:EdgeI")
     for ei in sorted(edgeMeta.keys()):
-        n=etree.Element(toNS("p:EdgeI"))
-        n.attrib["id"]=ei
-        save_metadata(n, "p:M", edgeMeta[ei])
-        ein.append(n)
+        n=etree.SubElement(ein, eiTag, {"id":ei})
+        save_metadata(n, toNS("p:M"), edgeMeta[ei])
         
     return gn    
  
@@ -278,9 +268,12 @@ def save_graph(graph,dst):
     nsmap = { None : "http://TODO.org/POETS/virtual-graph-schema-v1" }
     root=etree.Element(toNS("p:Graphs"), nsmap=nsmap)
 
-    root.append(save_graph_type(graph.graph_type))
-    root.append(save_graph_instance(graph))
+    sys.stderr.write("save_graph: Constructing graph type tree\n")
+    save_graph_type(root,graph.graph_type)
+    sys.stderr.write("save_graph: Constructing graph inst tree\n")
+    save_graph_instance(root,graph)
 
+    sys.stderr.write("save_graph: writing\n")
     # The wierdness is because stdout is in text mode, so we send
     # it via a string. Ideally it would write it straight to the file...
     tree = etree.ElementTree(root)
@@ -292,7 +285,7 @@ def save_metadata_patch(id,graphMeta,deviceMeta,edgeMeta,dst):
     nsmap = { None : "http://TODO.org/POETS/virtual-graph-schema-v1" }
     root=etree.Element(toNS("p:Graphs"), nsmap=nsmap)
 
-    root.append(save_graph_instance_metadata_patch(id,graphMeta,deviceMeta,edgeMeta))
+    save_graph_instance_metadata_patch(root, id,graphMeta,deviceMeta,edgeMeta)
 
     # The wierdness is because stdout is in text mode, so we send
     # it via a string. Ideally it would write it straight to the file...
