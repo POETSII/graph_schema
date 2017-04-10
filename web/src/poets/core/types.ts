@@ -106,6 +106,8 @@ export abstract class InputPort
         public readonly name : string,
         public readonly edgeType : EdgeType
     ){}
+
+    index : number = -1;
     
     abstract onReceive(
         graphProperties : TypedData,
@@ -124,6 +126,8 @@ export abstract class OutputPort
         public readonly name : string,
         public readonly edgeType : EdgeType
     ){}
+
+    index : number = -1;
     
     abstract onSend (
         graphProperties : TypedData,
@@ -137,7 +141,9 @@ export abstract class OutputPort
 export class DeviceType
 {
     inputs : {[key:string]:InputPort} = {};
+    inputsByIndex : InputPort[] = [];
     outputs : {[key:string]:OutputPort} = {};
+    outputsByIndex : OutputPort[] = [];
     
     constructor(
         public readonly id:string,
@@ -146,13 +152,24 @@ export class DeviceType
         inputs : InputPort[] = [],
         outputs : OutputPort[] = []
     ){
+        var numInputs=0;
         for(let i of inputs){
             //console.log(`  adding ${i.name}, edgeType=${i.edgeType.id}`);
+            assert(i.index==-1);
+            i.index=numInputs;
             this.inputs[i.name]=i;
+            this.inputsByIndex.push(i);
+            numInputs++;
+            
         }
+        var numOutputs=0;
         for(let o of outputs){
             //console.log(`  adding ${o.name}`);
+            assert(o.index==-1);
+            o.index=numOutputs;
             this.outputs[o.name]=o;
+            this.outputsByIndex.push(o);
+            numOutputs++;
         }
     }
     

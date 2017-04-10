@@ -22,7 +22,9 @@ import OutputPort = POETS.OutputPort;
 class CellDeviceProperties
     extends TypedData
 {
-    static elements = [tInt("nhood"),tInt("dt"),tFloat("iv"),tFloat("wSelf")];
+    static elements = [
+        tInt("nhood"),tInt("dt",1),tFloat("iv"),tFloat("wSelf")
+     ];
 
     constructor(
         _spec_ : TypedDataSpec,
@@ -41,7 +43,8 @@ class CellDeviceState
     static elements = [
         tFloat("v"), tInt("t"),
         tInt("cs"), tFloat("ca"),
-        tInt("ns"), tFloat("na")
+        tInt("ns"), tFloat("na"),
+        tBoolean("force")
     ];
 
     constructor(
@@ -51,7 +54,8 @@ class CellDeviceState
         public cs : number = 0,
         public ca : number = 0,
         public ns : number = 0,
-        public na : number = 0
+        public na : number = 0,
+        public force : boolean = false
     ){
         super("cell_state", _spec_);
     };
@@ -150,7 +154,9 @@ class CellOutOutputPort
             rts["out"]=false;
             return false;
         }else{
-            deviceState.v=deviceState.ca;
+            if(!deviceState.force){
+                deviceState.v=deviceState.ca;
+            }
             deviceState.t += deviceProperties.dt;
             deviceState.cs = deviceState.ns;
             deviceState.ca = deviceState.na + deviceProperties.wSelf * deviceState.v;

@@ -84,6 +84,11 @@ Vagrant.configure(2) do |config|
      # Editors
      sudo apt-get install -y emacs-nox screen
 
+     # Creating meshes
+     sudo apt-get install -y octave octave-msh octave-geometry
+     # Given the change, sympy pulls in all of tex, and is about 1GB
+     sudo apt-get install python3-sympy --no-install-recommends
+
      # Used to support generation of documentation from schema
      sudo apt-get install -y xsltproc ant libsaxon-java docbook docbook-xsl-ns pandoc
 

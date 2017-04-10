@@ -21,8 +21,11 @@ class DirichletDeviceProperties
     extends TypedData
 {
     static elements = [
-        tInt("dt"), tInt("neighbours"),
-        tFloat("amplitude"), tFloat("phase"), tFloat("frequency"), tFloat("bias")
+        tInt("dt",1), tInt("neighbours"),
+        tFloat("amplitude",1.0),
+        tFloat("phase",0.5),
+        tFloat("frequency",1.0),
+        tFloat("bias")
     ];
 
     constructor(

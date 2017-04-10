@@ -472,7 +472,9 @@ export class BatchStepper
             );
             ++count;
             if(doSend){
-                for(let e of dev.outputs[port.name]){
+                //let outgoing=dev.outputs[port.name];
+                let outgoing=dev.outputsByIndex[port.index];
+                for(let e of outgoing){
                 
                     e.dstPort.onReceive(
                         this.g.properties,

@@ -76,14 +76,14 @@ export class ScalarDataType
     }
 }
 
-export function tFloat(name:string) : ScalarDataType
-{ return new ScalarDataType(name,"float");}
+export function tFloat(name:string, defaultValue:number=0.0) : ScalarDataType
+{ return new ScalarDataType(name,"float",defaultValue);}
 
-export function tInt(name:string) : ScalarDataType
-{ return new ScalarDataType(name,"int");}
+export function tInt(name:string, defaultValue:number=0.0) : ScalarDataType
+{ return new ScalarDataType(name,"int",defaultValue);}
 
-export function tBoolean(name:string) : ScalarDataType
-{ return new ScalarDataType(name,"boolean");}
+export function tBoolean(name:string,defaultValue:boolean=false) : ScalarDataType
+{ return new ScalarDataType(name,"boolean",defaultValue);}
 
 
 export class VectorDataType

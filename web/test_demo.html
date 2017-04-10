@@ -4,60 +4,9 @@
 
 <script src="scripts/require.js"></script>
 
-<script src="sigma.js/src/sigma.core.js"></script>
-<script src="sigma.js/src/conrad.js"></script>
-<script src="sigma.js/src/utils/sigma.utils.js"></script>
-<script src="sigma.js/src/utils/sigma.polyfills.js"></script>
-<script src="sigma.js/src/sigma.settings.js"></script>
-<script src="sigma.js/src/classes/sigma.classes.dispatcher.js"></script>
-<script src="sigma.js/src/classes/sigma.classes.configurable.js"></script>
-<script src="sigma.js/src/classes/sigma.classes.graph.js"></script>
-<script src="sigma.js/src/classes/sigma.classes.camera.js"></script>
-<script src="sigma.js/src/classes/sigma.classes.quad.js"></script>
-<script src="sigma.js/src/classes/sigma.classes.edgequad.js"></script>
-<script src="sigma.js/src/captors/sigma.captors.mouse.js"></script>
-<script src="sigma.js/src/captors/sigma.captors.touch.js"></script>
-<script src="sigma.js/src/renderers/sigma.renderers.canvas.js"></script>
-<script src="sigma.js/src/renderers/sigma.renderers.webgl.js"></script>
-<script src="sigma.js/src/renderers/sigma.renderers.svg.js"></script>
-<script src="sigma.js/src/renderers/sigma.renderers.def.js"></script>
-<script src="sigma.js/src/renderers/webgl/sigma.webgl.nodes.def.js"></script>
-<script src="sigma.js/src/renderers/webgl/sigma.webgl.nodes.fast.js"></script>
-<script src="sigma.js/src/renderers/webgl/sigma.webgl.edges.def.js"></script>
-<script src="sigma.js/src/renderers/webgl/sigma.webgl.edges.fast.js"></script>
-<script src="sigma.js/src/renderers/webgl/sigma.webgl.edges.arrow.js"></script>
-<script src="sigma.js/src/renderers/canvas/sigma.canvas.labels.def.js"></script>
-<script src="sigma.js/src/renderers/canvas/sigma.canvas.hovers.def.js"></script>
-<script src="sigma.js/src/renderers/canvas/sigma.canvas.nodes.def.js"></script>
-<script src="sigma.js/src/renderers/canvas/sigma.canvas.edges.def.js"></script>
-<script src="sigma.js/src/renderers/canvas/sigma.canvas.edges.curve.js"></script>
-<script src="sigma.js/src/renderers/canvas/sigma.canvas.edges.arrow.js"></script>
-<script src="sigma.js/src/renderers/canvas/sigma.canvas.edges.curvedArrow.js"></script>
-<script src="sigma.js/src/renderers/canvas/sigma.canvas.edgehovers.def.js"></script>
-<script src="sigma.js/src/renderers/canvas/sigma.canvas.edgehovers.curve.js"></script>
-<script src="sigma.js/src/renderers/canvas/sigma.canvas.edgehovers.arrow.js"></script>
-<script src="sigma.js/src/renderers/canvas/sigma.canvas.edgehovers.curvedArrow.js"></script>
-<script src="sigma.js/src/renderers/canvas/sigma.canvas.extremities.def.js"></script>
-<script src="sigma.js/src/renderers/svg/sigma.svg.utils.js"></script>
-<script src="sigma.js/src/renderers/svg/sigma.svg.nodes.def.js"></script>
-<script src="sigma.js/src/renderers/svg/sigma.svg.edges.def.js"></script>
-<script src="sigma.js/src/renderers/svg/sigma.svg.edges.curve.js"></script>
-<script src="sigma.js/src/renderers/svg/sigma.svg.labels.def.js"></script>
-<script src="sigma.js/src/renderers/svg/sigma.svg.hovers.def.js"></script>
-<script src="sigma.js/src/middlewares/sigma.middlewares.rescale.js"></script>
-<script src="sigma.js/src/middlewares/sigma.middlewares.copy.js"></script>
-<script src="sigma.js/src/misc/sigma.misc.animation.js"></script>
-<script src="sigma.js/src/misc/sigma.misc.bindEvents.js"></script>
-<script src="sigma.js/src/misc/sigma.misc.bindDOMEvents.js"></script>
-<script src="sigma.js/src/misc/sigma.misc.drawHovers.js"></script>
-<!-- END SIGMA IMPORTS -->
-<script src="sigma.js/plugins/sigma.renderers.parallelEdges/utils.js"></script>
-<script src="sigma.js/plugins/sigma.renderers.parallelEdges/sigma.canvas.edges.curve.js"></script>
-<script src="sigma.js/plugins/sigma.renderers.parallelEdges/sigma.canvas.edges.curvedArrow.js"></script>
-<script src="sigma.js/plugins/sigma.renderers.parallelEdges/sigma.canvas.edgehovers.curve.js"></script>
-<script src="sigma.js/plugins/sigma.renderers.parallelEdges/sigma.canvas.edgehovers.curvedArrow.js"></script>
-<script src="sigma.js/plugins/sigma.renderers.customShapes/shape-library.js"></script>
-<script src="sigma.js/plugins/sigma.renderers.customShapes/sigma.renderers.customShapes.js"></script>
+<style>
+
+</style>
 
 </head>
 <body>
@@ -68,20 +17,15 @@
             Reset
         </button>
         <select id="topology">
-            <option value="rect">Rectangular</option>
-            <option value="hex">Hexagonal</option>
             <option value="file">File (Buggy)</option>
+            <option value="file2">File2 (Buggy)</option>
+            <option value="file4">File4 (Buggy)</option>
         </select>
         
         <label>width: <input id="width" value="12"></input></label>
         <select id="engine">
             <option value="single">Single stepper (faithful blocking)</option>
             <option value="batch">Batch stepper (fast)</option>
-        </select>
-        <select id="renderer">
-            <option value="canvas">Canvas (pretty but slow)</option>
-            <option value="webgl">WebGL (fast)</option>
-            <option value="svg">SVG (buggy)</option>
         </select>
     </div>
 
@@ -100,6 +44,7 @@
         <input id="step-size" value="1">
         </input>
         </label>
+        <label><input type="checkbox" id="force-pointer" checked="checked"></input>Force from Pointer</label>
         <label><input type="checkbox" id="show-events" checked="checked"></input>Hide events</label>
         <label><input type="checkbox" id="show-heat" checked="checked" ></input>Show time</label>
         <span>Events: <span id="total-events">0</span></span>
@@ -122,8 +67,10 @@ var GUI=null;
 var s=null;
 var stepper=null;
 var SVG=null;
+var svgPanZoom=null;
 
 var polys={};
+var arrows={};
 var statePanel=null;
 
 function hex2(v)
@@ -185,10 +132,12 @@ var showEvents=true;
 var showTime=false;
 var useVoronoi=false;
 
+var pointerIsForcing=false;
+
 var timeLevels=10;
 var timeColors=[];
 for(let i=0; i<timeLevels; i++){
-    let rgb=HSVtoRGB(i/timeLevels, 1, 1);
+    let rgb=HSVtoRGB(i/timeLevels/2, 1, 1);
     timeColors.push( "#"+hex2(rgb[0])+hex2(rgb[1])+hex2(rgb[2]) );
 }
 
@@ -200,23 +149,77 @@ for(let i=0; i<heatLevels; i++){
     heatColors.push( "#"+hex2(rgb[0])+hex2(rgb[1])+hex2(rgb[2]) );
 }
 
-function updateNodeStyle(n)
+function vecAdd(a,b)
+{ return [a[0]+b[0], a[1]+b[1]]; }
+
+function vecSub(a,b)
+{ return [a[0]-b[0], a[1]-b[1]]; }
+
+function vecDistance(a,b)
+{ return Math.sqrt( (a[0]-b[0])*(a[0]-b[0]) + (a[1]-b[1])*(a[1]-b[1]) ); }
+
+function vecNormalise(x)
 {
-    var device=n.device;
-    if(showEvents){
-        n.borderColor = device.blocked() ? "#FF0000" : device.is_rts() ? "#00FF00" : "#808080";
-    }else{
-        n.borderColor = "#808080";
-    }
-    if(showTime){
-        let t = device.state.t % timeLevels;
-        n.color = timeColors[t]; 
-    }else{
-        let v = Math.floor((device.state.v + 1)/2 * heatLevels);
-        //console.log(" v="+device.state.v+", v="+v);
-        n.color = heatColors[v]; 
-    }
-};
+    let l=Math.sqrt(x[0]*x[0]+x[1]*x[1]);
+    return [ x[0] / l, x[1] / l];
+}
+
+function vecAngle(a,b,c)
+{
+    let ab=vecNormalise( [a[0]-b[0],a[1]-b[1]] );
+    let cb=vecNormalise( [c[0]-b[0],c[1]-b[1]] );
+    return Math.acos( ab[0]*cb[0] + ab[1]*cb[1] );
+}
+
+function vecRotate(x, theta)
+{
+    return [ Math.cos(theta)*x[0]-Math.sin(theta)*x[1],   Math.sin(theta)*x[0]+Math.cos(theta)*x[1] ];
+}
+
+function vecScale(x,s)
+{ return [x[0]*s,x[1]*s]; }
+
+function makeArrow(svg, e,b)
+{
+    // Midpoint between b and e
+    var m=[ (b[0]+e[0])/2,(b[1]+e[1])/2 ]
+
+    // Vector from b to m
+    var b_to_m= vecSub(m,b);
+    
+    // Vector from m to c (turn counter-clockwise by 90 degrees)
+    let theta=Math.PI*1.5;
+    var m_to_c= vecRotate(b_to_m, theta);
+
+    // Centre of the circle
+    var c=vecAdd(m,m_to_c);
+    var r=vecDistance(b,c);
+
+    // angle of b-c-m and m-c-e
+    let outer=vecAngle(b,c,m);
+
+    // Find the three points along the curve between the edges
+    let bp=vecAdd(vecRotate(vecSub(b,c), -outer*0.4),c);
+    let mp=vecAdd(vecRotate(vecSub(b,c), -outer),c);
+    let ep=vecAdd(vecRotate(vecSub(e,c), outer*0.4),c);
+
+    let arrAngle=0.05; // How much do the arrow ends trail the mid-point by?
+    let apL=vecAdd(vecRotate(vecSub(mp,c), +Math.PI*arrAngle),c);
+    let apT=vecAdd(vecRotate(vecSub(mp,c), -Math.PI*arrAngle),c);
+    let apT1=vecAdd(vecScale(vecSub(apT,c),0.8),c);
+    let apT2=vecAdd(vecScale(vecSub(apT,c),1.2),c);
+
+    //return svg.path("M "+b[0]+" "+b[1]+"  A "+r+" "+r+" 0 0 0 "+e[0]+" "+e[1]);
+
+    return svg.path("M "+bp[0]+" "+bp[1]
+                 +"  A "+r+" "+r+" 0 0 0 "+ep[0]+" "+ep[1]
+                 +"  M "+apT1[0]+" "+apT1[1]
+                 +"  L "+apL[0]+" "+apL[1]
+                 +"  L "+apT2[0]+" "+apT2[1]
+                 );
+    
+}
+
 function updateNodeStyleVor(d)
 {
     var device=d
@@ -231,35 +234,50 @@ function updateNodeStyleVor(d)
         poly.fill(timeColors[t]); 
     }else{
         let v = Math.floor((device.state.v + 1)/2 * heatLevels);
-        console.log(" v="+device.state.v+", v="+v);
-        poly.fill(heatColors[v]); 
+        //console.log(" v="+device.state.v+", v="+v);
+        //poly.fill(heatColors[v]); 
+        poly.node.setAttribute("fill",heatColors[v]);
+    }
+    if(poly.selected){
+        poly.stroke("#FFFFFF");
+        poly.node.parentNode.appendChild(poly.node); // Bring to the front
+    }else{
+        poly.attr('stroke',null);
     }
 };
 
 function updateEdgeStyle(e)
 {
-    var edge=e.edge;
+    var edge=e;
+    var arrow=arrows[edge.id];
     if(showEvents){
-        e.color= edge.empty() ? "#808080" : "#00FF00";
+        arrow.attr('visibility','visible');
+        arrow.attr('stroke', edge.empty() ? "#808080" : "#00FF00");
     }else{
-        e.color="#808080";
+        arrow.attr('visibility','hidden');
     }
-};
+}
+
+function updateAllDevices(s)
+{
+    for(let d of G.enumDevices()){
+        updateNodeStyleVor(d);
+    }
+    
+}
+
+function updateAllEdges(s)
+{
+    for(let e of G.enumEdges()){
+        updateEdgeStyle(e);
+    }
+}
 
 function updateAllNodes(s)
 {
-    if(useVoronoi){
-        for(let d of G.enumDevices()){
-            updateNodeStyleVor(d);
-        }
-    }else{
-        for(let d of s.graph.nodes()){
-            updateNodeStyle(d);
-        }
-        for(let e of s.graph.edges()){
-            updateEdgeStyle(e);
-        }
-        s.refresh({skipIndexation: true});
+    updateAllDevices();
+    if(showEvents){
+        updateAllEdges();
     }
     statePanel.update();
 }
@@ -300,121 +318,116 @@ function animate()
 
 function resetGraph()
 {
-    var w=$("#width").val()|0;
-    var h=w;
-
     console.log("Pre");
     
-    useVoronoi=false;
-
     var topology=$("#topology").val();
-    if(topology=="hex"){
-        G=H.makeGridHex(w,h*2);
-    }else if(topology=="file"){
-        //G=C.loadGraphFromUrl("/graphs/heat_rect_8x8.xml");
+    if(topology=="file"){
         G=C.loadGraphFromUrl("/graphs/poets.xml");
         useVoronoi=true;
+    }else if(topology=="file2"){
+        G=C.loadGraphFromUrl("/graphs/poets2.xml");
+        useVoronoi=true;
+    }else if(topology=="file4"){
+        G=C.loadGraphFromUrl("/graphs/poets4.xml");
+        useVoronoi=true;
     }else{
-        G=H.makeGrid(w,h);
+        G=0;
     }
     console.log("Post");
 
     totalEvents=0;    
     runAnim=false;
 
-    if(s!=null){
-        s.graph.clear();
-        s.graph.kill();
-        $("#graph-container").empty();
-        s=null;
-    }
-    
-    if(useVoronoi){
-        polys={};
-    
-        var minX=+1e10;
-        var maxX=-1e10;
-        var minY=+1e10;
-        var maxY=-1e10;
-        
-        $("#graph-container").empty();
-        var svg=SVG('graph-container').size('100%', '100%')
-        
-        add=function(x,y){
-            minX=Math.min(minX,x);
-            minY=Math.min(minY,y);
-            maxX=Math.max(maxX,x);
-            maxY=Math.max(maxY,y);
-        };
-        
-        for(var d of G.enumDevices()){
-            m=d.metadata;
-            hull=m["hull"];
-            // TODO : HACK!
-            if(hull){
-                for(var dim=0;dim<3;dim++){
-                    hull[dim][1]=-hull[dim][1];
-                    console.log(`${dim[0]} ${dim[1]}`)    
-                    add(hull[dim][0],hull[dim][1])
-                    console.log(`  ${minX},${maxX}`)
-                }
-            }
-            console.log(`  ${minX},${maxX}`)
-            
-            var poly=svg.polyline( hull ).id('node-'+d.id);
-            polys[d.id]=poly;
-        }
-        svg.viewbox({ x: minX, y: minY, width: maxX-minX, height: maxY-minY })
-    }else{
-        // Sigma
-        
-        s = new sigma({
-            renderer: {
-                container: document.getElementById('graph-container'),
-                type: $("#renderer").val()
-            },
-            settings: {
-                drawLabels: false,
-                maxNodeSize: 10,
-                minNodeSize: 0.25,
-                minEdgeSize: 0.5,
-                maxEdgeSize: 3
-            }
-        });
+    polys={};
 
-        for(var d of G.enumDevices()){
-            s.graph.addNode({
-                id:d.id,
-                label:d.id,
-                x:d.metadata["x"]*50,
-                y:d.metadata["y"]*50,
-                size:0.5,
-                color:"#FFFFFF",
-                type: d.deviceType.id=="cell" ? "circle" : "square",
-                borderColor:"#000000",
-                device:d
-            });
+    var minX=+1e10;
+    var maxX=-1e10;
+    var minY=+1e10;
+    var maxY=-1e10;
+    
+    $("#graph-container").empty();
+    var svg=SVG('graph-container').size('100%', '100%')
+
+    
+    add=function(x,y){
+        minX=Math.min(minX,x);
+        minY=Math.min(minY,y);
+        maxX=Math.max(maxX,x);
+        maxY=Math.max(maxY,y);
+    };
+
+    var sumArea=0.0;
+    var numDevices=0;
+    for(var d of G.enumDevices()){
+        sumArea += d.metadata["area"];
+        numDevices++;
+    }
+    var meanArea=sumArea / numDevices;
+    var meanLength=Math.sqrt(meanArea);
+    var strokeWidth=meanLength/5;
+    
+    var devicesGroup=svg.group();
+    for(var d of G.enumDevices()){
+        m=d.metadata;
+        hull=m["hull"];
+        hull=hull.slice(0);
+        // TODO : HACK!
+        if(hull){
+            for(var dim=0;dim<3;dim++){
+                hull[dim][1]=-hull[dim][1];
+                console.log(`${dim[0]} ${dim[1]}`)    
+                add(hull[dim][0],hull[dim][1])
+                console.log(`  ${minX},${maxX}`)
+            }
+            add(hull[0][0],hull[0][1])
         }
-        for(var n of s.graph.nodes()){
-            n.device.gNode=n;
-            updateNodeStyle(n);
-        }
-        for(var e of G.enumEdges()){
-            s.graph.addEdge({
-                id:e.id,
-                source:e.srcDev.id,
-                target:e.dstDev.id,
-                 type: "curvedArrow",
-                 size:1,
-                 color:"#000000",
-                 edge:e
-            });
-        }
-        for(var e of s.graph.edges()){
-            e.edge.gEdge=e;
-            updateEdgeStyle(e);
+        console.log(`  ${minX},${maxX}`)
+        hull.push(hull[0]); // Join the shape up
+        
+        var poly=devicesGroup.polyline( hull ).id('node-'+d.id);
+        polys[d.id]=poly;
+        poly.attr('stroke-width',strokeWidth); // Create a reasonable stroke width
+        poly.attr('stroke',null); // But don't want a stroke
+        poly.device=d;
+        poly.selected=false;
+
+        poly.on('mouseover',function(){
+            this.selected=true;
+            if(pointerIsForcing){
+                this.device.state.v=+5;
+                this.device.state.force=true;
+            }
+            statePanel.attach(this.device);
+            updateNodeStyleVor(this.device);
+        });
+        poly.on('mouseleave',function(){
+            this.selected=false;
+            this.device.state.force=false;
+            updateNodeStyleVor(this.device);
+        });
+    }
+
+    for(var e of G.enumEdges()){
+        var src=e.srcDev, dst=e.dstDev;
+        var cSrc=[src.metadata["x"],-src.metadata["y"]];
+        var cDst=[dst.metadata["x"],-dst.metadata["y"]];
+
+        if(cSrc && cDst){
+            var arrow=makeArrow(svg, cDst, cSrc);
+            arrow.attr('stroke-width', strokeWidth/2);
+            arrow.attr('fill','none');
+            arrow.style('pointer-events','none'); // Don't want to hit-test mouse on arrows
+            arrow.edge=e;
+
+            arrows[e.id]=arrow;
         }
     }
+
+    svg.viewbox({ x: minX, y: minY, width: maxX-minX, height: maxY-minY })
+
+    panZoom = svgPanZoom(svg.node, {zoomScaleSensitivity: 0.3});
+    
+    updateAllNodes();
     
     if($("#engine").val()=="batch"){
         stepper=new C.BatchStepper();
@@ -423,21 +436,6 @@ function resetGraph()
     }
     stepper.attach(G,true);
     
-    if(useVoronoi){
-    
-    }else{
-        s.refresh();
-        updateAllNodes(s);
-        
-         s.bind('clickNode', function(e) {
-            //console.log(e.type, e.data.node.label, e.data.captor);
-            var node=e.data.node;
-            var device=node.device;
-
-            statePanel.attach(device);
-        });
-    }
-    
    
 }
 
@@ -445,11 +443,12 @@ console.log("Pre load");
 
 require(['scripts/require_config'],function() {
 
-    require(['scripts/core/core','scripts/graphs/heat_graph', 'scripts/graphs/all','scripts/gui/gui', 'scripts/svg'], function(CC,HH,AG,GG,svg){
+    require(['scripts/core/core','scripts/graphs/heat_graph', 'scripts/graphs/all','scripts/gui/gui', 'scripts/svg','svg-pan-zoom'], function(CC,HH,AG,GG,svg,pz){
         C=CC;
         H=HH;
         GUI=GG;
         SVG=svg;
+        svgPanZoom=pz;
 
         AG.registerAllGraphTypes();
 
@@ -479,13 +478,17 @@ require(['scripts/require_config'],function() {
 
         $("#show-events").change(function(){
             showEvents=!!this.checked;
-            s.settings('drawEdges',showEvents);
-            updateAllNodes(s);
+            updateAllEdges(s);
         });
 
         $("#show-heat").change(function(){
             showTime=!this.checked;
-            updateAllNodes(s);
+            updateAllEdges(s);
+        });
+
+        $("#force-pointer").change(function(){
+            pointerIsForcing=!!this.checked;
+            updateAll(s);
         });
     });
 });

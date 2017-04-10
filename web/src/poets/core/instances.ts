@@ -14,18 +14,26 @@ export class DeviceInstance
         public metadata : {[key:string]:any;} = {}
     )
     {
-        for(let k in deviceType.outputs){
-            this.rts[k]=false;
-            this.outputs[k]=[];
+        for(var i=0;i<deviceType.outputsByIndex.length; i++){
+            let k=deviceType.outputsByIndex[i];
+            this.rts[k.name]=false;
+            this.outputs[k.name]=[];
+            this.outputsByIndex.push([]);
         }
-        for(let k in deviceType.inputs){
-            this.inputs[k]=[];
+        for(var i=0;i<deviceType.inputsByIndex.length; i++){
+            let k=deviceType.inputsByIndex[i];
+            this.inputs[k.name]=[];
+            this.inputsByIndex.push([]);
         }
     }
 
     rts : ReadySet = {};
     inputs : { [key:string] : EdgeInstance[]; } = {};
     outputs : { [key:string] : EdgeInstance[]; } = {};
+
+    // These are faster to access than by name
+    outputsByIndex : EdgeInstance[][] = [];
+    inputsByIndex : EdgeInstance[][] = [];
 
     // Controls the rate for this device. If rate==1.0, then
     // it runs at full rate, if rate==0.0, then nothing happens.
@@ -214,7 +222,9 @@ export class GraphInstance
         this.edges[id]=edge;
         this.edgesA.push(edge);
         srcDev.outputs[srcPort.name].push(edge);
+        srcDev.outputsByIndex[srcPort.index].push(edge);
         dstDev.inputs[dstPort.name].push(edge);
+        dstDev.inputsByIndex[dstPort.index].push(edge);
     }
 };
 
