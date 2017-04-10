@@ -57,7 +57,8 @@ export class ScalarDataType
 
     constructor(
         public name:string,
-        public type:"float"|"int"|"boolean"
+        public type:"float"|"int"|"boolean",
+        public defaultValue:any = 0
     )
     {}
 
@@ -262,6 +263,8 @@ function import_typed_data(spec:TypedDataSpec, data:any) : TypedData
         for(let e of spec.elementsByIndex){
             if(data.hasOwnProperty(e.name)){
                 res[e.name] = data[e.name];
+            }else if(e instanceof ScalarDataType){
+                res[e.name] = e.defaultValue;
             }else{
                 throw "NotImplemented";
             }

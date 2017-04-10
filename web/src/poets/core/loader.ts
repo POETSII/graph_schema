@@ -120,7 +120,7 @@ function split_path(path:string) : [string,string,string,string]
 
 export function loadGraphXmlToEvents(registry:Registry, parent:Element, events:GraphLoadEvents) : void
 {
-    var ns="http://TODO.org/POETS/virtual-graph-schema-v0";
+    var ns="http://TODO.org/POETS/virtual-graph-schema-v1";
 
     let eGraph= find_single(parent, "GraphInstance", ns);
     if(!eGraph)
@@ -163,29 +163,6 @@ export function loadGraphXmlToEvents(registry:Registry, parent:Element, events:G
 
         let id=get_attribute_required(eDevice, "id");
         let deviceTypeId=get_attribute_required(eDevice, "type");
-
-        var metadata:{ [id:string]:any; } = {};
-
-        var nativeLocationStr = get_attribute_optional(eDevice, "nativeLocation");
-        if(nativeLocationStr){
-            var nativeLocation : number[] = [];
-            for(let e of nativeLocationStr.split(',')){
-                nativeLocation.push(parseFloat(e));
-            }
-            if(nativeLocation.length<=3){
-                metadata["x"]=nativeLocation[0];
-                if(nativeLocation.length>1){
-                    metadata["y"]=nativeLocation[1];
-                }
-                if(nativeLocation.length>2){
-                    metadata["z"]=nativeLocation[2];
-                }
-            }else{
-                for(let i=0; i<nativeLocation.length; i++){
-                    metadata[`loc${i}`]=nativeLocation[i];
-                }
-            }
-        }
     
         var dt=graphType.deviceTypes[deviceTypeId];
         if(!dt){
@@ -199,8 +176,15 @@ export function loadGraphXmlToEvents(registry:Registry, parent:Element, events:G
         }else{
             deviceProperties=dt.properties.create();
         }
+        
+        var metadata:{ [id:string]:any; } = {};
+        let eMetadata=find_single(eDevice, "M", ns);
+        if(eMetadata){
+            var value=eMetadata.textContent;
+            metadata=JSON.parse("{"+value+"}");
+        }
 
-        console.log(`  Adding device ${id}`);
+        console.log(`  Adding device ${id}, metadata=${metadata}`);
         var dId=events.onDeviceInstance(gId, dt, id, deviceProperties, metadata);
 
         devices[id]=[dId, dt];
@@ -396,7 +380,7 @@ export function loadGraphFromString(data:string, registry:Registry|null=null) : 
     console.log("Parsing xml");
     let doc=parser.parseFromString(data, "application/xml");
     console.log("Looking for graphs");
-    let graphs=doc.getElementsByTagName("Graph");
+    let graphs=doc.getElementsByTagName("Graphs");
     for(let elt of graphs){
         let builder=new GraphBuilder();
 
@@ -411,7 +395,7 @@ export function loadGraphFromString(data:string, registry:Registry|null=null) : 
 
 export function loadGraphFromXml(data:Element, registry:Registry|null=null) : GraphInstance
 {
-    let graphs=data.getElementsByTagName("Graph");
+    let graphs=data.getElementsByTagName("Graphs");
     for(let i=0; i<graphs.length; i++){
         let elt=graphs[i];
 

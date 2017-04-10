@@ -30,7 +30,7 @@ export class DeviceInstance
     // Controls the rate for this device. If rate==1.0, then
     // it runs at full rate, if rate==0.0, then nothing happens.
     // The exact semantics are determined by the simulator
-    rate : number = 0.5;
+    rate : number = 1.0;
 
     private _is_blocked : boolean = false;
     private _is_rts : boolean = false;

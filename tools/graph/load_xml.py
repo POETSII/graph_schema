@@ -172,6 +172,7 @@ def load_device_type(graph,dtNode,sourceFile):
 
         (handler,sourceLine)=get_child_text(p,"p:OnReceive")
         dt.add_input(name,message_type,properties,state,pinMetadata, handler,sourceFile,sourceLine)
+        sys.stderr.write("      Added input {}\n".format(name))
 
     for p in dtNode.findall("p:OutputPort",ns):
         name=get_attrib(p,"name")
@@ -192,6 +193,7 @@ def load_device_type(graph,dtNode,sourceFile):
 
 def load_graph_type(graphNode, sourcePath):
     id=get_attrib(graphNode,"id")
+    sys.stderr.write("  Loading graph type {}\n".format(id))
 
     properties=None
     propertiesNode=graphNode.find("p:Properties",ns)
@@ -213,6 +215,7 @@ def load_graph_type(graphNode, sourcePath):
     for dtNode in graphNode.findall("p:DeviceTypes/p:*",ns):
         dt=load_device_type(graphType,dtNode, sourcePath)
         graphType.add_device_type(dt)
+        sys.stderr.write("    Added device type {}\n".format(dt.id))
 
     return graphType
 
@@ -243,7 +246,11 @@ def load_device_instance(graph,diNode):
 
     device_type_id=get_attrib(diNode,"type")
     if device_type_id not in graph.graph_type.device_types:
-        raise XMLSyntaxError("Unknown device type id {}".format(device_type_id))
+        raise XMLSyntaxError("Unknown device type id {}, known devices = [{}]".format(device_type_id,
+                        [d.id for d in graph.graph_type.device_types.keys()]
+                    ),
+                    diNode
+                )
     device_type=graph.graph_type.device_types[device_type_id]
 
     properties=None
@@ -278,9 +285,13 @@ def load_edge_instance(graph,eiNode):
         dst_port_name=get_attrib(eiNode,"dstPortName")
         src_device_id=get_attrib(eiNode,"srcDeviceId")
         src_port_name=get_attrib(eiNode,"srcPortName")
-
+    
     dst_device=graph.device_instances[dst_device_id]
     src_device=graph.device_instances[src_device_id]
+    
+    assert dst_port_name in dst_device.device_type.inputs, "Couldn't find input port called '{}' in device type '{}'. Inputs are [{}]".format(dst_port_name,dst_device.device_type.id, [p.name for p in dst_device.device_type.inputs])
+    assert src_port_name in src_device.device_type.outputs
+    
 
     properties=None
     propertiesNode=eiNode.find("p:P",ns)

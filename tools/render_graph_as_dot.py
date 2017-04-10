@@ -99,13 +99,14 @@ def write_graph(dst, graph,devStates=None,edgeStates=None):
 
     minFirings={}
     maxFirings={}
-    for (id,es) in edgeStates.items():
-        et=graph.edge_instances[id].message_type.id
-        firings=int(es[1])
-        minFirings[et]=min(firings,  minFirings.get(et,firings))
-        maxFirings[et]=max(firings,  maxFirings.get(et,firings))
+    if edgeStates:
+        for (id,es) in edgeStates.items():
+            et=graph.edge_instances[id].message_type.id
+            firings=int(es[1])
+            minFirings[et]=min(firings,  minFirings.get(et,firings))
+            maxFirings[et]=max(firings,  maxFirings.get(et,firings))
 
-    sys.stderr.write("min = {}, max = {}\n".format(minFirings,maxFirings))
+        sys.stderr.write("min = {}, max = {}\n".format(minFirings,maxFirings))
 
     out('digraph "{}"{{'.format(graph.id))
     out('  sep="+10,10";');
@@ -115,19 +116,21 @@ def write_graph(dst, graph,devStates=None,edgeStates=None):
     for di in graph.device_instances.values():
         dt=di.device_type
 
-        stateTuple=devStates.get(di.id,None)
-        if stateTuple:
-            state=stateTuple[0]
-            rts=stateTuple[1]
+        if devStates:
+            stateTuple=devStates.get(di.id,None)
+            if stateTuple:
+                state=stateTuple[0]
+                rts=stateTuple[1]
 
 
         props=[]
         shape=deviceTypeToShape[di.device_type.id]
         props.append('shape={}'.format(shape))
 
-        #pos=di.native_location
-        #if pos:
-        #    props.append('pos="{},{}"'.format(pos[0]*0.25,pos[1]*0.25))
+        meta=di.metadata
+        if meta and "x" in meta and "y" in meta:
+            props.append('pos="{},{}"'.format(meta["x"],meta["y"]))
+            props.append('pin=true')
 
         for b in bind_dev:
             #print("Type : {}".format(di.device_type.state))
@@ -155,11 +158,12 @@ def write_graph(dst, graph,devStates=None,edgeStates=None):
     addLabels=len(graph.edge_instances) < 50
 
     for ei in graph.edge_instances.values():
-        stateTuple=edgeStates.get(ei.id,None)
-        if stateTuple:
-            state=stateTuple[0]
-            firings=stateTuple[1]
-            queue=stateTuple[2]
+        if edgeStates:
+            stateTuple=edgeStates.get(ei.id,None)
+            if stateTuple:
+                state=stateTuple[0]
+                firings=stateTuple[1]
+                queue=stateTuple[2]
 
         props={}
         props["color"]=edgeTypeToColor[ei.message_type.id]

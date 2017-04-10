@@ -13,16 +13,16 @@ def toNS(t):
     tt=t.replace("p:","{"+ns["p"]+"}")
     return tt
 
-_type_to_tag={
-    GraphType : toNS("p:GraphType"),
-    MessageType : toNS("p:MessageType"),
-    DeviceType : toNS("p:DeviceType"),
-    InputPort : toNS("p:InputPort"),
-    OutputPort : toNS("p:OutputPort"),
-    GraphInstance : toNS("p:GraphInstance"),
-    EdgeInstance : toNS("p:EdgeI"),
-    DeviceInstance : toNS("p:DevI")
-}
+#_type_to_tag={
+#    GraphType : toNS("p:GraphType"),
+#    MessageType : toNS("p:MessageType"),
+#    DeviceType : toNS("p:DeviceType"),
+#    InputPort : toNS("p:InputPort"),
+#    OutputPort : toNS("p:OutputPort"),
+#    GraphInstance : toNS("p:GraphInstance"),
+#    EdgeInstance : toNS("p:EdgeI"),
+#    DeviceInstance : toNS("p:DevI")
+#}
 
 def _type_to_element(parent,t):
     tag=_type_to_tag[type(t)]
@@ -103,7 +103,7 @@ def save_metadata(node,childTagNameWithNS,value):
 
 
 def save_message_type(parent,mt):
-    n=_type_to_element(parent,mt)
+    n=etree.SubElement(parent,toNS("p:MessageType"))
 
     n.attrib["id"]=mt.id
     save_typed_struct_spec(n, toNS("p:Message"), mt.message)
@@ -113,7 +113,7 @@ def save_message_type(parent,mt):
 
 
 def save_device_type(parent,dt):
-    n=_type_to_element(parent,dt)
+    n=etree.SubElement(parent,toNS("p:DeviceType"))
 
     n.attrib["id"]=dt.id
     save_typed_struct_spec(n, toNS("p:Properties"), dt.properties)
@@ -122,12 +122,11 @@ def save_device_type(parent,dt):
 
     if dt.shared_code:
         for s in dt.shared_code:
-            sn=etree.Element(toNS("p:SharedCode"))
+            sn=etree.SubElement(n,toNS("p:SharedCode"))
             sn.text=etree.CDATA(s)
-            n.append(sn)
 
     for p in dt.inputs_by_index:
-        pn=_type_to_element(n,p)
+        pn=etree.SubElement(n,toNS("p:InputPort"))
         pn.attrib["name"]=p.name
         pn.attrib["messageTypeId"]=p.message_type.id
         if(p.properties):
@@ -143,7 +142,7 @@ def save_device_type(parent,dt):
         pn.append(h)
 
     for p in dt.outputs_by_index:
-        pn=_type_to_element(n,p)
+        pn=etree.SubElement(n,toNS("OutputPort"))
         pn.attrib["name"]=p.name
         pn.attrib["messageTypeId"]=p.message_type.id
 
@@ -188,7 +187,7 @@ def save_edge_instance(parent, ei):
 
 
 def save_graph_type(parent, graph):
-    gn = _type_to_element(parent,graph)
+    gn = etree.SubElement(parent,toNS("p:GraphType"))
     gn.attrib["id"]=graph.id
 
     save_typed_struct_spec(gn, toNS("p:Properties"), graph.properties)
@@ -204,17 +203,17 @@ def save_graph_type(parent, graph):
     etn = etree.Element(toNS("p:MessageTypes"))
     gn.append(etn)
     for et in graph.message_types.values():
-        save_message_type(parent, et)
+        save_message_type(etn, et)
 
     dtn = etree.Element(toNS("p:DeviceTypes"))
     gn.append(dtn)
     for dt in graph.device_types.values():
-        save_device_type(parent,dt)
+        save_device_type(dtn,dt)
 
     return gn
 
 def save_graph_instance(parent, graph):
-    gn = _type_to_element(parent, graph);
+    gn = etree.SubElement(parent, toNS("p:GraphInstance"));
     gn.attrib["id"]=graph.id
     gn.attrib["graphTypeId"]=graph.graph_type.id
 
@@ -232,6 +231,8 @@ def save_graph_instance(parent, graph):
     ein.attrib["sorted"]="1"
     gn.append(ein)
     for i in sorted(graph.edge_instances.keys()):
+        assert( graph.edge_instances[i].dst_device.id in graph.device_instances )
+        assert( graph.edge_instances[i].src_device.id in graph.device_instances )
         save_edge_instance(ein, graph.edge_instances[i] )
 
     return gn
@@ -279,7 +280,14 @@ def save_graph(graph,dst):
     tree = etree.ElementTree(root)
     #s=etree.tostring(root,pretty_print=True,xml_declaration=True).decode("utf8")
     #dst.write(s)
-    tree.write(dst.buffer, pretty_print=True, xml_declaration=True)
+    
+    # TODO : Fix this!
+    if (sys.version_info > (3, 0)):
+        # Python3
+        tree.write(dst.buffer, pretty_print=True, xml_declaration=True)
+    else:
+        #Python2
+        tree.write(dst, pretty_print=True, xml_declaration=True)
 
 def save_metadata_patch(id,graphMeta,deviceMeta,edgeMeta,dst):
     nsmap = { None : "http://TODO.org/POETS/virtual-graph-schema-v1" }
@@ -292,6 +300,13 @@ def save_metadata_patch(id,graphMeta,deviceMeta,edgeMeta,dst):
     tree = etree.ElementTree(root)
     #s=etree.tostring(root,pretty_print=True,xml_declaration=True).decode("utf8")
     #dst.write(s)
-    tree.write(dst.buffer, pretty_print=True, xml_declaration=True)
+    
+    # TODO : Fix this!
+    if (sys.version_info > (3, 0)):
+        # Python3
+        tree.write(dst.buffer, pretty_print=True, xml_declaration=True)
+    else:
+        #Python2
+        tree.write(dst, pretty_print=True, xml_declaration=True)
 
     

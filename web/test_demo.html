@@ -107,48 +107,7 @@
     </div>
 </div>
 <div style="display:flex;       width:100%; height:80%;"    > 
-    <div id="description" style="flex-basis:30%; overflow-y:scroll">
-        <p>Hit "Step" to advance once. Hit "Run" to advance lots.
-        <p>If you want to see the big (fast) picture, suggest you set:
-            <ul>
-                <li>Width=32+
-                <li>Batch-Stepper
-                <li>WebGL
-                <li>Disable show-events
-            </ul>
-            Then hit "reset" and "run"
-
-        <p>
-        <p>Single-stepper / Event-mode
-        <p>In event mode the edges are simulated as channels with a single
-            buffer slot. When a node sends, a copy is placed in all channels
-            (and it turns green). If any outgoing edge currently has a message,
-            then the source node will be unable to send until that message
-            is received by the target (i.e. that node is blocked).
-        <ul>
-        <li>Nodes:
-            <ul>
-                <li>Grey border : idle (waiting for messages)
-                <li>Green border : ready (want to send, and not blocked)
-                <li>Red border: blocked (want to send, blocked by one or more edges)
-            </ul>
-        <li>Edges:
-            <ul>
-                <li>Grey edge: channel currently empty
-                <li>Green edge: message pending in channel
-            </ul>
-        </ul>
-
-        <p>Batch stepper
-        <p>The batch stepper will ignore channel buffers, and allow a device to
-            send its message and immediately call the send handler on
-            all target devices. All devices that are ready to send get a
-            chance to send one message in each frame. This is a lot faster
-            to simulate, but is less realistic in terms of messages and
-            blocking.
-
-    </div>
-    <div id="container"  style="flex-basis:50%">
+    <div id="container"  style="flex-basis:80%">
         <div id="graph-container" style="width:100%; height:100%;"></div>
     </div>
     <div id="state-panel" style="flex-basis:20%; overflow-y:scroll">
@@ -345,6 +304,8 @@ function resetGraph()
     var h=w;
 
     console.log("Pre");
+    
+    useVoronoi=false;
 
     var topology=$("#topology").val();
     if(topology=="hex"){
@@ -352,6 +313,7 @@ function resetGraph()
     }else if(topology=="file"){
         //G=C.loadGraphFromUrl("/graphs/heat_rect_8x8.xml");
         G=C.loadGraphFromUrl("/graphs/poets.xml");
+        useVoronoi=true;
     }else{
         G=H.makeGrid(w,h);
     }
@@ -388,8 +350,10 @@ function resetGraph()
         for(var d of G.enumDevices()){
             m=d.metadata;
             hull=m["hull"];
+            // TODO : HACK!
             if(hull){
                 for(var dim=0;dim<3;dim++){
+                    hull[dim][1]=-hull[dim][1];
                     console.log(`${dim[0]} ${dim[1]}`)    
                     add(hull[dim][0],hull[dim][1])
                     console.log(`  ${minX},${maxX}`)
