@@ -16,7 +16,6 @@ export class DeviceInstance
     {
         for(var i=0;i<deviceType.outputsByIndex.length; i++){
             let k=deviceType.outputsByIndex[i];
-            this.rts[k.name]=false;
             this.outputs[k.name]=[];
             this.outputsByIndex.push([]);
         }
@@ -27,7 +26,7 @@ export class DeviceInstance
         }
     }
 
-    rts : ReadySet = {};
+    rts : number = 0;
     inputs : { [key:string] : EdgeInstance[]; } = {};
     outputs : { [key:string] : EdgeInstance[]; } = {};
 
@@ -38,38 +37,45 @@ export class DeviceInstance
     // Controls the rate for this device. If rate==1.0, then
     // it runs at full rate, if rate==0.0, then nothing happens.
     // The exact semantics are determined by the simulator
-    rate : number = 1.0;
+    rate : number = Math.random()*0.1+0.9;
 
     private _is_blocked : boolean = false;
     private _is_rts : boolean = false;
 
     update() : void
     {
-        var _blocked=false;
-        var _is_rts=false;
-        for( let k in this.rts){
-            var lrts=this.rts[k];
-            _is_rts = _is_rts || lrts;
-            if(lrts){
-                for( let e of  this.outputs[k]){
-                    let b = e.full();
-                    _blocked=_blocked || b;
+        var _all_blocked=true; // All ports that are ready are also blocked
+        
+        // Loop over all bits in rts
+        var bits=this.rts;
+        var index=0;
+        while(bits){
+            var _this_blocked=false;
+            let is_ready=bits&1;
+            if(is_ready){
+                let outgoing=this.outputsByIndex[index];
+                for(let e of outgoing){
+                    if(e.full()){
+                        _this_blocked=true;
+                        break;
+                    }
+                }
+                if(!_this_blocked){
+                    _all_blocked=false;
+                    break; // We don't need to keep checking
                 }
             }
+            bits=bits>>1;
+            index=index+1;
         }
-        this._is_blocked=_blocked;
-        this._is_rts=_is_rts;
+        this._is_rts= this.rts!=0;
+        this._is_blocked=_all_blocked;
+        
     }
 
     update_rts_only() : void
     {
-        this._is_rts=false;
-        for( let k in this.rts){
-            if(this.rts[k]){
-                this._is_rts=true;
-                return;
-            }
-        }
+        this._is_rts = this.rts!=0;
     }
 
     blocked() : boolean

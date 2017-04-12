@@ -66,7 +66,7 @@ class SendEvent
         public readonly device : DeviceInstance,
         public readonly port : OutputPort,
         public state : TypedData,
-        public rts : ReadySet,
+        public rts : number,
         public readonly message : TypedData,
         public readonly cancelled : boolean
     ){
@@ -93,7 +93,7 @@ class InitEvent
     constructor(
         public readonly device : DeviceInstance,
         public state : TypedData,
-        public rts : ReadySet,
+        public rts : number,
         public readonly message : TypedData
     ){
         super();
@@ -120,7 +120,7 @@ class ReceiveEvent
     constructor(
         public readonly edge : EdgeInstance,
         public state : TypedData,
-        public rts : ReadySet,
+        public rts : number,
         public readonly message : TypedData
     ){
         super();
@@ -206,15 +206,14 @@ export class SingleStepper
                 let message=port.edgeType.message.create();
                 
                 let preState=d.deviceType.state.import(d.state);
-                let preRts=clone(d.rts);
-                port.onReceive(
+                let preRts=d.rts;
+                d.rts=port.onReceive(
                     this.g.properties,
                     d.properties,
                     d.state,
                     port.edgeType.properties.create(),
                     port.edgeType.state.create(),
-                    message,
-                    d.rts
+                    message
                 );
                 this.history.push(new InitEvent(d, preState, preRts, message));
             }
@@ -295,30 +294,35 @@ export class SingleStepper
 
             assert(dev.is_rts());
 
-            let rts=dev.rts;
-            let rtsPorts:string[]=[];
-            for(let k in rts){
-                if(rts[k]){
-                    rtsPorts.push(k);
+            let rtsPorts:number[]=[];
+            {
+                var rtsBits=dev.rts;
+                var rtsIndex=0;
+                while(rtsBits){
+                    if(rtsBits&1){
+                        rtsPorts.push(rtsIndex);
+                    }
+                    rtsBits>>=1;
+                    rtsIndex++;
                 }
             }
 
             assert(rtsPorts.length>0);
 
             let selPort=Math.floor(Math.random()*rtsPorts.length);
-            let port=dev.deviceType.getOutput(rtsPorts[selPort]);
+            let port=dev.deviceType.getOutputByIndex(rtsPorts[selPort]);
 
             let message=port.edgeType.message.create();
 
             let preState=dev.deviceType.state.import(dev.state)
-            let preRts=clone(dev.rts);
+            let preRts=dev.rts;
 
-            let doSend=port.onSend(
+            var doSend:boolean;
+            [doSend,dev.rts]=port.onSend(
                 this.g.properties,
                 dev.properties,
                 dev.state,
-                message,
-                dev.rts
+                message
             );
             res.push(new SendEvent(dev, port, preState, preRts, message, !doSend));
             //console.log(` send to ${dev.id} : state'=${JSON.stringify(dev.state)}, rts'=${JSON.stringify(dev.rts)}`);
@@ -341,15 +345,14 @@ export class SingleStepper
             e.queue.splice(0,1);
             
             let preState=e.dstDev.deviceType.state.import(e.dstDev.state);
-            let preRts=clone(e.dstDev.rts);
-            e.dstPort.onReceive(
+            let preRts=e.dstDev.rts;
+            e.dstDev.rts=e.dstPort.onReceive(
                 this.g.properties,
                 e.dstDev.properties,
                 e.dstDev.state,
                 e.properties,
                 e.state,
-                message,
-                e.dstDev.rts
+                message
             );
             res.push(new ReceiveEvent(e, preState, preRts, message));
 
@@ -372,6 +375,8 @@ export class BatchStepper
 {
     g : GraphInstance|null = null;
 
+    rts : DeviceInstance [] = [];
+
     history : Event[] = [];
 
     attach(
@@ -386,14 +391,13 @@ export class BatchStepper
                 let port=d.deviceType.inputs["__init__"];
                 let message=port.edgeType.message.create();
                 
-                port.onReceive(
+                d.rts=port.onReceive(
                     this.g.properties,
                     d.properties,
                     d.state,
                     port.edgeType.properties.create(),
                     port.edgeType.state.create(),
-                    message,
-                    d.rts
+                    message
                 );
             }
             d.update();
@@ -405,19 +409,24 @@ export class BatchStepper
                 let message=e.queue[0];
                 e.queue.splice(0,1);
             
-                e.dstPort.onReceive(
+                e.dstDev.rts=e.dstPort.onReceive(
                     this.g.properties,
                     e.dstDev.properties,
                     e.dstDev.state,
                     e.properties,
                     e.state,
-                    message,
-                    e.dstDev.rts
+                    message
                 );
             }
             e.update();
             e.srcDev.update();
             e.dstDev.update();
+        }
+
+        for(let d of graph.enumDevices()){
+            if(d.is_rts()){
+                this.rts.push(d);
+            }
         }
     }
 
@@ -427,6 +436,7 @@ export class BatchStepper
         var res=this.g;
 
         this.g=null;
+        this.rts=[];
 
         return res;
     }
@@ -435,62 +445,87 @@ export class BatchStepper
     {
         var count=0;
 
-        let devByIndex=this.g.enumDevices();
-        let offset=0 | Math.floor(Math.random() * devByIndex.length);
-        for(let i=0; i<devByIndex.length; i++){
-            let dev=devByIndex[ (i+offset)%devByIndex.length ];
+        let rtsDevNext=[];
+        let rtsDevCurr=this.rts;
 
+        for(let dev of rtsDevCurr)
+        {
             if(!dev.is_rts())
-                continue;
+                continue; // Shouldn't happen
 
             if(dev.rate!=1.0 && dev.rate < Math.random()){
                 ++count;
+                rtsDevNext.push(dev);
                 continue;
             }
 
-            let rts=dev.rts;
-            let rtsPorts:string[]=[];
-            for(let k in rts){
-                if(rts[k]){
-                    rtsPorts.push(k);
+            var port:OutputPort;
+            let deviceType=dev.deviceType;
+
+            if(deviceType.outputCount==1){
+                port=deviceType.outputsByIndex[0];
+            }else{
+
+                let rtsPorts:number[]=[];
+                {
+                    var rtsBits=dev.rts;
+                    var rtsIndex=0;
+                    while(rtsBits){
+                        if(rtsBits&1){
+                            rtsPorts.push(rtsIndex);
+                        }
+                        rtsBits>>=1;
+                        rtsIndex++;
+                    }
                 }
+
+                assert(rtsPorts.length>0);
+
+                let selPort=Math.floor(Math.random()*rtsPorts.length);
+                port=dev.deviceType.getOutputByIndex(rtsPorts[selPort]);
             }
-
-            assert(rtsPorts.length>0);
-
-            let selPort=Math.floor(Math.random()*rtsPorts.length);
-            let port=dev.deviceType.getOutput(rtsPorts[selPort]);
 
             let message=port.edgeType.message.create();
 
-            let doSend=port.onSend(
+            var doSend:boolean;
+            [doSend,dev.rts]=port.onSend(
                 this.g.properties,
                 dev.properties,
                 dev.state,
-                message,
-                dev.rts
+                message
             );
+            if(dev.rts){
+                rtsDevNext.push(dev);
+            }
+            dev.update_rts_only();
+
             ++count;
             if(doSend){
                 //let outgoing=dev.outputs[port.name];
                 let outgoing=dev.outputsByIndex[port.index];
                 for(let e of outgoing){
-                
-                    e.dstPort.onReceive(
+                    let dstDev=e.dstDev;
+                    
+                    let preRts=dstDev.rts;
+                    dstDev.rts=e.dstPort.onReceive(
                         this.g.properties,
-                        e.dstDev.properties,
-                        e.dstDev.state,
+                        dstDev.properties,
+                        dstDev.state,
                         e.properties,
                         e.state,
-                        message,
-                        e.dstDev.rts
+                        message
                     );
-                    e.dstDev.update_rts_only();
+                    if(dstDev.rts && !preRts){
+                        rtsDevNext.push(dstDev);
+                    }
+                    dstDev.update_rts_only();
                     ++count;
                 }
             }
-            dev.update_rts_only();
         }
+
+        this.rts=rtsDevNext;
+
         return [count,[]];
     }
 }

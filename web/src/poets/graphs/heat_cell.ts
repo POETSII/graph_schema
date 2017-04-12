@@ -64,9 +64,16 @@ class CellDeviceState
 class CellInitInputPort
     extends InputPort
 {
+    private rts_flag_out:number;
+
     constructor()
     {
         super("__init__", initEdgeType);
+    }
+
+    onBindDevice(parent:DeviceType)
+    {
+        this.rts_flag_out=parent.getOutput("out").rts_flag;
     }   
     
     onReceive(
@@ -75,9 +82,8 @@ class CellInitInputPort
         deviceStateG : TypedData,
         edgePropertiesG : TypedData,
         edgeStateG : TypedData,
-        messageG : TypedData,
-        rts : { [key:string] : boolean; }
-    ) : void
+        messageG : TypedData
+    ) : number
      {
         let deviceProperties=devicePropertiesG as CellDeviceProperties;
         let deviceState=deviceStateG as CellDeviceState;
@@ -89,17 +95,24 @@ class CellInitInputPort
         deviceState.ns = 0;
         deviceState.na = 0;
 
-        rts["out"] = deviceState.cs==deviceProperties.nhood;
+        return deviceState.cs==deviceProperties.nhood ? this.rts_flag_out : 0;
     }
 };
 
 class CellInInputPort
     extends InputPort
 {
+    private rts_flag_out : number;
+
     constructor()
     {
         super("in", updateEdgeType);
     }
+
+    onBindDevice(parent:DeviceType)
+    {
+        this.rts_flag_out=parent.getOutput("out").rts_flag;
+    }   
     
     onReceive(
         graphPropertiesG : TypedData,
@@ -107,9 +120,9 @@ class CellInInputPort
         deviceStateG : TypedData,
         edgePropertiesG : TypedData,
         edgeStateG : TypedData,
-        messageG : TypedData,
-        rts : { [key:string] : boolean; }
-    ){
+        messageG : TypedData
+    ) : number
+    {
         let deviceProperties=devicePropertiesG as CellDeviceProperties;
         let deviceState=deviceStateG as CellDeviceState;
         let edgeProperties=edgePropertiesG as UpdateEdgeProperties;
@@ -125,34 +138,42 @@ class CellInInputPort
             deviceState.ns++;
             deviceState.na += edgeProperties.w * message.v;
         }
-        rts["out"] = deviceState.cs == deviceProperties.nhood;
+        return deviceState.cs == deviceProperties.nhood ? this.rts_flag_out : 0;
     }
 };
 
 class CellOutOutputPort
     extends OutputPort
 {
+    private rts_flags_out : number;
+
     constructor()
     {
         super("out", updateEdgeType);
     }   
+
+    onBindDevice(parent:DeviceType)
+    {
+        this.rts_flags_out=parent.getOutput("out").rts_flag;
+    }
     
     onSend(
         graphPropertiesG : TypedData,
         devicePropertiesG : TypedData,
         deviceStateG : TypedData,
-        messageG : TypedData,
-        rts : { [key:string] : boolean; }
-    ) : boolean
+        messageG : TypedData
+    ) : [boolean,number]
     {
         let graphProperties=graphPropertiesG as HeatGraphProperties;
         let deviceProperties=devicePropertiesG as CellDeviceProperties;
         let deviceState=deviceStateG as CellDeviceState;
         let message=messageG as UpdateMessage;
+
+        var doSend:boolean=false;
+        var rts:number=0;
         
         if(deviceState.t > graphProperties.maxTime){
-            rts["out"]=false;
-            return false;
+            // do nothing
         }else{
             if(!deviceState.force){
                 deviceState.v=deviceState.ca;
@@ -166,9 +187,10 @@ class CellOutOutputPort
             message.t = deviceState.t;
             message.v=deviceState.v;
             
-            rts["out"] = deviceState.cs == deviceProperties.nhood;
-            return true;
+            rts =  deviceState.cs == deviceProperties.nhood ? this.rts_flags_out : 0;
+            doSend=true;
         }
+        return [doSend,rts];
     }
 };
 

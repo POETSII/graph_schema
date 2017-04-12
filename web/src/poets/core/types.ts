@@ -17,78 +17,6 @@ export function get_type(thing : any){
     return Object.prototype.toString.call(thing);
 }
 
-/*
-export interface TypedData
-{
-    readonly _name_ : string;
-
-    [x:string]:any;
-};
-
-class EmptyTypedData
-    implements TypedData
-{
-    readonly _name_ = "empty";
-};
-
-
-export interface TypedDataSpec
-{
-    create : { () : TypedData; };
-    import(data : any|null) : TypedData;
-
-};
-
-export class EmptyTypedDataSpec
-    implements TypedDataSpec
-{
-    private static instance : TypedData = new EmptyTypedData();
-    
-    create () : TypedData {
-        return EmptyTypedDataSpec.instance;
-    }
-    import(data : any|null) : TypedData
-    {
-        if(data!=null){
-            for(let k in data){
-                throw new Error(`Empty data should havve no properties, but got ${k}`);
-            }
-        }
-        return EmptyTypedDataSpec.instance;
-    }
-};
-
-
-export class GenericTypedDataSpec<T extends TypedData>
-    implements TypedDataSpec
-{
-    constructor(
-        // https://github.com/Microsoft/TypeScript/issues/2794
-        private readonly newT : { new(...args : any[]) : T; } 
-    ) {
-    };
-    
-    create () : TypedData {
-        return new this.newT();
-    };
-
-    // This will work for both another typed data instance, or a general object
-    import(data : any|null) : TypedData
-    {
-        var r = new this.newT();
-        if(data !=null){
-            //for(var k of data.getOwnPropertyNames()){
-            for(let k in data){
-                if(!r.hasOwnProperty(k)){
-                    throw new Error(`Object ${r._name_} does not have property called ${k}`);
-                }
-                
-                r[k]=data[k];
-            }
-        }
-        return r;
-    }
-};*/
 
 export class EdgeType
 {
@@ -108,6 +36,14 @@ export abstract class InputPort
     ){}
 
     index : number = -1;
+
+    setIndex(_index:number) : void
+    {
+        assert(this.index==-1);
+        this.index = _index;
+    }
+
+    abstract onBindDevice(parent:DeviceType) : void;
     
     abstract onReceive(
         graphProperties : TypedData,
@@ -115,9 +51,8 @@ export abstract class InputPort
         deviceState : TypedData,
         edgeProperties : TypedData,
         edgeState : TypedData,
-        message : TypedData,
-        rts : { [key:string] : boolean ;}
-    ) : void;
+        message : TypedData
+    ) : number;
 };
 
 export abstract class OutputPort
@@ -128,14 +63,23 @@ export abstract class OutputPort
     ){}
 
     index : number = -1;
+    rts_flag : number = 0;
+
+    setIndex(_index:number) : void
+    {
+        assert(this.index==-1);
+        this.index = _index;
+        this.rts_flag = 1<<_index;
+    }
+
+    abstract onBindDevice(parent:DeviceType) : void;
     
     abstract onSend (
         graphProperties : TypedData,
         deviceProperties : TypedData,
         deviceState : TypedData,
-        message : TypedData,
-        rts : { [key:string] : boolean; }
-    ) : boolean;
+        message : TypedData
+    ) : [boolean,number]; // Return a pair of doSend and new rts
 };
 
 export class DeviceType
@@ -150,13 +94,13 @@ export class DeviceType
         public readonly properties:TypedDataSpec,
         public readonly state:TypedDataSpec,
         inputs : InputPort[] = [],
-        outputs : OutputPort[] = []
+        outputs : OutputPort[] = [],
+        public readonly outputCount : number = outputs.length
     ){
         var numInputs=0;
         for(let i of inputs){
             //console.log(`  adding ${i.name}, edgeType=${i.edgeType.id}`);
-            assert(i.index==-1);
-            i.index=numInputs;
+            i.setIndex(numInputs);
             this.inputs[i.name]=i;
             this.inputsByIndex.push(i);
             numInputs++;
@@ -165,11 +109,17 @@ export class DeviceType
         var numOutputs=0;
         for(let o of outputs){
             //console.log(`  adding ${o.name}`);
-            assert(o.index==-1);
-            o.index=numOutputs;
+            o.setIndex(numOutputs);
             this.outputs[o.name]=o;
             this.outputsByIndex.push(o);
             numOutputs++;
+        }
+
+        for(let i of inputs){
+            i.onBindDevice(this);
+        }
+        for(let o of outputs){
+            o.onBindDevice(this);
         }
     }
     
@@ -180,12 +130,22 @@ export class DeviceType
             throw new Error(`No input called ${name}`);
         return this.inputs[name];
     }
+
+    getInputByIndex(index:number) : InputPort
+    {
+        return this.inputsByIndex[index];
+    }
     
     getOutput(name:string) : OutputPort
     {
         if(!this.outputs.hasOwnProperty(name))
             throw new Error(`No output called ${name}`);
         return this.outputs[name];
+    }
+
+    getOutputByIndex(index:number) : OutputPort
+    {
+        return this.outputsByIndex[index];
     }
 };
 

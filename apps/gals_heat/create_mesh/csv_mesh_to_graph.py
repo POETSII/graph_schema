@@ -101,10 +101,7 @@ for p in patches.values():
     nodes[p.id]=di
     res.add_device_instance(di)
 
-from sympy.geometry import *
-
 for p in patches.values():
-    sys.stderr.write("xx\n")
     for i in range(len(p.neighbours)):
         n=p.neighbours[i]
         if p in dirichlet:

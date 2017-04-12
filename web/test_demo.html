@@ -231,18 +231,21 @@ function updateNodeStyleVor(d)
     }
     if(showTime){
         let t = device.state.t % timeLevels;
-        poly.fill(timeColors[t]); 
+        let nv=timeColors[t];
+        let pv=poly.prev_fill;
+        if(pv!=nv){
+            poly.node.setAttribute("fill",nv);
+            poly.prev_fill=nv;
+        } 
     }else{
-        let v = Math.floor((device.state.v + 1)/2 * heatLevels);
+        let nv = heatColors[Math.floor((device.state.v + 1)/2 * heatLevels)];
         //console.log(" v="+device.state.v+", v="+v);
-        //poly.fill(heatColors[v]); 
-        poly.node.setAttribute("fill",heatColors[v]);
-    }
-    if(poly.selected){
-        poly.stroke("#FFFFFF");
-        poly.node.parentNode.appendChild(poly.node); // Bring to the front
-    }else{
-        poly.attr('stroke',null);
+        //poly.fill(heatColors[v]);
+        let pv=poly.prev_fill;
+        if(pv!=nv){     
+            poly.node.setAttribute("fill",nv);
+            poly.prev_fill=nv;
+        }
     }
 };
 
@@ -251,10 +254,13 @@ function updateEdgeStyle(e)
     var edge=e;
     var arrow=arrows[edge.id];
     if(showEvents){
-        arrow.attr('visibility','visible');
-        arrow.attr('stroke', edge.empty() ? "#808080" : "#00FF00");
-    }else{
-        arrow.attr('visibility','hidden');
+        let ps=arrow.prev_stroke;
+        let ns=edge.empty() ? "#808080" : "#00FF00";
+        if(ps!=ns){
+            arrow.node.setAttribute('stroke', ns);
+            arrow.prev_stroke=ns;
+        }
+        //arrow.attr('stroke', edge.empty() ? "#808080" : "#00FF00");
     }
 }
 
@@ -388,6 +394,7 @@ function resetGraph()
         polys[d.id]=poly;
         poly.attr('stroke-width',strokeWidth); // Create a reasonable stroke width
         poly.attr('stroke',null); // But don't want a stroke
+        poly.prev_fill="";
         poly.device=d;
         poly.selected=false;
 
@@ -398,12 +405,14 @@ function resetGraph()
                 this.device.state.force=true;
             }
             statePanel.attach(this.device);
-            updateNodeStyleVor(this.device);
+            
+            this.stroke("#FFFFFF");
+            this.node.parentNode.appendChild(poly.node); // Bring to the front
         });
         poly.on('mouseleave',function(){
             this.selected=false;
             this.device.state.force=false;
-            updateNodeStyleVor(this.device);
+            this.attr('stroke',null);
         });
     }
 
@@ -418,6 +427,7 @@ function resetGraph()
             arrow.attr('fill','none');
             arrow.style('pointer-events','none'); // Don't want to hit-test mouse on arrows
             arrow.edge=e;
+            arrow.prev_stroke="";
 
             arrows[e.id]=arrow;
         }
@@ -478,6 +488,13 @@ require(['scripts/require_config'],function() {
 
         $("#show-events").change(function(){
             showEvents=!!this.checked;
+            for(let d of G.enumEdges()){
+                if(showEvents){
+                    arrows[d.id].node.setAttribute('visibility','visible');
+                }else{
+                    arrows[d.id].node.setAttribute('visibility','hidden');
+                }
+            }
             updateAllEdges(s);
         });
 
