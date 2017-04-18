@@ -786,6 +786,9 @@ grammar {
     ## Zero or more DeviceInstance elements.
     element DeviceInstances {
 
+      ## If present and true, then the edge instances are sorted lexically by instance id.
+      attribute sorted { xsd:boolean } ? ,
+
       ## Each DevI creates a single device instance of a given device type.
       ##
       ## Every device instance must have a unique id within the set
@@ -816,6 +819,9 @@ grammar {
 
     ## Zero or more edge instance elements
     element EdgeInstances {
+      ## If present and true, then the edge instances are sorted lexically by effective id.
+      attribute sorted { xsd:boolean } ? ,
+
 
       ## Each EdgeI specifies a single connection between two device instances.
       ##

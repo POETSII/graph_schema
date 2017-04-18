@@ -9,6 +9,7 @@ from graph.calc_c_globals import *
 
 import sys
 import os
+import logging
 
 def render_typed_data_as_type_decl(td,dst,indent,name=None):
     if name==None:
@@ -448,7 +449,9 @@ def render_graph_instance_as_softswitch(gi,dst,num_threads,device_to_thread):
     thread_to_devices=[[] for i in range(num_threads)]
     devices_to_thread={}
     for d in gi.device_instances.values():
-        t=device_to_thread[d]
+        if d.id not in device_to_thread:
+            logging.error("device {}  not in mapping".format(d.id))
+        t=device_to_thread[d.id]
         assert(t>=0 and t<num_threads)
         thread_to_devices[t].append(d)
         devices_to_thread[d]=t
@@ -477,7 +480,7 @@ def render_graph_instance_as_softswitch(gi,dst,num_threads,device_to_thread):
     for ti in range(num_threads):
         dst.write("""
         {{
-            0,
+            {},
             &{}_properties,
             DEVICE_TYPE_COUNT,
             DEVICE_TYPE_VTABLES,
@@ -494,7 +497,7 @@ def render_graph_instance_as_softswitch(gi,dst,num_threads,device_to_thread):
             0,  // currentDevice
             0,  // currentMode
             0   // currentHandler
-        }}\n""".format(gi.id,ti,ti))
+        }}\n""".format(ti,gi.id,ti,ti))
         if ti+1<num_threads:
             dst.write(",\n")
             
@@ -504,13 +507,18 @@ def render_graph_instance_as_softswitch(gi,dst,num_threads,device_to_thread):
 
 import argparse
 
+#logging.getLogger(__name__)
 
 parser = argparse.ArgumentParser(description='Render graph instance as softswitch.')
 parser.add_argument('source', type=str, help='source file (xml graph instance)')
 parser.add_argument('--dest', help="Directory to write the output to", default=".")
 parser.add_argument('--threads', help='number of threads', type=int, default=2)
+parser.add_argument('--log-level', dest="logLevel", help='logging level (INFO,ERROR,...)', default='WARNING')
 
 args = parser.parse_args()
+
+logLevel = getattr(logging, args.logLevel.upper(), None)
+logging.basicConfig(level=logLevel)
 
 nThreads=args.threads
 
