@@ -39,3 +39,5 @@ CLOCK_TREE_FILTERS = \
 $(eval $(call clock_tree_instance_template,8_2,50,$(CLOCK_TREE_FILTERS)))
 $(eval $(call clock_tree_instance_template,6_3,50,$(CLOCK_TREE_FILTERS)))
 $(eval $(call clock_tree_instance_template,4_4,50,$(CLOCK_TREE_FILTERS)))
+$(eval $(call clock_tree_instance_template,3_3,50,$(CLOCK_TREE_FILTERS)))
+$(eval $(call clock_tree_instance_template,2_2,50,$(CLOCK_TREE_FILTERS)))
