@@ -377,6 +377,13 @@ public:
       fprintf(m_dst, "\n");
     }
   }
+
+  virtual void log_key_value(uint32_t key, uint32_t value)
+  {
+    if(m_logLevel >= 1){
+      fprintf(m_dst, "%s%s:%s : LOG_KEY_VALUE(%u,%u,%u)\n", m_prefix.c_str(), m_device, m_input, m_device, key, value);
+    }
+  }
 };
 
 class SendOrchestratorServicesImpl
@@ -415,6 +422,13 @@ public:
       fprintf(m_dst, "\n");
     }
   }
+
+  virtual void log_key_value(uint32_t key, uint32_t value)
+  {
+    if(m_logLevel >= 1){
+      fprintf(m_dst, "%s%s:%s : LOG_KEY_VALUE(%s,%u,%u)\n", m_prefix.c_str(), m_device, m_output, m_device, key, value);
+    }
+  }
 };
 
 class HandlerLogImpl
@@ -433,6 +447,23 @@ public:
       va_start(args, msg);
       m_services->vlog(level, msg, args);
       va_end(args);
+    }
+  }
+};
+
+class HandlerLogKeyValueImpl
+{
+private:
+  OrchestratorServices *m_services;
+public:
+  HandlerLogKeyValueImpl(OrchestratorServices *services)
+    : m_services(services)
+  {}
+
+  void operator()(uint32_t key, uint32_t value)
+  {
+    if(m_services && (m_services->getLogLevel() >= 1)){ // Allows call to be avoided out on client side
+      m_services->log_key_value(key, value);
     }
   }
 };

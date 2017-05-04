@@ -372,6 +372,7 @@ public:
     auto edgeState=cast_typed_data<{pinPropertiesStructName}>(gEdgeState);
     auto message=cast_typed_properties<{messageStructName}>(gMessage);
     HandlerLogImpl handler_log(orchestrator);
+    HandlerLogKeyValueImpl handler_log_key_value(orchestrator);
 
     // Begin custom handler
     {preProcLinePragma}
@@ -452,6 +453,7 @@ def render_output_port_as_cpp(op,dst):
     dst.write('    auto deviceState=cast_typed_data<{}_state_t>(gDeviceState);\n'.format( dt.id ))
     dst.write('    auto message=cast_typed_data<{}_message_t>(gMessage);\n'.format(op.message_type.id))
     dst.write('    HandlerLogImpl handler_log(orchestrator);\n')
+    dst.write('    HandlerLogKeyValueImpl handler_log_key_value(orchestrator);\n')
 
     dst.write('    // Begin custom handler\n')
     if op.source_line and op.source_file:
@@ -558,6 +560,7 @@ def render_device_type_as_cpp(dt,dst):
     auto deviceProperties=cast_typed_properties<{devicePropertiesStructName}>(gDeviceProperties);
     auto deviceState=cast_typed_properties<{deviceStateStructName}>(gDeviceState);
     HandlerLogImpl handler_log(orchestrator);
+    HandlerLogKeyValueImpl handler_log_key_value(orchestrator);
 
     {deviceGlobalConstants}
     {deviceLocalConstants}

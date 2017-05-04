@@ -385,6 +385,12 @@ public:
 
   // Log a handler message with the given log level
   virtual void vlog(unsigned level, const char *msg, va_list args) =0;
+
+  
+  // Allow handler to export a value back to the outside world... somehow
+  // Not designed as true exfiltration. This is much cheaper than generalised
+  // logging, and is intended to be used for testing.
+  virtual void log_key_value(uint32_t key, uint32_t value) =0;
 };
 
 

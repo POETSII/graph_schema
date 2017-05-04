@@ -46,6 +46,7 @@
 		  <OnSend><![CDATA[
 		  deviceState->cycle++;
 		  deviceState->pending=deviceProperties->fanout;
+			handler_log_key_value(0, deviceState->cycle);
 		  ]]></OnSend>
 		</OutputPort>
 		
