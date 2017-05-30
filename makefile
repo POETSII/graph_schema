@@ -169,7 +169,7 @@ define softswitch_instance_template
 
 $(SOFTSWITCH_DIR)/generated/apps/$1_threads$3/present : $2
 	mkdir -p $(SOFTSWITCH_DIR)/generated/apps/$1_threads$3/
-	tools/render_graph_as_softswitch.py $2 --threads $3 --dest $(SOFTSWITCH_DIR)/generated/apps/$1_threads$3/
+	tools/render_graph_as_softswitch.py --log-level INFO $2 --threads $3 --dest $(SOFTSWITCH_DIR)/generated/apps/$1_threads$3/
 	touch $$@
 
 ALL_SOFTSWITCH := $(ALL_SOFTSWITCH) $(SOFTSWITCH_DIR)/generated/apps/$1_threads$3/present
