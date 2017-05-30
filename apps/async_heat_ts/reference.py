@@ -107,6 +107,82 @@ class AS:
         return (self.t,self.u)
 
 
+class ASMaxDiff:
+    def __init__(self,u0,a,dx,dy,dt,max_diff,skip=False):
+        """
+        u0 : initial state (determines width and height, plus gives boundaries)
+        a : Diffusion constant
+        dt : Time step
+        """
+        self.w=u0.shape[0]
+        self.h=u0.shape[1]
+        self.a=a
+        self.dt=dt
+        self.dx=dx
+        self.dy=dy
+        self.pUpdate=0.5
+        self.max_diff=max_diff
+        self.skip=False
+        
+        # Equation 2.1
+        self.r_x = a*a * dt / (dx*dx)
+        self.r_y = a*a * dt / (dy*dy)
+        
+        self.t=numpy.zeros_like(u0)
+        self.u=numpy.copy(u0)
+        
+        
+    def step_point(self,F,u,t,x,y):
+        d2_ux = u[x-1,y] - 2*u[x,y] + u[x+1,y]
+        d2_uy = u[x,y-1] - 2*u[x,y] + u[x,y+1]
+        
+        nu = (  u[x,y] +
+                self.r_x * d2_ux +
+                self.r_y * d2_uy +
+                self.dt*F(t[x,y],x,y))
+        nt = t[x,y]+self.dt
+        return (nt,nu)
+        
+    def step(self,F):
+        up=numpy.copy(self.u)
+        tp=numpy.copy(self.t)
+        
+        tN=numpy.minimum(numpy.minimum(tp[0:w-2,1:h-1],tp[2:w,1:w-1]),numpy.minimum(tp[1:w-1,0:h-2],tp[1:w-1,2:h]))
+        tMaxDelta=tp[1:w-1,1:h-1]-tN
+        canStep=tMaxDelta<self.max_diff
+        
+        doStep = canStep & (numpy.random.random(canStep.shape) < self.pUpdate)
+        
+        tU=numpy.maximum(numpy.maximum(tp[0:w-2,1:h-1],tp[2:w,1:w-1]),numpy.maximum(tp[1:w-1,0:h-2],tp[1:w-1,2:h]))
+        
+        
+        for x in range(1,self.w-1):
+            for y in range(1,self.h-1):
+                if doStep[x-1,y-1]:
+                    (nt,nu)=self.step_point(F,self.u,self.t,x,y)
+                    if self.skip:
+                        nt=tU[x-1,y-1]
+                    tp[x,y]=nt 
+                    up[x,y]=nu
+        
+        # Boundaries are always at the same time as neighbour
+        tp[1:w-1,0]=tp[1:w-1,1]
+        tp[1:w-1,h-1]=tp[1:w-1,h-2]
+        tp[0,1:h-1]=tp[1:w-1,1]
+        tp[w-1,1:h-1]=tp[h-2,1:h-1]
+        tp[0,0]=tp[0,1]
+        tp[0,h-1]=tp[0,h-2]
+        tp[w-1,0]=tp[w-1,1]
+        tp[w-1,h-1]=tp[w-1,h-2]
+        
+        self.t=tp
+        self.u=up
+    
+    def current_sol(self):
+        return (self.t,self.u)
+
+
+
 class CA:
     def __init__(self,u0,a,dx,dy,dt):
         """
@@ -288,9 +364,9 @@ def F(t,x,y):
     else:
         return 0
 
-def create_solution_cuboid(S,F,u0,a,dx,dy,dt,steps):
+def create_solution_cuboid(S,F,u0,a,dx,dy,dt,steps, *args):
     cuboid=numpy.zeros([u0.shape[0],u0.shape[1],steps])
-    solver=S(u0,a,dx,dy,dt)
+    solver=S(u0,a,dx,dy,dt,*args)
     ts=[t*dt for t in range(0,steps)]
     ti=numpy.zeros(u0.shape,dtype=numpy.long)
     
@@ -318,11 +394,26 @@ solver=SY(u0,a,dx,dy,dt)
 cubeSY=create_solution_cuboid(SY,F,u0,a,dx,dy,dt,100)    
 cubeAS=create_solution_cuboid(AS,F,u0,a,dx,dy,dt,100)    
 cubeCA2=create_solution_cuboid(CA2,F,u0,a,dx,dy,dt,100)    
+cubeASMaxDiff1=create_solution_cuboid(ASMaxDiff,F,u0,a,dx,dy,dt,100,1)    
+cubeASMaxDiff1S=create_solution_cuboid(ASMaxDiff,F,u0,a,dx,dy,dt,100,1,True)    
+cubeASMaxDiff2=create_solution_cuboid(ASMaxDiff,F,u0,a,dx,dy,dt,100,2)    
+cubeASMaxDiff2S=create_solution_cuboid(ASMaxDiff,F,u0,a,dx,dy,dt,100,2,True)    
+cubeASMaxDiff3=create_solution_cuboid(ASMaxDiff,F,u0,a,dx,dy,dt,100,3)    
+cubeASMaxDiff3S=create_solution_cuboid(ASMaxDiff,F,u0,a,dx,dy,dt,100,3,True)    
 
 for ti in range(cubeSY.shape[2]):
     errAS=cubeSY[:,:,ti]-cubeAS[:,:,ti]
     errCA2=cubeSY[:,:,ti]-cubeCA2[:,:,ti]
-    print(numpy.array_str(errAS,precision=3,suppress_small=True))
-    print(numpy.array_str(errCA2,precision=3,suppress_small=True))
-    print()
-    print("AS = {}, CA2 = {}\n\n".format( numpy.linalg.norm(errAS,ord=2), numpy.linalg.norm(errCA2,ord=2)))
+    errASMaxDiff1=cubeSY[:,:,ti]-cubeASMaxDiff1[:,:,ti]
+    errASMaxDiff1S=cubeSY[:,:,ti]-cubeASMaxDiff1S[:,:,ti]
+    errASMaxDiff2=cubeSY[:,:,ti]-cubeASMaxDiff2[:,:,ti]
+    errASMaxDiff2S=cubeSY[:,:,ti]-cubeASMaxDiff2S[:,:,ti]
+    errASMaxDiff3=cubeSY[:,:,ti]-cubeASMaxDiff3[:,:,ti]
+    errASMaxDiff3S=cubeSY[:,:,ti]-cubeASMaxDiff3S[:,:,ti]
+    #print(numpy.array_str(errAS,precision=3,suppress_small=True))
+    #print(numpy.array_str(errCA2,precision=3,suppress_small=True))
+    #print(numpy.array_str(errASMaxDiff2,precision=3,suppress_small=True))
+    #print(numpy.array_str(errASMaxDiff3,precision=3,suppress_small=True))
+    #print()
+    print("AS = {}, CA2 = {}, ASMaxDiff1 ={}, ASMaxDiff1S ={}, ASMaxDiff2 ={}, ASMaxDiff2S ={}, ASMaxDiff3 ={}, ASMaxDiff3S ={}".format( numpy.linalg.norm(errAS,ord=2), numpy.linalg.norm(errCA2,ord=2), numpy.linalg.norm(errASMaxDiff1,ord=2), numpy.linalg.norm(errASMaxDiff1S,ord=2), numpy.linalg.norm(errASMaxDiff2,ord=2), numpy.linalg.norm(errASMaxDiff2S,ord=2), numpy.linalg.norm(errASMaxDiff3,ord=2), numpy.linalg.norm(errASMaxDiff3S,ord=2)))
+    

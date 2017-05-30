@@ -398,7 +398,7 @@ class GraphInstance:
 
     def add_edge_instance(self,ei,validate=True):
         if ei.id in self.edge_instances:
-            raise GraphDescriptionError("Duplicate edgeInstance id {}".format(id))
+            raise GraphDescriptionError("Duplicate edgeInstance id {}".format(ei.id))
 
         if validate:
             self._validate_edge_instance(ei)

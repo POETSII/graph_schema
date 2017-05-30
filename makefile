@@ -183,6 +183,7 @@ include apps/gals_izhikevich/makefile.inc
 include apps/gals_heat/makefile.inc
 
 include apps/amg/makefile.inc
+include apps/apsp/makefile.inc
 
 include tools/partitioner.inc
 

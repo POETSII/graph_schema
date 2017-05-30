@@ -97,8 +97,12 @@ def save_metadata(node,childTagNameWithNS,value):
         return
     text=json.dumps(value)
     assert text.startswith('{') and text.endswith('}')
+    text=text[1:-1] # Get rid of brackets
+    text=text.strip()
+    if text=="":
+        return
     r=etree.SubElement(node, childTagNameWithNS)
-    r.text=text[1:-1] # Get rid of brackets
+    r.text=text
     return r
 
 

@@ -21,87 +21,6 @@
         
 
 
-        controller
-        {
-            recv/progress_in
-            {
-                totalSent += msg.sentCount;
-                totalRecv += msg.recvCount;
-                
-                if(msg.prevEdge){ // This is new information about the previous round
-                    totalProgress ++;
-                    maxDist=std::max(maxDist, msg.prevDist);
-                    sumDist += msg.prevDist;
-                }
-
-                if(totalSent==totalRecv){   // If there is no imbalance in messages...
-                    if(totalProgress==NODECOUNT){ // And we have received a message from everyone (necessary?)...
-                        // ...then we have completed the current range
-                    moveOn=true;
-                }
-            }
-
-            send/begin_out
-            {
-                assert(moveOn);
-                assert(totalSent==totalRecv);
-                assert(totalProcess==NODECOUNT);
-
-                totalMaxDist=0;
-                totalSumDist=0;
-                totalProgress=0;
-
-                msg.source=source+1;
-
-                moveOn=false;
-            }
-        }
-
-        node
-        {
-
-            recv/begin_in
-            {
-                if(msg.source==ID){ // We are the new source
-                    currDist=0;
-                    currSource=ID;
-                    dirtyDist=true;
-                }
-            }
-
-            recv/dist_in
-            {
-                newDist=m.dist+ep.weight;
-                if(msg.source!=currSource){
-                    prevDist=0;
-                    currSource=msg.source;
-                    currDist=INT_MAX;   // force currDist to update
-                }
-                if(newDist &lt; currDist){
-                    dirtyDist=true;
-                    currDist=newDist;
-                }
-                
-                dirtyProgress=true;
-                sentCount++;
-            }
-
-            send/dist_out{
-                msg.dist=currDist;
-                sentCount+=DEGREE;
-                dirtyDist=false;
-            }
-
-            send/progress_out{
-                msg.source=currSource;
-                msg.recvCount=recvCount;
-                msg.sentCount=sentCount;
-                msg.currDist=currDist;
-                msg.prevDist=prevDist;
-                dirtyProgress=false;
-            }
-        }
-
         ]]>
 	</Documentation>
 	 
@@ -115,18 +34,16 @@
       </MessageType>
       
       <MessageType id="progress">
-		<Documentation>Sent from nodes up to controller as they work through things. We use this to both collect
-        the results of the previous round, and to monitor ongoing progress in the current round. Once we have
-        received a progress message from all nodes, we know that:
-        - everyone knows they are in the new round
-        - we have definitely got the complete result for the previous round
+		<Documentation>Sent from nodes up to controller as they work through things. We use this to detect progress
+        within the current round, and to simultaneously collect the results.
         </Documentation>
         <Message>
             <Scalar type="uint32_t" name="round"><Documentation>The current round this progress is talking about (mainly for sanity checks)</Documentation></Scalar>
-            <Scalar type="uint32_t" name="sendDelta"><Documentation>How many messages sent since last progress update</Documentation></Scalar>
-            <Scalar type="uint32_t" name="recvDelta"><Documentation>How many messages received since last progress update</Documentation></Scalar>
-            <Scalar type="uint32_t" name="prevRoundDistance"><Documentation>Gives the distance calculated for the previous round</Documentation></Scalar>
-            <Scalar type="uint8_t" name="firstOfRound"><Documentation>True for the first progress message send within a round (used to track total nodes who have started)</Documentation></Scalar>
+            <Scalar type="uint32_t" name="version"><Documentation>Used to detect freshness of progress, so that out of order messages are discarded.</Documentation></Scalar>
+            <Scalar type="uint32_t" name="sendCount"><Documentation>Total dist messages sent</Documentation></Scalar>
+            <Scalar type="uint32_t" name="recvCount"><Documentation>Total dist messages received</Documentation></Scalar>
+            <Scalar type="uint32_t" name="maxDistance"><Documentation>Longest distance seen in this round</Documentation></Scalar>
+            <Scalar type="uint32_t" name="sumDistance"><Documentation>Sum of all distances in this round.</Documentation></Scalar>
         </Message>
       </MessageType>
 
@@ -154,18 +71,17 @@
 		</Properties>
 		
 		<State>
-		  <Scalar type="uint32_t" name="currRound" />
-          <Scalar type="uint32_t" name="currDist" />
-          <Scalar type="uint8_t" name="currDistDirty"><Documentation>Current distance has changed, but we haven't told neighbours yet.</Documentation></Scalar>
-          <Scalar type="uint32_t" name="progressSendDelta" />
-          <Scalar type="uint32_t" name="progressRecvDelta" />
+		  <Scalar type="uint32_t" name="round" />
+          <Scalar type="uint32_t" name="version" />
+          <Scalar type="uint32_t" name="dist" />
+          <Scalar type="uint8_t" name="distDirty"><Documentation>Current distance has changed, but we haven't told neighbours yet.</Documentation></Scalar>
+          <Scalar type="uint32_t" name="sendCount" />
+          <Scalar type="uint32_t" name="recvCount" />
           <Scalar type="uint8_t" name="progressDirty"><Documentation>Number of messages sent or recevied has changed.</Documentation></Scalar>
-          <Scalar type="uint8_t" name="progressIsFirst"><Documentation>We have yet to send the first progress of the current round</Documentation></Scalar>
-          <Scalar type="uint32_t" name="prevDist"><Documentation>Distance for previous round</Documentation></Scalar>
 		</State>
 		
 		<ReadyToSend><![CDATA[
-            if(deviceState->currDistDirty){
+            if(deviceState->distDirty){
                 *readyToSend = OUTPUT_FLAG_dout;
             }else if(deviceState->progressDirty){
                 *readyToSend = OUTPUT_FLAG_progress_out;
@@ -176,7 +92,7 @@
 
         <InputPort name="__init__" messageTypeId="__init__">
           <OnReceive><![CDATA[
-		  deviceState->currRound=INT_MAX;
+		  deviceState->round=INT_MAX;
 		  ]]></OnReceive>
 		</InputPort>
 
@@ -184,24 +100,25 @@
             <OnReceive><![CDATA[
             if(message->round==deviceProperties->index){
                 // It is this device's turn
-                deviceState->prevDist=deviceState->currDist;
-                deviceState->currRound=message->round;
-                deviceState->currDist=0; // Start from here
-                deviceState->currDistDirty=true;
-                deviceState->progressIsFirst=true;
+                deviceState->round=message->round;
+                deviceState->version=0;
+                deviceState->dist=0; // Start from here
+                deviceState->distDirty=true;
+                deviceState->sendCount=0;
+                deviceState->recvCount=0;
             }
             ]]></OnReceive>
         </InputPort>
 		
 		<OutputPort name="dout" messageTypeId="dist">
 		  <OnSend><![CDATA[
-          assert(deviceState->currDistDirty);
+          assert(deviceState->distDirty);
 
-		  message->round = deviceState->currRound;
-          message->distance = deviceState->currDist;
+		  message->round = deviceState->round;
+          message->distance = deviceState->dist;
 
-          deviceState->currDistDirty = false;
-          deviceState->progressSendDelta += deviceProperties->degree;
+          deviceState->distDirty = false;
+          deviceState->sendCount += deviceProperties->degree;
           deviceState->progressDirty = true;
 		  ]]></OnSend>
 		</OutputPort>
@@ -211,45 +128,151 @@
                 <Scalar type="uint32_t" name="w" default="1" />
             </Properties>
 		  <OnReceive><![CDATA[
-		  if(message->round!=deviceState->currRound){
-                deviceState->currRound=message->round;
-                deviceState->progressIsFirst=true;
-                deviceState->prevDist=deviceState->currDist;
-                deviceState->currDist=0xFFFFFFFFul;
+		  if(message->round!=deviceState->round){
+                deviceState->round=message->round;
+                deviceState->version=0;
+                deviceState->dist=0xFFFFFFFFul;
                 handler_log(2, "New round=%u", message->round);
           }
           auto newDist=message->distance + edgeProperties->w;
-          if(newDist < deviceState->currDist){
-                deviceState->currDist = newDist;
-                deviceState->currDistDirty = true;
-                handler_log(2, "New dist=%u", deviceState->currDist);
+          if(newDist < deviceState->dist){
+                deviceState->dist = newDist;
+                deviceState->distDirty = true;
+                handler_log(2, "New dist=%u", deviceState->dist);
           }
-          deviceState->progressRecvDelta++;
+          deviceState->recvCount++;
           deviceState->progressDirty=true;
 		  ]]></OnReceive>
 		</InputPort>
 
         <OutputPort name="progress_out" messageTypeId="progress">
             <OnSend><![CDATA[
-                assert(!deviceState->currDistDirty);
+                assert(!deviceState->distDirty);
                 assert(deviceState->progressDirty);
 
-                message->round=deviceState->currRound;
-                message->sendDelta=deviceState->progressSendDelta;
-                message->recvDelta=deviceState->progressRecvDelta;
-                message->firstOfRound=deviceState->progressIsFirst;
-                message->prevRoundDistance=deviceState->prevDist;
-                
-                deviceState->progressSendDelta=0;
-                deviceState->progressRecvDelta=0;
-                deviceState->progressDirty=false;
-                deviceState->progressIsFirst=false;
+                deviceState->version++;
 
-                handler_log(2, "Progress for round=%u, sendDelta=%u, recvDelta=%u", deviceState->currRound, message->sendDelta, message->recvDelta);
+                message->round=deviceState->round;
+                message->version=deviceState->version;
+                message->sendCount=deviceState->sendCount;
+                message->recvCount=deviceState->recvCount;
+                message->maxDistance=deviceState->dist;
+                message->sumDistance=deviceState->dist;
+                
+                deviceState->progressDirty=false;
+                
+                handler_log(2, "Progress for round=%u, sendCount=%u, recvCount=%u", deviceState->round, message->sendCount, message->recvCount);
             ]]></OnSend>
         </OutputPort>
       </DeviceType>
+
+    <DeviceType id="branch">
+	  <Properties>
+	    <Scalar type="uint32_t" name="node_count"/>
+	  </Properties>
+	  
+	  <State>
+
+        <Scalar type="uint8_t" name="dirty" />
+        <Scalar type="uint32_t" name="round" />
+        <Scalar type="uint32_t" name="version" />
+
+		<Scalar type="uint32_t" name="leftVersion" />
+        <Scalar type="uint32_t" name="leftMaxDistance" />
+        <Scalar type="uint32_t" name="leftSumDistance" />
+        <Scalar type="uint32_t" name="leftSendCount" />
+        <Scalar type="uint32_t" name="leftRecvCount" />
+
+        <Scalar type="uint32_t" name="rightVersion" />
+        <Scalar type="uint32_t" name="rightMaxDistance" />
+        <Scalar type="uint32_t" name="rightSumDistance" />
+        <Scalar type="uint32_t" name="rightSendCount" />
+        <Scalar type="uint32_t" name="rightRecvCount" />
+
+        
+	  </State>
+	  
+	  <ReadyToSend><![CDATA[
+      if(deviceState->dirty && deviceState->leftVersion>0 && deviceState->rightVersion>0){
+            *readyToSend = OUTPUT_FLAG_progress_out;
+      }else{
+            *readyToSend = 0;
+      }
+	  ]]></ReadyToSend>
+
+    <InputPort name="__init__" messageTypeId="__init__">
+          <OnReceive><![CDATA[
+		  deviceState->round=INT_MAX;
+		  ]]></OnReceive>
+		</InputPort>
+
+        <InputPort name="progress_in_left" messageTypeId="progress">
+            <OnReceive><![CDATA[
+                if(message->round != deviceState->round){
+                    assert(message->version > 0);
+                    deviceState->round=message->round;
+                    deviceState->version=0;
+                    deviceState->leftVersion=0;
+                    deviceState->rightVersion=0;
+                }
+
+                if(message->version < deviceState->leftVersion){
+                    return;
+                }
+                assert(message->version != deviceState->leftVersion);
+
+                deviceState->dirty=true;
+                deviceState->leftVersion=message->version;
+                deviceState->leftMaxDistance=message->maxDistance;
+                deviceState->leftSumDistance=message->sumDistance;
+                deviceState->leftSendCount=message->sendCount;
+                deviceState->leftRecvCount=message->recvCount;
+            ]]></OnReceive>
+        </InputPort>
+
+        <InputPort name="progress_in_right" messageTypeId="progress">
+            <OnReceive><![CDATA[
+                if(message->round != deviceState->round){
+                    assert(message->version > 0);
+                    deviceState->round=message->round;
+                    deviceState->version=0;
+                    deviceState->leftVersion=0;
+                    deviceState->rightVersion=0;
+                }
+
+                if(message->version < deviceState->rightVersion){
+                    return;
+                }
+                assert(message->version != deviceState->rightVersion);
+
+                deviceState->dirty=true;
+                deviceState->rightVersion=message->version;
+                deviceState->rightMaxDistance=message->maxDistance;
+                deviceState->rightSumDistance=message->sumDistance;
+                deviceState->rightSendCount=message->sendCount;
+                deviceState->rightRecvCount=message->recvCount;
+            ]]></OnReceive>
+        </InputPort>
 	
+
+        <OutputPort name="progress_out" messageTypeId="progress">
+            <OnSend><![CDATA[
+            assert(deviceState->dirty && deviceState->leftVersion>0 && deviceState->rightVersion>0);
+            
+            deviceState->version++;
+
+            message->version=deviceState->version;
+            message->round=deviceState->round;
+            message->maxDistance=std::max(deviceState->leftMaxDistance , deviceState->rightMaxDistance);
+            message->sumDistance=deviceState->leftSumDistance + deviceState->rightSumDistance;
+            message->sendCount=deviceState->leftSendCount + deviceState->rightSendCount;
+            message->recvCount=deviceState->leftRecvCount + deviceState->rightRecvCount;
+
+            deviceState->dirty=false;
+            ]]></OnSend>
+        </OutputPort>
+    </DeviceType>
+
 	<DeviceType id="controller">
 	  <Properties>
 	    <Scalar type="uint32_t" name="node_count"/>
@@ -262,15 +285,11 @@
         <Scalar type="uint32_t" name="round" />
         <Scalar type="uint8_t" name="roundComplete" />
 
-        <Scalar type="uint32_t" name="prevRoundSeen" />
-        <Scalar type="uint32_t" name="prevRoundMaxDist" />
-        <Scalar type="uint32_t" name="prevRoundSumDist" />
-        <Scalar type="uint32_t" name="prevRoundMinDist" />
+        <Scalar type="uint32_t" name="maxDist" />
+        <Scalar type="uint32_t" name="sumDist" />
 
         <Scalar type="uint32_t" name="sumMaxDist" />
-        <Scalar type="uint32_t" name="sumSumDistHi"></Scalar>
-        <Scalar type="uint32_t" name="sumSumDistLo"></Scalar>
-        <Scalar type="uint32_t" name="sumMinDist" />
+        <Scalar type="uint32_t" name="sumSumDist"></Scalar>
 	  </State>
 	  
 	  <ReadyToSend><![CDATA[
@@ -283,8 +302,6 @@
 
         <InputPort name="__init__" messageTypeId="__init__">
             <OnReceive><![CDATA[
-            deviceState->prevRoundMaxDist=0;
-
             // trigger first begin message
             deviceState->round=0;
             deviceState->roundComplete=true;
@@ -296,24 +313,19 @@
 	    <OnReceive><![CDATA[
         assert(deviceState->round==message->round);
 
-	    deviceState->totalSent += message->sendDelta;
-        deviceState->totalRecv += message->recvDelta;
+        if(message->sendCount == message->recvCount){
+            // We can only receive progress if _all_ nodes have sent a progress message,
+            // so as soon as things balance it is finished
 
-        if(message->firstOfRound){
-            deviceState->prevRoundMaxDist = std::max(deviceState->prevRoundMaxDist, message->prevRoundDistance);
-            deviceState->prevRoundMinDist = std::min(deviceState->prevRoundMinDist, message->prevRoundDistance);
-            deviceState->prevRoundSumDist += message->prevRoundDistance;
-            deviceState->prevRoundSeen++;
+            handler_log(2, "Round %u complete", deviceState->round);
+
+            deviceState->sumMaxDist += message->maxDistance;
+            deviceState->sumSumDist += message->sumDistance;
+
+            deviceState->roundComplete = true;
+            deviceState->round++;            
         }
 
-        if(deviceState->prevRoundSeen == deviceProperties->node_count){
-            if(deviceState->totalSent == deviceState->totalRecv){
-                deviceState->roundComplete = true;
-                deviceState->round++;
-            }
-        }
-
-        handler_log(2, "In round %u, prevRoundSeen = %u", deviceState->round, deviceState->prevRoundSeen);
 	    ]]></OnReceive>
 	  </InputPort>
 	  
@@ -321,18 +333,6 @@
 	    <OnSend><![CDATA[
 	    assert(deviceState->roundComplete);
 
-        deviceState->sumMaxDist += deviceState->prevRoundMaxDist;
-        deviceState->sumMinDist += deviceState->prevRoundMinDist;
-        uint32_t sumSumDistPrevLo = deviceState->sumSumDistLo;
-        deviceState->sumSumDistLo += deviceState->prevRoundSumDist;
-        if(deviceState->sumSumDistLo < sumSumDistPrevLo){
-            deviceState->sumSumDistHi++;
-        }
-        
-        deviceState->prevRoundMaxDist = 0;
-        deviceState->prevRoundMinDist = 0;
-        deviceState->prevRoundSumDist = 0;
-        deviceState->prevRoundSeen = 0;
         deviceState->roundComplete=false;
 
         message->round = deviceState->round;

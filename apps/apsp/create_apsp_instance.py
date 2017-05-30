@@ -28,6 +28,7 @@ if len(sys.argv)>2:
 graphType=graphTypes["apsp"]
 nodeType=graphType.device_types["node"]
 controllerType=graphType.device_types["controller"]
+branchType=graphType.device_types["branch"]
 
 
 connections={}
@@ -49,6 +50,7 @@ controller=DeviceInstance(res, "controller", controllerType, {"node_count":len(c
 res.add_device_instance(controller)
 
 nodes={}
+progress=[]
 for i in range(0,n):
     props={"index":i, "degree":len(connections[i])}
     meta={}
@@ -56,13 +58,11 @@ for i in range(0,n):
     nodes[i]=DeviceInstance(res, "n{}".format(i), nodeType, props, meta)
     res.add_device_instance(nodes[i])
     
-    prog=EdgeInstance(res,controller,"progress_in",nodes[i],"progress_out")
-    res.add_edge_instance(prog)
-    
     begin=EdgeInstance(res,nodes[i],"begin_in",controller,"begin_out")
     res.add_edge_instance(begin)
     
-        
+    progress.append(nodes[i])
+    
 for i in range(0,n):
     sys.stderr.write(" Edges : Node {} of {}\n".format( i, n) )
     
@@ -73,5 +73,33 @@ for i in range(0,n):
         sys.stderr.write("    dst={}, src={}\n".format(dstN.id,srcN.id))
         ei=EdgeInstance(res,dstN,"din",srcN,"dout",props)
         res.add_edge_instance(ei)
+        
+depth=0
+while len(progress)>1:
+    
+    next=[]
+    
+    sys.stderr.write("  len(progress) == {}\n".format(len(progress)))
+    
+    if(len(progress)%2):
+        next.append(progress.pop())
+        
+    assert 0==(len(progress)%2)
+    
+    
+    for i in range(0,len(progress),2):
+        src1=progress[i]
+        src2=progress[i+1]
+        branch=DeviceInstance(res, "b_{}_{}".format(depth,i), branchType, None, None)
+        res.add_device_instance(branch)
+        next.append(branch)
+        
+        res.add_edge_instance(EdgeInstance(res,branch,"progress_in_left",src1,"progress_out"))
+        res.add_edge_instance(EdgeInstance(res,branch,"progress_in_right",src2,"progress_out"))
+
+    depth=depth+1        
+    progress=next
+
+res.add_edge_instance(EdgeInstance(res,controller,"progress_in",progress[0],"progress_out"))
     
 save_graph(res,sys.stdout)        

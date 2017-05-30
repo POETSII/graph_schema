@@ -11,39 +11,41 @@
 #include <cassert>
 #include <type_traits>
 
+#include "rapidjson/document.h"
+
 #include "poets_hash.hpp"
 
 /* What is the point of all this?
 
    - C/C++ doesn't support introspection, so there is no way of getting at data-structures
-     at run-time.
+   at run-time.
 
    - We want richly typed structures for debugging purposes. Persisted forms should be
-     human readable (for debuggable size graphs)
+   human readable (for debuggable size graphs)
 
    - We need to be able to bind code to arbitrary input/output ports in the graph
 
    - We want speed for simulation purposes. Structured data can get in the way of that.
 
-The approach taken here is a mix of opaque and structured data types:
+   The approach taken here is a mix of opaque and structured data types:
 
-- The kernel implementations are all strongly typed. Messages/state/properties are all
-  proper structs. The kernel implementations only work in terms of those structs.
+   - The kernel implementations are all strongly typed. Messages/state/properties are all
+   proper structs. The kernel implementations only work in terms of those structs.
 
-- The external implementations are all type-agnostic, and do not know the detailed
-  structure of anything. However, they have access to methods which allow them to
-  save/load the opaque data-types, and the opaque structures can be passed directly
-  to handlers with no need for translation.
+   - The external implementations are all type-agnostic, and do not know the detailed
+   structure of anything. However, they have access to methods which allow them to
+   save/load the opaque data-types, and the opaque structures can be passed directly
+   to handlers with no need for translation.
 
-Handlers are made available at run-time via a registry. A given graph's types
-can be compiled into a shared object. The shared object contains the various
-type descriptors and handlers, and registers them in a run-time registry. As
-the graph is loaded, the various structs and device types are mapped to the
-equivalent handler.
+   Handlers are made available at run-time via a registry. A given graph's types
+   can be compiled into a shared object. The shared object contains the various
+   type descriptors and handlers, and registers them in a run-time registry. As
+   the graph is loaded, the various structs and device types are mapped to the
+   equivalent handler.
 
-The intent is that when simulating, the only abstraction cost is for a
-virtual dispatch (usually quick), plus the loss of cross-function optimisation
-(which seems fair enough).
+   The intent is that when simulating, the only abstraction cost is for a
+   virtual dispatch (usually quick), plus the loss of cross-function optimisation
+   (which seems fair enough).
 
 */
 
@@ -191,6 +193,9 @@ public:
     }
   }
 
+  void reset()
+  { release(); }
+
   ~DataPtr()
   {
     release();
@@ -324,8 +329,6 @@ public:
 };
 
 
-
-
 class MessageType
 {
 public:
@@ -338,6 +341,8 @@ public:
   virtual const std::string &getId() const=0;
 
   virtual const TypedDataSpecPtr &getMessageSpec() const=0;
+  
+  virtual rapidjson::Document &getMetadata() =0;
 };
 
 class Port
@@ -352,6 +357,8 @@ public:
   virtual unsigned getIndex() const=0;
 
   virtual const MessageTypePtr &getMessageType() const=0;
+
+  virtual rapidjson::Document &getMetadata() =0;
 };
 typedef std::shared_ptr<Port> PortPtr;
 
@@ -363,12 +370,12 @@ typedef std::shared_ptr<Port> PortPtr;
 
    Q: Why is this C++ when we work so hard to make the other parts pure C?
    A: This is not visible in the handler. All they can see are the primitive
-      C functions defined by the handler spec.
+   C functions defined by the handler spec.
 */
 class OrchestratorServices
 {
 protected:
- unsigned m_logLevel;
+  unsigned m_logLevel;
 
   OrchestratorServices(unsigned logLevel)
     : m_logLevel(logLevel)
@@ -399,12 +406,12 @@ public:
 			 const typed_data_t *edgeProperties,
 			 typed_data_t *edgeState,
 			 const typed_data_t *message
-		      ) const=0;
+			 ) const=0;
 
-    virtual const TypedDataSpecPtr &getPropertiesSpec() const=0;
-    virtual const TypedDataSpecPtr &getStateSpec() const=0;
+  virtual const TypedDataSpecPtr &getPropertiesSpec() const=0;
+  virtual const TypedDataSpecPtr &getStateSpec() const=0;
 
-    virtual const std::string &getHandlerCode() const=0;
+  virtual const std::string &getHandlerCode() const=0;
 };
 typedef std::shared_ptr<InputPort> InputPortPtr;
 
@@ -446,11 +453,13 @@ public:
   virtual const std::vector<OutputPortPtr> &getOutputs() const=0;
 
   virtual uint32_t calcReadyToSend(
-    OrchestratorServices *orchestrator,
-    const typed_data_t *graphProperties,
-    const typed_data_t *deviceProperties,
-    const typed_data_t *deviceState
-  ) const=0;
+				   OrchestratorServices *orchestrator,
+				   const typed_data_t *graphProperties,
+				   const typed_data_t *deviceProperties,
+				   const typed_data_t *deviceState
+				   ) const=0;
+
+  virtual rapidjson::Document &getMetadata() =0;
 };
 
 class GraphType
@@ -474,6 +483,8 @@ public:
   virtual const MessageTypePtr &getMessageType(unsigned index) const=0;
   virtual const MessageTypePtr &getMessageType(const std::string &name) const=0;
   virtual const std::vector<MessageTypePtr> &getMessageTypes() const=0;
+
+  virtual rapidjson::Document &getMetadata() =0;
 };
 
 /* These allow registration/discovery of different data types at run-time */

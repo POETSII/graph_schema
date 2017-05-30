@@ -21,3 +21,5 @@ instruments*.trace
 /*.xml
 /*.snap
 /*.gz
+/CMakeFiles
+/external/rng-svg

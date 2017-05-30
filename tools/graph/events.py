@@ -166,7 +166,7 @@ def extractRecvEvent(n,writer):
         L.append(l.text)
     
     S=n.find("p:S",ns)
-    if S is not None:
+    if S is not None and S.text is not None:
         S=json.loads("{"+S.text+"}")
         
     port=get_attrib(n,"port")

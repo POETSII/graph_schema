@@ -75,6 +75,8 @@ private:
   TypedDataSpecPtr m_propertiesType;
   TypedDataSpecPtr m_stateType;
   std::string m_code;
+
+  rapidjson::Document m_metadata;
 protected:
   InputPortImpl(
     DeviceTypePtr (*deviceTypeSrc)(),
@@ -92,7 +94,9 @@ protected:
     , m_propertiesType(propertiesType)
     , m_stateType(stateType)
     , m_code(code)
-  {}
+  {
+    m_metadata.SetObject();
+  }
 public:
   virtual const DeviceTypePtr &getDeviceType() const override
   {
@@ -118,6 +122,9 @@ public:
   
   virtual const std::string &getHandlerCode() const override
   { return m_code; }
+
+  virtual rapidjson::Document &getMetadata() override
+  { return m_metadata; }
 };
 
 
@@ -131,6 +138,8 @@ private:
   unsigned m_index;
   MessageTypePtr m_messageType;
   std::string m_code;
+
+  rapidjson::Document m_metadata;
 protected:
   OutputPortImpl(DeviceTypePtr (*deviceTypeSrc)(), const std::string &name, unsigned index, MessageTypePtr messageType, const std::string &code)
     : m_deviceTypeSrc(deviceTypeSrc)
@@ -138,7 +147,9 @@ protected:
     , m_index(index)
     , m_messageType(messageType)
     , m_code(code)
-  {}
+  {
+    m_metadata.SetObject();
+  }
 public:
   virtual const DeviceTypePtr &getDeviceType() const override
   {
@@ -159,6 +170,8 @@ public:
   virtual const std::string &getHandlerCode() const override
   { return m_code; }
 
+  virtual rapidjson::Document &getMetadata() override
+  { return m_metadata; }
 };
 
 class MessageTypeImpl
@@ -168,11 +181,14 @@ private:
   std::string m_id;
   TypedDataSpecPtr m_message;
 
+  rapidjson::Document m_metadata;
 protected:
   MessageTypeImpl(const std::string &id, TypedDataSpecPtr message)
     : m_id(id)
     , m_message(message)
-  {}
+  {
+    m_metadata.SetObject();
+  }
 public:
   virtual const std::string &getId() const override
   { return m_id; }
@@ -180,6 +196,9 @@ public:
 
   virtual const TypedDataSpecPtr &getMessageSpec() const override
   { return m_message; }
+
+  virtual rapidjson::Document &getMetadata() override
+  { return m_metadata; }
 };
 
 
@@ -198,6 +217,8 @@ private:
   std::vector<OutputPortPtr> m_outputsByIndex;
   std::map<std::string,OutputPortPtr> m_outputsByName;
 
+  rapidjson::Document m_metadata;
+
 protected:
   DeviceTypeImpl(const std::string &id, TypedDataSpecPtr properties, TypedDataSpecPtr state, const std::vector<InputPortPtr> &inputs, const std::vector<OutputPortPtr> &outputs)
     : m_id(id)
@@ -206,6 +227,7 @@ protected:
     , m_inputsByIndex(inputs)
     , m_outputsByIndex(outputs)
   {
+    m_metadata.SetObject();
     for(auto &i : inputs){
       m_inputsByName.insert(std::make_pair(i->getName(), i));
     }
@@ -257,6 +279,9 @@ public:
 
   virtual const std::vector<OutputPortPtr> &getOutputs() const override
   { return m_outputsByIndex; }
+
+  virtual rapidjson::Document &getMetadata() override
+  { return m_metadata; }
 };
 typedef std::shared_ptr<DeviceType> DeviceTypePtr;
 
@@ -277,11 +302,15 @@ private:
   std::unordered_map<std::string,DeviceTypePtr> m_deviceTypesById;
 
   std::string m_sharedCode;
+
+  rapidjson::Document m_metadata;
 protected:
   GraphTypeImpl(std::string id, TypedDataSpecPtr propertiesSpec)
     : m_id(id)
     , m_propertiesSpec(propertiesSpec)
-  {}
+  {
+    m_metadata.SetObject();
+  }
 
   const std::string &getId() const override
   { return m_id; }
@@ -322,6 +351,9 @@ protected:
   {
     return m_sharedCode;
   }
+
+  virtual rapidjson::Document &getMetadata() override
+  { return m_metadata; }
 
   void addSharedCode(const std::string &code)
   {
