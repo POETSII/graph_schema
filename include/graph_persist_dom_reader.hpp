@@ -35,6 +35,148 @@ rapidjson::Document parse_meta_data(xmlpp::Element *parent, const char *name, xm
   }
 }
 
+TypedDataSpecElementPtr loadTypedDataSpecElement(xmlpp::Element *eMember)
+{
+  xmlpp::Node::PrefixNsMap ns;
+  ns["g"]="http://TODO.org/POETS/virtual-graph-schema-v1";
+
+  
+  std::string name=get_attribute_required(eMember, "name");
+  
+  if(eMember->get_name()=="Scalar"){
+    std::string type=get_attribute_required(eMember, "type");
+    std::string defaultValue=get_attribute_optional(eMember, "default");
+    return makeScalar(name, type, defaultValue);
+  
+  }else if(eMember->get_name()=="Array"){
+    std::string lengthS=get_attribute_required(eMember, "length");
+    unsigned length=std::stoul(lengthS);
+    
+    TypedDataSpecElementPtr elt;
+    std::string typeS=get_attribute_optional(eMember, "type");
+    if(!typeS.empty()){
+      elt=makeScalar("_", typeS);
+    }else{
+      throw std::runtime_error("Arrays of non-scalar not implemented yet.");
+    }
+    return makeArray(name, length, elt);
+    
+  }else if(eMember->get_name()=="Tuple"){
+    std::vector<TypedDataSpecElementPtr> members;
+    
+    for(auto *nSubMember : eMember->find("./g:Scalar | ./g:Union | ./g:Array | ./g:Tuple",ns))
+    {
+      auto eSubMember=(xmlpp::Element*)nSubMember;
+      members.push_back( loadTypedDataSpecElement( eSubMember ) );
+    }
+    
+    return makeTuple(name, members.begin(), members.end() );
+  }else if(eMember->get_name()=="Union"){
+    throw std::runtime_error("Union not impl.");
+  }else{
+    throw std::runtime_error("Unknown data spec part.");
+  }
+
+}
+
+TypedDataSpecPtr loadTypedDataSpec(xmlpp::Element *eTypedDataSpec)
+{
+  xmlpp::Node::PrefixNsMap ns;
+  ns["g"]="http://TODO.org/POETS/virtual-graph-schema-v1";
+  
+  std::vector<TypedDataSpecElementPtr> members;
+  
+  for(auto *nMember : eTypedDataSpec->find("./g:Scalar|./g:Tuple|./g:Array|./g:Union", ns))
+  {
+    auto eMember=(xmlpp::Element*)nMember;
+    members.push_back( loadTypedDataSpecElement( eMember ) );
+  }
+  
+  auto elt=makeTuple("_", members.begin(), members.end());
+  
+  return std::make_shared<TypedDataSpecImpl>(elt);
+}
+
+/*
+
+GraphTypePtr loadGraphTypeElement(xmlpp::Element *eGraphType, GraphLoadEvents *events)
+{
+  std::string id=get_attribute_required(eGraph, "id");
+  
+  TypedDataPtr properties;
+  auto *eGraphProperties=find_single(eGraphType, "./g:Properties", ns);
+  if(eGraphProperties){
+    properties=loadTypedDataElement(eGraphProperties);
+  }
+  
+  auto res=std::make_shared<GraphTypeImpl>(id, properties);
+  
+  std::map<std::string,MessageTypePtr> messageTypes;
+  std::map<std::string,DeviceTypePtr> deviceTypes;
+  
+  auto *eMessageTypes=find_single(parent, "./g:MessageTypes", ns);
+  for(auto *nMessageType : eMessageTypes->find("./g:MessageType", ns)){
+    auto mt=loadMessageTypeElement( (xmlpp::Element*)nMessageType);
+    
+    if(messageTypes.find(mt->getId())!=messageTypes.end()){
+      throw std::runtime_error("Message type id appears twice.");
+    }
+    
+    messageTypes.insert(std::make_pair( mt->getId(), mt ));
+    events->onMessageType(mt);
+    res->addMessageType(mt);
+  }
+  
+  auto *eDeviceTypes=find_single(parent, "./g:DeviceTypes", ns);
+  for(auto *nDeviceType : eDeviceTypes->find("./g:DeviceType", ns)){
+    auto dt=loadDeviceTypeElement( (xmlpp::Element*)nDeviceType);
+    
+    if(deviceTypes.find(dt->getId())!=deviceTypes.end()){
+      throw std::runtime_error("Device type id appears twice.");
+    }
+    
+    deviceTypes.insert(std::make_pair( dt->getId(), mt ));
+    events->onDeviceType(dt);
+    res->addDeviceType(dt);
+  }
+  
+  events->onGraphType(res);
+  
+  return res;
+}
+
+//! Given a graph an element of type "g:Graphs", look for a graph type with given id.
+GraphTypePtr loadGraphType(xmlpp::Element *parent, GraphLoadEvents *events, const std::string &name id)
+{
+  xmlpp::Node::PrefixNsMap ns;
+  ns["g"]="http://TODO.org/POETS/virtual-graph-schema-v1";
+  
+  auto *eGraphType=find_single(parent, "./g:GraphType[@id='"+id+"'", ns);
+  if(eGraphType==0){   
+    return loadGraphTypeElement(eGraphType, events);
+  }
+  
+  throw std::runtime_error("No graph type element for id='"+id+"'");
+}
+
+std::map<std::string,GraphTypePtr> loadAllGraphTypes(xmlpp::Element *parent, GraphLoadEvents *events)
+{
+  xmlpp::Node::PrefixNsMap ns;
+  ns["g"]="http://TODO.org/POETS/virtual-graph-schema-v1";
+  
+  std::map<std::string,GraphTypePtr> res;
+  
+  for(auto *nGraphType : parent->find("./g:GraphType", ns){
+    auto r=loadGraphTypeElement((xmlpp::Element *)eGraphType, events);
+    if( res.find(r->getId())!=res.end() ){
+      throw std::string("Duplicate graph type id.");
+    }
+    res.insert(std::make_pair(r->getId(),r));
+    events->onGraphType(r);
+  }
+  return rs;
+}
+*/
 void loadGraph(Registry *registry, xmlpp::Element *parent, GraphLoadEvents *events)
 {
   xmlpp::Node::PrefixNsMap ns;
@@ -130,7 +272,7 @@ void loadGraph(Registry *registry, xmlpp::Element *parent, GraphLoadEvents *even
 
     std::string srcDeviceId, srcPortName, dstDeviceId, dstPortName;
     std::string path=get_attribute_optional(eEdge, "path");
-    if(path.c_str()){
+    if(!path.empty()){
       split_path(path, dstDeviceId, dstPortName, srcDeviceId, srcPortName);
       //std::cerr<<srcDeviceId<<" "<<srcPortName<<" "<<dstDeviceId<<" "<<dstPortName<<"\n";
     }else{

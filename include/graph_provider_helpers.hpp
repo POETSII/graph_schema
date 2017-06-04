@@ -17,6 +17,9 @@
 #include <sys/types.h>
 #include <dirent.h>
 
+#include "rapidjson/stringbuffer.h"
+#include "rapidjson/prettywriter.h"
+
 
 xmlpp::Element *find_single(xmlpp::Element *parent, const std::string &name, const xmlpp::Node::PrefixNsMap &ns=xmlpp::Node::PrefixNsMap())
 {
@@ -62,6 +65,86 @@ template<class T>
 T *cast_typed_data(typed_data_t *data)
 {  return static_cast<T *>(data); }
 
+
+
+class TypedDataSpecImpl
+  : public TypedDataSpec
+{
+private:
+  TypedDataSpecElementTuplePtr m_type;
+  unsigned m_payloadSize;
+  unsigned m_totalSize;
+
+public:
+  TypedDataSpecImpl(TypedDataSpecElementTuplePtr elt)
+    : m_type(elt)
+    , m_payloadSize(elt->getPayloadSize())
+    , m_totalSize(elt->getPayloadSize()+sizeof(typed_data_t))
+  {}
+  
+  //! Gets the detailed type of the data spec
+  /*! For very lightweight implementations this may not be available
+  */
+  virtual TypedDataSpecElementTuplePtr getTupleElement()
+  {
+    return m_type;
+  }
+
+  //! Size of the actual content, not including typed_data_t header
+  virtual size_t payloadSize() const override
+  { return m_type->getPayloadSize(); }
+
+  //! Size of the entire typed_data_t instance, including standard header
+  virtual size_t totalSize() const override
+  { return m_totalSize; }
+
+  virtual TypedDataPtr create() const override
+  {
+    typed_data_t *p=(typed_data_t*)malloc(m_totalSize);
+    p->_ref_count=0;
+    p->_total_size_bytes=m_totalSize;
+    
+    m_type->createBinaryDefault((char*)p, m_totalSize);
+    
+    return TypedDataPtr(p);
+  }
+
+  virtual TypedDataPtr load(xmlpp::Element *elt) const override
+  {
+    TypedDataPtr res=create();
+    if(elt){ 
+      std::string text="{"+elt->get_child_text()->get_content()+"}";
+      rapidjson::Document document;
+      document.Parse(text.c_str());
+      assert(document.IsObject());
+    
+      m_type->JSONToBinary(document, (char*)res.payloadPtr(), m_payloadSize);
+    }
+    return res;
+  }
+
+  virtual void save(xmlpp::Element *parent, const TypedDataPtr &data) const override
+  {
+    parent->set_child_text(toJSON(data));
+  }
+
+  virtual std::string toJSON(const TypedDataPtr &data) const override
+  {
+    rapidjson::Document doc;
+    auto v=m_type->binaryToJSON((char*)data.payloadPtr(), data.payloadSize(), doc.GetAllocator());
+
+    rapidjson::StringBuffer buffer;
+    rapidjson::PrettyWriter<rapidjson::StringBuffer> writer(buffer);
+    v.Accept(writer);
+    return std::string(buffer.GetString());    
+  }
+
+  virtual void addDataHash(const TypedDataPtr &data, POETSHash &hash) const
+  {
+    throw std::runtime_error("addDataHash - Not implemented for dynamic types yet.");
+  }
+  
+};
 
 class InputPortImpl
   : public InputPort

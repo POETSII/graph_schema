@@ -13,6 +13,8 @@
 
 #include "rapidjson/document.h"
 
+#include "typed_data_spec.hpp"
+
 #include "poets_hash.hpp"
 
 /* What is the point of all this?
@@ -296,6 +298,12 @@ class TypedDataSpec
 public:
   virtual ~TypedDataSpec()
   {}
+  
+  //! Gets the detailed type of the data spec
+  /*! For very lightweight implementations this may not be available
+  */
+  virtual std::shared_ptr<TypedDataSpecElementTuple> getTupleElement()
+  { throw std::runtime_error("Not implemented."); }
 
   //! Size of the actual content, not including typed_data_t header
   virtual size_t payloadSize() const=0;

@@ -52,11 +52,15 @@ endif
 PYTHON = python3
 
 $(TRANG) : external/trang-20091111.zip
-	(cd external && unzip -o trang-20091111.zip)
+	if [[ ! -f $(TRANG) ]] ; then \
+		(cd external && unzip -o trang-20091111.zip) \
+	fi
 	touch $@
 
 $(JING) : external/jing-20081028.zip
-	(cd external && unzip -o jing-20081028.zip)
+	if [[ ! -f $(JING) ]] ; then \
+		(cd external && unzip -o jing-20081028.zip) \
+	fi
 	touch $@
 
 $(RNG_SVG) : external/rng-svg-latest.zip
