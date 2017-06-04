@@ -12,6 +12,8 @@ CPPFLAGS += -I providers
 LDLIBS += $(shell pkg-config --libs-only-l libxml++-2.6)
 LDFLAGS += $(shell pkg-config --libs-only-L --libs-only-other libxml++-2.6)
 
+LDLIBS += -lboost_filesystem -lboost_system
+
 ifeq ($(OS),Windows_NT)
 SO_CPPFLAGS += -shared
 else

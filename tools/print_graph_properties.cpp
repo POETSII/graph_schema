@@ -133,20 +133,25 @@ public:
 int main(int argc, char *argv[])
 {
   try{
+    fprintf(stderr, "Initialising registry.\n");
     RegistryImpl registry;
+    fprintf(stderr, "Parsing.\n");
 
     xmlpp::DomParser parser;
 
     std::istream *src=&std::cin;
     std::ifstream srcFile;
+    boost::filesystem::path srcPath(boost::filesystem::current_path());
 
     if(argc>1){
-      fprintf(stderr,"Reading from '%s'\n", argv[1]);
-      srcFile.open(argv[1]);
+      boost::filesystem::path p(argv[1]);
+      p=absolute(p);
+      fprintf(stderr,"Reading from '%s' ( = '%s' absolute)\n", argv[1], p.c_str());
+      srcFile.open(p.c_str());
       if(!srcFile.is_open())
-	throw std::runtime_error(std::string("Couldn't open '")+argv[1]+"'");
+        throw std::runtime_error(std::string("Couldn't open '")+p.native()+"'");
       src=&srcFile;
-
+      srcPath=p.parent_path();
     }
 
     fprintf(stderr, "Parsing XML\n");
@@ -155,7 +160,7 @@ int main(int argc, char *argv[])
 
     GraphInfo graph;
 
-    loadGraph(&registry, parser.get_document()->get_root_node(), &graph);
+    loadGraph(&registry, srcPath, parser.get_document()->get_root_node(), &graph);
 
     fprintf(stderr, "Done\n");
 

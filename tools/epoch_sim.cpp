@@ -477,15 +477,19 @@ int main(int argc, char *argv[])
 
     std::istream *src=&std::cin;
     std::ifstream srcFile;
+    boost::filesystem::path srcPath(boost::filesystem::current_path());
 
     if(srcFilePath!="-"){
+      boost::filesystem::path p(srcFilePath);
+      p=absolute(p);
       if(logLevel>1){
-        fprintf(stderr,"Reading from '%s'\n", srcFilePath.c_str());
+        fprintf(stderr,"Reading from '%s' ( = '%s' absolute)\n", srcFilePath.c_str(), p.c_str());
       }
-      srcFile.open(srcFilePath.c_str());
+      srcFile.open(p.c_str());
       if(!srcFile.is_open())
-        throw std::runtime_error(std::string("Couldn't open '")+srcFilePath+"'");
+        throw std::runtime_error(std::string("Couldn't open '")+p.native()+"'");
       src=&srcFile;
+      srcPath=p.parent_path();    
     }
 
     xmlpp::DomParser parser;
@@ -508,7 +512,7 @@ int main(int argc, char *argv[])
       signal(SIGINT, onsignal_close_log);
     }
 
-    loadGraph(&registry, parser.get_document()->get_root_node(), &graph);
+    loadGraph(&registry, srcPath, parser.get_document()->get_root_node(), &graph);
     if(logLevel>1){
       fprintf(stderr, "Loaded\n");
     }

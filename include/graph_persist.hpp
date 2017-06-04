@@ -3,6 +3,9 @@
 
 #include "rapidjson/document.h"
 
+#include <boost/filesystem.hpp>
+
+
 #include "graph.hpp"
 
 /*!
@@ -132,6 +135,6 @@ public:
   }
 };
 
-extern "C" void loadGraph(Registry *registry, xmlpp::Element *elt, GraphLoadEvents *events);
+extern "C" void loadGraph(Registry *registry, const boost::filesystem::path &srcPath, xmlpp::Element *elt, GraphLoadEvents *events);
 
 #endif

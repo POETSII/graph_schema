@@ -76,12 +76,12 @@ private:
   unsigned m_totalSize;
 
 public:
-  TypedDataSpecImpl(TypedDataSpecElementTuplePtr elt)
+  TypedDataSpecImpl(TypedDataSpecElementTuplePtr elt=makeTuple("_", {}))
     : m_type(elt)
     , m_payloadSize(elt->getPayloadSize())
     , m_totalSize(elt->getPayloadSize()+sizeof(typed_data_t))
   {}
-  
+    
   //! Gets the detailed type of the data spec
   /*! For very lightweight implementations this may not be available
   */
@@ -104,7 +104,7 @@ public:
     p->_ref_count=0;
     p->_total_size_bytes=m_totalSize;
     
-    m_type->createBinaryDefault((char*)p, m_totalSize);
+    m_type->createBinaryDefault((char*)p, m_payloadSize);
     
     return TypedDataPtr(p);
   }
@@ -150,7 +150,7 @@ class InputPortImpl
   : public InputPort
 {
 private:
-  DeviceTypePtr (*m_deviceTypeSrc)(); // Avoid circular initialisation with device type
+  std::function<DeviceTypePtr ()> m_deviceTypeSrc; // Avoid circular initialisation with device type
   mutable DeviceTypePtr m_deviceType;
   std::string m_name;
   unsigned m_index;
@@ -162,7 +162,7 @@ private:
   rapidjson::Document m_metadata;
 protected:
   InputPortImpl(
-    DeviceTypePtr (*deviceTypeSrc)(),
+    std::function<DeviceTypePtr ()> deviceTypeSrc,
     const std::string &name,
     unsigned index,
     MessageTypePtr messageType,
@@ -181,6 +181,7 @@ protected:
     m_metadata.SetObject();
   }
 public:
+  
   virtual const DeviceTypePtr &getDeviceType() const override
   {
     if(!m_deviceType)
@@ -215,7 +216,7 @@ class OutputPortImpl
   : public OutputPort
 {
 private:
-  DeviceTypePtr (*m_deviceTypeSrc)(); // Avoid circular initialisation with device type
+  std::function<DeviceTypePtr ()> m_deviceTypeSrc; // Avoid circular initialisation with device type
   mutable DeviceTypePtr m_deviceType;
   std::string m_name;
   unsigned m_index;
@@ -224,7 +225,7 @@ private:
 
   rapidjson::Document m_metadata;
 protected:
-  OutputPortImpl(DeviceTypePtr (*deviceTypeSrc)(), const std::string &name, unsigned index, MessageTypePtr messageType, const std::string &code)
+  OutputPortImpl(std::function<DeviceTypePtr ()> deviceTypeSrc, const std::string &name, unsigned index, MessageTypePtr messageType, const std::string &code)
     : m_deviceTypeSrc(deviceTypeSrc)
     , m_name(name)
     , m_index(index)
@@ -265,14 +266,14 @@ private:
   TypedDataSpecPtr m_message;
 
   rapidjson::Document m_metadata;
-protected:
+public:
   MessageTypeImpl(const std::string &id, TypedDataSpecPtr message)
     : m_id(id)
     , m_message(message)
   {
     m_metadata.SetObject();
-  }
-public:
+  }  
+
   virtual const std::string &getId() const override
   { return m_id; }
 
@@ -395,6 +396,30 @@ protected:
     m_metadata.SetObject();
   }
 
+  void addSharedCode(const std::string &code)
+  {
+    m_sharedCode=m_sharedCode+code;
+  }
+
+  void addMessageType(MessageTypePtr et)
+  {
+    if(m_messageTypesById.find(et->getId())!=m_messageTypesById.end()){
+      throw std::runtime_error("Duplicate message type '"+et->getId()+"'");
+    }
+    m_messageTypesByIndex.push_back(et);
+    m_messageTypesById[et->getId()]=et;
+  }
+
+  void addDeviceType(DeviceTypePtr et)
+  {
+    if(m_deviceTypesById.find(et->getId())!=m_deviceTypesById.end()){
+      throw std::runtime_error("Duplicate device type '"+et->getId()+"'");
+    }
+    m_deviceTypesByIndex.push_back(et);
+    m_deviceTypesById[et->getId()]=et;
+  }
+
+public:
   const std::string &getId() const override
   { return m_id; }
 
@@ -438,22 +463,6 @@ protected:
   virtual rapidjson::Document &getMetadata() override
   { return m_metadata; }
 
-  void addSharedCode(const std::string &code)
-  {
-    m_sharedCode=m_sharedCode+code;
-  }
-
-  void addMessageType(MessageTypePtr et)
-  {
-    m_messageTypesByIndex.push_back(et);
-    m_messageTypesById[et->getId()]=et;
-  }
-
-  void addDeviceType(DeviceTypePtr et)
-  {
-    m_deviceTypesByIndex.push_back(et);
-    m_deviceTypesById[et->getId()]=et;
-  }
 };
 
 class ReceiveOrchestratorServicesImpl
@@ -552,6 +561,18 @@ public:
   }
 };
 
+class unknown_graph_type_error
+  : public std::runtime_error
+{
+private:
+  std::string m_graphId;
+public:
+  unknown_graph_type_error(const std::string &graphId)
+    : std::runtime_error("Couldn't find graph type with id '"+graphId+"'")
+    , m_graphId(graphId)
+  {}
+};
+
 class RegistryImpl
   : public Registry
 {
@@ -605,17 +626,18 @@ private:
     }
   }
 public:
-  RegistryImpl()
+  RegistryImpl(bool disableImplicitLoad=false)
     : m_soExtension(".graph.so")
   {
-    const char * searchPath=getenv("POETS_PROVIDER_PATH");
-    std::shared_ptr<char> cwd;
-    if(searchPath==NULL){
-      cwd.reset(getcwd(0,0), free);
-      searchPath=cwd.get();
-    }
-    if(searchPath){
-      recurseLoad(searchPath);
+    if(!disableImplicitLoad){
+      const char * searchPath=getenv("POETS_PROVIDER_PATH");
+      if(searchPath){
+        recurseLoad(searchPath);
+      }else{
+        std::shared_ptr<char> cwd;
+        cwd.reset(getcwd(0,0), free);
+          recurseLoad(cwd.get()+std::string("/providers"));
+      }
     }
   }
 
@@ -647,11 +669,8 @@ public:
   {
     auto it=m_graphs.find(id);
     if(it==m_graphs.end()){
-      fprintf(stderr, "Couldn't find provide for '%s'", id.c_str());
-      for(auto i : m_graphs){
-	std::cerr<<"  "<<i.first<<" : "<<i.second<<"\n";
-      }
-      exit(1);
+      throw unknown_graph_type_error(id);
+      
     }
     return it->second;
   }
