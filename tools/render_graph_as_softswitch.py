@@ -7,9 +7,15 @@ from graph.write_cpp import render_graph_as_cpp
 from graph.make_properties import *
 from graph.calc_c_globals import *
 
+import struct
 import sys
 import os
 import logging
+
+# The alignment to pad to for the next cache line
+_cache_line_size=32
+
+_use_BLOB=True
 
 def render_typed_data_as_type_decl(td,dst,indent,name=None):
     if name==None:
@@ -73,6 +79,97 @@ def render_typed_data_inst(td,tName,ti,iName,dst,const=False):
     else:
         dst.write("{}")
     dst.write(";\n")
+
+_scalar_to_struct_format={
+    "float":struct.Struct("<f"),
+    "double":struct.Struct("<d"),
+    "uint8_t":struct.Struct("<B"),
+    "int8_t":struct.Struct("<b"),
+    "uint16_t":struct.Struct("<H"),
+    "int16_t":struct.Struct("<h"),
+    "uint32_t":struct.Struct("<I"),
+    "int32_t":struct.Struct("<i"),
+    "uint64_t":struct.Struct("<Q"),
+    "int64_t":struct.Struct("<q"),
+    "char":struct.Struct("<c")
+}
+
+# TODO : this is probably very expensive
+def scalar_to_bytes(val,type):
+    return _scalar_to_struct_format[type].pack(val)
+    
+
+def convert_typed_data_inst_to_bytes(td,ti):
+    if isinstance(td,ScalarTypedDataSpec):
+        if ti is None:
+            v=0
+        else:
+            v=ti
+        return scalar_to_bytes(v, td.type)
+    elif isinstance(td,TupleTypedDataSpec):
+        res=bytearray([])
+        for e in td.elements_by_index:
+            res.extend(convert_typed_data_inst_to_bytes(e,ti and ti.get(e.name,None)))
+        return res
+    elif isinstance(td,ArrayTypedDataSpec):
+        res=bytearray([])
+        for i in range(td.length):
+            res.extend(convert_typed_data_inst_to_bytes(td.type,ti and ti[i]) )
+        return res
+    else:
+        raise RuntimeError("Unknown type {}".format(td))
+
+def get_typed_data_size(td):
+    if td is None:
+        return 0
+    return len(convert_typed_data_inst_to_bytes(td,None))
+ 
+    
+class BLOBHolder:
+    def __init__(self):
+        self.bytes=bytearray([])
+        self.offsets={} # Map of name : (offset,size)
+        self.segments=[] # List of (offset,size,name)
+    
+    # Returns the offset
+    def add(self,name, payload):
+        assert isinstance(payload,bytearray)
+        assert name not in self.offsets
+        offset=len(self.bytes)
+        length=len(payload)
+        self.bytes.extend(payload)
+        self.offsets[name]=(offset,length)
+        self.segments.append( (offset,length,name) )
+        return offset
+        
+    def pad(self,granularity):
+        over = len(self.bytes) % granularity
+        if over>0:
+            offset=len(self.bytes)
+            length=granularity-over
+            self.bytes.extend( [0]*length )
+            self.segments.append( (offset,length,"__pad__") )
+    
+    # Returns an (offset,length) pair
+    def find(self,name):
+        if name not in self.offsets:
+            for k in self.offsets.keys():
+                sys.stderr.write("Key = {}\n".format(k))
+            sys.stderr.write("Looking for {}\n".format(name))
+        assert name in self.offsets
+        return self.offsets[name]
+        
+    # Write the array out as an array of uint8_t called name
+    def write(self,dst,name):
+        dst.write("uint8_t {}[]={{\n".format(name));
+        for (offset,length,name) in self.segments:
+            dst.write("  // {} +{}, {}\n".format(offset, length, name))
+            for b in self.bytes[offset:offset+length]:
+                dst.write("{},".format(b))
+            dst.write("\n")
+        dst.write("  // trailing byte\n")
+        dst.write("  0\n")
+        dst.write("};\n\n")
 
 def render_graph_type_as_softswitch_decls(gt,dst):
     gtProps=make_graph_type_properties(gt)
@@ -215,15 +312,18 @@ def render_device_type_as_softswitch_defs(dt,dst,dtProps):
         ip=dt.inputs_by_index[i]
         if i!=0:
             dst.write("  ,\n");
+            
+        propertiesSize=get_typed_data_size(ip.properties)
+        stateSize=get_typed_data_size(ip.state)
         dst.write("""
             {{
                 (receive_handler_t){INPUT_PORT_FULL_ID}_receive_handler,
                 sizeof(packet_t)+sizeof({INPUT_PORT_MESSAGE_T}),
-                sizeof({INPUT_PORT_PROPERTIES_T}),
-                sizeof({INPUT_PORT_STATE_T}),
+                {ACTUAL_PROPERTIES_SIZE}, //sizeof({INPUT_PORT_PROPERTIES_T}),
+                {ACTUAL_STATE_SIZE}, //sizeof({INPUT_PORT_STATE_T}),
                 "{INPUT_PORT_NAME}"
             }}
-            """.format(**make_input_port_properties(ip)))
+            """.format(ACTUAL_PROPERTIES_SIZE=propertiesSize, ACTUAL_STATE_SIZE=stateSize, **make_input_port_properties(ip)))
     dst.write("};\n");
     
     dst.write("OutputPortVTable OUTPUT_VTABLES_{DEVICE_TYPE_FULL_ID}[OUTPUT_COUNT_{DEVICE_TYPE_FULL_ID}]={{\n".format(**dtProps))
@@ -258,7 +358,9 @@ def render_graph_type_as_softswitch_defs(gt,dst):
 
     dst.write("DeviceTypeVTable DEVICE_TYPE_VTABLES[DEVICE_TYPE_COUNT] = {{".format(**gtProps))
     first=True
-    for dt in gt.device_types.values():
+    
+    # Have to put these out in the same order as the device indexes
+    for (name,dt) in sorted( [ (dt.id,dt) for dt in gt.device_types.values() ] ):
         if first:
             first=False
         else:
@@ -278,6 +380,8 @@ def render_graph_type_as_softswitch_defs(gt,dst):
 
 def render_graph_instance_as_thread_context(
     dst,
+    globalProperties, # Giant array of read-only BLOBs
+    globalState,      # Giant array of read-write BLOBs
     gi,
     thread_index, # Thread index we are working on
     devices_to_thread,      # Map from device:thread
@@ -287,13 +391,31 @@ def render_graph_instance_as_thread_context(
     props   # Map from graph and device types to properties
     ):
         
-    dst.write("//////// Thread {}\n".format(thread_index))    
+    # Make sure we are starting new cache line boundaries for this thread
+    globalProperties.pad(_cache_line_size)
+    globalState.pad(_cache_line_size)
+        
+    dst.write("//////// Thread {}\n".format(thread_index))  
+
+
     
     for di in thread_to_devices[thread_index]:
+        devicePropertiesOffset=None
+        deviceStateOffset=None
+        
         if di.device_type.properties:
-            render_typed_data_inst(di.device_type.properties, props[di.device_type]["DEVICE_TYPE_PROPERTIES_T"], di.properties, di.id+"_properties", dst,True)
+            devicePropertiesName=di.id+"_properties"
+            render_typed_data_inst(di.device_type.properties, props[di.device_type]["DEVICE_TYPE_PROPERTIES_T"], di.properties, devicePropertiesName, dst,True)
+            blob=convert_typed_data_inst_to_bytes(di.device_type.properties, di.properties)
+            globalProperties.pad(4)
+            devicePropertiesOffset=globalProperties.add(devicePropertiesName, blob)
+            
         if di.device_type.state:
-            render_typed_data_inst(di.device_type.state, props[di.device_type]["DEVICE_TYPE_STATE_T"], None, di.id+"_state",dst)
+            deviceStateName=di.id+"_state"
+            render_typed_data_inst(di.device_type.state, props[di.device_type]["DEVICE_TYPE_STATE_T"], None, deviceStateName, dst)
+            blob=convert_typed_data_inst_to_bytes(di.device_type.state, None) # TODO : This could be much cheaper, as it is always the same
+            globalState.pad(4)
+            deviceStateOffset=globalState.add(deviceStateName, blob)
         
         for op in di.device_type.outputs_by_index:
             dst.write("address_t {}_{}_addresses[]={{\n".format(di.id, op.name))
@@ -306,17 +428,17 @@ def render_graph_instance_as_thread_context(
                 dstDev=ei.dst_device
                 tIndex=devices_to_thread[dstDev]
                 tOffset=thread_to_devices[tIndex].index(dstDev)
-                dst.write("{{{},{},INPUT_INDEX_{}_{}_{}}}".format(tIndex,tOffset,dstDev.device_type.parent.id, dstDev.device_type.id, ei.dst_port.name))
+                dst.write("  {{{},{},INPUT_INDEX_{}_{}_{}}}".format(tIndex,tOffset,dstDev.device_type.parent.id, dstDev.device_type.id, ei.dst_port.name))
             dst.write("};\n")
         
-        dst.write("OutputPortTargets {}_targets[]={{".format(di.id))
+        dst.write("OutputPortTargets {}_targets[]={{\n".format(di.id))
         first=True
         for ei in edges_out[di][op]:
             if first:
                 first=False
             else:
                 dst.write(",")
-            dst.write("{{ {}, {}_{}_addresses }}".format( len(edges_out[di][op]), di.id, op.name ))
+            dst.write("{{ {}, {}_{}_addresses }} // {}\n".format( len(edges_out[di][op]), di.id, op.name, op.name ))
         dst.write("};\n")
         
         for ip in di.device_type.inputs_by_index:
@@ -325,9 +447,17 @@ def render_graph_instance_as_thread_context(
             for ei in edges_in[di][ip]:
                 name="{}_{}_{}_{}".format(ei.dst_device.id,ei.dst_port.name,ei.src_device.id,ei.src_port.name)
                 if ip.properties:
-                    render_typed_data_inst(ip.properties, props[ip]["INPUT_PORT_PROPERTIES_T"], ei.properties, name+"_properties", dst,True)
+                    inputPropertiesName=name+"_properties"
+                    render_typed_data_inst(ip.properties, props[ip]["INPUT_PORT_PROPERTIES_T"], ei.properties, inputPropertiesName, dst,True)
+                    blob=convert_typed_data_inst_to_bytes(ip.properties, None)
+                    globalState.pad(4)
+                    inputPropertiesOffset=globalProperties.add(inputPropertiesName, blob)
                 if ip.state:
-                    render_typed_data_inst(ip.state, props[ip]["INPUT_PORT_STATE_T"], None, name+"_state", dst)
+                    inputStateName=name+"_state"
+                    render_typed_data_inst(ip.state, props[ip]["INPUT_PORT_STATE_T"], None, inputStateName, dst)
+                    blob=convert_typed_data_inst_to_bytes(ip.state, None) # TODO : This could be much cheaper, as it is always the same
+                    globalState.pad(4)
+                    inputStateOffset=globalState.add(inputStateName, blob)
 
         for ip in di.device_type.inputs_by_index:
             if ip.properties==None and ip.state==None:
@@ -359,9 +489,17 @@ def render_graph_instance_as_thread_context(
                     "EDGE_STATE":0
                 }
                 if ip.properties:
-                    eProps["EDGE_PROPERTIES"]="&{}_properties".format(name)
+                    if not _use_BLOB:
+                        eProps["EDGE_PROPERTIES"]="&{}_properties".format(name)
+                    else:
+                        (offset,length)=globalProperties.find("{}_properties".format(name))
+                        eProps["EDGE_PROPERTIES"]="softswitch_pthread_global_properties+{}".format(offset)
                 if ip.state:
-                    eProps["EDGE_STATE"]="&{}_state".format(name)
+                    if not _use_BLOB:
+                        eProps["EDGE_STATE"]="&{}_state".format(name)
+                    else:
+                        (offset,length)=globalState.find("{}_state".format(name))
+                        eProps["EDGE_STATE"]="softswitch_pthread_global_state+{}".format(offset)
                 dst.write("""
                     {{
                         {{
@@ -375,7 +513,7 @@ def render_graph_instance_as_thread_context(
                     """.format(**eProps))
             dst.write("};\n");
 
-        dst.write("InputPortSources {}_sources[]={{".format(di.id))
+        dst.write("InputPortSources {}_sources[]={{\n".format(di.id))
         first=True
         
         for ip in di.device_type.inputs_by_index:
@@ -384,9 +522,9 @@ def render_graph_instance_as_thread_context(
             else:
                 dst.write(",")
             if ip.properties==None and ip.state==None:
-                dst.write("{0,0}\n")
+                dst.write("  {{0,0}} // {}\n".format(ip.name))
             else:
-                dst.write("{{ {}, {}_{}_bindings }}\n".format( len(edges_in[di][ip]), di.id, ip.name ))
+                dst.write("  {{ {}, {}_{}_bindings }}\n // {}\n".format( len(edges_in[di][ip]), di.id, ip.name, ip.name ))
         dst.write("};\n")
         
 
@@ -408,9 +546,17 @@ def render_graph_instance_as_thread_context(
             "DEVICE_INSTANCE_STATE" : 0
         }   
         if di.device_type.properties:
-            diProps["DEVICE_INSTANCE_PROPERTIES"]="&{}_properties".format(di.id)
+            if not _use_BLOB:
+                diProps["DEVICE_INSTANCE_PROPERTIES"]="&{}_properties".format(di.id)
+            else:
+                (offset,length)=globalProperties.find(di.id+"_properties")
+                diProps["DEVICE_INSTANCE_PROPERTIES"]="softswitch_pthread_global_properties+{}".format(offset)
         if di.device_type.state:
-            diProps["DEVICE_INSTANCE_STATE"]="&{}_state".format(di.id)
+            if not _use_BLOB:
+                diProps["DEVICE_INSTANCE_STATE"]="&{}_state".format(di.id)
+            else:
+                (offset,length)=globalState.find(di.id+"_state")
+                diProps["DEVICE_INSTANCE_STATE"]="softswitch_pthread_global_state+{}".format(offset)
         dst.write("""
         {{
             DEVICE_TYPE_VTABLES+DEVICE_TYPE_INDEX_{DEVICE_TYPE_FULL_ID}, // vtable
@@ -429,6 +575,12 @@ def render_graph_instance_as_thread_context(
     dst.write("};\n")
 
 def render_graph_instance_as_softswitch(gi,dst,num_threads,device_to_thread):
+    
+    globalProperties=BLOBHolder()
+    globalProperties.add("__nudge__", bytearray([0]*4))
+    globalState=BLOBHolder()
+    globalState.add("__nudge__", bytearray([0]*4))
+    
     props={
         gi.graph_type:make_graph_type_properties(gi.graph_type)
     }
@@ -468,7 +620,7 @@ def render_graph_instance_as_softswitch(gi,dst,num_threads,device_to_thread):
         dst.write("    const unsigned DEVICE_INSTANCE_COUNT_thread{}={};\n".format(ti,len(thread_to_devices[ti])))
     
     for ti in range(num_threads):
-        render_graph_instance_as_thread_context(dst,gi,ti,devices_to_thread, thread_to_devices,edgesIn,edgesOut,props)
+        render_graph_instance_as_thread_context(dst,globalProperties,globalState,gi,ti,devices_to_thread, thread_to_devices,edgesIn,edgesOut,props)
 
     render_typed_data_inst(gi.graph_type.properties, props[gi.graph_type]["GRAPH_TYPE_PROPERTIES_T"], gi.properties, gi.id+"_properties", dst,True)
 
@@ -503,6 +655,8 @@ def render_graph_instance_as_softswitch(gi,dst,num_threads,device_to_thread):
             
     dst.write("};\n")
 
+    globalProperties.write(dst, "softswitch_pthread_global_properties")
+    globalState.write(dst, "softswitch_pthread_global_state")
 
 
 import argparse

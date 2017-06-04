@@ -560,11 +560,15 @@ int main(int argc, char *argv[])
     }
   
   }catch(std::exception &e){
-    g_pLog->close();
+    if(g_pLog){
+      g_pLog->close();
+    }
     std::cerr<<"Exception : "<<e.what()<<"\n";
     exit(1);
   }catch(...){
-    g_pLog->close();
+    if(g_pLog){
+      g_pLog->close();
+    }
     std::cerr<<"Exception of unknown type\n";
     exit(1);
   }

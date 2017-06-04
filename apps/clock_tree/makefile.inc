@@ -12,7 +12,7 @@ demos/clock_tree/clock_tree_$1.xml : apps/clock_tree/create_clock_tree_instance.
 	$$(PYTHON) apps/clock_tree/create_clock_tree_instance.py apps/clock_tree/clock_tree_graph_type.xml $$(subst _, ,$1) > $$@
 
 demos/clock_tree/clock_tree_$1.snap : demos/clock_tree/clock_tree_$1.xml bin/epoch_sim clock_tree_provider demos/clock_tree/clock_tree_$1.checked
-	bin/epoch_sim --max-steps $2 --snapshots 1 $$@  demos/clock_tree/clock_tree_$1.xml
+	bin/epoch_sim  --log-level 0 --max-steps $2 --snapshots 1 $$@  demos/clock_tree/clock_tree_$1.xml
 
 demos/clock_tree/clock_tree_$1.mp4 : demos/clock_tree/clock_tree_$1.xml demos/clock_tree/clock_tree_$1.snap clock_tree_provider
 	mkdir -p demos/clock_tree/clock_tree_$1.tmp
