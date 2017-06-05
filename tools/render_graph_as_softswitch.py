@@ -16,6 +16,7 @@ import logging
 _cache_line_size=32
 
 _use_BLOB=True
+_use_indirect_BLOB=False and _use_BLOB
 
 def render_typed_data_as_type_decl(td,dst,indent,name=None):
     if name==None:
@@ -100,6 +101,8 @@ def scalar_to_bytes(val,type):
     
 
 def convert_typed_data_inst_to_bytes(td,ti):
+    if td==None:
+        return bytearray([])
     if isinstance(td,ScalarTypedDataSpec):
         if ti is None:
             v=0
@@ -124,24 +127,72 @@ def get_typed_data_size(td):
         return 0
     return len(convert_typed_data_inst_to_bytes(td,None))
  
+_address_to_bytes_format=struct.Struct("<IHBB")
+ 
+def convert_address_to_bytes(address,device,port):
+    return _address_to_bytes_format.pack(address,device,port,0)
+    
+class StructHolder:    
+    """Builds a giant list of structs containing sub-structs."""
+    
+    def __init__(self,typename,arity):
+        self.typename=typename
+        self.arity=arity
+        self.entries=[] # Vector of (payload,name)
+        self.indices={} # Map of name : index
+    
+    # Add a label without adding any entries
+    def add_label(self,name):
+        assert name not in self.indices
+        index=len(self.entries)
+        self.indices[name]=index
+        return index
+    
+    # Returns the offset
+    def add(self,name, payload):
+        assert isinstance(payload,tuple)
+        assert len(payload)==self.arity
+        assert name not in self.indices
+        index=len(self.entries)
+        self.entries.append( (payload,name) )
+        self.indices[name]=index
+        return index
+    
+    # Returns an offset
+    def find(self,name):
+        if name not in self.indices:
+            for k in self.indices.keys():
+                sys.stderr.write("Key = {}\n".format(k))
+            sys.stderr.write("Looking for {}\n".format(name))
+        assert name in self.indices
+        return self.indices[name]
+        
+    # Write the array out as an array called name
+    def write(self,dst,name):
+        dst.write("{} {}[] ={{\n".format(self.typename, name));
+        i=0
+        for (payload,name) in self.entries:
+            dst.write("  // {}, {}\n".format(i, name))
+            dst.write("  {")
+            dst.write(",".join([str(x) for x in payload]))
+            dst.write("}")
+            if i<len(self.entries)-1:
+                dst.write(",")
+            dst.write("\n")
+            i=i+1
+        dst.write("};\n\n")
     
 class BLOBHolder:
+    """Builds a BLOB containing small BLOBs. Each sub-BLOB can be aligned
+    within the master BLOB, by default to a multiple of 4.
+    The overall BLOB should be aligned to at least a cache line.
+    """
+    
     def __init__(self):
         self.bytes=bytearray([])
         self.offsets={} # Map of name : (offset,size)
         self.segments=[] # List of (offset,size,name)
     
-    # Returns the offset
-    def add(self,name, payload):
-        assert isinstance(payload,bytearray)
-        assert name not in self.offsets
-        offset=len(self.bytes)
-        length=len(payload)
-        self.bytes.extend(payload)
-        self.offsets[name]=(offset,length)
-        self.segments.append( (offset,length,name) )
-        return offset
-        
     def pad(self,granularity):
         over = len(self.bytes) % granularity
         if over>0:
@@ -150,6 +201,18 @@ class BLOBHolder:
             self.bytes.extend( [0]*length )
             self.segments.append( (offset,length,"__pad__") )
     
+    # Returns the offset
+    def add(self,name, payload, align=4):
+        self.pad(align) # Always align to 32-bit boundary
+        assert isinstance(payload,bytearray)
+        assert name not in self.offsets
+        offset=len(self.bytes)
+        length=len(payload)
+        self.bytes.extend(payload)
+        self.offsets[name]=(offset,length)
+        self.segments.append( (offset,length,name) )
+        return offset
+            
     # Returns an (offset,length) pair
     def find(self,name):
         if name not in self.offsets:
@@ -161,7 +224,7 @@ class BLOBHolder:
         
     # Write the array out as an array of uint8_t called name
     def write(self,dst,name):
-        dst.write("uint8_t {}[]={{\n".format(name));
+        dst.write("uint8_t {}[]  __attribute__((aligned({}))) ={{\n".format(name, _cache_line_size));
         for (offset,length,name) in self.segments:
             dst.write("  // {} +{}, {}\n".format(offset, length, name))
             for b in self.bytes[offset:offset+length]:
@@ -223,7 +286,7 @@ def render_graph_type_as_softswitch_decls(gt,dst):
             const uint32_t OUTPUT_FLAG_{OUTPUT_PORT_FULL_ID} = 1<<{OUTPUT_PORT_INDEX};
             """.format(**make_output_port_properties(op)))
     
-    dst.write("extern DeviceTypeVTable DEVICE_TYPE_VTABLES[];\n")
+    dst.write("extern DeviceTypeVTable softswitch_device_vtables[];\n")
     dst.write("#endif\n")
 
 def render_rts_handler_as_softswitch(dev,dst,devProps):
@@ -356,7 +419,7 @@ def render_graph_type_as_softswitch_defs(gt,dst):
         dtProps=make_device_type_properties(dt)
         render_device_type_as_softswitch_defs(dt,dst,dtProps)
 
-    dst.write("DeviceTypeVTable DEVICE_TYPE_VTABLES[DEVICE_TYPE_COUNT] = {{".format(**gtProps))
+    dst.write("DeviceTypeVTable softswitch_device_vtables[DEVICE_TYPE_COUNT] = {{".format(**gtProps))
     first=True
     
     # Have to put these out in the same order as the device indexes
@@ -382,6 +445,7 @@ def render_graph_instance_as_thread_context(
     dst,
     globalProperties, # Giant array of read-only BLOBs
     globalState,      # Giant array of read-write BLOBs
+    globalOutputPortTargets, # Giant array of outputport targets
     gi,
     thread_index, # Thread index we are working on
     devices_to_thread,      # Map from device:thread
@@ -405,41 +469,76 @@ def render_graph_instance_as_thread_context(
         
         if di.device_type.properties:
             devicePropertiesName=di.id+"_properties"
-            render_typed_data_inst(di.device_type.properties, props[di.device_type]["DEVICE_TYPE_PROPERTIES_T"], di.properties, devicePropertiesName, dst,True)
-            blob=convert_typed_data_inst_to_bytes(di.device_type.properties, di.properties)
-            globalProperties.pad(4)
-            devicePropertiesOffset=globalProperties.add(devicePropertiesName, blob)
+            if not _use_BLOB:
+                render_typed_data_inst(di.device_type.properties, props[di.device_type]["DEVICE_TYPE_PROPERTIES_T"], di.properties, devicePropertiesName, dst,True)
+            else:
+                blob=convert_typed_data_inst_to_bytes(di.device_type.properties, di.properties)
+                devicePropertiesOffset=globalProperties.add(devicePropertiesName, blob)
             
         if di.device_type.state:
             deviceStateName=di.id+"_state"
-            render_typed_data_inst(di.device_type.state, props[di.device_type]["DEVICE_TYPE_STATE_T"], None, deviceStateName, dst)
-            blob=convert_typed_data_inst_to_bytes(di.device_type.state, None) # TODO : This could be much cheaper, as it is always the same
-            globalState.pad(4)
-            deviceStateOffset=globalState.add(deviceStateName, blob)
+            if not _use_BLOB:
+                render_typed_data_inst(di.device_type.state, props[di.device_type]["DEVICE_TYPE_STATE_T"], None, deviceStateName, dst)
+            else:
+                blob=convert_typed_data_inst_to_bytes(di.device_type.state, None) # TODO : This could be much cheaper, as it is always the same
+                deviceStateOffset=globalState.add(deviceStateName, blob)
         
         for op in di.device_type.outputs_by_index:
-            dst.write("address_t {}_{}_addresses[]={{\n".format(di.id, op.name))
-            first=True
-            for ei in edges_out[di][op]:
+            addressesName="{}_{}_addresses".format(di.id, op.name)
+            if not _use_BLOB:
+                dst.write("address_t {}[]={{\n".format(addressesName))
+                first=True
+                for ei in edges_out[di][op]:
+                    if first:
+                        first=False
+                    else:
+                        dst.write(",")
+                    dstDev=ei.dst_device
+                    tIndex=devices_to_thread[dstDev]
+                    tOffset=thread_to_devices[tIndex].index(dstDev)
+                    dst.write("  {{{},{},INPUT_INDEX_{}_{}_{}}}".format(tIndex,tOffset,dstDev.device_type.parent.id, dstDev.device_type.id, ei.dst_port.name))
+                dst.write("};\n")
+            else:
+                blob=bytearray([])
+                for ei in edges_out[di][op]:
+                    dstDev=ei.dst_device
+                    tIndex=devices_to_thread[dstDev]
+                    tOffset=thread_to_devices[tIndex].index(dstDev)
+                    port_index=ei.dst_port.parent.inputs_by_index.index(ei.dst_port)
+                    addr=convert_address_to_bytes(tIndex, tOffset, port_index)
+                    #dst.write("  {{{},{},INPUT_INDEX_{}_{}_{}}}".format(tIndex,tOffset,dstDev.device_type.parent.id, dstDev.device_type.id, ei.dst_port.name))
+                    blob.extend(addr)
+                globalProperties.add(addressesName, blob)
+        
+        
+        if not _use_BLOB:
+            dst.write("OutputPortTargets {}_targets[]={{\n".format(di.id))
+        else:
+            globalOutputPortTargets.add_label("{}_targets".format(di.id))
+        
+        first=True
+        for op in di.device_type.outputs_by_index:
+            addressesName="{}_{}_addresses".format(di.id, op.name)
+            if not _use_BLOB:
+                addressesSource=addressesName
+            else:
+                (offset,length)=globalProperties.find(addressesName)
+                if not _use_indirect_BLOB:
+                    addressesSource="(address_t*)(softswitch_pthread_global_properties+{})".format(offset)
+                else:
+                    addressesSource="(address_t*)({})".format(offset)
+            
+            if not _use_BLOB:
                 if first:
                     first=False
                 else:
-                    dst.write(",")
-                dstDev=ei.dst_device
-                tIndex=devices_to_thread[dstDev]
-                tOffset=thread_to_devices[tIndex].index(dstDev)
-                dst.write("  {{{},{},INPUT_INDEX_{}_{}_{}}}".format(tIndex,tOffset,dstDev.device_type.parent.id, dstDev.device_type.id, ei.dst_port.name))
-            dst.write("};\n")
-        
-        dst.write("OutputPortTargets {}_targets[]={{\n".format(di.id))
-        first=True
-        for ei in edges_out[di][op]:
-            if first:
-                first=False
+                    dst.write(",")                
+                dst.write("{{ {}, {} }} // {}\n".format( len(edges_out[di][op]), addressesSource, op.name ))
             else:
-                dst.write(",")
-            dst.write("{{ {}, {}_{}_addresses }} // {}\n".format( len(edges_out[di][op]), di.id, op.name, op.name ))
-        dst.write("};\n")
+                globalOutputPortTargets.add(addressesName, (len(edges_out[di][op]), addressesSource) )
+                
+        if not _use_BLOB:   
+            dst.write("};\n") # End of output port targets
         
         for ip in di.device_type.inputs_by_index:
             if ip.properties==None and ip.state==None:
@@ -448,16 +547,18 @@ def render_graph_instance_as_thread_context(
                 name="{}_{}_{}_{}".format(ei.dst_device.id,ei.dst_port.name,ei.src_device.id,ei.src_port.name)
                 if ip.properties:
                     inputPropertiesName=name+"_properties"
-                    render_typed_data_inst(ip.properties, props[ip]["INPUT_PORT_PROPERTIES_T"], ei.properties, inputPropertiesName, dst,True)
-                    blob=convert_typed_data_inst_to_bytes(ip.properties, None)
-                    globalState.pad(4)
-                    inputPropertiesOffset=globalProperties.add(inputPropertiesName, blob)
+                    if not _use_BLOB:
+                        render_typed_data_inst(ip.properties, props[ip]["INPUT_PORT_PROPERTIES_T"], ei.properties, inputPropertiesName, dst,True)
+                    else:
+                        blob=convert_typed_data_inst_to_bytes(ip.properties, ei.properties)
+                        inputPropertiesOffset=globalProperties.add(inputPropertiesName, blob)
                 if ip.state:
                     inputStateName=name+"_state"
-                    render_typed_data_inst(ip.state, props[ip]["INPUT_PORT_STATE_T"], None, inputStateName, dst)
-                    blob=convert_typed_data_inst_to_bytes(ip.state, None) # TODO : This could be much cheaper, as it is always the same
-                    globalState.pad(4)
-                    inputStateOffset=globalState.add(inputStateName, blob)
+                    if not _use_BLOB:
+                        render_typed_data_inst(ip.state, props[ip]["INPUT_PORT_STATE_T"], None, inputStateName, dst)
+                    else:
+                        blob=convert_typed_data_inst_to_bytes(ip.state, None) # TODO : This could be much cheaper, as it is always the same
+                        inputStateOffset=globalState.add(inputStateName, blob)
 
         for ip in di.device_type.inputs_by_index:
             if ip.properties==None and ip.state==None:
@@ -543,27 +644,42 @@ def render_graph_instance_as_thread_context(
             "DEVICE_INSTANCE_ID" : di.id,
             "DEVICE_INSTANCE_THREAD_OFFSET" : thread_to_devices[thread_index].index(di),
             "DEVICE_INSTANCE_PROPERTIES" : 0,
-            "DEVICE_INSTANCE_STATE" : 0
+            "DEVICE_INSTANCE_STATE" : 0,
+            "DEVICE_INSTANCE_TARGETS" : "{}_targets".format(di.id)
         }   
         if di.device_type.properties:
             if not _use_BLOB:
                 diProps["DEVICE_INSTANCE_PROPERTIES"]="&{}_properties".format(di.id)
             else:
                 (offset,length)=globalProperties.find(di.id+"_properties")
-                diProps["DEVICE_INSTANCE_PROPERTIES"]="softswitch_pthread_global_properties+{}".format(offset)
+                if not _use_indirect_BLOB:
+                    diProps["DEVICE_INSTANCE_PROPERTIES"]="softswitch_pthread_global_properties+{}".format(offset)
+                else:
+                    diProps["DEVICE_INSTANCE_PROPERTIES"]="(void*){}".format(offset)
         if di.device_type.state:
             if not _use_BLOB:
                 diProps["DEVICE_INSTANCE_STATE"]="&{}_state".format(di.id)
             else:
                 (offset,length)=globalState.find(di.id+"_state")
-                diProps["DEVICE_INSTANCE_STATE"]="softswitch_pthread_global_state+{}".format(offset)
+                if not _use_indirect_BLOB:
+                    diProps["DEVICE_INSTANCE_STATE"]="softswitch_pthread_global_state+{}".format(offset)
+                else:
+                    diProps["DEVICE_INSTANCE_STATE"]="(void*){}".format(offset)
+        if _use_BLOB:
+            offset=globalOutputPortTargets.find(diProps["DEVICE_INSTANCE_TARGETS"])
+            diProps["DEVICE_INSTANCE_TARGETS"]="softswitch_pthread_output_port_targets+{}".format(offset)
+        
+        diProps["DEVICE_INSTANCE_VTABLE_SOURCE"]="softswitch_device_vtables+DEVICE_TYPE_INDEX_{DEVICE_TYPE_FULL_ID}".format(**diProps)
+        if _use_indirect_BLOB:
+            diProps["DEVICE_INSTANCE_VTABLE_SOURCE"]="(DeviceTypeVTable*)DEVICE_TYPE_INDEX_{DEVICE_TYPE_FULL_ID}".format(**diProps)
+        
         dst.write("""
         {{
-            DEVICE_TYPE_VTABLES+DEVICE_TYPE_INDEX_{DEVICE_TYPE_FULL_ID}, // vtable
+            {DEVICE_INSTANCE_VTABLE_SOURCE}, // vtable
             {DEVICE_INSTANCE_PROPERTIES},
             {DEVICE_INSTANCE_STATE},
             {DEVICE_INSTANCE_THREAD_OFFSET}, // device index
-            {DEVICE_INSTANCE_ID}_targets, // address lists for ports
+            {DEVICE_INSTANCE_TARGETS}, // address lists for ports
             {DEVICE_INSTANCE_ID}_sources, // source list for inputs
             "{DEVICE_INSTANCE_ID}", // id
             0, // rtsFlags
@@ -578,8 +694,12 @@ def render_graph_instance_as_softswitch(gi,dst,num_threads,device_to_thread):
     
     globalProperties=BLOBHolder()
     globalProperties.add("__nudge__", bytearray([0]*4))
+    
     globalState=BLOBHolder()
     globalState.add("__nudge__", bytearray([0]*4))
+    
+    globalOutputPortTargets=StructHolder("OutputPortTargets", 2);
+    globalOutputPortTargets.add("__nudge__", (0,0))
     
     props={
         gi.graph_type:make_graph_type_properties(gi.graph_type)
@@ -620,22 +740,36 @@ def render_graph_instance_as_softswitch(gi,dst,num_threads,device_to_thread):
         dst.write("    const unsigned DEVICE_INSTANCE_COUNT_thread{}={};\n".format(ti,len(thread_to_devices[ti])))
     
     for ti in range(num_threads):
-        render_graph_instance_as_thread_context(dst,globalProperties,globalState,gi,ti,devices_to_thread, thread_to_devices,edgesIn,edgesOut,props)
+        render_graph_instance_as_thread_context(
+            dst,
+            globalProperties,globalState,globalOutputPortTargets,
+            gi,ti,devices_to_thread, thread_to_devices,edgesIn,edgesOut,props
+            )
 
-    render_typed_data_inst(gi.graph_type.properties, props[gi.graph_type]["GRAPH_TYPE_PROPERTIES_T"], gi.properties, gi.id+"_properties", dst,True)
+    graphPropertiesName=gi.id+"_properties"
+    if not _use_BLOB:
+        render_typed_data_inst(gi.graph_type.properties, props[gi.graph_type]["GRAPH_TYPE_PROPERTIES_T"], gi.properties, graphPropertiesName, dst,True)
+        graphPropertiesBinding="&{}".format(graphPropertiesName)
+    else:
+        blob=convert_typed_data_inst_to_bytes(gi.graph_type.properties, gi.properties)
+        graphPropertiesOffset=globalState.add(graphPropertiesName, blob)
+        graphPropertiesBinding="softswitch_pthread_global_properties+{}".format(graphPropertiesOffset)
 
     dst.write("\n")
     dst.write("unsigned softswitch_pthread_count = THREAD_COUNT;\n\n")
 
     dst.write("PThreadContext softswitch_pthread_contexts[THREAD_COUNT]=\n")
     dst.write("{\n")
+    pointersAreRelative=0
+    if _use_indirect_BLOB:
+        pointersAreRelative=1
     for ti in range(num_threads):
         dst.write("""
         {{
             {},
-            &{}_properties,
+            {},
             DEVICE_TYPE_COUNT,
-            DEVICE_TYPE_VTABLES,
+            softswitch_device_vtables,
             DEVICE_INSTANCE_COUNT_thread{},
             DEVICE_INSTANCE_CONTEXTS_thread{},
             0, // lamport
@@ -648,8 +782,9 @@ def render_graph_instance_as_softswitch(gi,dst,num_threads,device_to_thread):
             0,  // hardLogLevel
             0,  // currentDevice
             0,  // currentMode
-            0   // currentHandler
-        }}\n""".format(ti,gi.id,ti,ti))
+            0,   // currentHandler
+            {}  // pointersAreRelative
+        }}\n""".format(ti,graphPropertiesBinding,ti,ti,pointersAreRelative))
         if ti+1<num_threads:
             dst.write(",\n")
             
@@ -657,7 +792,7 @@ def render_graph_instance_as_softswitch(gi,dst,num_threads,device_to_thread):
 
     globalProperties.write(dst, "softswitch_pthread_global_properties")
     globalState.write(dst, "softswitch_pthread_global_state")
-
+    globalOutputPortTargets.write(dst, "softswitch_pthread_output_port_targets")
 
 import argparse
 
