@@ -141,10 +141,10 @@ int main(int argc, char *argv[])
 
     std::istream *src=&std::cin;
     std::ifstream srcFile;
-    boost::filesystem::path srcPath(boost::filesystem::current_path());
+    filepath srcPath(current_path());
 
     if(argc>1){
-      boost::filesystem::path p(argv[1]);
+      filepath p(argv[1]);
       p=absolute(p);
       fprintf(stderr,"Reading from '%s' ( = '%s' absolute)\n", argv[1], p.c_str());
       srcFile.open(p.c_str());

@@ -477,10 +477,10 @@ int main(int argc, char *argv[])
 
     std::istream *src=&std::cin;
     std::ifstream srcFile;
-    boost::filesystem::path srcPath(boost::filesystem::current_path());
+    filepath srcPath(current_path());
 
     if(srcFilePath!="-"){
-      boost::filesystem::path p(srcFilePath);
+      filepath p(srcFilePath);
       p=absolute(p);
       if(logLevel>1){
         fprintf(stderr,"Reading from '%s' ( = '%s' absolute)\n", srcFilePath.c_str(), p.c_str());

@@ -355,7 +355,7 @@ public:
   }
 };
 
-GraphTypePtr loadGraphTypeElement(const boost::filesystem::path &srcPath, xmlpp::Element *eGraphType, GraphLoadEvents *events)
+GraphTypePtr loadGraphTypeElement(const filepath &srcPath, xmlpp::Element *eGraphType, GraphLoadEvents *events)
 {
   xmlpp::Node::PrefixNsMap ns;
   ns["g"]="http://TODO.org/POETS/virtual-graph-schema-v1";
@@ -417,15 +417,15 @@ GraphTypePtr loadGraphTypeElement(const boost::filesystem::path &srcPath, xmlpp:
   return res;
 }
 
-GraphTypePtr loadGraphType(const boost::filesystem::path &srcPath, xmlpp::Element *parent, GraphLoadEvents *events, const std::string &id);
+GraphTypePtr loadGraphType(const filepath &srcPath, xmlpp::Element *parent, GraphLoadEvents *events, const std::string &id);
 
-GraphTypePtr loadGraphTypeReferenceElement(const boost::filesystem::path &srcPath, xmlpp::Element *eGraphTypeReference, GraphLoadEvents *events)
+GraphTypePtr loadGraphTypeReferenceElement(const filepath &srcPath, xmlpp::Element *eGraphTypeReference, GraphLoadEvents *events)
 {
   std::string id=get_attribute_required(eGraphTypeReference, "id");
   std::string src=get_attribute_required(eGraphTypeReference, "src");
   
-  boost::filesystem::path newRelPath(src);
-  boost::filesystem::path newPath=boost::filesystem::absolute(newRelPath, srcPath);
+  filepath newRelPath(src);
+  filepath newPath=absolute(newRelPath, srcPath);
   
   if(!exists(newPath)){
     throw std::runtime_error("Couldn't resolve graph reference src '"+src+"', tried looking in '"+newPath.native()+"'");
@@ -442,7 +442,7 @@ GraphTypePtr loadGraphTypeReferenceElement(const boost::filesystem::path &srcPat
 }
 
 //! Given a graph an element of type "g:Graphs", look for a graph type with given id.
-GraphTypePtr loadGraphType(const boost::filesystem::path &srcPath, xmlpp::Element *parent, GraphLoadEvents *events, const std::string &id)
+GraphTypePtr loadGraphType(const filepath &srcPath, xmlpp::Element *parent, GraphLoadEvents *events, const std::string &id)
 {
   xmlpp::Node::PrefixNsMap ns;
   ns["g"]="http://TODO.org/POETS/virtual-graph-schema-v1";
@@ -464,7 +464,7 @@ GraphTypePtr loadGraphType(const boost::filesystem::path &srcPath, xmlpp::Elemen
   throw unknown_graph_type_error(id);
 }
 
-std::map<std::string,GraphTypePtr> loadAllGraphTypes(const boost::filesystem::path &srcPath, xmlpp::Element *parent, GraphLoadEvents *events)
+std::map<std::string,GraphTypePtr> loadAllGraphTypes(const filepath &srcPath, xmlpp::Element *parent, GraphLoadEvents *events)
 {
   xmlpp::Node::PrefixNsMap ns;
   ns["g"]="http://TODO.org/POETS/virtual-graph-schema-v1";
@@ -482,7 +482,7 @@ std::map<std::string,GraphTypePtr> loadAllGraphTypes(const boost::filesystem::pa
   return res;
 }
 
-void loadGraph(Registry *registry, const boost::filesystem::path &srcPath, xmlpp::Element *parent, GraphLoadEvents *events)
+void loadGraph(Registry *registry, const filepath &srcPath, xmlpp::Element *parent, GraphLoadEvents *events)
 {
   xmlpp::Node::PrefixNsMap ns;
   ns["g"]="http://TODO.org/POETS/virtual-graph-schema-v1";

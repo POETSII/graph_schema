@@ -3,10 +3,59 @@
 
 #include "rapidjson/document.h"
 
-#include <boost/filesystem.hpp>
-
 
 #include "graph.hpp"
+
+#if 0
+// Boost not installed on keystone
+//#include <boost/filesystem.hpp>
+#else
+ #include <unistd.h>
+// HACK.
+struct filepath
+{
+  filepath(const std::string &p)
+    : path(p)
+  {}
+  
+  std::string path;
+  
+  const char *c_str() const
+  { return path.c_str(); }
+  
+  const std::string &native() const
+  { return path; }
+  
+  filepath parent_path() const
+  {
+    auto pos=path.find_last_of('/');
+    if(pos==std::string::npos){
+      return *this;
+    }
+    auto parent=path.substr(0, pos);
+    return parent;
+  }
+};
+
+filepath current_path()
+{
+  std::shared_ptr<char> p(getcwd(0,0),free);
+  return filepath(p.get());
+}
+
+filepath absolute(const filepath &relPath, const filepath &basePath=current_path())
+{
+  if(relPath.path.size()>0 && relPath.path[0]=='/'){
+    return relPath;
+  }
+  return basePath.native()+"/"+relPath.native();
+}
+
+bool exists(const filepath &p)
+{
+  return 0==access(p.path.c_str(), F_OK);
+}
+#endif
 
 /*!
   Metadata is represented as rapidjson structs, as they
@@ -135,6 +184,6 @@ public:
   }
 };
 
-extern "C" void loadGraph(Registry *registry, const boost::filesystem::path &srcPath, xmlpp::Element *elt, GraphLoadEvents *events);
+extern "C" void loadGraph(Registry *registry, const std::string &srcPath, xmlpp::Element *elt, GraphLoadEvents *events);
 
 #endif
