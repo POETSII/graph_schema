@@ -727,7 +727,18 @@ def render_graph_instance_as_softswitch(gi,dst,num_threads,device_to_thread):
         assert(t>=0 and t<num_threads)
         thread_to_devices[t].append(d)
         devices_to_thread[d]=t
-    
+
+    # calculate statistics of distribution
+    device_per_thread_hist=[]
+    for d in thread_to_devices:
+        c=len(d)
+        while c >= len(device_per_thread_hist):
+            device_per_thread_hist.append(0)
+        device_per_thread_hist[c] += 1
+    for i in range(len(device_per_thread_hist)):
+        if device_per_thread_hist[i]!=0:
+            sys.stderr.write("{} devices/thread -> {} threads\n".format(i, device_per_thread_hist[i]))
+        
     dst.write("""
     #include "{GRAPH_TYPE_ID}.hpp"
 
@@ -777,9 +788,9 @@ def render_graph_instance_as_softswitch(gi,dst,num_threads,device_to_thread):
             0, // rtsTail
             0, // rtcChecked
             0,  // rtcOffset
-            0,  // applLogLevel
-            0,  // softLogLevel
-            0,  // hardLogLevel
+            3,  // applLogLevel
+            3,  // softLogLevel
+            3,  // hardLogLevel
             0,  // currentDevice
             0,  // currentMode
             0,   // currentHandler
@@ -881,6 +892,7 @@ if(len(instances)>0):
     else:
         logging.info("Generating random partition.")
         device_to_thread = { id:(hash(id)%nThreads) for id in inst.device_instances.keys() }
+    
 
     destInstPath=os.path.abspath("{}/{}_{}_inst.cpp".format(destPrefix,graph.id,inst.id))
     destInst=open(destInstPath,"wt")

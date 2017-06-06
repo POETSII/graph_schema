@@ -29,6 +29,11 @@ ALL_DEMOS += clock_tree_demos
 $(eval $(call softswitch_instance_template,clock_tree_$1,demos/clock_tree/clock_tree_$1.xml,1))
 $(eval $(call softswitch_instance_template,clock_tree_$1,demos/clock_tree/clock_tree_$1.xml,4))
 $(eval $(call softswitch_instance_template,clock_tree_$1,demos/clock_tree/clock_tree_$1.xml,16))
+$(eval $(call softswitch_instance_template,clock_tree_$1,demos/clock_tree/clock_tree_$1.xml,32))
+$(eval $(call softswitch_instance_template,clock_tree_$1,demos/clock_tree/clock_tree_$1.xml,64))
+$(eval $(call softswitch_instance_template,clock_tree_$1,demos/clock_tree/clock_tree_$1.xml,128))
+$(eval $(call softswitch_instance_template,clock_tree_$1,demos/clock_tree/clock_tree_$1.xml,256))
+$(eval $(call softswitch_instance_template,clock_tree_$1,demos/clock_tree/clock_tree_$1.xml,512))
 
 endef
 
@@ -36,6 +41,7 @@ CLOCK_TREE_FILTERS = \
 	--bind-dev "branch" "state" "pending" "color" "blend_colors( (255,255,0), (255,0,255), 0, 2, value)" \
 	--bind-dev "leaf" "rts" "-" "color" "'red' if value>0 else 'green'" \
 
+$(eval $(call clock_tree_instance_template,8_3,50,$(CLOCK_TREE_FILTERS)))
 $(eval $(call clock_tree_instance_template,8_2,50,$(CLOCK_TREE_FILTERS)))
 $(eval $(call clock_tree_instance_template,6_3,50,$(CLOCK_TREE_FILTERS)))
 $(eval $(call clock_tree_instance_template,4_4,50,$(CLOCK_TREE_FILTERS)))
