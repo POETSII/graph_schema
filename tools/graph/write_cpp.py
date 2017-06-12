@@ -72,7 +72,7 @@ def render_typed_data_load_v4_tuple(proto,dst,prefix,indent):
         dst.write('{}  const rapidjson::Value &n=document["{}"];\n'.format(indent,elt.name))
         if isinstance(elt,ScalarTypedDataSpec):
 
-            if elt.type=="int32_t" or elt.type=="int16_t" or elt.type=="int8_t" :
+            if elt.type=="int32_t" or elt.type=="int16_t" or elt.type=="int8_t" or elt.type=="char" :
                 dst.write('{}  {}{}=n.GetInt();\n'.format(indent, prefix, elt.name))
 
             elif elt.type=="uint32_t" or elt.type=="uint16_t" or elt.type=="uint8_t":
@@ -89,7 +89,7 @@ def render_typed_data_load_v4_tuple(proto,dst,prefix,indent):
             dst.write('{}  assert(n.IsArray());\n')
             for i in range(0,elt.length):
 
-                if elt.type.type=="int32_t" or elt.type.type=="int16_t" or elt.type.type=="int8_t":
+                if elt.type.type=="int32_t" or elt.type.type=="int16_t" or elt.type.type=="int8_t" or elt.type=="char":
                     dst.write('{}  assert(n[{}].IsInt());\n'.format(indent,i))
                     dst.write('{}  {}{}[{}]=n[{}].GetInt();\n'.format(indent, prefix, elt.name,i,i))
 
@@ -372,6 +372,9 @@ public:
     auto edgeState=cast_typed_data<{pinPropertiesStructName}>(gEdgeState);
     auto message=cast_typed_properties<{messageStructName}>(gMessage);
     HandlerLogImpl handler_log(orchestrator);
+    auto handler_exit=[&](int code) -> void {{ orchestrator->application_exit(code); }};
+    auto handler_export_key_value=[&](uint32_t key, uint32_t value) -> void {{ orchestrator->export_key_value(key, value); }};
+    
 
     // Begin custom handler
     {preProcLinePragma}
@@ -452,6 +455,8 @@ def render_output_port_as_cpp(op,dst):
     dst.write('    auto deviceState=cast_typed_data<{}_state_t>(gDeviceState);\n'.format( dt.id ))
     dst.write('    auto message=cast_typed_data<{}_message_t>(gMessage);\n'.format(op.message_type.id))
     dst.write('    HandlerLogImpl handler_log(orchestrator);\n')
+    dst.write('    auto handler_exit=[&](int code) -> void { orchestrator->application_exit(code); };\n')
+    dst.write('    auto handler_export_key_value=[&](uint32_t key, uint32_t value) -> void { orchestrator->export_key_value(key, value); };\n')   
 
     dst.write('    // Begin custom handler\n')
     if op.source_line and op.source_file:
@@ -558,6 +563,7 @@ def render_device_type_as_cpp(dt,dst):
     auto deviceProperties=cast_typed_properties<{devicePropertiesStructName}>(gDeviceProperties);
     auto deviceState=cast_typed_properties<{deviceStateStructName}>(gDeviceState);
     HandlerLogImpl handler_log(orchestrator);
+    // Note: no handler_exit or handler_export_key_value in rts, as it should be side effect free
 
     {deviceGlobalConstants}
     {deviceLocalConstants}

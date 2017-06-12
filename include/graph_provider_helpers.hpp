@@ -104,7 +104,7 @@ public:
     p->_ref_count=0;
     p->_total_size_bytes=m_totalSize;
     
-    m_type->createBinaryDefault((char*)p, m_payloadSize);
+    m_type->createBinaryDefault(((char*)p)+sizeof(typed_data_t), m_payloadSize);
     
     return TypedDataPtr(p);
   }
@@ -465,6 +465,8 @@ public:
 
 };
 
+
+
 class ReceiveOrchestratorServicesImpl
   : public OrchestratorServices
 {
@@ -473,13 +475,21 @@ private:
   std::string m_prefix;
   const char *m_device;
   const char *m_input;
+  std::function<void (const char *,uint32_t,uint32_t)> m_onExportKeyValue;
+  std::function<void (const char *,int)> m_onApplicationExit;
 public:
-  ReceiveOrchestratorServicesImpl(unsigned logLevel, FILE *dst, const char *device, const char *input)
+  ReceiveOrchestratorServicesImpl(
+    unsigned logLevel, FILE *dst, const char *device, const char *input,
+    std::function<void (const char *, uint32_t,uint32_t)> onExportKeyValue, // It is up to application to manage sequence
+    std::function<void (const char *,int)> onApplicationExit
+  )
     : OrchestratorServices(logLevel)
     , m_dst(dst)
     , m_prefix("Recv: ")
     , m_device(device)
     , m_input(input)
+    , m_onExportKeyValue(onExportKeyValue)
+    , m_onApplicationExit(onApplicationExit)
   {}
 
   void setPrefix(const char *prefix)
@@ -501,8 +511,19 @@ public:
       fprintf(m_dst, "\n");
     }
   }
+  
+  virtual void export_key_value(uint32_t key, uint32_t value) override
+  {
+    m_onExportKeyValue(m_device, key, value);
+  }
+  
+  virtual void application_exit(int code)
+  {
+    m_onApplicationExit(m_device, code);
+  }
 };
 
+// TODO : Fold the services into one class. No reason for separation
 class SendOrchestratorServicesImpl
   : public OrchestratorServices
 {
@@ -511,13 +532,21 @@ private:
   std::string m_prefix;
   const char *m_device;
   const char *m_output;
+
+  std::function<void (const char *,uint32_t,uint32_t)> m_onExportKeyValue;
+  std::function<void (const char *,int)> m_onApplicationExit;
 public:
-  SendOrchestratorServicesImpl(unsigned logLevel, FILE *dst, const char *device, const char *output)
+  SendOrchestratorServicesImpl(unsigned logLevel, FILE *dst, const char *device, const char *output,
+    std::function<void (const char *, uint32_t,uint32_t)> onExportKeyValue, // It is up to application to manage sequence
+    std::function<void (const char *,int)> onApplicationExit
+  )
     : OrchestratorServices(logLevel)
     , m_dst(dst)
     , m_prefix("Send: ")
     , m_device(device)
     , m_output(output)
+    , m_onExportKeyValue(onExportKeyValue)
+    , m_onApplicationExit(onApplicationExit)
   {}
 
   void setPrefix(const std::string &prefix)
@@ -538,6 +567,16 @@ public:
       vfprintf(m_dst, msg, args);
       fprintf(m_dst, "\n");
     }
+  }
+
+  virtual void export_key_value(uint32_t key, uint32_t value) override
+  {
+    m_onExportKeyValue(m_device, key, value);
+  }
+  
+  virtual void application_exit(int code)
+  {
+    m_onApplicationExit(m_device, code);
   }
 };
 

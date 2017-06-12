@@ -26,8 +26,6 @@ demos/ising_spin/ising_spin_$1.gif : demos/ising_spin/ising_spin_$1.xml demos/is
 
 ALL_ISING_SPIN_DEMOS += demos/ising_spin/ising_spin_$1.gif
 
-$(eval $(call softswitch_instance_template,ising_spin_$1,demos/ising_spin/ising_spin_$1.xml,4))
-$(eval $(call softswitch_instance_template,ising_spin_$1,demos/ising_spin/ising_spin_$1.xml,1))
 
 endef
 

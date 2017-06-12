@@ -16,6 +16,9 @@ import logging
 _cache_line_size=32
 
 _use_BLOB=True
+
+# TODO: This seems to be unneeded now, as static initialiser code has
+# been removed by other methods. Remove?
 _use_indirect_BLOB=False and _use_BLOB
 
 def render_typed_data_as_type_decl(td,dst,indent,name=None):
@@ -240,17 +243,24 @@ def render_graph_type_as_softswitch_decls(gt,dst):
     #ifndef {GRAPH_TYPE_ID}_hpp
     #define {GRAPH_TYPE_ID}_hpp
     
-    #include <cstdint>
+    #include <stdint.h>
     
     #include "softswitch.hpp"
     
+    #ifdef __cplusplus
+    extern "C"{{
+    #endif
+    
     #define handler_log softswitch_handler_log  
+    #define handler_exit softswitch_handler_exit
+    #define handler_export_key_value softswitch_handler_export_key_value
     
     
     ///////////////////////////////////////////////
     // Graph type stuff
 
     const unsigned DEVICE_TYPE_COUNT = {GRAPH_TYPE_DEVICE_TYPE_COUNT};
+    enum{{ DEVICE_TYPE_COUNT_V = {GRAPH_TYPE_DEVICE_TYPE_COUNT} }};
     """.format(**gtProps))
     
     render_typed_data_as_struct(gt.properties,dst,gtProps["GRAPH_TYPE_PROPERTIES_T"])
@@ -264,8 +274,11 @@ def render_graph_type_as_softswitch_decls(gt,dst):
         
         dst.write("""
         const unsigned DEVICE_TYPE_INDEX_{DEVICE_TYPE_FULL_ID} = {DEVICE_TYPE_INDEX};
+        enum{{ DEVICE_TYPE_INDEX_{DEVICE_TYPE_FULL_ID}_V = {DEVICE_TYPE_INDEX} }};
         const unsigned INPUT_COUNT_{DEVICE_TYPE_FULL_ID} = {DEVICE_TYPE_INPUT_COUNT};
+        enum{{ INPUT_COUNT_{DEVICE_TYPE_FULL_ID}_V = {DEVICE_TYPE_INPUT_COUNT} }};
         const unsigned OUTPUT_COUNT_{DEVICE_TYPE_FULL_ID} = {DEVICE_TYPE_OUTPUT_COUNT};
+        enum{{ OUTPUT_COUNT_{DEVICE_TYPE_FULL_ID}_V = {DEVICE_TYPE_OUTPUT_COUNT} }};
         """.format(**dtProps))
         
         render_typed_data_as_struct(dt.properties,dst,dtProps["DEVICE_TYPE_PROPERTIES_T"])
@@ -275,6 +288,7 @@ def render_graph_type_as_softswitch_decls(gt,dst):
             ipProps=make_input_port_properties(ip)
             dst.write("""
             const unsigned INPUT_INDEX_{INPUT_PORT_FULL_ID} = {INPUT_PORT_INDEX};
+            enum{{ INPUT_INDEX_{INPUT_PORT_FULL_ID}_V = {INPUT_PORT_INDEX} }};
             """.format(**ipProps))
             
             render_typed_data_as_struct(ip.properties, dst, ipProps["INPUT_PORT_PROPERTIES_T"])
@@ -283,10 +297,16 @@ def render_graph_type_as_softswitch_decls(gt,dst):
         for op in dt.outputs_by_index:
             dst.write("""
             const unsigned OUTPUT_INDEX_{OUTPUT_PORT_FULL_ID} = {OUTPUT_PORT_INDEX};
+            enum {{ OUTPUT_INDEX_{OUTPUT_PORT_FULL_ID}_V = {OUTPUT_PORT_INDEX} }};
             const uint32_t OUTPUT_FLAG_{OUTPUT_PORT_FULL_ID} = 1<<{OUTPUT_PORT_INDEX};
             """.format(**make_output_port_properties(op)))
     
-    dst.write("extern DeviceTypeVTable softswitch_device_vtables[];\n")
+    dst.write("extern const DeviceTypeVTable softswitch_device_vtables[];\n")
+    dst.write("""
+    #ifdef __cplusplus
+    };
+    #endif
+    """)
     dst.write("#endif\n")
 
 def render_rts_handler_as_softswitch(dev,dst,devProps):
@@ -369,7 +389,7 @@ def render_device_type_as_softswitch_defs(dt,dst,dtProps):
     for op in dt.outputs_by_index:
         render_send_handler_as_softswitch(op,dst,make_output_port_properties(op))
     
-    dst.write("InputPortVTable INPUT_VTABLES_{DEVICE_TYPE_FULL_ID}[INPUT_COUNT_{DEVICE_TYPE_FULL_ID}]={{\n".format(**dtProps))
+    dst.write("InputPortVTable INPUT_VTABLES_{DEVICE_TYPE_FULL_ID}[INPUT_COUNT_{DEVICE_TYPE_FULL_ID}_V]={{\n".format(**dtProps))
     i=0
     for i in range(len(dt.inputs_by_index)):
         ip=dt.inputs_by_index[i]
@@ -389,11 +409,12 @@ def render_device_type_as_softswitch_defs(dt,dst,dtProps):
             """.format(ACTUAL_PROPERTIES_SIZE=propertiesSize, ACTUAL_STATE_SIZE=stateSize, **make_input_port_properties(ip)))
     dst.write("};\n");
     
-    dst.write("OutputPortVTable OUTPUT_VTABLES_{DEVICE_TYPE_FULL_ID}[OUTPUT_COUNT_{DEVICE_TYPE_FULL_ID}]={{\n".format(**dtProps))
+    dst.write("OutputPortVTable OUTPUT_VTABLES_{DEVICE_TYPE_FULL_ID}[OUTPUT_COUNT_{DEVICE_TYPE_FULL_ID}_V]={{\n".format(**dtProps))
     i=0
     for i in range(len(dt.outputs_by_index)):
         if i!=0:
             dst.write("  ,\n");
+        op=dt.outputs_by_index[i]
         dst.write("""
             {{
                 (send_handler_t){OUTPUT_PORT_FULL_ID}_send_handler,
@@ -419,7 +440,7 @@ def render_graph_type_as_softswitch_defs(gt,dst):
         dtProps=make_device_type_properties(dt)
         render_device_type_as_softswitch_defs(dt,dst,dtProps)
 
-    dst.write("DeviceTypeVTable softswitch_device_vtables[DEVICE_TYPE_COUNT] = {{".format(**gtProps))
+    dst.write("const DeviceTypeVTable softswitch_device_vtables[DEVICE_TYPE_COUNT_V] = {{".format(**gtProps))
     first=True
     
     # Have to put these out in the same order as the device indexes
@@ -431,9 +452,9 @@ def render_graph_type_as_softswitch_defs(gt,dst):
         dst.write("""
         {{
             (ready_to_send_handler_t){GRAPH_TYPE_ID}_{DEVICE_TYPE_ID}_ready_to_send_handler,
-            OUTPUT_COUNT_{DEVICE_TYPE_FULL_ID},
+            OUTPUT_COUNT_{DEVICE_TYPE_FULL_ID}_V,
             OUTPUT_VTABLES_{DEVICE_TYPE_FULL_ID},
-            INPUT_COUNT_{DEVICE_TYPE_FULL_ID},
+            INPUT_COUNT_{DEVICE_TYPE_FULL_ID}_V,
             INPUT_VTABLES_{DEVICE_TYPE_FULL_ID},
             (compute_handler_t)0, // No compute handler
             "{DEVICE_TYPE_FULL_ID}"
@@ -496,7 +517,7 @@ def render_graph_instance_as_thread_context(
                     dstDev=ei.dst_device
                     tIndex=devices_to_thread[dstDev]
                     tOffset=thread_to_devices[tIndex].index(dstDev)
-                    dst.write("  {{{},{},INPUT_INDEX_{}_{}_{}}}".format(tIndex,tOffset,dstDev.device_type.parent.id, dstDev.device_type.id, ei.dst_port.name))
+                    dst.write("  {{{},{},INPUT_INDEX_{}_{}_{}_V, 0}}".format(tIndex,tOffset,dstDev.device_type.parent.id, dstDev.device_type.id, ei.dst_port.name))
                 dst.write("};\n")
             else:
                 blob=bytearray([])
@@ -506,7 +527,6 @@ def render_graph_instance_as_thread_context(
                     tOffset=thread_to_devices[tIndex].index(dstDev)
                     port_index=ei.dst_port.parent.inputs_by_index.index(ei.dst_port)
                     addr=convert_address_to_bytes(tIndex, tOffset, port_index)
-                    #dst.write("  {{{},{},INPUT_INDEX_{}_{}_{}}}".format(tIndex,tOffset,dstDev.device_type.parent.id, dstDev.device_type.id, ei.dst_port.name))
                     blob.extend(addr)
                 globalProperties.add(addressesName, blob)
         
@@ -594,7 +614,11 @@ def render_graph_instance_as_thread_context(
                         eProps["EDGE_PROPERTIES"]="&{}_properties".format(name)
                     else:
                         (offset,length)=globalProperties.find("{}_properties".format(name))
-                        eProps["EDGE_PROPERTIES"]="softswitch_pthread_global_properties+{}".format(offset)
+                        if not _use_indirect_BLOB:
+                            edgePropertiesBinding="softswitch_pthread_global_properties+{}".format(offset)
+                        else:
+                            edgePropertiesBinding="(const void *){}".format(offset)
+                        eProps["EDGE_PROPERTIES"]=edgePropertiesBinding
                 if ip.state:
                     if not _use_BLOB:
                         eProps["EDGE_STATE"]="&{}_state".format(name)
@@ -630,7 +654,7 @@ def render_graph_instance_as_thread_context(
         
 
     dst.write("""
-    DeviceContext DEVICE_INSTANCE_CONTEXTS_thread{THREAD_INDEX}[DEVICE_INSTANCE_COUNT_thread{THREAD_INDEX}]={{
+    DeviceContext DEVICE_INSTANCE_CONTEXTS_thread{THREAD_INDEX}[DEVICE_INSTANCE_COUNT_thread{THREAD_INDEX}_V]={{
     """.format(THREAD_INDEX=thread_index))
     
     first=True
@@ -669,9 +693,9 @@ def render_graph_instance_as_thread_context(
             offset=globalOutputPortTargets.find(diProps["DEVICE_INSTANCE_TARGETS"])
             diProps["DEVICE_INSTANCE_TARGETS"]="softswitch_pthread_output_port_targets+{}".format(offset)
         
-        diProps["DEVICE_INSTANCE_VTABLE_SOURCE"]="softswitch_device_vtables+DEVICE_TYPE_INDEX_{DEVICE_TYPE_FULL_ID}".format(**diProps)
+        diProps["DEVICE_INSTANCE_VTABLE_SOURCE"]="softswitch_device_vtables+DEVICE_TYPE_INDEX_{DEVICE_TYPE_FULL_ID}_V".format(**diProps)
         if _use_indirect_BLOB:
-            diProps["DEVICE_INSTANCE_VTABLE_SOURCE"]="(DeviceTypeVTable*)DEVICE_TYPE_INDEX_{DEVICE_TYPE_FULL_ID}".format(**diProps)
+            diProps["DEVICE_INSTANCE_VTABLE_SOURCE"]="(DeviceTypeVTable*)DEVICE_TYPE_INDEX_{DEVICE_TYPE_FULL_ID}_V".format(**diProps)
         
         dst.write("""
         {{
@@ -743,12 +767,15 @@ def render_graph_instance_as_softswitch(gi,dst,num_threads,device_to_thread):
     #include "{GRAPH_TYPE_ID}.hpp"
 
     const unsigned THREAD_COUNT={NUM_THREADS};
+    enum{{ THREAD_COUNT_V={NUM_THREADS} }};
 
     const unsigned DEVICE_INSTANCE_COUNT={TOTAL_INSTANCES};
+    enum {{ DEVICE_INSTANCE_COUNT_V={TOTAL_INSTANCES} }};
     """.format(GRAPH_TYPE_ID=gi.graph_type.id, NUM_THREADS=num_threads, TOTAL_INSTANCES=len(gi.device_instances)))
 
     for ti in range(num_threads):
         dst.write("    const unsigned DEVICE_INSTANCE_COUNT_thread{}={};\n".format(ti,len(thread_to_devices[ti])))
+        dst.write("    enum{{ DEVICE_INSTANCE_COUNT_thread{}_V={} }};\n".format(ti,len(thread_to_devices[ti])))
     
     for ti in range(num_threads):
         render_graph_instance_as_thread_context(
@@ -763,13 +790,13 @@ def render_graph_instance_as_softswitch(gi,dst,num_threads,device_to_thread):
         graphPropertiesBinding="&{}".format(graphPropertiesName)
     else:
         blob=convert_typed_data_inst_to_bytes(gi.graph_type.properties, gi.properties)
-        graphPropertiesOffset=globalState.add(graphPropertiesName, blob)
+        graphPropertiesOffset=globalProperties.add(graphPropertiesName, blob)
         graphPropertiesBinding="softswitch_pthread_global_properties+{}".format(graphPropertiesOffset)
 
     dst.write("\n")
-    dst.write("unsigned softswitch_pthread_count = THREAD_COUNT;\n\n")
+    dst.write("unsigned softswitch_pthread_count = THREAD_COUNT_V;\n\n")
 
-    dst.write("PThreadContext softswitch_pthread_contexts[THREAD_COUNT]=\n")
+    dst.write("PThreadContext softswitch_pthread_contexts[THREAD_COUNT_V]=\n")
     dst.write("{\n")
     pointersAreRelative=0
     if _use_indirect_BLOB:
@@ -779,9 +806,9 @@ def render_graph_instance_as_softswitch(gi,dst,num_threads,device_to_thread):
         {{
             {},
             {},
-            DEVICE_TYPE_COUNT,
+            DEVICE_TYPE_COUNT_V,
             softswitch_device_vtables,
-            DEVICE_INSTANCE_COUNT_thread{},
+            DEVICE_INSTANCE_COUNT_thread{}_V,
             DEVICE_INSTANCE_CONTEXTS_thread{},
             0, // lamport
             0, // rtsHead
@@ -801,8 +828,12 @@ def render_graph_instance_as_softswitch(gi,dst,num_threads,device_to_thread):
             
     dst.write("};\n")
 
+    dst.write("const ")
     globalProperties.write(dst, "softswitch_pthread_global_properties")
+    
     globalState.write(dst, "softswitch_pthread_global_state")
+    
+    dst.write("const ");
     globalOutputPortTargets.write(dst, "softswitch_pthread_output_port_targets")
 
 import argparse

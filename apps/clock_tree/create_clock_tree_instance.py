@@ -8,15 +8,18 @@ import math
 
 
 
-src=sys.argv[1]
+import os
+appBase=os.path.dirname(os.path.realpath(__file__))
+
+src=appBase+"/clock_tree_graph_type.xml"
 (graphTypes,graphInstances)=load_graph_types_and_instances(src,src)
 
 d=4
 b=2
+if len(sys.argv)>1:
+    d=int(sys.argv[1])
 if len(sys.argv)>2:
-    d=int(sys.argv[2])
-if len(sys.argv)>3:
-    b=int(sys.argv[3])
+    b=int(sys.argv[2])
 
 graphType=graphTypes["clock_tree"]
 rootType=graphType.device_types["root"]
@@ -39,9 +42,9 @@ def create(prefix, parent,depth):
         res.add_edge_instance(EdgeInstance(res,parent,"ack_in",node,"ack_out",None))
     else:
         if depth==d:
-            node=DeviceInstance(res, prefix, rootType, None, {"fanout":b})
+            node=DeviceInstance(res, prefix, rootType, {"fanout":b}, None)
         else:
-            node=DeviceInstance(res, prefix, branchType, None, {"fanout":b})
+            node=DeviceInstance(res, prefix, branchType, {"fanout":b}, None)
         res.add_device_instance(node)
         for i in range(b):
             child=create("{}_{}".format(prefix,i), node, depth-1)

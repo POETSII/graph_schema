@@ -7,9 +7,9 @@ define clock_tree_instance_template
 # $2 = max-steps
 # $3 = filters
 
-demos/clock_tree/clock_tree_$1.xml : apps/clock_tree/create_clock_tree_instance.py apps/clock_tree/clock_tree_graph_type.xml
+demos/clock_tree/clock_tree_$1.xml : apps/clock_tree/create_clock_tree_instance.py
 	mkdir -p $$(dir $$@)
-	$$(PYTHON) apps/clock_tree/create_clock_tree_instance.py apps/clock_tree/clock_tree_graph_type.xml $$(subst _, ,$1) > $$@
+	$$(PYTHON) apps/clock_tree/create_clock_tree_instance.py  $$(subst _, ,$1) > $$@
 
 demos/clock_tree/clock_tree_$1.snap : demos/clock_tree/clock_tree_$1.xml bin/epoch_sim clock_tree_provider demos/clock_tree/clock_tree_$1.checked
 	bin/epoch_sim  --log-level 0 --max-steps $2 --snapshots 1 $$@  demos/clock_tree/clock_tree_$1.xml

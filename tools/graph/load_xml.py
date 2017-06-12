@@ -99,7 +99,7 @@ def load_struct_instance(spec,dt):
     return spec.expand(value)
 
 def load_metadata(parent, name):
-    metadata=None
+    metadata={}
     metadataNode=parent.find(name,ns)
     if metadataNode is not None and metadataNode.text is not None:
         metadata=json.loads("{"+metadataNode.text+"}")

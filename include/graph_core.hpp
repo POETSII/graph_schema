@@ -400,6 +400,18 @@ public:
 
   // Log a handler message with the given log level
   virtual void vlog(unsigned level, const char *msg, va_list args) =0;
+  
+  // Export a key value pair from the application. This will be made
+  // available in some way as (deviceInstId,sequence,key,value)
+  // where sequence is a sequence number for that device instance
+  // running from zero upwards
+  virtual void export_key_value(uint32_t key, uint32_t value) =0;
+  
+  // Mark the application as complete. As soon as any device calls this,
+  // the whole graph is considered complete. If multiple devices call
+  // exit, then the run-time can non-determinstically choose any one of
+  // them.
+  virtual void application_exit(int code) =0;
 };
 
 

@@ -184,9 +184,11 @@ endef
 
 include apps/clock_tree/makefile.inc
 include apps/ising_spin/makefile.inc
+include apps/ising_spin_fix/makefile.inc
 include apps/clocked_izhikevich/makefile.inc
 include apps/gals_izhikevich/makefile.inc
 include apps/gals_heat/makefile.inc
+include apps/gals_heat_fix/makefile.inc
 
 include apps/amg/makefile.inc
 include apps/apsp/makefile.inc
@@ -196,7 +198,8 @@ include tools/partitioner.inc
 demos : $(ALL_DEMOS)
 
 
-all_tools : bin/print_graph_properties bin/epoch_sim bin/queue_sim
+all_tools : bin/print_graph_properties bin/epoch_sim
+#bin/queue_sim
 
 
 VIRTUAL_ALL_TESTS := $(patsubst test/virtual/%.xml,%,$(wildcard test/virtual/*.xml))
@@ -208,7 +211,7 @@ validate-virtual : $(foreach t,$(VIRTUAL_ALL_TESTS),validate-virtual/$(t) output
 
 test : all_tools $(ALL_TESTS)
 
-softswitch : test $(ALL_SOFTSWITCH)
+softswitch : $(ALL_SOFTSWITCH)
 	echo $(ALL_SOFTSWITCH)
 
 demo : $(ALL_DEMOS)
