@@ -43,9 +43,17 @@
 
     <SharedCode><![CDATA[
 
+    uint32_t mod(uint32_t x, uint32_t y)
+    {
+      while(x>=y){
+        x-=y;
+	}
+	return x;
+    }
+
 		uint32_t calc_tag(uint32_t x, uint32_t y)
 		{
-			return (x%3) + (y%3)*3;
+			return mod(x,3) + mod(y,3)*3;
 		}
 
     uint32_t urng(uint32_t *state)
@@ -115,7 +123,19 @@
         spins[0] *= -1; // Flip
       }
       times[0] = (((times[0]>>4) + erng(rng)) << 4) | tag;
-    }
+      }
+
+      // <Scalar type="uint32_t" name="direction" /> <!-- 1=Up, 2=Right, 3=Down, 4=Left -->
+
+      void get_neighbour_coords(uint32_t x, uint32_t y, uint32_t w, uint32_t h, int dir, uint32_t &nx, uint32_t &ny)
+      {
+      nx=x;
+      ny=y;
+      if(dir==1){ ny = y==0 ? h-1 : y-1; }
+      if(dir==2){ nx = x==w-1 ? 0 : x+1; }
+      if(dir==3){ ny = y==h-1 ? 0 : y+1; }
+      if(dir==4){ nx = x==0 ? w-1 : x-1; }
+      }
 
     ]]></SharedCode>
 
@@ -176,10 +196,10 @@
 
 		handler_log(3, " x=%u, y=%u", x, y);
 
-		cell_init(x, (y+H-1)%H, deviceState->spins+1, deviceState->times+1, &seed);
-		cell_init((x+1)%W, y, 	deviceState->spins+2, deviceState->times+2, &seed);
-		cell_init(x, (y+1)%H, 	deviceState->spins+3, deviceState->times+3, &seed);
-		cell_init((x+W-1)%W, y, deviceState->spins+4, deviceState->times+4, &seed);
+		cell_init(x, mod(y+H-1, H), deviceState->spins+1, deviceState->times+1, &seed);
+		cell_init( mod(x+1,W), y, 	deviceState->spins+2, deviceState->times+2, &seed);
+		cell_init(x, mod(y+1,H), 	deviceState->spins+3, deviceState->times+3, &seed);
+		cell_init(mod(x+W-1,W), y, deviceState->spins+4, deviceState->times+4, &seed);
 		
 	  // Final one is this node
 		cell_init(x, y, 				deviceState->spins+0, deviceState->times+0, &seed);
@@ -221,27 +241,34 @@
 	  </Properties>
 
 	  <OnReceive><![CDATA[
+	  uint32_t nx, ny;
+	  
 	  if(message->time >= deviceState->times[edgeProperties->direction]){
   	    deviceState->spins[edgeProperties->direction]=message->spin;
 	    deviceState->times[edgeProperties->direction]=message->time;
 
-	    handler_log(4, "from %d, new_time = %u, new_spin  %d", edgeProperties->direction, message->time, message->spin);
+	    get_neighbour_coords(deviceProperties->x, deviceProperties->y, graphProperties->width, graphProperties->height, edgeProperties->direction, nx, ny);
+	    
+	    handler_log(4, "from %d=(%u,%d), new_time = %u, new_spin  %d", edgeProperties->direction, nx, ny, message->time, message->spin);
 	  }
 
 	  deviceState->isEarliest=1;
 
 	  for(unsigned i=1; i<5; i++){
-			if(deviceState->times[i] < deviceState->times[0]){
-					handler_log(4, "  time[%d] = %u < time[0] = %u", i, deviceState->times[i], deviceState->times[0]);
-					deviceState->isEarliest = 0;
+	    get_neighbour_coords(deviceProperties->x, deviceProperties->y, graphProperties->width, graphProperties->height, i, nx, ny);
+	    if(deviceState->times[i] < deviceState->times[0]){
+	      handler_log(4, "  time[%d (%u,%u)] = %u < time[0] = %u", i, nx, ny, deviceState->times[i],  deviceState->times[0]);
+	      deviceState->isEarliest = 0;
 	    }
-	  }
+	}
+	handler_log(4, "isEarliest = %x, time=%u", deviceState->isEarliest, deviceState->times[0]);
 
 	  ]]></OnReceive>
 	</InputPort>
 
 	<OutputPort name="out" messageTypeId="update">
 	  <OnSend><![CDATA[
+	        uint32_t nx, ny;
 
 		uint32_t prevTime=deviceState->times[0];
 		int prevSpin=deviceState->spins[0];
@@ -260,12 +287,13 @@
 
 		deviceState->isEarliest=1;
 		for(unsigned i=1; i<5; i++){
+		        get_neighbour_coords(deviceProperties->x, deviceProperties->y, graphProperties->width, graphProperties->height, i, nx, ny);
 			if(deviceState->times[0] > deviceState->times[i]){
-				handler_log(4, "  time[%d] = %u < time[0] = %u", i, deviceState->times[i], deviceState->times[0]);
+				handler_log(4, "  time[%d (%u,%u)] = %u < time[0] = %u", i, nx, ny, deviceState->times[i],  deviceState->times[0]);
 				deviceState->isEarliest = 0;
 			}
 		}
-		handler_log(3, "sendAgain = %x", deviceState->isEarliest);
+		handler_log(3, "isEarliest = %x, time=%u, send-finished=%x", deviceState->isEarliest, deviceState->times[0], deviceState->times[0] >= graphProperties->endTime );
 	  ]]></OnSend>
 	</OutputPort>
 
@@ -280,7 +308,7 @@
 	<ReadyToSend><![CDATA[
 	if(deviceState->times[0] == 0xFFFFFFFFul){
 		*readyToSend = 0;
-	}else if(deviceState->times[0] > graphProperties->endTime){
+	}else if(deviceState->times[0] >= graphProperties->endTime){
 		*readyToSend = RTS_FLAG_cell_finished;
 	}else if(deviceState->isEarliest){
 		*readyToSend = RTS_FLAG_cell_out;
