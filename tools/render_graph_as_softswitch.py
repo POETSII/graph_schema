@@ -15,6 +15,8 @@ import logging
 # The alignment to pad to for the next cache line
 _cache_line_size=32
 
+# This compacts properties and state down into BLOBs, and
+# makes things faster to compile.
 _use_BLOB=True
 
 # TODO: This seems to be unneeded now, as static initialiser code has
