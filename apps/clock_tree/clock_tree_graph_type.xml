@@ -57,6 +57,7 @@
 		
 		<OutputPort name="tick_out" messageTypeId="tick">
 		  <OnSend><![CDATA[
+		  handler_log(2, "root_tick_out, cycle=0x%x, max_ticks=0x%x", deviceState->cycle, graphProperties->max_ticks);
 			assert(deviceState->pending==0);
 			assert(deviceState->doExport==0);
 			deviceState->cycle++;
@@ -122,6 +123,7 @@
 	  
 	  <OutputPort name="tick_out" messageTypeId="tick">
 	    <OnSend><![CDATA[
+	    handler_log(2, "branch_tick_out");
 	    deviceState->status=2+deviceProperties->fanout;
 	    ]]></OnSend>
 	  </OutputPort>
@@ -134,6 +136,7 @@
 	  
 	  <OutputPort name="ack_out" messageTypeId="ack">
 	    <OnSend><![CDATA[
+	    handler_log(2, "branch_ack_out");
 	    deviceState->status=0;
 	    ]]></OnSend>
 	  </OutputPort>

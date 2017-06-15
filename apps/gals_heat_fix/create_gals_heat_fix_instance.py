@@ -17,8 +17,16 @@ src=appBase+"/gals_heat_fix_graph_type.xml"
 urand=random.random
 
 n=16
+maxTime=65
+exportDeltaMask=15
 if len(sys.argv)>1:
     n=int(sys.argv[1])
+if len(sys.argv)>2:
+    maxTime=int(sys.argv[2])
+if len(sys.argv)>3:
+    exportDeltaMask=int(sys.argv[3])
+
+assert math.log2(exportDeltaMask+1).is_integer()
 
 assert n>=3
 
@@ -109,7 +117,7 @@ for x in range(0,n):
         if x!=0 and not edgeY:
             add_channel(x,y, -1, 0)        
 
-finished=DeviceInstance(res, "finished",exitNodeType, None, None) 
+finished=DeviceInstance(res, "finished",exitNodeType, {"fanin":len(nodes)}, None) 
 res.add_device_instance(finished)
 
 for (id,di) in nodes.items():

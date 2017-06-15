@@ -11,6 +11,7 @@ import struct
 import sys
 import os
 import logging
+import random
 
 # The alignment to pad to for the next cache line
 _cache_line_size=32
@@ -52,7 +53,7 @@ def render_typed_data_as_struct(td,dst,name):
 def render_typed_data_inst_contents(td,ti,dst):
     if isinstance(td,ScalarTypedDataSpec):
         if ti is None:
-            dst.write("0")
+            dst.write(str(td.default))
         else:
             dst.write("{}".format(ti))
     elif isinstance(td,TupleTypedDataSpec):
@@ -110,7 +111,7 @@ def convert_typed_data_inst_to_bytes(td,ti):
         return bytearray([])
     if isinstance(td,ScalarTypedDataSpec):
         if ti is None:
-            v=0
+            v=td.default
         else:
             v=ti
         return scalar_to_bytes(v, td.type)
@@ -591,8 +592,8 @@ def render_graph_instance_as_thread_context(
             first=True
             
             def edge_key(ei):
-                return ((devices_to_thread[ei.src_device]<<32) +
-                    (thread_to_devices[devices_to_thread[ei.src_device]].index(ei.src_device))<<16 +
+                return (devices_to_thread[ei.src_device],
+                        thread_to_devices[devices_to_thread[ei.src_device]].index(ei.src_device),
                     int(props[ei.src_port]["OUTPUT_PORT_INDEX"]))
             
             eiSorted=list(edges_in[di][ip])
@@ -847,6 +848,7 @@ parser.add_argument('source', type=str, help='source file (xml graph instance)')
 parser.add_argument('--dest', help="Directory to write the output to", default=".")
 parser.add_argument('--threads', help='number of threads', type=int, default=2)
 parser.add_argument('--log-level', dest="logLevel", help='logging level (INFO,ERROR,...)', default='WARNING')
+parser.add_argument('--placement-seed', dest="placementSeed", help="Choose a specific random placement", default=None)
 
 args = parser.parse_args()
 
@@ -923,8 +925,10 @@ if(len(instances)>0):
         logging.info("Reading partition info from metadata.")
         device_to_thread = { di.id:int(di.metadata[key]) for di in inst.device_instances.values() }
     else:
-        logging.info("Generating random partition.")
-        device_to_thread = { id:(hash(id)%nThreads) for id in inst.device_instances.keys() }
+        seed=args.placementSeed or 1
+        logging.info("Generating random partition from seed {}.".format(seed))
+        random.seed(seed)
+        device_to_thread = { id:random.randint(0,nThreads-1) for id in inst.device_instances.keys() }
     
 
     destInstPath=os.path.abspath("{}/{}_{}_inst.cpp".format(destPrefix,graph.id,inst.id))

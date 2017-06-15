@@ -16,10 +16,13 @@ src=appBase+"/clock_tree_graph_type.xml"
 
 d=4
 b=2
+maxTicks=100
 if len(sys.argv)>1:
     d=int(sys.argv[1])
 if len(sys.argv)>2:
     b=int(sys.argv[2])
+if len(sys.argv)>3:
+    maxTicks=int(sys.argv[3])
 
 graphType=graphTypes["clock_tree"]
 rootType=graphType.device_types["root"]
@@ -28,7 +31,7 @@ leafType=graphType.device_types["leaf"]
 
 instName="clock_{}_{}".format(d,b)
 
-properties=None
+properties={"max_ticks":maxTicks}
 res=GraphInstance(instName, graphType, properties)
 
 nodes={}

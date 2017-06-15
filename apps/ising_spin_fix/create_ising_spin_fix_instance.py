@@ -13,7 +13,7 @@ appBase=os.path.dirname(os.path.realpath(__file__))
 src=appBase+"/ising_spin_fix_graph_type.xml"
 (graphTypes,graphInstances)=load_graph_types_and_instances(src,src)
 
-endTime=1000
+endTime=100
 T=1
 J=1
 H=0
@@ -23,7 +23,8 @@ if len(sys.argv)>1:
     n=int(sys.argv[1])
 if len(sys.argv)>2:
     T=float(sys.argv[2])
-    
+if len(sys.argv)>3:
+    endTime=float(sys.argv[3])
 
 graphType=graphTypes["ising_spin_fix"]
 devType=graphType.device_types["cell"]
@@ -46,7 +47,7 @@ for i in range(0,5):
         sys.stderr.write("prob[{}] = {} = p\n".format(index,probs[index], p))
 
 properties={
-    "endTime":100 * 2**20,
+    "endTime":endTime * 2**20,
     "width":n,
     "height":n,
     "probabilities":probs
