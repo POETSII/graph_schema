@@ -186,6 +186,7 @@ include apps/clock_tree/makefile.inc
 include apps/ising_spin/makefile.inc
 include apps/ising_spin_fix/makefile.inc
 include apps/clocked_izhikevich/makefile.inc
+include apps/clocked_izhikevich_fix/makefile.inc
 include apps/gals_izhikevich/makefile.inc
 include apps/gals_heat/makefile.inc
 include apps/gals_heat_fix/makefile.inc
