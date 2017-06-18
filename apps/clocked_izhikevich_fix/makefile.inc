@@ -12,7 +12,7 @@ demos/clocked_izhikevich_fix/clocked_izhikevich_fix_$1.xml : apps/clocked_izhike
 	$$(PYTHON) apps/clocked_izhikevich_fix/create_clocked_izhikevich_fix_instance.py  $$(subst _, ,$1) > $$@
 
 demos/clocked_izhikevich_fix/clocked_izhikevich_fix_$1.snap : demos/clocked_izhikevich_fix/clocked_izhikevich_fix_$1.xml bin/epoch_sim providers/clocked_izhikevich_fix.graph.so demos/clocked_izhikevich_fix/clocked_izhikevich_fix_$1.checked
-	bin/epoch_sim --stats-delta 1000 --max-steps $2 --log-level 0 --snapshots 1000 $$@  demos/clocked_izhikevich_fix/clocked_izhikevich_fix_$1.xml
+	bin/epoch_sim --stats-delta 1000 --max-steps $2 --log-level 0 --snapshots 1000 $$@ --key-value  demos/clocked_izhikevich_fix/clocked_izhikevich_fix_$1.kv  demos/clocked_izhikevich_fix/clocked_izhikevich_fix_$1.xml
 
 ALL_clocked_izhikevich_fix_TESTS += demos/clocked_izhikevich_fix/clocked_izhikevich_fix_$1.snap
 
@@ -35,9 +35,10 @@ clocked_izhikevich_fix_FILTERS = \
 
 $(eval $(call clocked_izhikevich_fix_instance_template,8_2_10,100000,$(clocked_izhikevich_fix_FILTERS)))
 
-$(eval $(call clocked_izhikevich_fix_instance_template,50_10_60,10000,$(clocked_izhikevich_fix_FILTERS)))
-$(eval $(call clocked_izhikevich_fix_instance_template,80_20_100,10000,$(clocked_izhikevich_fix_FILTERS)))
-$(eval $(call clocked_izhikevich_fix_instance_template,200_50_50,10000,$(clocked_izhikevich_fix_FILTERS)))
+$(eval $(call clocked_izhikevich_fix_instance_template,50_10_60_100,10000,$(clocked_izhikevich_fix_FILTERS)))
+$(eval $(call clocked_izhikevich_fix_instance_template,80_20_100_100,10000,$(clocked_izhikevich_fix_FILTERS)))
+$(eval $(call clocked_izhikevich_fix_instance_template,200_50_50_100,10000,$(clocked_izhikevich_fix_FILTERS)))
+$(eval $(call clocked_izhikevich_fix_instance_template,500_100_100_100,10000,$(clocked_izhikevich_fix_FILTERS)))
 
 
 clocked_izhikevich_fix_tests : $(ALL_clocked_izhikevich_fix_TESTS)
