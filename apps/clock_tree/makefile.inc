@@ -24,7 +24,9 @@ demos/clock_tree/clock_tree_$1.mp4 : demos/clock_tree/clock_tree_$1.xml demos/cl
 	(cd demos/clock_tree/clock_tree_$1.tmp/  && convert -delay 20 -loop 0 *.dot.png ../../clock_tree_$1.gif)
 	(cd demos/clock_tree/clock_tree_$1.tmp/  && $(FFMPEG) -r 10 -i out_%06d.dot.png -vf "scale=trunc(iw/2)*2:trunc(ih/2)*2" -c:v libx264 -crf 18 ../clock_$1.mp4)
 
+
 ALL_CLOCK_TREE_DEMOS +=  demos/clock_tree/clock_tree_$1.mp4
+
 
 $(eval $(call softswitch_instance_template,clock_tree_$1,demos/clock_tree/clock_tree_$1.xml,1))
 $(eval $(call softswitch_instance_template,clock_tree_$1,demos/clock_tree/clock_tree_$1.xml,4))

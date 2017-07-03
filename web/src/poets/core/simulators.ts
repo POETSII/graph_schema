@@ -406,7 +406,7 @@ export class BatchStepper
             while(e.queue.length>0){
                 var h=e.queue.pop();
 
-                let message=e.queue[0];
+                let message=h;
                 e.queue.splice(0,1);
             
                 e.dstDev.rts=e.dstPort.onReceive(
