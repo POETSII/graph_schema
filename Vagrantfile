@@ -55,7 +55,7 @@ Vagrant.configure(2) do |config|
   #   vb.gui = true
   #
   #   # Customize the amount of memory on the VM:
-     vb.memory = "2048"
+     vb.memory = "6000"
   end
 
 
@@ -70,10 +70,10 @@ Vagrant.configure(2) do |config|
   # Puppet, Chef, Ansible, Salt, and Docker are also available. Please see the
   # documentation for more information about their specific syntax and use.
   config.vm.provision "shell", inline: <<-SHELL
-     sudo apt-get install -y libxml2-dev gdb g++ git make libxml++2.6-dev libboost-dev python3 zip default-jre-headless python3-lxml curl mpich rapidjson-dev
+     sudo apt-get install -y libxml2-dev gdb g++ git make libxml++2.6-dev libboost-dev libboost-filesystem-dev python3 zip default-jre-headless python3-lxml curl mpich rapidjson-dev
 
      # RISC-V toolchain (not sure exactly how much is needed)
-	sudo apt-get install -y autoconf automake autotools-dev curl libmpc-dev libmpfr-dev libgmp-dev gawk build-essential bison flex texinfo gperf libtool patchutils bc zlib1g-dev
+      sudo apt-get install -y autoconf automake autotools-dev curl libmpc-dev libmpfr-dev libgmp-dev gawk build-essential bison flex texinfo gperf libtool patchutils bc zlib1g-dev
 
      # Graph partitioning
      sudo apt-get install -y metis
@@ -86,9 +86,7 @@ Vagrant.configure(2) do |config|
 
      # Creating meshes
      sudo apt-get install -y octave octave-msh octave-geometry
-     # Given the change, sympy pulls in all of tex, and is about 1GB
-     sudo apt-get install python3-sympy --no-install-recommends
-
+     
      # Used to support generation of documentation from schema
      sudo apt-get install -y xsltproc ant libsaxon-java docbook docbook-xsl-ns pandoc
 

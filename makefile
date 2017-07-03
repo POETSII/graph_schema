@@ -12,6 +12,8 @@ CPPFLAGS += -I providers
 LDLIBS += $(shell pkg-config --libs-only-l libxml++-2.6)
 LDFLAGS += $(shell pkg-config --libs-only-L --libs-only-other libxml++-2.6)
 
+#LDLIBS += -lboost_filesystem -lboost_system
+
 ifeq ($(OS),Windows_NT)
 SO_CPPFLAGS += -shared
 else
@@ -52,11 +54,15 @@ endif
 PYTHON = python3
 
 $(TRANG) : external/trang-20091111.zip
-	(cd external && unzip -o trang-20091111.zip)
+	if [[ ! -f $(TRANG) ]] ; then \
+		(cd external && unzip -o trang-20091111.zip) \
+	fi
 	touch $@
 
 $(JING) : external/jing-20081028.zip
-	(cd external && unzip -o jing-20081028.zip)
+	if [[ ! -f $(JING) ]] ; then \
+		(cd external && unzip -o jing-20081028.zip) \
+	fi
 	touch $@
 
 $(RNG_SVG) : external/rng-svg-latest.zip
@@ -178,18 +184,23 @@ endef
 
 include apps/clock_tree/makefile.inc
 include apps/ising_spin/makefile.inc
+include apps/ising_spin_fix/makefile.inc
 include apps/clocked_izhikevich/makefile.inc
+include apps/clocked_izhikevich_fix/makefile.inc
 include apps/gals_izhikevich/makefile.inc
 include apps/gals_heat/makefile.inc
+include apps/gals_heat_fix/makefile.inc
 
 include apps/amg/makefile.inc
+include apps/apsp/makefile.inc
 
 include tools/partitioner.inc
 
 demos : $(ALL_DEMOS)
 
 
-all_tools : bin/print_graph_properties bin/epoch_sim bin/queue_sim
+all_tools : bin/print_graph_properties bin/epoch_sim
+#bin/queue_sim
 
 
 VIRTUAL_ALL_TESTS := $(patsubst test/virtual/%.xml,%,$(wildcard test/virtual/*.xml))
@@ -204,7 +215,7 @@ test_list :
 
 test : all_tools $(ALL_TESTS)
 
-softswitch : test $(ALL_SOFTSWITCH)
+softswitch : $(ALL_SOFTSWITCH)
 	echo $(ALL_SOFTSWITCH)
 
 demo : $(ALL_DEMOS)

@@ -123,13 +123,13 @@
             <Scalar type="int8_t" name="hot" />
           </State>
 
-          <InputPort name="in" messageTypeId="update">
+          <InputPort name="in" messageTypeId="transfer">
             <OnReceive><![CDATA[
             deviceState->hot=1;
             ]]></OnReceive>
           </InputPort>
 
-          <OutputPort name="out" messageTypeId="update">
+          <OutputPort name="out" messageTypeId="transfer">
             <OnSend><![CDATA[
             deviceState->hot=0;
             ]]></OnSend>

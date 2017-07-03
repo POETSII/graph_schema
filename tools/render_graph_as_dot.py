@@ -3,9 +3,11 @@ from graph.snapshots import extractSnapshotInstances
 import sys
 import os
 import argparse
+import re
 
 parser=argparse.ArgumentParser("Render a graph to dot.")
 parser.add_argument('graph', metavar="G", default="-", nargs="?")
+parser.add_argument('--device-type-filter', dest="deviceTypeFilter", default=".*")
 parser.add_argument('--snapshots', dest="snapshots", default=None)
 parser.add_argument('--bind-dev',dest="bind_dev",metavar=("idFilter","property|state|rts","name","attribute","expression"), nargs=5,action="append",default=[])
 parser.add_argument('--bind-edge',dest="bind_edge",metavar=("idFilter","property|state|firings","name","attribute","expression"), nargs=5,action="append",default=[])
@@ -15,6 +17,8 @@ args=parser.parse_args()
 
 shapes=["oval","box","diamond","pentagon","hexagon","septagon", "octagon"]
 colors=["blue4","red4","green4"]
+
+reDeviceTypeFilter=re.compile(args.deviceTypeFilter)
 
 deviceTypeToShape={}
 edgeTypeToColor={}
@@ -112,9 +116,16 @@ def write_graph(dst, graph,devStates=None,edgeStates=None):
     out('  sep="+10,10";');
     out('  overlap=false;');
     out('  spline=true;');
+    
+    incNodes=set()
 
     for di in graph.device_instances.values():
         dt=di.device_type
+        
+        if not reDeviceTypeFilter.match(dt.id):
+            continue
+        
+        incNodes.add( di.id )
 
         if devStates:
             stateTuple=devStates.get(di.id,None)
@@ -158,6 +169,11 @@ def write_graph(dst, graph,devStates=None,edgeStates=None):
     addLabels=len(graph.edge_instances) < 50
 
     for ei in graph.edge_instances.values():
+        if not ei.src_device.id in incNodes:
+            continue
+        if not ei.dst_device.id in incNodes:
+            continue
+        
         if edgeStates:
             stateTuple=edgeStates.get(ei.id,None)
             if stateTuple:

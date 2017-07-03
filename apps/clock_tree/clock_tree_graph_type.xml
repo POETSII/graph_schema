@@ -12,10 +12,17 @@
 		"native_dimension":2
 	 </MetaData>
 
+	 <Properties>
+	 	<Scalar name="max_ticks" type="uint32_t" default="100"/>
+	 </Properties>
 
     <MessageTypes>
       <MessageType id="__init__">
-		<Documentation>This doesn't have any properties</Documentation>
+				<Documentation>This doesn't have any properties</Documentation>
+      </MessageType>
+
+			<MessageType id="empty">
+				<Documentation>This should be replaced with OnCompute at some point.</Documentation>
       </MessageType>
       
       <MessageType id="tick">
@@ -36,18 +43,41 @@
 		<State>
 		  <Scalar type="uint32_t" name="cycle" />
 		  <Scalar type="uint32_t" name="pending" />
+			<Scalar type="uint32_t" name="doExport" />
 		</State>
 		
 		<ReadyToSend><![CDATA[
-			*readyToSend = deviceState->pending==0 ? OUTPUT_FLAG_root_tick_out : 0;
+			*readyToSend = 0; 
+			if(deviceState->doExport){
+				*readyToSend = OUTPUT_FLAG_root_fake_compute;
+			}else if(deviceState->pending==0){
+			 	*readyToSend = OUTPUT_FLAG_root_tick_out;
+			}
 		]]></ReadyToSend>
 		
 		<OutputPort name="tick_out" messageTypeId="tick">
 		  <OnSend><![CDATA[
-		  deviceState->cycle++;
-		  deviceState->pending=deviceProperties->fanout;
-			handler_log_key_value(0, deviceState->cycle);
+		  handler_log(2, "root_tick_out, cycle=0x%x, max_ticks=0x%x", deviceState->cycle, graphProperties->max_ticks);
+			assert(deviceState->pending==0);
+			assert(deviceState->doExport==0);
+			deviceState->cycle++;
+			if(deviceState->cycle >= graphProperties->max_ticks){
+				handler_exit(0);
+				*doSend=false;
+			}else{
+				deviceState->pending=deviceProperties->fanout;
+				deviceState->doExport=1;
+			}
 		  ]]></OnSend>
+		</OutputPort>
+
+		<OutputPort name="fake_compute" messageTypeId="empty">
+		<OnSend><![CDATA[
+		handler_log(1, "export = %u", deviceState->cycle);
+		handler_export_key_value(0, deviceState->cycle);
+		deviceState->doExport=0;
+		*doSend=false;
+		]]></OnSend>
 		</OutputPort>
 		
 		<InputPort name="ack_in" messageTypeId="ack">
@@ -93,6 +123,7 @@
 	  
 	  <OutputPort name="tick_out" messageTypeId="tick">
 	    <OnSend><![CDATA[
+	    handler_log(2, "branch_tick_out");
 	    deviceState->status=2+deviceProperties->fanout;
 	    ]]></OnSend>
 	  </OutputPort>
@@ -105,6 +136,7 @@
 	  
 	  <OutputPort name="ack_out" messageTypeId="ack">
 	    <OnSend><![CDATA[
+	    handler_log(2, "branch_ack_out");
 	    deviceState->status=0;
 	    ]]></OnSend>
 	  </OutputPort>

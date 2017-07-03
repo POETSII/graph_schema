@@ -53,6 +53,7 @@ struct EpochSim
     DeviceTypePtr type;
     TypedDataPtr properties;
     TypedDataPtr state;
+    unsigned keyValueSeq; // Sequence number for key value
 
     unsigned outputCount;
     uint32_t readyToSend;
@@ -73,6 +74,15 @@ struct EpochSim
   TypedDataPtr m_graphProperties;
   std::vector<device> m_devices;
   std::shared_ptr<LogWriter> m_log;
+  
+  std::unordered_map<const char *,unsigned> m_deviceIdToIndex;
+  std::vector<std::tuple<const char*,unsigned,uint32_t,uint32_t> > m_keyValueEvents;
+  
+  std::function<void (const char*,uint32_t,uint32_t)> m_onExportKeyValue;
+  
+  bool m_deviceExitCalled=false;
+  bool m_deviceExitCode=0;
+  std::function<void (const char*,int)> m_onDeviceExit;
 
   uint64_t m_unq;
   
@@ -99,6 +109,7 @@ struct EpochSim
     d.type=dt;
     d.properties=deviceProperties;
     d.state=state;
+    d.keyValueSeq=0;
     d.readyToSend=0;
     d.outputCount=dt->getOutputCount();
     d.outputs.resize(dt->getOutputCount());
@@ -107,6 +118,7 @@ struct EpochSim
     }
     d.inputs.resize(dt->getInputCount());
     m_devices.push_back(d);
+    m_deviceIdToIndex[d.name]=d.index;
     return d.index;
   }
 
@@ -168,8 +180,28 @@ struct EpochSim
 
   void init()
   {
+    m_onExportKeyValue=[&](const char *id, uint32_t key, uint32_t value) -> void
+    {
+      auto it=m_deviceIdToIndex.find(id);
+      if(it==m_deviceIdToIndex.end()){
+        fprintf(stderr, "ERROR : Attempt export key value on non-existent (or non interned) id '%s'\n", id);
+        exit(1);
+      }
+      unsigned index=it->second;
+      unsigned seq=m_devices[index].keyValueSeq++;
+      
+      m_keyValueEvents.emplace_back(id, seq, key, value);
+    };
+    
+    m_onDeviceExit=[&](const char *id, int code) ->void
+    {
+      m_deviceExitCalled=true;
+      m_deviceExitCode=code;
+      fprintf(stderr, "  device '%s' called application_exit(%d)\n", id, code);
+    };
+    
     for(auto &dev : m_devices){
-      ReceiveOrchestratorServicesImpl receiveServices{logLevel, stderr, dev.name, "__init__"  };
+      ReceiveOrchestratorServicesImpl receiveServices{logLevel, stderr, dev.name, "__init__", m_onExportKeyValue, m_onDeviceExit  };
       auto init=dev.type->getInput("__init__");
       if(init){
         if(logLevel>2){
@@ -208,14 +240,14 @@ struct EpochSim
 
     std::uniform_real_distribution<> udist;
 
-    ReceiveOrchestratorServicesImpl receiveServices{logLevel, stderr, 0, 0};
+    ReceiveOrchestratorServicesImpl receiveServices{logLevel, stderr, 0, 0, m_onExportKeyValue, m_onDeviceExit};
     {
       std::stringstream tmp;
       tmp<<"Epoch "<<m_epoch<<", Recv: ";
       receiveServices.setPrefix(tmp.str().c_str());
     }
 
-    SendOrchestratorServicesImpl sendServices{logLevel, stderr, 0, 0};
+    SendOrchestratorServicesImpl sendServices{logLevel, stderr, 0, 0, m_onExportKeyValue, m_onDeviceExit};
     {
       std::stringstream tmp;
       tmp<<"Epoch "<<m_epoch<<", Send: ";
@@ -383,6 +415,7 @@ void usage()
   fprintf(stderr, "  --snapshots interval destFile\n");
   fprintf(stderr, "  --log-events destFile\n");
   fprintf(stderr, "  --prob-send probability\n");
+  fprintf(stderr, "  --key-value destFile\n");
   exit(1);
 }
 
@@ -419,6 +452,8 @@ int main(int argc, char *argv[])
     int maxSteps=INT_MAX;
 
     double probSend=0.9;
+
+    std::string keyValueName;
 
     int ia=1;
     while(ia < argc){
@@ -467,6 +502,13 @@ int main(int argc, char *argv[])
         }
         logSinkName=argv[ia+1];
         ia+=2;
+      }else if(!strcmp("--key-value",argv[ia])){
+        if(ia+1 >= argc){
+          fprintf(stderr, "Missing argument to --key-value\n");
+          usage();
+        }
+        keyValueName=argv[ia+1];
+        ia+=2;
       }else{
         srcFilePath=argv[ia];
         ia++;
@@ -477,15 +519,19 @@ int main(int argc, char *argv[])
 
     std::istream *src=&std::cin;
     std::ifstream srcFile;
+    filepath srcPath(current_path());
 
     if(srcFilePath!="-"){
+      filepath p(srcFilePath);
+      p=absolute(p);
       if(logLevel>1){
-        fprintf(stderr,"Reading from '%s'\n", srcFilePath.c_str());
+        fprintf(stderr,"Reading from '%s' ( = '%s' absolute)\n", srcFilePath.c_str(), p.c_str());
       }
-      srcFile.open(srcFilePath.c_str());
+      srcFile.open(p.c_str());
       if(!srcFile.is_open())
-        throw std::runtime_error(std::string("Couldn't open '")+srcFilePath+"'");
+        throw std::runtime_error(std::string("Couldn't open '")+p.native()+"'");
       src=&srcFile;
+      srcPath=p.parent_path();    
     }
 
     xmlpp::DomParser parser;
@@ -508,7 +554,16 @@ int main(int argc, char *argv[])
       signal(SIGINT, onsignal_close_log);
     }
 
-    loadGraph(&registry, parser.get_document()->get_root_node(), &graph);
+    FILE *keyValueDst=0;
+    if(!keyValueName.empty()){
+        keyValueDst=fopen(keyValueName.c_str(), "wt");
+        if(keyValueDst==0){
+            fprintf(stderr, "Couldn't open key value dest '%s'\n", keyValueName.c_str());
+            exit(1);
+        }
+    }
+
+    loadGraph(&registry, srcPath, parser.get_document()->get_root_node(), &graph);
     if(logLevel>1){
       fprintf(stderr, "Loaded\n");
     }
@@ -530,7 +585,7 @@ int main(int argc, char *argv[])
     int snapshotSequenceNum=1;
 
     for(int i=0; i<maxSteps; i++){
-      bool running = graph.step(rng, probSend);
+      bool running = graph.step(rng, probSend) && !graph.m_deviceExitCalled;
 
       if(logLevel>2 || i==nextStats){
         fprintf(stderr, "Epoch %u : sends/device/epoch = %f (%f / %u)\n\n", i, graph.m_statsSends / graph.m_devices.size() / statsDelta, graph.m_statsSends/statsDelta, (unsigned)graph.m_devices.size());
@@ -554,13 +609,28 @@ int main(int argc, char *argv[])
     if(logLevel>1){
       fprintf(stderr, "Done\n");
     }
+
+    if(keyValueDst){
+        if(logLevel>2){
+            fprintf(stderr, "Writing key value file\n");
+        }
+        std::sort(graph.m_keyValueEvents.begin(), graph.m_keyValueEvents.end());
+        for(auto t : graph.m_keyValueEvents){
+            fprintf(keyValueDst, "%s, %u, %u, %u\n", std::get<0>(t), std::get<1>(t), std::get<2>(t), std::get<3>(t));
+        }
+        fflush(keyValueDst);
+    }
   
   }catch(std::exception &e){
-    g_pLog->close();
+    if(g_pLog){
+      g_pLog->close();
+    }
     std::cerr<<"Exception : "<<e.what()<<"\n";
     exit(1);
   }catch(...){
-    g_pLog->close();
+    if(g_pLog){
+      g_pLog->close();
+    }
     std::cerr<<"Exception of unknown type\n";
     exit(1);
   }

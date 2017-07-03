@@ -1,34 +1,18 @@
 <?xml version="1.0"?>
 <Graphs xmlns="http://TODO.org/POETS/virtual-graph-schema-v1">
-  <GraphType id="gals_heat" >
+  <GraphType id="gals_heat_fix" >
 	<Documentation><![CDATA[
-    Locally synchronous heat.
+    Locally synchronous heat in fixed point.
 
-	 Each cell i has a time t, and all cells start at t=0.
-	 Initially each cell knows its own state, but not its
-	 neighbours, so all cells want to broadcast their state and move to t=1.
-	 However, there is no ordering on the broadcasts, so the
-	 order they achieve it in is going to be random.
+		This is intended to be the same as gals_heat, except for working in fixed point.
 
-         As the messages fly we have a number of situations:
-         - t=0, no messages received    : wants to send t=0
-	 - t=0, some messages received  : wants to send t=0
-	 - t=0, all messages received   : wants to send t=1 (could also send t=2, but has to do t=1 first)
-	 - t=1, no messaged received    : blocked
-	 - t=1, some messages received  : blocked
-	 - t=1, all messages recieved   : wants to send t=2
+		The main difference is the dirichlet variables are much simpler, to avoid
+		calling sin and cos.
 
-         In order to progress to t=2 (i.e. send) a cell must have received t=1 from all
-         neighbours. However, while waiting for t=1 from one neighbour, it might also
-	 receive t=2 from another neighbour, which it will need to repemeber for next
-	 time. It is not possible to recieve anything with t=3, as no neighbour can get
-	 there without receiving our t=2 (which we haven't sent yet).
+		Numbers are represented as signed 32-bit fixed point with 24 fractional bits.
 
-         So at a given time t we need to deal with messages for both t=1 and t=2,
-         and essentially need two copies. When we advance, the t+1 copy becomes
-	 the t version and t+1 is empty.
     ]]></Documentation>
-	
+
 		<MetaData>
 			"location.dimension" : 2
 		</MetaData>
@@ -44,7 +28,41 @@
     </Properties>
 
     <SharedCode><![CDATA[
-    #include <cmath>
+    
+		int32_t fix_mul(int32_t x, int32_t y)
+		{
+			auto xy=x*(int64_t)y;
+			xy += (1<<23);
+			xy = xy>>24;
+			assert( -2147483648 <= xy && xy <= 2147483647 );
+			return (int32_t)(xy);
+		}
+
+		int32_t fix_add(int32_t x, int32_t y)
+		{
+			int64_t xy64=x+(int64_t)y;
+			assert( -2147483648 <= xy64 && xy64 <= 2147483647 );
+			int32_t xy=x+y;
+			return xy;
+		}
+
+		int32_t fix_sub(int32_t x, int32_t y)
+		{
+			int64_t xy64=x-(int64_t)y;
+			assert( -2147483648 <= xy64 && xy64 <= 2147483647 );
+			int32_t xy=x-y;
+			return xy;
+		}
+
+		bool fix_gt(int32_t x, int32_t y)
+		{
+			return x>y;
+		}
+
+		bool fix_lt(int32_t x, int32_t y)
+		{
+			return x>y;
+		}
     ]]></SharedCode>
 
     <MessageTypes>
@@ -58,7 +76,7 @@
       <MessageType id="update">
 				<Message>
 					<Scalar type="uint32_t" name="t" />
-					<Scalar type="float" name="v" />
+					<Scalar type="int32_t" name="v" />
 				</Message>
       </MessageType>
     </MessageTypes>
@@ -72,16 +90,14 @@
 		<Properties>
 			<Scalar type="int32_t" name="dt" default="1" />
 
-		  <Scalar type="float" name="amplitude" />
-		  <Scalar type="float" name="phase" />
-		  <Scalar type="float" name="frequency" />
-		  <Scalar type="float" name="bias" />
+		  <Scalar type="int32_t" name="updateDelta" />
+		  <Scalar type="int32_t" name="updateMax" />
 
 		  <Scalar type="uint32_t" name="neighbours" /> <!-- We need to know the neighbour count in order to sync -->
 		</Properties>
 
 		<State>
-		  <Scalar type="float" name="v" />
+		  <Scalar type="uint32_t" name="v" />
 		  <Scalar type="uint32_t" name="t" />
 
 		  <Scalar type="uint32_t" name="cs" />
@@ -91,7 +107,7 @@
 		<ReadyToSend><![CDATA[
 		*readyToSend		= 0;
 		if(deviceState->t < graphProperties->maxTime){
-			if(deviceState->cs==deviceProperties->neighbours){
+			if(deviceState->cs>=deviceProperties->neighbours){
 				*readyToSend = RTS_FLAG_out;
 			}
 		}else if(deviceState->t == graphProperties->maxTime){
@@ -105,20 +121,19 @@
 		  deviceState->cs=deviceProperties->neighbours;
 		  deviceState->ns=0;
 
-		  deviceState->v=deviceProperties->bias + deviceProperties->amplitude
-			     * sin(deviceProperties->phase + deviceProperties->frequency * deviceState->t);
+		  deviceState->v=0;
 		  ]]></OnReceive>
 		</InputPort>
 
 		<InputPort name="__print__" messageTypeId="__init__">
 		  <OnReceive><![CDATA[
-		  handler_log(0, "t = %d, v=%8g (seenNow=%d, seenNext=%d)", deviceState->t, deviceState->v, deviceState->cs, deviceState->ns);
+		  handler_log(0, "t = %d, v=%d (seenNow=%d, seenNext=%d)", deviceState->t, deviceState->v, deviceState->cs, deviceState->ns);
 		  ]]></OnReceive>
 		</InputPort>
 
 		<InputPort name="in" messageTypeId="update">
 		  <OnReceive><![CDATA[
-			handler_log(3, "m=(t=%d,v=%.4f) tNow=%d, sNow=%d, aNow=%.4f, sNext=%d, aNext=%f", message->t, message->v, deviceState->t, deviceState->cs, deviceState->ns);
+			handler_log(3, "m=(t=%d,v=%d) tNow=%d, sNow=%d, sNext=%d", message->t, message->v, deviceState->t, deviceState->cs, deviceState->ns);
 		  
 			if(message->t==deviceState->t){
 				deviceState->cs++;
@@ -139,8 +154,11 @@
 			assert(deviceState->t < graphProperties->maxTime);
 			assert(deviceState->cs==deviceProperties->neighbours);
 
-			deviceState->v=deviceProperties->bias + deviceProperties->amplitude
-					* sin(deviceProperties->phase + deviceProperties->frequency * deviceState->t);
+			deviceState->v = fix_add( deviceState->v, deviceProperties->updateDelta );
+			if( fix_gt( deviceState->v, deviceProperties->updateMax) ){
+				deviceState->v = fix_sub(deviceState->v, deviceProperties->updateMax);
+				deviceState->v = fix_sub(deviceState->v, deviceProperties->updateMax);
+			}
 
 			deviceState->t = deviceState->t + deviceProperties->dt;
 			deviceState->cs = deviceState->ns;
@@ -148,6 +166,7 @@
 
 			message->t = deviceState->t;
 			message->v = deviceState->v;
+			handler_log(2, "msg=(%u,%d), t=%u, cs=%u, ns=%u", message->t, message->v, deviceState->t, deviceState->cs, deviceState->ns);
 		  ]]></OnSend>
 		</OutputPort>
 
@@ -165,27 +184,27 @@
       <DeviceType id="cell">
 		<!-- This is a common-or-garden 2d cell, with no boundary stuff -->
 		<Properties>
-		  <Scalar type="float" name="iv" />
+		  <Scalar type="int32_t" name="iv" />
 		  <Scalar type="uint32_t" name="nhood" />
-		  <Scalar type="float" name="wSelf" />
+		  <Scalar type="int32_t" name="wSelf" />
 		  <Scalar type="uint32_t" name="dt" default="1" />
 		</Properties>
 
 		<State>
-		  <Scalar type="float" name="v" />
+		  <Scalar type="int32_t" name="v" />
 		  <Scalar type="uint32_t" name="t" />
 
-		  <Scalar type="float" name="ca" /> <!-- w_self * s_self + sum( w_o * s_o for o in seenNow)  -->
+		  <Scalar type="int32_t" name="ca" /> <!-- w_self * s_self + sum( w_o * s_o for o in seenNow)  -->
 		  <Scalar type="uint32_t" name="cs" />
 
-		  <Scalar type="float" name="na" /> <!-- sum(w_o * s_o for o in seenNext) -->
+		  <Scalar type="int32_t" name="na" /> <!-- sum(w_o * s_o for o in seenNext) -->
 		  <Scalar type="uint32_t" name="ns" />
 		</State>
 
 		<ReadyToSend><![CDATA[
 		*readyToSend = 0;
 		if(deviceState->t < graphProperties->maxTime){
-			if(deviceState->cs==deviceProperties->nhood){
+			if(deviceState->cs>=deviceProperties->nhood){
 				*readyToSend = RTS_FLAG_out;
 			}
 		}else if(deviceState->t == graphProperties->maxTime){
@@ -204,29 +223,30 @@
 		  deviceState->ns=0;
 		  deviceState->na=0;
 
-		  handler_log(3, "value = %f", deviceState->v);
+		  handler_log(3, "value = %d", deviceState->v);
 		  ]]></OnReceive>
 		</InputPort>
 
 		<InputPort name="__print__" messageTypeId="__init__">
 		  <OnReceive><![CDATA[
-		  handler_log(0, "t = %d, v=%8g (seenNow=%d, seenNext=%d)", deviceState->t, deviceState->v, deviceState->cs, deviceState->ns);
+		  handler_log(0, "t = %d, v=%d (seenNow=%d, seenNext=%d)", deviceState->t, deviceState->v, deviceState->cs, deviceState->ns);
 		  ]]></OnReceive>
 		</InputPort>
 
 
 		<InputPort name="in" messageTypeId="update">
 			<Properties>
-				<Scalar type="float" name="w" />
+				<Scalar type="int32_t" name="w" />
 			</Properties>
 
 		  <OnReceive><![CDATA[
-			handler_log(3, "m=(t=%d,v=%.4f) tNow=%d, sNow=%d, aNow=%.4f, sNext=%d, aNext=%f", message->t, message->v, deviceState->t, deviceState->cs, deviceState->ca, deviceState->ns, deviceState->na);
+			handler_log(3, "m=(t=%d,v=%d) tNow=%d, sNow=%d, aNow=%d, sNext=%d, aNext=%d", message->t, message->v, deviceState->t, deviceState->cs, deviceState->ca, deviceState->ns, deviceState->na);
+			auto wv=fix_mul( edgeProperties->w , message->v );
 		  if(message->t==deviceState->t){
-				deviceState->ca += edgeProperties->w * message->v;
+				deviceState->ca = fix_add(deviceState->ca, wv );
 				deviceState->cs++;
 		  }else{
-				deviceState->na += edgeProperties->w * message->v;
+				deviceState->na = fix_add(deviceState->na, wv );
 				deviceState->ns++;
 
 				assert(
@@ -248,19 +268,20 @@
 		<OutputPort name="out" messageTypeId="update">
 		  <OnSend><![CDATA[
 
-		  handler_log(3, "tNow=%d, sNow=%d, aNow=%.4f, sNext=%d, aNext=%f", deviceState->t, deviceState->cs, deviceState->ca, deviceState->ns, deviceState->na);
+		  handler_log(3, "tNow=%d, sNow=%d, aNow=%d, sNext=%d, aNext=%d", deviceState->t, deviceState->cs, deviceState->ca, deviceState->ns, deviceState->na);
 
 			assert(deviceState->cs == deviceProperties->nhood);
+
+			// TODO : move this out of the send handler into compute
+			if( (deviceState->t & graphProperties->exportDeltaMask)==0 ){
+				handler_log(2, "export %u", deviceState->v);
+				handler_export_key_value(0, 0x80000000ul+(uint32_t)(deviceState->v));
+			}
 
 			deviceState->t += deviceProperties->dt;
 			deviceState->v=deviceState->ca;
 
-			// TODO : move this out of the send handler into compute
-			if( (deviceState->t & graphProperties->exportDeltaMask)==0 ){
-				handler_export_key_value(0, 0x800000ul+(uint32_t)(int32_t)(deviceState->v*65536));
-			}
-
-			deviceState->ca = deviceProperties->wSelf * deviceState->v + deviceState->na;
+			deviceState->ca = fix_add(deviceState->na, fix_mul( deviceProperties->wSelf , deviceState->v ) );
 			deviceState->cs = deviceState->ns;
 
 			deviceState->na=0;
@@ -271,6 +292,8 @@
 
 			// It is possible that all our neighbours are ahead and have broadcast, so
 			// we could immediately be ready to go.
+
+			handler_log(2, "msg=(%u,%d), t=%u, cs=%u, ns=%u", message->t, message->v, deviceState->t, deviceState->cs, deviceState->ns);
 		  ]]></OnSend>
 		</OutputPort>
 		</DeviceType>
@@ -290,8 +313,9 @@
 			]]></ReadyToSend>
 
 			<InputPort name="done" messageTypeId="finished">
-				<OnReceive><![CDATA[
+			  <OnReceive><![CDATA[
 				deviceState->done++;
+				handler_log(2, "done=0x%x, fanin=0x%x", deviceState->done, deviceProperties->fanin);
 				if(deviceState->done == deviceProperties->fanin){
 					handler_exit(0);
 				}

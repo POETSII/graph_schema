@@ -34,14 +34,14 @@
     </Documentation>
     <DeviceInstances>
       
-      <DevI id="x" type="cell">
+      <DevI id="x" type="dev">
         <!-- Set the "leader" property to true. -->
         <P>"leader":1</P> 
       </DevI>
       
       <!-- For this instance we can let it default "leader"
            to false. -->
-      <DevI id="y" type="cell" /> 
+      <DevI id="y" type="dev" /> 
     </DeviceInstances>
     
     <EdgeInstances>

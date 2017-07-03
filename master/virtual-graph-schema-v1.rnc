@@ -36,6 +36,8 @@ datatypes xsd = "http://www.w3.org/2001/XMLSchema-datatypes"
 # If a breaking change is made to the graph specification,
 # then the namespace identifier will change.
 default namespace = "http://TODO.org/POETS/virtual-graph-schema-v1"
+# TODO: Final namespace should be
+# https://poets-project.org/schemas/virtual-graph-schema-v2
 
 # Here begins the actual grammar itself
 grammar {

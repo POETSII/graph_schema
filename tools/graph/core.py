@@ -398,7 +398,7 @@ class GraphInstance:
 
     def add_edge_instance(self,ei,validate=True):
         if ei.id in self.edge_instances:
-            raise GraphDescriptionError("Duplicate edgeInstance id {}".format(id))
+            raise GraphDescriptionError("Duplicate edgeInstance id {}".format(ei.id))
 
         if validate:
             self._validate_edge_instance(ei)
@@ -406,6 +406,27 @@ class GraphInstance:
             self._validated=False
 
         self.edge_instances[ei.id]=ei
+        
+        
+    #~ def add_reduction(self,dstDevInst,dstPortName,reducerFactory,maxFanIn,srcInstances,srcPortName):
+        #~ """Adds a reduction via a tree of reduction nodes.
+        
+            #~ dstDevInst : the (already constructed) destination node
+            #~ dstPortName : output port name for the destination _and_ the input port for reducers
+            #~ reducerFactor : a functor from (name,faninCount) -> deviceInstance
+            #~ maxFanIn : largest acceptable fanin at any level of tree
+            #~ srcInstances: Array of source instances
+            #~ srcPortName : output port name for the sources _and_ the output port for reducers
+        
+        #~ """
+        
+        #~ assert(len(srcInstances)>0)
+        
+        #~ while(len(srcInstances)>maxFanIn):
+            #~ currLevel=srcInstances
+            #~ nextLevel=[]
+            
+            
 
     def validate(self):
         if self._validated:
