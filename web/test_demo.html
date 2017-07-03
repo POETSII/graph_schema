@@ -238,7 +238,8 @@ function updateNodeStyleVor(d)
             poly.prev_fill=nv;
         } 
     }else{
-        let nv = heatColors[Math.floor((device.state.v + 1)/2 * heatLevels)];
+        let v=Math.max(-1,Math.min(+1, device.state.v));
+        let nv = heatColors[Math.floor((v + 1)/2 * heatLevels)];
         //console.log(" v="+device.state.v+", v="+v);
         //poly.fill(heatColors[v]);
         let pv=poly.prev_fill;
@@ -322,6 +323,19 @@ function animate()
     }
 }
 
+function chooseStepper(doInit)
+{
+    if(stepper){
+        stepper.detach();
+    }
+    if($("#engine").val()=="batch"){
+        stepper=new C.BatchStepper();
+    }else{
+        stepper=new C.SingleStepper();
+    }
+    stepper.attach(G,doInit);
+}
+
 function resetGraph()
 {
     console.log("Pre");
@@ -401,7 +415,7 @@ function resetGraph()
         poly.on('mouseover',function(){
             this.selected=true;
             if(pointerIsForcing){
-                this.device.state.v=+5;
+                this.device.state.v=-3;
                 this.device.state.force=true;
             }
             statePanel.attach(this.device);
@@ -437,14 +451,9 @@ function resetGraph()
 
     panZoom = svgPanZoom(svg.node, {zoomScaleSensitivity: 0.3});
     
+    chooseStepper(true);
+
     updateAllNodes();
-    
-    if($("#engine").val()=="batch"){
-        stepper=new C.BatchStepper();
-    }else{
-        stepper=new C.SingleStepper();
-    }
-    stepper.attach(G,true);
     
    
 }
@@ -498,6 +507,10 @@ require(['scripts/require_config'],function() {
             updateAllEdges(s);
         });
 
+        $("#engine").change(function(){
+            chooseStepper(false);
+        });
+
         $("#show-heat").change(function(){
             showTime=!this.checked;
             updateAllEdges(s);
@@ -505,7 +518,7 @@ require(['scripts/require_config'],function() {
 
         $("#force-pointer").change(function(){
             pointerIsForcing=!!this.checked;
-            updateAll(s);
+            updateAllNodes(s);
         });
     });
 });

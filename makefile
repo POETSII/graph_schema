@@ -210,6 +210,9 @@ tt :
 
 validate-virtual : $(foreach t,$(VIRTUAL_ALL_TESTS),validate-virtual/$(t) output/virtual/$(t).svg output/virtual/$(t).graph.cpp output/virtual/$(t).graph.so)
 
+test_list :
+	echo $(ALL_TESTS)
+
 test : all_tools $(ALL_TESTS)
 
 softswitch : $(ALL_SOFTSWITCH)

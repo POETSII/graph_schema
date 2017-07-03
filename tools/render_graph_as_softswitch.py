@@ -633,7 +633,8 @@ def render_graph_instance_as_thread_context(
                         {{
                             {SRC_THREAD_INDEX}, // thread id
                             {SRC_THREAD_OFFSET}, // thread offset
-                            {SRC_PORT_INDEX} // port
+                            {SRC_PORT_INDEX}, // port
+                            0
                         }},
                         {EDGE_PROPERTIES},
                         {EDGE_STATE}
