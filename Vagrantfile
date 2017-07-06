@@ -23,6 +23,10 @@ Vagrant.configure(2) do |config|
   # within the machine from a port on the host machine. In the example below,
   # accessing "localhost:8080" will access port 80 on the guest machine.
   # config.vm.network "forwarded_port", guest: 80, host: 8080
+  
+  config.ssh.forward_agent = true
+  
+  config.ssh.forward_x11 = true
 
   # Create a private network, which allows host-only access to the machine
   # using a specific IP.
@@ -51,7 +55,7 @@ Vagrant.configure(2) do |config|
   #   vb.gui = true
   #
   #   # Customize the amount of memory on the VM:
-     vb.memory = "2048"
+     vb.memory = "6000"
   end
 
 
@@ -66,12 +70,16 @@ Vagrant.configure(2) do |config|
   # Puppet, Chef, Ansible, Salt, and Docker are also available. Please see the
   # documentation for more information about their specific syntax and use.
   config.vm.provision "shell", inline: <<-SHELL
-    sudo apt-get update
+	sudo apt-get update
 
      sudo apt-get install -y libxml2-dev gdb g++ git make libxml++2.6-dev libboost-dev python3.4 zip default-jre-headless python3-lxml curl mpich rapidjson-dev
+     sudo apt-get install -y libxml2-dev gdb g++ git make libxml++2.6-dev libboost-dev libboost-filesystem-dev python3 zip default-jre-headless python3-lxml curl mpich rapidjson-dev
 
      # RISC-V toolchain (not sure exactly how much is needed)
-	sudo apt-get install -y autoconf automake autotools-dev curl libmpc-dev libmpfr-dev libgmp-dev gawk build-essential bison flex texinfo gperf libtool patchutils bc zlib1g-dev
+      sudo apt-get install -y autoconf automake autotools-dev curl libmpc-dev libmpfr-dev libgmp-dev gawk build-essential bison flex texinfo gperf libtool patchutils bc zlib1g-dev
+
+     # Graph partitioning
+     sudo apt-get install -y metis
 
      # Visualisation
      sudo apt-get install -y graphviz imagemagick ffmpeg
@@ -79,6 +87,9 @@ Vagrant.configure(2) do |config|
      # Editors
      sudo apt-get install -y emacs-nox screen
 
+     # Creating meshes
+     sudo apt-get install -y octave octave-msh octave-geometry
+     
      # Used to support generation of documentation from schema
      sudo apt-get install -y xsltproc ant libsaxon-java docbook docbook-xsl-ns pandoc
 

@@ -28,9 +28,19 @@
          and essentially need two copies. When we advance, the t+1 copy becomes
 	 the t version and t+1 is empty.
     ]]></Documentation>
+	
+		<MetaData>
+			"location.dimension" : 2
+		</MetaData>
 
 	<Properties>
-      <Scalar type="uint32_t" name="maxTime" default="1000" />
+      <Scalar type="uint32_t" name="maxTime" default="65" />
+			<Scalar type="uint32_t" name="exportDeltaMask" default="15">
+				<Documentation><![CDATA[
+				Controls the rate at which values are exported. Interior cells will
+				export when (t & exportDeltaMask)==0
+				]]></Documentation>
+			</Scalar>
     </Properties>
 
     <SharedCode><![CDATA[
@@ -39,18 +49,24 @@
 
     <MessageTypes>
       <MessageType id="__init__">
-		<!-- This doesn't have any properties -->
+				<!-- This doesn't have any properties -->
       </MessageType>
 
+			<MessageType id="finished">
+			</MessageType>
+
       <MessageType id="update">
-		<Message>
-		  <Scalar type="uint32_t" name="t" />
-		  <Scalar type="float" name="v" />
-		</Message>
+				<Message>
+					<Scalar type="uint32_t" name="t" />
+					<Scalar type="float" name="v" />
+				</Message>
       </MessageType>
     </MessageTypes>
 
     <DeviceTypes>
+
+
+
 
       <DeviceType id="dirichlet_variable">
 		<Properties>
@@ -74,8 +90,12 @@
 
 		<ReadyToSend><![CDATA[
 		*readyToSend		= 0;
-		if(deviceState->t <= graphProperties->maxTime && deviceState->cs==deviceProperties->neighbours){
-			*readyToSend = RTS_FLAG_out;
+		if(deviceState->t < graphProperties->maxTime){
+			if(deviceState->cs==deviceProperties->neighbours){
+				*readyToSend = RTS_FLAG_out;
+			}
+		}else if(deviceState->t == graphProperties->maxTime){
+			*readyToSend=RTS_FLAG_finished;
 		}
 		]]></ReadyToSend>
 
@@ -98,36 +118,49 @@
 
 		<InputPort name="in" messageTypeId="update">
 		  <OnReceive><![CDATA[
-		  if(message->t==deviceState->t){
-			deviceState->cs++;
+			handler_log(3, "m=(t=%d,v=%.4f) tNow=%d, sNow=%d, aNow=%.4f, sNext=%d, aNext=%f", message->t, message->v, deviceState->t, deviceState->cs, deviceState->ns);
+		  
+			if(message->t==deviceState->t){
+				deviceState->cs++;
 		  }else{
-			deviceState->ns++;
-		  			assert(deviceState->t + deviceProperties->dt == message->t);
+				deviceState->ns++;
 
+				assert(
+					(deviceState->t + deviceProperties->dt == message->t) // Either it is one step ahead
+					||
+					(deviceState->t == graphProperties->maxTime+1)  // Or we are idle and don't care
+				);
 		  }
 		  ]]></OnReceive>
 		</InputPort>
 
 		<OutputPort name="out" messageTypeId="update">
 		  <OnSend><![CDATA[
-		  if(deviceState->t > graphProperties->maxTime){
-			 *doSend=false;
-		  }else{
-			  assert(deviceState->cs==deviceProperties->neighbours);
+			assert(deviceState->t < graphProperties->maxTime);
+			assert(deviceState->cs==deviceProperties->neighbours);
 
-			  deviceState->v=deviceProperties->bias + deviceProperties->amplitude
-			     * sin(deviceProperties->phase + deviceProperties->frequency * deviceState->t);
+			deviceState->v=deviceProperties->bias + deviceProperties->amplitude
+					* sin(deviceProperties->phase + deviceProperties->frequency * deviceState->t);
 
-			  deviceState->t = deviceState->t + deviceProperties->dt;
-			  deviceState->cs = deviceState->ns;
-			  deviceState->ns = 0;
+			deviceState->t = deviceState->t + deviceProperties->dt;
+			deviceState->cs = deviceState->ns;
+			deviceState->ns = 0;
 
-			  message->t = deviceState->t;
-			  message->v = deviceState->v;
-			}
+			message->t = deviceState->t;
+			message->v = deviceState->v;
 		  ]]></OnSend>
 		</OutputPort>
-      </DeviceType>
+
+		<OutputPort name="finished" messageTypeId="finished">
+			<OnSend><![CDATA[
+			assert(deviceState->t==graphProperties->maxTime);
+			deviceState->t++; // We advance beyond the end of time and go idle
+			// And send an empty pulse to exit node
+			]]></OnSend>
+		</OutputPort>
+
+
+	</DeviceType>
 
       <DeviceType id="cell">
 		<!-- This is a common-or-garden 2d cell, with no boundary stuff -->
@@ -151,8 +184,12 @@
 
 		<ReadyToSend><![CDATA[
 		*readyToSend = 0;
-		if(deviceState->t <= graphProperties->maxTime && deviceState->cs==deviceProperties->nhood){
-			*readyToSend = RTS_FLAG_out;
+		if(deviceState->t < graphProperties->maxTime){
+			if(deviceState->cs==deviceProperties->nhood){
+				*readyToSend = RTS_FLAG_out;
+			}
+		}else if(deviceState->t == graphProperties->maxTime){
+			*readyToSend = RTS_FLAG_finished;
 		}
 		]]></ReadyToSend>
 
@@ -184,47 +221,84 @@
 			</Properties>
 
 		  <OnReceive><![CDATA[
+			handler_log(3, "m=(t=%d,v=%.4f) tNow=%d, sNow=%d, aNow=%.4f, sNext=%d, aNext=%f", message->t, message->v, deviceState->t, deviceState->cs, deviceState->ca, deviceState->ns, deviceState->na);
 		  if(message->t==deviceState->t){
-			deviceState->ca += edgeProperties->w * message->v;
-			deviceState->cs++;
+				deviceState->ca += edgeProperties->w * message->v;
+				deviceState->cs++;
 		  }else{
-			assert(deviceState->t + deviceProperties->dt == message->t);
-			deviceState->na += edgeProperties->w * message->v;
-			deviceState->ns++;
-			}
+				deviceState->na += edgeProperties->w * message->v;
+				deviceState->ns++;
 
-			  handler_log(3, "(t=%d,v=%.4f) tNow=%d, sNow=%d, aNow=%.4f, sNext=%d, aNext=%f", message->t, message->v, deviceState->t, deviceState->cs, deviceState->ca, deviceState->ns, deviceState->na);
-		  ]]></OnReceive>
+				assert(
+					(deviceState->t + deviceProperties->dt == message->t) // Either it is one step ahead
+					||
+					(deviceState->t == graphProperties->maxTime+1)  // Or we are idle and don't care
+				);
+			}
+		]]></OnReceive>
 		</InputPort>
+
+		<OutputPort name="finished" messageTypeId="finished">
+			<OnSend><![CDATA[
+			deviceState->t++; // We advance beyond the end of time and go idle
+			// And send an empty pulse to exit node
+			]]></OnSend>
+		</OutputPort>
 
 		<OutputPort name="out" messageTypeId="update">
 		  <OnSend><![CDATA[
 
 		  handler_log(3, "tNow=%d, sNow=%d, aNow=%.4f, sNext=%d, aNext=%f", deviceState->t, deviceState->cs, deviceState->ca, deviceState->ns, deviceState->na);
 
-		  if(deviceState->t > graphProperties->maxTime){
-			*doSend=false;
-		  }else{
-			  assert(deviceState->cs == deviceProperties->nhood);
+			assert(deviceState->cs == deviceProperties->nhood);
 
-			  deviceState->t += deviceProperties->dt;
-			  deviceState->v=deviceState->ca;
+			deviceState->t += deviceProperties->dt;
+			deviceState->v=deviceState->ca;
 
-			  deviceState->ca = deviceProperties->wSelf * deviceState->v + deviceState->na;
-			  deviceState->cs = deviceState->ns;
+			// TODO : move this out of the send handler into compute
+			if( (deviceState->t & graphProperties->exportDeltaMask)==0 ){
+				handler_export_key_value(0, 0x800000ul+(uint32_t)(int32_t)(deviceState->v*65536));
+			}
 
-			  deviceState->na=0;
-			  deviceState->ns=0;
+			deviceState->ca = deviceProperties->wSelf * deviceState->v + deviceState->na;
+			deviceState->cs = deviceState->ns;
 
-			  message->t=deviceState->t;
-			  message->v=deviceState->ca;
+			deviceState->na=0;
+			deviceState->ns=0;
+
+			message->t=deviceState->t;
+			message->v=deviceState->ca;
 
 			// It is possible that all our neighbours are ahead and have broadcast, so
 			// we could immediately be ready to go.
-		  }
 		  ]]></OnSend>
 		</OutputPort>
-      </DeviceType>
+		</DeviceType>
+
+
+		<DeviceType id="exit_node">
+			<Properties>
+				<Scalar name="fanin" type="uint32_t" />
+			</Properties>
+			
+			<State>
+				<Scalar name="done" type="uint32_t" />
+			</State>
+			
+			<ReadyToSend><![CDATA[
+			*readyToSend=0;
+			]]></ReadyToSend>
+
+			<InputPort name="done" messageTypeId="finished">
+				<OnReceive><![CDATA[
+				deviceState->done++;
+				if(deviceState->done == deviceProperties->fanin){
+					handler_exit(0);
+				}
+				]]></OnReceive>
+			</InputPort>
+		</DeviceType>
+
     </DeviceTypes>
   </GraphType>
 </Graphs>

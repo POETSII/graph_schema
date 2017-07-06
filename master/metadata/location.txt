@@ -1,0 +1,8 @@
+GraphType:
+
+  "location.dimension" : dims
+  
+DeviceInstance:
+
+  "loc" : [x,y,z,...]
+  "hull"? : [ [x,y,z,...], [x,y,z,...], ... ]

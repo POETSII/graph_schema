@@ -8,6 +8,7 @@
     "@types/snapsvg": "^0.4.27",
     "@types/svg.js": "0.0.17",
     "jquery": "^3.1.1",
+    "svg-pan-zoom": "github:ariutta/svg-pan-zoom",
     "svg.js": "^2.3.6"
   },
   "devDependencies": {

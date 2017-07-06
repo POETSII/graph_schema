@@ -11,7 +11,7 @@ def make_graph_type_properties(gt):
         "GRAPH_TYPE_ID" : gt.id,
         "GRAPH_TYPE_PROPERTIES_T" : "{}_properties_t".format(gt.id),
         "GRAPH_TYPE_MESSAGE_TYPE_COUNT" : len(gt.message_types),
-        "GRAPH_TYPE_DEVICE_TYPE_COUNT" : len(gt.message_types)
+        "GRAPH_TYPE_DEVICE_TYPE_COUNT" : len(gt.device_types)
     }
 
 def make_device_type_properties(dt):

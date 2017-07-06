@@ -14,9 +14,14 @@ parser.add_argument('--output-prefix', dest="output_prefix", default="graph")
 
 args=parser.parse_args()
 
-graph=load_graph(args.graph)
+if args.graph!="-":
+    basePath=os.path.dirname(args.graph)
+else:
+    basePath=os.getcwd()
 
-if graph.graph_type.native_dimension!=2:
+graph=load_graph(args.graph,basePath)
+
+if "location.dimension" not in graph.graph_type.metadata:
     raise RuntimeError("This graph doesn't seem to be a 2d field.")
 
 scaleX=1
@@ -28,12 +33,13 @@ minY=100000000000000
 maxY=-100000000000000
 
 for di in graph.device_instances.values():
-    if di.native_location==None:
-        raise RuntimeError("No location for device {}".format(di.id))
-    minX=min(minX,di.native_location[0])
-    minY=min(minY,di.native_location[1])
-    maxX=max(maxX,di.native_location[0])
-    maxY=max(maxY,di.native_location[1])
+    if not "loc" in di.metadata:
+        continue
+    loc=di.metadata["loc"]
+    minX=min(minX,loc[0])
+    minY=min(minY,loc[1])
+    maxX=max(maxX,loc[0])
+    maxY=max(maxY,loc[1])
 
 width=int((maxX-minX+1)*scaleX)
 height=int((maxX-minX+1)*scaleX)
@@ -47,9 +53,9 @@ for b in args.bind_dev:
 
 def blend_colors(colStart,colEnd,valStart,valEnd,val):
     if val<valStart:
-        return color_to_str(colStart)
+        return colStart
     elif val>valEnd:
-        return color_to_str(colEnd)
+        return colEnd
     else:
         interp=(val-valStart)/(valEnd-valStart)
         return    (
@@ -79,9 +85,12 @@ def render_graph(dstPath, graph,devStates):
         state=stateTuple[0]
         rts=stateTuple[1]
         
-        pos=di.native_location
-        x=(di.native_location[0]-minX)*scaleX
-        y=(di.native_location[1]-minY)*scaleY
+        if "loc" not in di.metadata:
+            continue
+        
+        loc=di.metadata["loc"]
+        x=(loc[0]-minX)*scaleX
+        y=(loc[1]-minY)*scaleY
 
         value=None
 

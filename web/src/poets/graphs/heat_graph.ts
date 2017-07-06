@@ -65,13 +65,13 @@ export function makeGrid(width : number, height : number) : POETS.GraphInstance
             let voronoi=makeVoronoiCell(x,y);
 
             if( x == Math.floor(width/2) && y==Math.floor(height/2)){
-                let props={ "bias":0, "amplitude":1.0, "phase":1.5, "frequency": 100*dt, "neighbours":4 };
+                let props={ "dt":1, "bias":0, "amplitude":1.0, "phase":1.5, "frequency": 100*dt, "neighbours":4 };
                 g.addDevice(id, dirichletDeviceType, props, {x:x,y:y, voronoi:voronoi});
             } else if( H || V){
-                let props={ "bias":0, "amplitude":1.0, "phase":1, "frequency": 70*dt*((x/width)+(y/height)), "neighbours":1 };
+                let props={ "dt":1, "bias":0, "amplitude":1.0, "phase":1, "frequency": 70*dt*((x/width)+(y/height)), "neighbours":1 };
                 g.addDevice(id, dirichletDeviceType, props, {x:x,y:y});
             }else{
-                let props={nhood:4, wSelf:wSelf, iv:Math.random()*2-1 };
+                let props={"dt":1, nhood:4, wSelf:wSelf, iv:Math.random()*2-1 };
                 g.addDevice(id, cellDeviceType, props, {x:x,y:y});
             }
 

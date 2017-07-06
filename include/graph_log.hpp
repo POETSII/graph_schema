@@ -35,6 +35,11 @@ public:
         m_dst=0;
     }
     
+    bool is_open() const
+    {
+        return m_dst!=0;
+    }
+    
     ~XMLWriter()
     {
         if(m_dst){
@@ -156,7 +161,9 @@ public:
         // send event
         const char *sendEventId
     ) =0;
-    
+        
+    //! End the log and flush the stream
+    virtual void close()=0;
 };
 
 
@@ -305,7 +312,15 @@ public:
     
     ~LogWriterToFile()
     {
-        m_dst.endElement("GraphLog");
+        close();
+    }
+    
+    virtual void close()
+    {   
+        if(m_dst.is_open()){
+            m_dst.endElement("GraphLog");
+            m_dst.closeDocument();
+        }
     }
 
     void onInitEvent(

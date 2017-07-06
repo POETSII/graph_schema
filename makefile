@@ -12,6 +12,8 @@ CPPFLAGS += -I providers
 LDLIBS += $(shell pkg-config --libs-only-l libxml++-2.6)
 LDFLAGS += $(shell pkg-config --libs-only-L --libs-only-other libxml++-2.6)
 
+#LDLIBS += -lboost_filesystem -lboost_system
+
 ifeq ($(OS),Windows_NT)
 SO_CPPFLAGS += -shared
 else
@@ -52,11 +54,15 @@ endif
 PYTHON = python3
 
 $(TRANG) : external/trang-20091111.zip
-	(cd external && unzip -o trang-20091111.zip)
+	if [[ ! -f $(TRANG) ]] ; then \
+		(cd external && unzip -o trang-20091111.zip) \
+	fi
 	touch $@
 
 $(JING) : external/jing-20081028.zip
-	(cd external && unzip -o jing-20081028.zip)
+	if [[ ! -f $(JING) ]] ; then \
+		(cd external && unzip -o jing-20081028.zip) \
+	fi
 	touch $@
 
 $(RNG_SVG) : external/rng-svg-latest.zip
@@ -158,20 +164,43 @@ all_providers : $1_provider
 
 endef
 
+SOFTSWITCH_DIR = ../toy_softswitch
+
+ALL_SOFTSWITCH = 
+
+define softswitch_instance_template
+# $1 = name
+# $2 = input-path.xml
+# $3 = threads
+
+$(SOFTSWITCH_DIR)/generated/apps/$1_threads$3/present : $2
+	mkdir -p $(SOFTSWITCH_DIR)/generated/apps/$1_threads$3/
+	tools/render_graph_as_softswitch.py --log-level INFO $2 --threads $3 --dest $(SOFTSWITCH_DIR)/generated/apps/$1_threads$3/
+	touch $$@
+
+ALL_SOFTSWITCH := $(ALL_SOFTSWITCH) $(SOFTSWITCH_DIR)/generated/apps/$1_threads$3/present
+
+endef
+
 include apps/clock_tree/makefile.inc
 include apps/ising_spin/makefile.inc
+include apps/ising_spin_fix/makefile.inc
 include apps/clocked_izhikevich/makefile.inc
+include apps/clocked_izhikevich_fix/makefile.inc
 include apps/gals_izhikevich/makefile.inc
 include apps/gals_heat/makefile.inc
+include apps/gals_heat_fix/makefile.inc
 
 include apps/amg/makefile.inc
+include apps/apsp/makefile.inc
 
 include tools/partitioner.inc
 
 demos : $(ALL_DEMOS)
 
 
-all_tools : bin/print_graph_properties bin/epoch_sim bin/queue_sim
+all_tools : bin/print_graph_properties bin/epoch_sim
+#bin/queue_sim
 
 
 VIRTUAL_ALL_TESTS := $(patsubst test/virtual/%.xml,%,$(wildcard test/virtual/*.xml))
@@ -181,7 +210,13 @@ tt :
 
 validate-virtual : $(foreach t,$(VIRTUAL_ALL_TESTS),validate-virtual/$(t) output/virtual/$(t).svg output/virtual/$(t).graph.cpp output/virtual/$(t).graph.so)
 
+test_list :
+	echo $(ALL_TESTS)
+
 test : all_tools $(ALL_TESTS)
+
+softswitch : $(ALL_SOFTSWITCH)
+	echo $(ALL_SOFTSWITCH)
 
 demo : $(ALL_DEMOS)
 

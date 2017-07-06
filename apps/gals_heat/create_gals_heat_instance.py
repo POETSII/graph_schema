@@ -40,7 +40,7 @@ weightOther = weightOther * leakage
 graphType=graphTypes["gals_heat"]
 devType=graphType.device_types["cell"]
 dirichletType=graphType.device_types["dirichlet_variable"]
-
+exitNodeType=graphType.device_types["exit_node"]
 
 instName="heat_{}_{}".format(n,n)
 
@@ -53,7 +53,7 @@ nodes={}
 for x in range(0,n):
     sys.stderr.write(" Devices : Row {} of {}\n".format(x, n))
     for y in range(0,n):
-        meta={"x":x,"y":y}
+        meta={"loc":[x,y]}
         edgeX = x==0 or x==n-1
         edgeY = y==0 or y==n-1
         if x==n//2 and y==n//2:
@@ -98,6 +98,11 @@ for x in range(0,n):
             add_channel(x,y, 0, +1)
         if x!=0 and not edgeY:
             add_channel(x,y, -1, 0)        
-        
+
+finished=DeviceInstance(res, "finished",exitNodeType, None, None) 
+res.add_device_instance(finished)
+
+for (id,di) in nodes.items():
+    res.add_edge_instance(EdgeInstance(res,finished,"done",di,"finished"))
 
 save_graph(res,sys.stdout)        
