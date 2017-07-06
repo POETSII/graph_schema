@@ -146,7 +146,7 @@ public:
 
   template<class TO>
   DataPtr(DataPtr<TO> &&o)
-    : m_p(o.m_p)
+    : m_p((T*)o.m_p)
   {
     o.m_p=0;
   }
@@ -202,6 +202,16 @@ public:
   {
     release();
   }
+  
+  DataPtr clone() const
+  {
+    if(!m_p)
+      return DataPtr();
+    typed_data_t *p=(typed_data_t*)malloc(m_p->_total_size_bytes);
+    memcpy(p, m_p, m_p->_total_size_bytes);
+    p->_ref_count=0;
+    return DataPtr((T*)p);
+  }
 
   const uint8_t *payloadPtr() const
   {
@@ -239,16 +249,20 @@ public:
     if(!o.m_p){
       return false;
     }
+    if(payloadSize() != o.payloadSize()){
+      return payloadSize() < o.payloadSize();
+    }
     // otherwise we need a byte-wise compare
-    assert(payloadSize()==o.payloadSize());
     return memcmp(payloadPtr(), o.payloadPtr(), payloadSize()) < 0;
   }
 
   bool operator == (const DataPtr &o) const
   {
     if(m_p == o.m_p)
-      return false;
+      return true;
     if(!m_p || !o.m_p)
+      return false;
+    if(payloadSize()!=o.payloadSize())
       return false;
     return 0==memcmp(payloadPtr(), o.payloadPtr(), payloadSize());
   }
@@ -278,7 +292,7 @@ namespace std
 template<class T>
 DataPtr<T> make_data_ptr()
 {
-  return DataPtr<T>(new T);
+  return DataPtr<T>((T*)malloc(sizeof(T)));
 }
 
 typedef DataPtr<typed_data_t> TypedDataPtr;
