@@ -1,5 +1,5 @@
 <?xml version="1.0"?>
-<Graphs xmlns="http://TODO.org/POETS/virtual-graph-schema-v1">
+<Graphs xmlns="https://poets-project.org/schemas/virtual-graph-schema-v2">
 <GraphType id="amg">
 
 <SharedCode><![CDATA[
@@ -83,7 +83,7 @@
         handler_log(2, "root RTS : 0x%x", *readyToSend);
         ]]></ReadyToSend>
 
-        <InputPort name="fine_up" messageTypeId="fine_to_coarse">
+        <InputPin name="fine_up" messageTypeId="fine_to_coarse">
             <Properties>
                 <Scalar type="float" name="R" ><Documentation>The component of R for this edge.</Documentation></Scalar>
             </Properties>
@@ -94,9 +94,9 @@
             deviceState->fineMaxResidual = std::max(deviceState->fineMaxResidual, message->max_r);
             handler_log(3, "maxMaxResidual=%g", deviceState->fineMaxResidual);
             ]]></OnReceive>
-        </InputPort>
+        </InputPin>
 
-        <OutputPort name="fine_down" messageTypeId="coarse_to_fine">
+        <OutputPin name="fine_down" messageTypeId="coarse_to_fine">
             <OnSend><![CDATA[
             assert(deviceState->fineSeen == deviceProperties->fineTotal);
 
@@ -108,7 +108,7 @@
             deviceState->fineAcc=0;
             deviceState->fineMaxResidual=0;
             ]]></OnSend>
-        </OutputPort>
+        </OutputPin>
     </DeviceType>
     
     <!--  #######################################################################################  -->
@@ -213,7 +213,7 @@
         ]]></ReadyToSend>
 
 
-        <InputPort name="fine_up" messageTypeId="fine_to_coarse">
+        <InputPin name="fine_up" messageTypeId="fine_to_coarse">
             <Properties>
                 <Scalar type="float" name="R" />
             </Properties>
@@ -227,10 +227,10 @@
             
             handler_log(2, "fineSeen=%d, fineAcc=%f", deviceState->fineSeen, deviceState->fineAcc);
             ]]></OnReceive>
-        </InputPort>
+        </InputPin>
 
 
-        <OutputPort name="peer_out" messageTypeId="jacobi_exchange">
+        <OutputPin name="peer_out" messageTypeId="jacobi_exchange">
             <OnSend><![CDATA[
             
             if(deviceState->state==State_Idle){
@@ -277,9 +277,9 @@
                 assert(0);
             }
             ]]></OnSend>
-        </OutputPort>
+        </OutputPin>
 
-        <InputPort name="peer_in" messageTypeId="jacobi_exchange">
+        <InputPin name="peer_in" messageTypeId="jacobi_exchange">
             <Properties>
                 <Scalar type="float" name="A" />
             </Properties>
@@ -306,10 +306,10 @@
                 break;
             }
             ]]></OnReceive>
-        </InputPort>
+        </InputPin>
     
 
-        <OutputPort name="coarse_up" messageTypeId="fine_to_coarse">
+        <OutputPin name="coarse_up" messageTypeId="fine_to_coarse">
             <OnSend><![CDATA[
             assert(deviceState->state==State_PreResidual);
             assert(deviceState->preResidualSeen==deviceProperties->peerCount);
@@ -328,9 +328,9 @@
             
             handler_log(2, "PreResidual->Coarse");
             ]]></OnSend>
-        </OutputPort>
+        </OutputPin>
 
-        <InputPort name="coarse_down" messageTypeId="coarse_to_fine">
+        <InputPin name="coarse_down" messageTypeId="coarse_to_fine">
             <Properties>
                 <Scalar type="float" name="P" />
             </Properties>
@@ -347,9 +347,9 @@
             
             handler_log(2, "coarseSeen=%d", deviceState->coarseSeen);
             ]]></OnReceive>
-        </InputPort>
+        </InputPin>
 
-        <OutputPort name="fine_down" messageTypeId="coarse_to_fine">
+        <OutputPin name="fine_down" messageTypeId="coarse_to_fine">
             <OnSend><![CDATA[
             assert(deviceState->state==State_PostSmooth);
             assert(deviceState->postSmoothSeen==deviceProperties->peerCount);
@@ -366,7 +366,7 @@
             message->x = deviceState->x;
             message->max_r = deviceState->max_r;
             ]]></OnSend>
-        </OutputPort>
+        </OutputPin>
 
 
     </DeviceType>
@@ -466,7 +466,7 @@
         ]]></ReadyToSend>
 
 
-        <InputPort name="problem" messageTypeId="linear_problem">
+        <InputPin name="problem" messageTypeId="linear_problem">
             <OnReceive><![CDATA[
             assert(deviceState->state==State_Idle);
             assert(deviceState->r ==0 ); // Must have finished the previous problem...
@@ -475,10 +475,10 @@
             deviceState->x = message->x;
             deviceState->r = FLT_MAX;     // This will trigger RTS for peer_out
             ]]></OnReceive>
-        </InputPort>
+        </InputPin>
 
 
-        <OutputPort name="peer_out" messageTypeId="jacobi_exchange">
+        <OutputPin name="peer_out" messageTypeId="jacobi_exchange">
             <OnSend><![CDATA[
             if(deviceState->state==State_Idle){
                 assert(deviceState->r >= graphProperties->residualTol);
@@ -520,9 +520,9 @@
                 assert(0);
             }
             ]]></OnSend>
-        </OutputPort>
+        </OutputPin>
 
-        <InputPort name="peer_in" messageTypeId="jacobi_exchange">
+        <InputPin name="peer_in" messageTypeId="jacobi_exchange">
             <Properties>
                 <Scalar type="float" name="A" />
             </Properties>
@@ -544,10 +544,10 @@
                 break;
             }
             ]]></OnReceive>
-        </InputPort>
+        </InputPin>
 
 
-        <OutputPort name="coarse_up" messageTypeId="fine_to_coarse">
+        <OutputPin name="coarse_up" messageTypeId="fine_to_coarse">
             <OnSend><![CDATA[
             assert(deviceState->state==State_PreResidual);
             assert(deviceState->preResidualSeen ==deviceProperties->peerCount);
@@ -562,9 +562,9 @@
             deviceState->r = FLT_MAX;
             deviceState->state=State_Coarse;
             ]]></OnSend>
-        </OutputPort>
+        </OutputPin>
 
-        <InputPort name="coarse_down" messageTypeId="coarse_to_fine">
+        <InputPin name="coarse_down" messageTypeId="coarse_to_fine">
             <Properties>
                 <Scalar type="float" name="P" />
             </Properties>
@@ -579,9 +579,9 @@
             deviceState->coarseAcc += edgeProperties->P * message->x;
             deviceState->r = message->max_r;
             ]]></OnReceive>
-        </InputPort>
+        </InputPin>
 
-        <OutputPort name="solution" messageTypeId="linear_solution">
+        <OutputPin name="solution" messageTypeId="linear_solution">
             <OnSend><![CDATA[
             assert(deviceState->state==State_Coarse);
             assert(deviceState->coarseSeen==deviceProperties->coarseCount);
@@ -597,7 +597,7 @@
             deviceState->r=0;
             deviceState->state=State_Idle;
             ]]></OnSend>
-        </OutputPort>
+        </OutputPin>
 
 
     </DeviceType>
@@ -630,7 +630,7 @@
         ]]></ReadyToSend>
 
 
-        <OutputPort name="problem" messageTypeId="linear_problem">
+        <OutputPin name="problem" messageTypeId="linear_problem">
             <OnSend><![CDATA[
             assert((deviceState->i&1)==0);
             assert(deviceState->i<16);
@@ -639,9 +639,9 @@
             message->b = deviceProperties->b[deviceState->i];
             deviceState->i++;
             ]]></OnSend>
-        </OutputPort>
+        </OutputPin>
 
-       <InputPort name="solution" messageTypeId="linear_solution">
+       <InputPin name="solution" messageTypeId="linear_solution">
             <OnReceive><![CDATA[
             assert((deviceState->i&1)==1);
             assert(deviceState->i<16);
@@ -658,7 +658,7 @@
 
             deviceState->i++;
             ]]></OnReceive>
-        </InputPort>
+        </InputPin>
     </DeviceType>
 
 </DeviceTypes>

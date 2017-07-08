@@ -6,7 +6,7 @@
 //#include <boost/filesystem.hpp>
 #include <libxml++/parsers/domparser.h>
 
-void split_path(const std::string &src, std::string &dstDevice, std::string &dstPort, std::string &srcDevice, std::string &srcPort)
+void split_path(const std::string &src, std::string &dstDevice, std::string &dstPin, std::string &srcDevice, std::string &srcPin)
 {
   int colon1=src.find(':');
   int arrow=src.find('-',colon1+1);
@@ -16,9 +16,9 @@ void split_path(const std::string &src, std::string &dstDevice, std::string &dst
     throw std::runtime_error("malformed path");
 
   dstDevice=src.substr(0,colon1);
-  dstPort=src.substr(colon1+1,arrow-colon1-1);
+  dstPin=src.substr(colon1+1,arrow-colon1-1);
   srcDevice=src.substr(arrow+1,colon2-arrow-1);
-  srcPort=src.substr(colon2+1);
+  srcPin=src.substr(colon2+1);
 }
 
 
@@ -42,7 +42,7 @@ rapidjson::Document parse_meta_data(xmlpp::Element *parent, const char *name, xm
 TypedDataSpecElementPtr loadTypedDataSpecElement(xmlpp::Element *eMember)
 {
   xmlpp::Node::PrefixNsMap ns;
-  ns["g"]="http://TODO.org/POETS/virtual-graph-schema-v1";
+  ns["g"]="https://poets-project.org/schemas/virtual-graph-schema-v2";
 
   
   std::string name=get_attribute_required(eMember, "name");
@@ -86,7 +86,7 @@ TypedDataSpecElementPtr loadTypedDataSpecElement(xmlpp::Element *eMember)
 TypedDataSpecPtr loadTypedDataSpec(xmlpp::Element *eTypedDataSpec)
 {
   xmlpp::Node::PrefixNsMap ns;
-  ns["g"]="http://TODO.org/POETS/virtual-graph-schema-v1";
+  ns["g"]="https://poets-project.org/schemas/virtual-graph-schema-v2";
   
   std::vector<TypedDataSpecElementPtr> members;
   
@@ -104,7 +104,7 @@ TypedDataSpecPtr loadTypedDataSpec(xmlpp::Element *eTypedDataSpec)
 MessageTypePtr loadMessageTypeElement(xmlpp::Element *eMessageType)
 {
   xmlpp::Node::PrefixNsMap ns;
-  ns["g"]="http://TODO.org/POETS/virtual-graph-schema-v1";
+  ns["g"]="https://poets-project.org/schemas/virtual-graph-schema-v2";
   
   std::string id=get_attribute_required(eMessageType, "id");
   
@@ -119,11 +119,11 @@ MessageTypePtr loadMessageTypeElement(xmlpp::Element *eMessageType)
   return std::make_shared<MessageTypeImpl>(id, spec);
 }
 
-class InputPortDynamic
-  : public InputPortImpl
+class InputPinDynamic
+  : public InputPinImpl
 {
 public:
-  InputPortDynamic(
+  InputPinDynamic(
     std::function<DeviceTypePtr ()> deviceTypeSrc,
     const std::string &name,
     unsigned index,
@@ -132,32 +132,32 @@ public:
     TypedDataSpecPtr stateType,
     const std::string &code
   )
-  : InputPortImpl(deviceTypeSrc, name, index, messageType, propertiesType, stateType, code)
+  : InputPinImpl(deviceTypeSrc, name, index, messageType, propertiesType, stateType, code)
   {}
 
   virtual void onReceive(OrchestratorServices*, const typed_data_t*, const typed_data_t*, typed_data_t*, const typed_data_t*, typed_data_t*, const typed_data_t*) const override
   {
-    throw std::runtime_error("onReceive - input port not loaded from provider, so functionality not available.");
+    throw std::runtime_error("onReceive - input pin not loaded from provider, so functionality not available.");
   }
 };
 
-class OutputPortDynamic
-  : public OutputPortImpl
+class OutputPinDynamic
+  : public OutputPinImpl
 {
 public:
-  OutputPortDynamic(
+  OutputPinDynamic(
     std::function<DeviceTypePtr ()> deviceTypeSrc,
     const std::string &name,
     unsigned index,
     MessageTypePtr messageType,
     const std::string &code
   )
-  : OutputPortImpl(deviceTypeSrc, name, index, messageType, code)
+  : OutputPinImpl(deviceTypeSrc, name, index, messageType, code)
   {}
 
   virtual void onSend(OrchestratorServices*, const typed_data_t*, const typed_data_t*, typed_data_t*, typed_data_t*, bool*) const
   {
-    throw std::runtime_error("onSend - output port not loaded from provider, so functionality not available.");
+    throw std::runtime_error("onSend - output pin not loaded from provider, so functionality not available.");
   }
 };
 
@@ -165,7 +165,7 @@ class DeviceTypeDynamic
   : public DeviceTypeImpl
 {
 public:
-  DeviceTypeDynamic(const std::string &id, TypedDataSpecPtr properties, TypedDataSpecPtr state, const std::vector<InputPortPtr> &inputs, const std::vector<OutputPortPtr> &outputs)
+  DeviceTypeDynamic(const std::string &id, TypedDataSpecPtr properties, TypedDataSpecPtr state, const std::vector<InputPinPtr> &inputs, const std::vector<OutputPinPtr> &outputs)
     : DeviceTypeImpl(id, properties, state, inputs, outputs)
   {
     for(auto i : inputs){
@@ -178,7 +178,7 @@ public:
   
   virtual uint32_t calcReadyToSend(OrchestratorServices*, const typed_data_t*, const typed_data_t*, const typed_data_t*) const override
   {
-    throw std::runtime_error("calcReadyToSend - input port not loaded from provider, so functionality not available.");
+    throw std::runtime_error("calcReadyToSend - input pin not loaded from provider, so functionality not available.");
   }
 };
 
@@ -205,11 +205,11 @@ DeviceTypePtr loadDeviceTypeElement(
   // TODO : This is stupid. Circular initialisation stuff, but we end up with cycle of references.
   auto futureSrc=std::make_shared<DeviceTypePtr>();
   
-  // Passed into ports...
+  // Passed into pins...
   std::function<DeviceTypePtr ()> delayedSrc=  [=]() -> DeviceTypePtr { return *futureSrc; };
   
   xmlpp::Node::PrefixNsMap ns;
-  ns["g"]="http://TODO.org/POETS/virtual-graph-schema-v1";
+  ns["g"]="https://poets-project.org/schemas/virtual-graph-schema-v2";
   
   std::string id=get_attribute_required(eDeviceType, "id");
   rapidjson::Document metadata=parse_meta_data(eDeviceType, "./g:MetaData", ns);
@@ -237,9 +237,9 @@ DeviceTypePtr loadDeviceTypeElement(
     state=std::make_shared<TypedDataSpecImpl>();
   }
   
-  std::vector<InputPortPtr> inputs;
+  std::vector<InputPinPtr> inputs;
   
-  for(auto *n : eDeviceType->find("./g:InputPort",ns)){
+  for(auto *n : eDeviceType->find("./g:InputPin",ns)){
     auto *e=(xmlpp::Element*)n;
     
     std::string name=get_attribute_required(e, "name");
@@ -275,7 +275,7 @@ DeviceTypePtr loadDeviceTypeElement(
     std::string onReceive=readTextContent(eHandler);
     
     
-    inputs.push_back(std::make_shared<InputPortDynamic>(
+    inputs.push_back(std::make_shared<InputPinDynamic>(
       delayedSrc,
       name, 
       inputs.size(),
@@ -287,9 +287,9 @@ DeviceTypePtr loadDeviceTypeElement(
   }
   
   
-  std::vector<OutputPortPtr> outputs;
+  std::vector<OutputPinPtr> outputs;
   
-  for(auto *n : eDeviceType->find("./g:OutputPort",ns)){
+  for(auto *n : eDeviceType->find("./g:OutputPin",ns)){
     auto *e=(xmlpp::Element*)n;
     
     std::string name=get_attribute_required(e, "name");
@@ -309,7 +309,7 @@ DeviceTypePtr loadDeviceTypeElement(
     std::string onSend=readTextContent(eHandler);
     
     
-    outputs.push_back(std::make_shared<OutputPortDynamic>(
+    outputs.push_back(std::make_shared<OutputPinDynamic>(
       delayedSrc,
       name, 
       outputs.size(),
@@ -358,7 +358,7 @@ public:
 GraphTypePtr loadGraphTypeElement(const filepath &srcPath, xmlpp::Element *eGraphType, GraphLoadEvents *events)
 {
   xmlpp::Node::PrefixNsMap ns;
-  ns["g"]="http://TODO.org/POETS/virtual-graph-schema-v1";
+  ns["g"]="https://poets-project.org/schemas/virtual-graph-schema-v2";
 
   
   std::string id=get_attribute_required(eGraphType, "id");
@@ -445,7 +445,7 @@ GraphTypePtr loadGraphTypeReferenceElement(const filepath &srcPath, xmlpp::Eleme
 GraphTypePtr loadGraphType(const filepath &srcPath, xmlpp::Element *parent, GraphLoadEvents *events, const std::string &id)
 {
   xmlpp::Node::PrefixNsMap ns;
-  ns["g"]="http://TODO.org/POETS/virtual-graph-schema-v1";
+  ns["g"]="https://poets-project.org/schemas/virtual-graph-schema-v2";
   
   std::cerr<<"parent = "<<parent<<"\n";
   for(auto *nGraphType : parent->find("./*")){
@@ -467,7 +467,7 @@ GraphTypePtr loadGraphType(const filepath &srcPath, xmlpp::Element *parent, Grap
 std::map<std::string,GraphTypePtr> loadAllGraphTypes(const filepath &srcPath, xmlpp::Element *parent, GraphLoadEvents *events)
 {
   xmlpp::Node::PrefixNsMap ns;
-  ns["g"]="http://TODO.org/POETS/virtual-graph-schema-v1";
+  ns["g"]="https://poets-project.org/schemas/virtual-graph-schema-v2";
   
   std::map<std::string,GraphTypePtr> res;
   
@@ -485,7 +485,7 @@ std::map<std::string,GraphTypePtr> loadAllGraphTypes(const filepath &srcPath, xm
 void loadGraph(Registry *registry, const filepath &srcPath, xmlpp::Element *parent, GraphLoadEvents *events)
 {
   xmlpp::Node::PrefixNsMap ns;
-  ns["g"]="http://TODO.org/POETS/virtual-graph-schema-v1";
+  ns["g"]="https://poets-project.org/schemas/virtual-graph-schema-v2";
 
   auto *eGraph=find_single(parent, "./g:GraphInstance", ns);
   if(eGraph==0)
@@ -585,35 +585,35 @@ void loadGraph(Registry *registry, const filepath &srcPath, xmlpp::Element *pare
     if(eEdge->get_name()!="EdgeI")
       continue;
 
-    std::string srcDeviceId, srcPortName, dstDeviceId, dstPortName;
+    std::string srcDeviceId, srcPinName, dstDeviceId, dstPinName;
     std::string path=get_attribute_optional(eEdge, "path");
     if(!path.empty()){
-      split_path(path, dstDeviceId, dstPortName, srcDeviceId, srcPortName);
-      //std::cerr<<srcDeviceId<<" "<<srcPortName<<" "<<dstDeviceId<<" "<<dstPortName<<"\n";
+      split_path(path, dstDeviceId, dstPinName, srcDeviceId, srcPinName);
+      //std::cerr<<srcDeviceId<<" "<<srcPinName<<" "<<dstDeviceId<<" "<<dstPinName<<"\n";
     }else{
       srcDeviceId=get_attribute_required(eEdge, "srcDeviceId");
-      srcPortName=get_attribute_required(eEdge, "srcPortName");
+      srcPinName=get_attribute_required(eEdge, "srcPinName");
       dstDeviceId=get_attribute_required(eEdge, "dstDeviceId");
-      dstPortName=get_attribute_required(eEdge, "dstPortName");
+      dstPinName=get_attribute_required(eEdge, "dstPinName");
     }
 
     auto &srcDevice=devices.at(srcDeviceId);
     auto &dstDevice=devices.at(dstDeviceId);
     
-    auto srcPort=srcDevice.second->getOutput(srcPortName);
-    auto dstPort=dstDevice.second->getInput(dstPortName);
+    auto srcPin=srcDevice.second->getOutput(srcPinName);
+    auto dstPin=dstDevice.second->getInput(dstPinName);
     
-    if(!srcPort){
-      throw std::runtime_error("No source port called '"+srcPortName+"' on device '"+srcDeviceId);
+    if(!srcPin){
+      throw std::runtime_error("No source pin called '"+srcPinName+"' on device '"+srcDeviceId);
     }
-    if(!dstPort){
-      throw std::runtime_error("No sink port called '"+dstPortName+"' on device '"+dstDeviceId);
+    if(!dstPin){
+      throw std::runtime_error("No sink pin called '"+dstPinName+"' on device '"+dstDeviceId);
     }
 
-    if(srcPort->getMessageType()!=dstPort->getMessageType())
-      throw std::runtime_error("Edge type mismatch on ports.");
+    if(srcPin->getMessageType()!=dstPin->getMessageType())
+      throw std::runtime_error("Edge type mismatch on pins.");
 
-    auto et=dstPort->getPropertiesSpec();
+    auto et=dstPin->getPropertiesSpec();
 
 
     TypedDataPtr edgeProperties;
@@ -643,15 +643,15 @@ void loadGraph(Registry *registry, const filepath &srcPath, xmlpp::Element *pare
     if(parseMetaData){
       auto metadata=parse_meta_data(eGraph, "g:M", ns);
       events->onEdgeInstance(gId,
-                 dstDevice.first, dstDevice.second, dstPort,
-                 srcDevice.first, srcDevice.second, srcPort,
+                 dstDevice.first, dstDevice.second, dstPin,
+                 srcDevice.first, srcDevice.second, srcPin,
                  edgeProperties,
                  std::move(metadata)
       );
     }else{
       events->onEdgeInstance(gId,
-                 dstDevice.first, dstDevice.second, dstPort,
-                 srcDevice.first, srcDevice.second, srcPort,
+                 dstDevice.first, dstDevice.second, dstPin,
+                 srcDevice.first, srcDevice.second, srcPin,
                  edgeProperties);
     }
   }

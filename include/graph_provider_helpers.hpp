@@ -146,8 +146,8 @@ public:
   
 };
 
-class InputPortImpl
-  : public InputPort
+class InputPinImpl
+  : public InputPin
 {
 private:
   std::function<DeviceTypePtr ()> m_deviceTypeSrc; // Avoid circular initialisation with device type
@@ -161,7 +161,7 @@ private:
 
   rapidjson::Document m_metadata;
 protected:
-  InputPortImpl(
+  InputPinImpl(
     std::function<DeviceTypePtr ()> deviceTypeSrc,
     const std::string &name,
     unsigned index,
@@ -212,8 +212,8 @@ public:
 };
 
 
-class OutputPortImpl
-  : public OutputPort
+class OutputPinImpl
+  : public OutputPin
 {
 private:
   std::function<DeviceTypePtr ()> m_deviceTypeSrc; // Avoid circular initialisation with device type
@@ -225,7 +225,7 @@ private:
 
   rapidjson::Document m_metadata;
 protected:
-  OutputPortImpl(std::function<DeviceTypePtr ()> deviceTypeSrc, const std::string &name, unsigned index, MessageTypePtr messageType, const std::string &code)
+  OutputPinImpl(std::function<DeviceTypePtr ()> deviceTypeSrc, const std::string &name, unsigned index, MessageTypePtr messageType, const std::string &code)
     : m_deviceTypeSrc(deviceTypeSrc)
     , m_name(name)
     , m_index(index)
@@ -295,16 +295,16 @@ private:
   TypedDataSpecPtr m_properties;
   TypedDataSpecPtr m_state;
 
-  std::vector<InputPortPtr> m_inputsByIndex;
-  std::map<std::string,InputPortPtr> m_inputsByName;
+  std::vector<InputPinPtr> m_inputsByIndex;
+  std::map<std::string,InputPinPtr> m_inputsByName;
 
-  std::vector<OutputPortPtr> m_outputsByIndex;
-  std::map<std::string,OutputPortPtr> m_outputsByName;
+  std::vector<OutputPinPtr> m_outputsByIndex;
+  std::map<std::string,OutputPinPtr> m_outputsByName;
 
   rapidjson::Document m_metadata;
 
 protected:
-  DeviceTypeImpl(const std::string &id, TypedDataSpecPtr properties, TypedDataSpecPtr state, const std::vector<InputPortPtr> &inputs, const std::vector<OutputPortPtr> &outputs)
+  DeviceTypeImpl(const std::string &id, TypedDataSpecPtr properties, TypedDataSpecPtr state, const std::vector<InputPinPtr> &inputs, const std::vector<OutputPinPtr> &outputs)
     : m_id(id)
     , m_properties(properties)
     , m_state(state)
@@ -333,35 +333,35 @@ public:
   virtual unsigned getInputCount() const override
   { return m_inputsByIndex.size(); }
 
-  virtual const InputPortPtr &getInput(unsigned index) const override
+  virtual const InputPinPtr &getInput(unsigned index) const override
   { return m_inputsByIndex.at(index); }
 
-  virtual InputPortPtr getInput(const std::string &name) const override
+  virtual InputPinPtr getInput(const std::string &name) const override
   {
     auto it=m_inputsByName.find(name);
     if(it==m_inputsByName.end())
-      return InputPortPtr();
+      return InputPinPtr();
     return it->second;
   }
 
-  virtual const std::vector<InputPortPtr> &getInputs() const override
+  virtual const std::vector<InputPinPtr> &getInputs() const override
   { return m_inputsByIndex; }
 
   virtual unsigned getOutputCount() const override
   { return m_outputsByIndex.size(); }
 
-  virtual const OutputPortPtr &getOutput(unsigned index) const override
+  virtual const OutputPinPtr &getOutput(unsigned index) const override
   { return m_outputsByIndex.at(index); }
 
-  virtual OutputPortPtr getOutput(const std::string &name) const override
+  virtual OutputPinPtr getOutput(const std::string &name) const override
   {
     auto it=m_outputsByName.find(name);
     if(it==m_outputsByName.end())
-      return OutputPortPtr();
+      return OutputPinPtr();
     return it->second;
   }
 
-  virtual const std::vector<OutputPortPtr> &getOutputs() const override
+  virtual const std::vector<OutputPinPtr> &getOutputs() const override
   { return m_outputsByIndex; }
 
   virtual rapidjson::Document &getMetadata() override

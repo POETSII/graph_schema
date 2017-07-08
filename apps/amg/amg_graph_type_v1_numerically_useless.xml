@@ -1,5 +1,5 @@
 <?xml version="1.0"?>
-<Graphs xmlns="http://TODO.org/POETS/virtual-graph-schema-v1">
+<Graphs xmlns="https://poets-project.org/schemas/virtual-graph-schema-v2">
 <GraphType id="amg">
 
 <Documentation>
@@ -88,7 +88,7 @@ so it seems we can't avoid doing a full cycle.
         handler_log(2, "root RTS : 0x%x", *readyToSend);
         ]]></ReadyToSend>
 
-        <InputPort name="fine_up" messageTypeId="fine_to_coarse">
+        <InputPin name="fine_up" messageTypeId="fine_to_coarse">
             <Properties>
                 <Scalar type="float" name="R" ><Documentation>The component of R for this edge.</Documentation></Scalar>
             </Properties>
@@ -99,9 +99,9 @@ so it seems we can't avoid doing a full cycle.
             deviceState->fineMaxResidual = std::max(deviceState->fineMaxResidual, message->max_r);
             handler_log(3, "maxMaxResidual=%g", deviceState->fineMaxResidual);
             ]]></OnReceive>
-        </InputPort>
+        </InputPin>
 
-        <OutputPort name="fine_down" messageTypeId="coarse_to_fine">
+        <OutputPin name="fine_down" messageTypeId="coarse_to_fine">
             <OnSend><![CDATA[
             assert(deviceState->fineSeen == deviceProperties->fineTotal);
 
@@ -113,7 +113,7 @@ so it seems we can't avoid doing a full cycle.
             deviceState->fineAcc=0;
             deviceState->fineMaxResidual=0;
             ]]></OnSend>
-        </OutputPort>
+        </OutputPin>
     </DeviceType>
     
     <!--  #######################################################################################  -->
@@ -201,7 +201,7 @@ so it seems we can't avoid doing a full cycle.
         ]]></ReadyToSend>
 
 
-        <InputPort name="fine_up" messageTypeId="fine_to_coarse">
+        <InputPin name="fine_up" messageTypeId="fine_to_coarse">
             <Properties>
                 <Scalar type="float" name="R" />
             </Properties>
@@ -213,10 +213,10 @@ so it seems we can't avoid doing a full cycle.
             deviceState->fineAcc+=edgeProperties->R * message->b;
             deviceState->fineMaxResidual=std::max(deviceState->fineMaxResidual, message->max_r);
             ]]></OnReceive>
-        </InputPort>
+        </InputPin>
 
 
-        <OutputPort name="peer_out" messageTypeId="jacobi_exchange">
+        <OutputPin name="peer_out" messageTypeId="jacobi_exchange">
             <OnSend><![CDATA[
             assert(deviceState->state==State_Idle);
             assert(deviceState->fineSeen == deviceProperties->fineCount);
@@ -229,9 +229,9 @@ so it seems we can't avoid doing a full cycle.
             
             message->x=deviceState->x;
             ]]></OnSend>
-        </OutputPort>
+        </OutputPin>
 
-        <InputPort name="peer_in" messageTypeId="jacobi_exchange">
+        <InputPin name="peer_in" messageTypeId="jacobi_exchange">
             <Properties>
                 <Scalar type="float" name="A" />
             </Properties>
@@ -243,10 +243,10 @@ so it seems we can't avoid doing a full cycle.
             deviceState->peerAcc += edgeProperties->A * message->x;
             
             ]]></OnReceive>
-        </InputPort>
+        </InputPin>
 
 
-        <OutputPort name="coarse_up" messageTypeId="fine_to_coarse">
+        <OutputPin name="coarse_up" messageTypeId="fine_to_coarse">
             <OnSend><![CDATA[
             assert(deviceState->state==State_Pre);
             assert(deviceState->peerSeen==deviceProperties->peerCount);
@@ -268,9 +268,9 @@ so it seems we can't avoid doing a full cycle.
             deviceState->max_r=FLT_MAX;
             deviceState->state=State_Coarse;
             ]]></OnSend>
-        </OutputPort>
+        </OutputPin>
 
-        <InputPort name="coarse_down" messageTypeId="coarse_to_fine">
+        <InputPin name="coarse_down" messageTypeId="coarse_to_fine">
             <Properties>
                 <Scalar type="float" name="P" />
             </Properties>
@@ -285,9 +285,9 @@ so it seems we can't avoid doing a full cycle.
             deviceState->coarseAcc += edgeProperties->P * message->x;
             deviceState->max_r = message->max_r;
             ]]></OnReceive>
-        </InputPort>
+        </InputPin>
 
-        <OutputPort name="fine_down" messageTypeId="coarse_to_fine">
+        <OutputPin name="fine_down" messageTypeId="coarse_to_fine">
             <OnSend><![CDATA[
             assert(deviceState->state==State_Coarse);
             assert(deviceState->coarseSeen==deviceProperties->coarseCount);
@@ -303,7 +303,7 @@ so it seems we can't avoid doing a full cycle.
             message->x = deviceState->x;
             message->max_r = deviceState->max_r;
             ]]></OnSend>
-        </OutputPort>
+        </OutputPin>
 
 
     </DeviceType>
@@ -398,7 +398,7 @@ so it seems we can't avoid doing a full cycle.
         ]]></ReadyToSend>
 
 
-        <InputPort name="problem" messageTypeId="linear_problem">
+        <InputPin name="problem" messageTypeId="linear_problem">
             <OnReceive><![CDATA[
             assert(deviceState->state==State_Idle);
             assert(deviceState->r <= graphProperties->residualTol); // Condition for entering this state
@@ -407,10 +407,10 @@ so it seems we can't avoid doing a full cycle.
             deviceState->x = message->x;
             deviceState->r = FLT_MAX;     // This will trigger RTS for peer_out
             ]]></OnReceive>
-        </InputPort>
+        </InputPin>
 
 
-        <OutputPort name="peer_out" messageTypeId="jacobi_exchange">
+        <OutputPin name="peer_out" messageTypeId="jacobi_exchange">
             <OnSend><![CDATA[
             assert(deviceState->state==State_Idle || deviceState->state==State_Coarse);
             
@@ -423,9 +423,9 @@ so it seems we can't avoid doing a full cycle.
             
             message->x=deviceState->x;
             ]]></OnSend>
-        </OutputPort>
+        </OutputPin>
 
-        <InputPort name="peer_in" messageTypeId="jacobi_exchange">
+        <InputPin name="peer_in" messageTypeId="jacobi_exchange">
             <Properties>
                 <Scalar type="float" name="A" />
             </Properties>
@@ -437,10 +437,10 @@ so it seems we can't avoid doing a full cycle.
             deviceState->peerAcc += edgeProperties->A * message->x;
             
             ]]></OnReceive>
-        </InputPort>
+        </InputPin>
 
 
-        <OutputPort name="coarse_up" messageTypeId="fine_to_coarse">
+        <OutputPin name="coarse_up" messageTypeId="fine_to_coarse">
             <OnSend><![CDATA[
             assert(deviceState->state==State_Pre);
             assert(deviceState->peerSeen ==deviceProperties->peerCount);
@@ -462,9 +462,9 @@ so it seems we can't avoid doing a full cycle.
             deviceState->r = FLT_MAX;
             deviceState->state=State_Coarse;
             ]]></OnSend>
-        </OutputPort>
+        </OutputPin>
 
-        <InputPort name="coarse_down" messageTypeId="coarse_to_fine">
+        <InputPin name="coarse_down" messageTypeId="coarse_to_fine">
             <Properties>
                 <Scalar type="float" name="P" />
             </Properties>
@@ -479,9 +479,9 @@ so it seems we can't avoid doing a full cycle.
             deviceState->coarseAcc += edgeProperties->P * message->x;
             deviceState->r = message->max_r;
             ]]></OnReceive>
-        </InputPort>
+        </InputPin>
 
-        <OutputPort name="solution" messageTypeId="linear_solution">
+        <OutputPin name="solution" messageTypeId="linear_solution">
             <OnSend><![CDATA[
             assert(deviceState->state==State_Coarse);
             assert(deviceState->coarseSeen==deviceProperties->coarseCount);
@@ -498,7 +498,7 @@ so it seems we can't avoid doing a full cycle.
             message->x = deviceState->x;
             message->r = deviceState->r;
             ]]></OnSend>
-        </OutputPort>
+        </OutputPin>
 
 
     </DeviceType>
@@ -531,7 +531,7 @@ so it seems we can't avoid doing a full cycle.
         ]]></ReadyToSend>
 
 
-        <OutputPort name="problem" messageTypeId="linear_problem">
+        <OutputPin name="problem" messageTypeId="linear_problem">
             <OnSend><![CDATA[
             assert((deviceState->i&1)==0);
             assert(deviceState->i<16);
@@ -540,9 +540,9 @@ so it seems we can't avoid doing a full cycle.
             message->b = deviceProperties->b[deviceState->i];
             deviceState->i++;
             ]]></OnSend>
-        </OutputPort>
+        </OutputPin>
 
-       <InputPort name="solution" messageTypeId="linear_solution">
+       <InputPin name="solution" messageTypeId="linear_solution">
             <OnReceive><![CDATA[
             assert((deviceState->i&1)==1);
             assert(deviceState->i<16);
@@ -559,7 +559,7 @@ so it seems we can't avoid doing a full cycle.
 
             deviceState->i++;
             ]]></OnReceive>
-        </InputPort>
+        </InputPin>
     </DeviceType>
 
 </DeviceTypes>

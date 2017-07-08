@@ -137,7 +137,7 @@ public:
         const std::vector<std::string> &logs,
         const TypedDataPtr &state,
         // message event
-        const OutputPortPtr &port,
+        const OutputPinPtr &pin,
         // send event
         bool cancel,
         unsigned fanout,
@@ -157,7 +157,7 @@ public:
         const std::vector<std::string> &logs,
         const TypedDataPtr &state,
         // message event
-        const InputPortPtr &port,
+        const InputPinPtr &pin,
         // send event
         const char *sendEventId
     ) =0;
@@ -171,7 +171,7 @@ class LogWriterToFile
   : public LogWriter
 {
 private:
-  const char *m_ns="http://TODO.org/POETS/virtual-graph-schema-v1";
+  const char *m_ns="https://poets-project.org/schemas/virtual-graph-schema-v2";
 
   std::shared_ptr<xmlChar> toXmlStr(const char *v)
   { return std::shared_ptr<xmlChar>(xmlCharStrdup(v), free); }
@@ -242,13 +242,13 @@ private:
     struct message_event_t
         : device_event_t
     {
-        std::string port;     // port name
+        std::string pin;     // pin name
         std::string msgType;  // msg type id
         std::string msgId;    // Unique message id
         
         void writeContents(XMLWriter &dst)
         {
-            dst.writeAttribute("port", port);
+            dst.writeAttribute("pin", pin);
             
             device_event_t::writeContents(dst);
         }
@@ -364,7 +364,7 @@ public:
         const std::vector<std::string> &logs,
         const TypedDataPtr &state,
         // message event
-        const OutputPortPtr &port,
+        const OutputPinPtr &pin,
         // send event
         bool cancel,
         unsigned fanout,
@@ -382,11 +382,11 @@ public:
         ev.L=logs;
         ev.S=toStr(dt->getStateSpec(), state);
         // message event
-        ev.port=port->getName();
+        ev.pin=pin->getName();
         // send event
         ev.cancel=cancel;
         ev.fanout=fanout;
-        ev.M=toStr(port->getMessageType()->getMessageSpec(), msg);
+        ev.M=toStr(pin->getMessageType()->getMessageSpec(), msg);
         
         ev.write(m_dst);
     }
@@ -404,7 +404,7 @@ public:
         const std::vector<std::string> &logs,
         const TypedDataPtr &state,
         // message event
-        const InputPortPtr &port,
+        const InputPinPtr &pin,
         // recv event
         const char *sendEventId
     ) override {
@@ -420,7 +420,7 @@ public:
         ev.L=logs;
         ev.S=toStr(dt->getStateSpec(), state);
         // message event
-        ev.port=port->getName();
+        ev.pin=pin->getName();
         // send event
         ev.sendEventId=sendEventId;
         

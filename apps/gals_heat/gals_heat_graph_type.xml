@@ -1,5 +1,5 @@
 <?xml version="1.0"?>
-<Graphs xmlns="http://TODO.org/POETS/virtual-graph-schema-v1">
+<Graphs xmlns="https://poets-project.org/schemas/virtual-graph-schema-v2">
   <GraphType id="gals_heat" >
 	<Documentation><![CDATA[
     Locally synchronous heat.
@@ -99,7 +99,7 @@
 		}
 		]]></ReadyToSend>
 
-		<InputPort name="__init__" messageTypeId="__init__">
+		<InputPin name="__init__" messageTypeId="__init__">
 		  <OnReceive><![CDATA[
 		  deviceState->t=0;
 		  deviceState->cs=deviceProperties->neighbours;
@@ -108,15 +108,15 @@
 		  deviceState->v=deviceProperties->bias + deviceProperties->amplitude
 			     * sin(deviceProperties->phase + deviceProperties->frequency * deviceState->t);
 		  ]]></OnReceive>
-		</InputPort>
+		</InputPin>
 
-		<InputPort name="__print__" messageTypeId="__init__">
+		<InputPin name="__print__" messageTypeId="__init__">
 		  <OnReceive><![CDATA[
 		  handler_log(0, "t = %d, v=%8g (seenNow=%d, seenNext=%d)", deviceState->t, deviceState->v, deviceState->cs, deviceState->ns);
 		  ]]></OnReceive>
-		</InputPort>
+		</InputPin>
 
-		<InputPort name="in" messageTypeId="update">
+		<InputPin name="in" messageTypeId="update">
 		  <OnReceive><![CDATA[
 			handler_log(3, "m=(t=%d,v=%.4f) tNow=%d, sNow=%d, aNow=%.4f, sNext=%d, aNext=%f", message->t, message->v, deviceState->t, deviceState->cs, deviceState->ns);
 		  
@@ -132,9 +132,9 @@
 				);
 		  }
 		  ]]></OnReceive>
-		</InputPort>
+		</InputPin>
 
-		<OutputPort name="out" messageTypeId="update">
+		<OutputPin name="out" messageTypeId="update">
 		  <OnSend><![CDATA[
 			assert(deviceState->t < graphProperties->maxTime);
 			assert(deviceState->cs==deviceProperties->neighbours);
@@ -149,15 +149,15 @@
 			message->t = deviceState->t;
 			message->v = deviceState->v;
 		  ]]></OnSend>
-		</OutputPort>
+		</OutputPin>
 
-		<OutputPort name="finished" messageTypeId="finished">
+		<OutputPin name="finished" messageTypeId="finished">
 			<OnSend><![CDATA[
 			assert(deviceState->t==graphProperties->maxTime);
 			deviceState->t++; // We advance beyond the end of time and go idle
 			// And send an empty pulse to exit node
 			]]></OnSend>
-		</OutputPort>
+		</OutputPin>
 
 
 	</DeviceType>
@@ -194,7 +194,7 @@
 		]]></ReadyToSend>
 
 
-		<InputPort name="__init__" messageTypeId="__init__">
+		<InputPin name="__init__" messageTypeId="__init__">
 		  <OnReceive><![CDATA[
 		  deviceState->v=0;
 		  deviceState->t=0;
@@ -206,16 +206,16 @@
 
 		  handler_log(3, "value = %f", deviceState->v);
 		  ]]></OnReceive>
-		</InputPort>
+		</InputPin>
 
-		<InputPort name="__print__" messageTypeId="__init__">
+		<InputPin name="__print__" messageTypeId="__init__">
 		  <OnReceive><![CDATA[
 		  handler_log(0, "t = %d, v=%8g (seenNow=%d, seenNext=%d)", deviceState->t, deviceState->v, deviceState->cs, deviceState->ns);
 		  ]]></OnReceive>
-		</InputPort>
+		</InputPin>
 
 
-		<InputPort name="in" messageTypeId="update">
+		<InputPin name="in" messageTypeId="update">
 			<Properties>
 				<Scalar type="float" name="w" />
 			</Properties>
@@ -236,16 +236,16 @@
 				);
 			}
 		]]></OnReceive>
-		</InputPort>
+		</InputPin>
 
-		<OutputPort name="finished" messageTypeId="finished">
+		<OutputPin name="finished" messageTypeId="finished">
 			<OnSend><![CDATA[
 			deviceState->t++; // We advance beyond the end of time and go idle
 			// And send an empty pulse to exit node
 			]]></OnSend>
-		</OutputPort>
+		</OutputPin>
 
-		<OutputPort name="out" messageTypeId="update">
+		<OutputPin name="out" messageTypeId="update">
 		  <OnSend><![CDATA[
 
 		  handler_log(3, "tNow=%d, sNow=%d, aNow=%.4f, sNext=%d, aNext=%f", deviceState->t, deviceState->cs, deviceState->ca, deviceState->ns, deviceState->na);
@@ -272,7 +272,7 @@
 			// It is possible that all our neighbours are ahead and have broadcast, so
 			// we could immediately be ready to go.
 		  ]]></OnSend>
-		</OutputPort>
+		</OutputPin>
 		</DeviceType>
 
 
@@ -289,14 +289,14 @@
 			*readyToSend=0;
 			]]></ReadyToSend>
 
-			<InputPort name="done" messageTypeId="finished">
+			<InputPin name="done" messageTypeId="finished">
 				<OnReceive><![CDATA[
 				deviceState->done++;
 				if(deviceState->done == deviceProperties->fanin){
 					handler_exit(0);
 				}
 				]]></OnReceive>
-			</InputPort>
+			</InputPin>
 		</DeviceType>
 
     </DeviceTypes>

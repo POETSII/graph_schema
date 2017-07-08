@@ -1,5 +1,5 @@
 <?xml version="1.0"?>
-<Graphs xmlns="http://TODO.org/POETS/virtual-graph-schema-v1">
+<Graphs xmlns="https://poets-project.org/schemas/virtual-graph-schema-v2">
   <GraphType id="clock_tree">
 	<Documentation>
 		This implements a simple clock-tree benchmark. The graph consists of
@@ -55,7 +55,7 @@
 			}
 		]]></ReadyToSend>
 		
-		<OutputPort name="tick_out" messageTypeId="tick">
+		<OutputPin name="tick_out" messageTypeId="tick">
 		  <OnSend><![CDATA[
 		  handler_log(2, "root_tick_out, cycle=0x%x, max_ticks=0x%x", deviceState->cycle, graphProperties->max_ticks);
 			assert(deviceState->pending==0);
@@ -69,22 +69,22 @@
 				deviceState->doExport=1;
 			}
 		  ]]></OnSend>
-		</OutputPort>
+		</OutputPin>
 
-		<OutputPort name="fake_compute" messageTypeId="empty">
+		<OutputPin name="fake_compute" messageTypeId="empty">
 		<OnSend><![CDATA[
 		handler_log(1, "export = %u", deviceState->cycle);
 		handler_export_key_value(0, deviceState->cycle);
 		deviceState->doExport=0;
 		*doSend=false;
 		]]></OnSend>
-		</OutputPort>
+		</OutputPin>
 		
-		<InputPort name="ack_in" messageTypeId="ack">
+		<InputPin name="ack_in" messageTypeId="ack">
 		  <OnReceive><![CDATA[
 		  deviceState->pending--;
 		  ]]></OnReceive>
-		</InputPort>
+		</InputPin>
 
       </DeviceType>
 	
@@ -115,31 +115,31 @@
 			}
 		]]></ReadyToSend>
 	  
-	  <InputPort name="tick_in" messageTypeId="tick">
+	  <InputPin name="tick_in" messageTypeId="tick">
 	    <OnReceive><![CDATA[
 	    deviceState->status=1;
 	    ]]></OnReceive>
-	  </InputPort>
+	  </InputPin>
 	  
-	  <OutputPort name="tick_out" messageTypeId="tick">
+	  <OutputPin name="tick_out" messageTypeId="tick">
 	    <OnSend><![CDATA[
 	    handler_log(2, "branch_tick_out");
 	    deviceState->status=2+deviceProperties->fanout;
 	    ]]></OnSend>
-	  </OutputPort>
+	  </OutputPin>
 	  
-	  <InputPort name="ack_in" messageTypeId="ack">
+	  <InputPin name="ack_in" messageTypeId="ack">
 	    <OnReceive><![CDATA[
 	    deviceState->status--;
 	    ]]></OnReceive>
-	  </InputPort>
+	  </InputPin>
 	  
-	  <OutputPort name="ack_out" messageTypeId="ack">
+	  <OutputPin name="ack_out" messageTypeId="ack">
 	    <OnSend><![CDATA[
 	    handler_log(2, "branch_ack_out");
 	    deviceState->status=0;
 	    ]]></OnSend>
-	  </OutputPort>
+	  </OutputPin>
 	</DeviceType>
 	
 	<DeviceType id="leaf">
@@ -151,18 +151,18 @@
 		*readyToSend = deviceState->ready ? OUTPUT_FLAG_leaf_ack_out : 0;
 		]]></ReadyToSend>
 	
-		  <InputPort name="tick_in" messageTypeId="tick">
+		  <InputPin name="tick_in" messageTypeId="tick">
 			<OnReceive><![CDATA[
 			deviceState->ready=true;
 			]]>
 			</OnReceive>
-		  </InputPort>
+		  </InputPin>
 		  
-		  <OutputPort name="ack_out" messageTypeId="ack">
+		  <OutputPin name="ack_out" messageTypeId="ack">
 			<OnSend><![CDATA[
 			deviceState->ready=false;
 			]]></OnSend>
-		  </OutputPort>
+		  </OutputPin>
 		</DeviceType>
 	  </DeviceTypes>
 	</GraphType>

@@ -1,5 +1,5 @@
 <?xml version="1.0"?>
-<Graph xmlns="http://TODO.org/POETS/virtual-graph-schema-v1">
+<Graph xmlns="https://poets-project.org/schemas/virtual-graph-schema-v2">
   <GraphType id="gals_heat">
     <!-- Locally synchronous heat.
 	 Each cell i has a time t, and all cells start at t=0.
@@ -162,7 +162,7 @@
 		
 		</ReadyToSend>
 
-		<InputPort name="__init__" messageTypeId="__init__">
+		<InputPin name="__init__" messageTypeId="__init__">
 		  <OnReceive><![CDATA[
 		  deviceState->t=0;
 		  deviceState->cs=deviceProperties->neighbours;
@@ -173,15 +173,15 @@
 
 		  requestSend_out = true;
 		  ]]></OnReceive>
-		</InputPort>
+		</InputPin>
 
-		<InputPort name="__print__" messageTypeId="__init__">
+		<InputPin name="__print__" messageTypeId="__init__">
 		  <OnReceive><![CDATA[
 		  handler_log(0, "t = %d, v=%8g (seenNow=%d, seenNext=%d)", deviceState->t, deviceState->v, deviceState->cs, deviceState->ns);
 		  ]]></OnReceive>
-		</InputPort>
+		</InputPin>
 
-		<InputPort name="in" messageTypeId="update">
+		<InputPin name="in" messageTypeId="update">
 		  <OnReceive><![CDATA[
 		  if(message->t==deviceState->t){
 			deviceState->cs++;
@@ -191,9 +191,9 @@
 		  }
 		  requestSend_out = deviceState->cs==deviceProperties->neighbours;
 		  ]]></OnReceive>
-		</InputPort>
+		</InputPin>
 
-		<OutputPort name="out" messageTypeId="update">
+		<OutputPin name="out" messageTypeId="update">
 		  <OnSend><![CDATA[
 		  if(deviceState->t > graphProperties->maxTime){
 			 *cancelSend=true;
@@ -213,7 +213,7 @@
 				requestSend_out = deviceState->cs==deviceProperties->neighbours;
 			}
 		  ]]></OnSend>
-		</OutputPort>
+		</OutputPin>
       </DeviceType>
       
       <DeviceType id="cell">
@@ -236,7 +236,7 @@
 		  <Scalar type="uint32_t" name="ns" />
 		</State>
 
-		<InputPort name="__init__" messageTypeId="__init__">
+		<InputPin name="__init__" messageTypeId="__init__">
 		  <OnReceive><![CDATA[
 		  deviceState->v=0;
 		  deviceState->t=0;
@@ -250,16 +250,16 @@
 
 		  requestSend_out=deviceState->cs==deviceProperties->nhood;
 		  ]]></OnReceive>
-		</InputPort>
+		</InputPin>
 
-		<InputPort name="__print__" messageTypeId="__init__">
+		<InputPin name="__print__" messageTypeId="__init__">
 		  <OnReceive><![CDATA[
 		  handler_log(0, "t = %d, v=%8g (seenNow=%d, seenNext=%d)", deviceState->t, deviceState->v, deviceState->cs, deviceState->ns);
 		  ]]></OnReceive>
-		</InputPort>
+		</InputPin>
 
 
-		<InputPort name="in" messageTypeId="update">
+		<InputPin name="in" messageTypeId="update">
 		  <OnReceive><![CDATA[
 		  if(message->t==deviceState->t){
 			deviceState->ca = add(deviceState->ca, mul( edgeProperties->w , message->v ) );
@@ -274,9 +274,9 @@
 
 		  requestSend_out = deviceState->cs==deviceProperties->nhood;
 		  ]]></OnReceive>
-		</InputPort>
+		</InputPin>
 
-		<OutputPort name="out" messageTypeId="update">
+		<OutputPin name="out" messageTypeId="update">
 		  <OnSend><![CDATA[
 
 		  handler_log(3, "tNow=%d, sNow=%d, aNow=%.4f, sNext=%d, aNext=%f", deviceState->t, deviceState->cs, deviceState->ca, deviceState->ns, deviceState->na);
@@ -304,7 +304,7 @@
 			requestSend_out = deviceState->cs == deviceProperties->nhood;
 		  }
 		  ]]></OnSend>
-		</OutputPort>
+		</OutputPin>
       </DeviceType>
     </DeviceTypes>
   </GraphType>

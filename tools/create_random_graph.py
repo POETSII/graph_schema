@@ -151,30 +151,30 @@ for i in range(nEdgeInstances):
     if len(src_device.device_type.outputs)==0:
         continue
     
-    src_port=random.choice(list(src_device.device_type.outputs.values()))
+    src_pin=random.choice(list(src_device.device_type.outputs.values()))
 
     random.shuffle(device_instances)
     
     dst_device=None
-    dst_port=None
+    dst_pin=None
     for dst_device in device_instances:
         pp=list(dst_device.device_type.inputs.values())
         random.shuffle(pp)
         for p in pp:
-            if p.edge_type == src_port.edge_type:
-                dst_port=p
+            if p.edge_type == src_pin.edge_type:
+                dst_pin=p
                 break
-        if dst_port:
+        if dst_pin:
             break
 
-    if not dst_port:
+    if not dst_pin:
         continue
 
-    if ( dst_device.id, dst_port.name, src_device.id, src_port.name) in graphInstance.edge_instances:
+    if ( dst_device.id, dst_pin.name, src_device.id, src_pin.name) in graphInstance.edge_instances:
         continue
 
-    properties=make_random_instance(dst_port.edge_type.properties)
-    ei=EdgeInstance(graphInstance, dst_device, dst_port.name, src_device, src_port.name,properties)
+    properties=make_random_instance(dst_pin.edge_type.properties)
+    ei=EdgeInstance(graphInstance, dst_device, dst_pin.name, src_device, src_pin.name,properties)
     graphInstance.add_edge_instance(ei)
         
     

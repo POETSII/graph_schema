@@ -1,5 +1,5 @@
 <?xml version="1.0"?>
-<Graphs xmlns="http://TODO.org/POETS/virtual-graph-schema-v1">
+<Graphs xmlns="https://poets-project.org/schemas/virtual-graph-schema-v2">
   <GraphType id="apsp">
 	<Documentation><![CDATA[
 		Does all-pairs shortest-path on a graph.
@@ -174,13 +174,13 @@
             }
 		]]></ReadyToSend>
 
-        <InputPort name="__init__" messageTypeId="__init__">
+        <InputPin name="__init__" messageTypeId="__init__">
           <OnReceive><![CDATA[
 		  deviceState->currRound=INT_MAX;
 		  ]]></OnReceive>
-		</InputPort>
+		</InputPin>
 
-        <InputPort name="begin_in" messageTypeId="begin">
+        <InputPin name="begin_in" messageTypeId="begin">
             <OnReceive><![CDATA[
             if(message->round==deviceProperties->index){
                 // It is this device's turn
@@ -191,9 +191,9 @@
                 deviceState->progressIsFirst=true;
             }
             ]]></OnReceive>
-        </InputPort>
+        </InputPin>
 		
-		<OutputPort name="dout" messageTypeId="dist">
+		<OutputPin name="dout" messageTypeId="dist">
 		  <OnSend><![CDATA[
           assert(deviceState->currDistDirty);
 
@@ -204,9 +204,9 @@
           deviceState->progressSendDelta += deviceProperties->degree;
           deviceState->progressDirty = true;
 		  ]]></OnSend>
-		</OutputPort>
+		</OutputPin>
 		
-		<InputPort name="din" messageTypeId="dist">
+		<InputPin name="din" messageTypeId="dist">
             <Properties>
                 <Scalar type="uint32_t" name="w" default="1" />
             </Properties>
@@ -227,9 +227,9 @@
           deviceState->progressRecvDelta++;
           deviceState->progressDirty=true;
 		  ]]></OnReceive>
-		</InputPort>
+		</InputPin>
 
-        <OutputPort name="progress_out" messageTypeId="progress">
+        <OutputPin name="progress_out" messageTypeId="progress">
             <OnSend><![CDATA[
                 assert(!deviceState->currDistDirty);
                 assert(deviceState->progressDirty);
@@ -247,7 +247,7 @@
 
                 handler_log(2, "Progress for round=%u, sendDelta=%u, recvDelta=%u", deviceState->currRound, message->sendDelta, message->recvDelta);
             ]]></OnSend>
-        </OutputPort>
+        </OutputPin>
       </DeviceType>
 	
 	<DeviceType id="controller">
@@ -281,7 +281,7 @@
       }
 	  ]]></ReadyToSend>
 
-        <InputPort name="__init__" messageTypeId="__init__">
+        <InputPin name="__init__" messageTypeId="__init__">
             <OnReceive><![CDATA[
             deviceState->prevRoundMaxDist=0;
 
@@ -290,9 +290,9 @@
             deviceState->roundComplete=true;
             ]]>
             </OnReceive>
-        </InputPort>
+        </InputPin>
 	  
-	  <InputPort name="progress_in" messageTypeId="progress">
+	  <InputPin name="progress_in" messageTypeId="progress">
 	    <OnReceive><![CDATA[
         assert(deviceState->round==message->round);
 
@@ -315,9 +315,9 @@
 
         handler_log(2, "In round %u, prevRoundSeen = %u", deviceState->round, deviceState->prevRoundSeen);
 	    ]]></OnReceive>
-	  </InputPort>
+	  </InputPin>
 	  
-	  <OutputPort name="begin_out" messageTypeId="begin">
+	  <OutputPin name="begin_out" messageTypeId="begin">
 	    <OnSend><![CDATA[
 	    assert(deviceState->roundComplete);
 
@@ -342,7 +342,7 @@
             *doSend = false;
         }
 	    ]]></OnSend>
-	  </OutputPort>
+	  </OutputPin>
 
       </DeviceType>
 	  

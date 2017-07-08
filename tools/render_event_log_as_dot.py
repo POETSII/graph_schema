@@ -81,9 +81,9 @@ def write_graph(dst, src):
             if e.type=="init":
                 content+='<TR><TD colspan="2">{} : __init__</TD></TR>'.format(e.dev)
             elif e.type=="send":
-                content+='<TR><TD colspan="2">{} : Send : {}</TD></TR>'.format(e.dev,e.port)
+                content+='<TR><TD colspan="2">{} : Send : {}</TD></TR>'.format(e.dev,e.pin)
             elif e.type=="recv":
-                content+='<TR><TD colspan="2">{} : Recv : {}</TD></TR>'.format(e.dev,e.port)
+                content+='<TR><TD colspan="2">{} : Recv : {}</TD></TR>'.format(e.dev,e.pin)
             else:
                 raise RuntimeError("Unknown type.")
             content+=makeState(curr,prev,ko)

@@ -225,8 +225,8 @@ public:
   virtual void onEdgeInstance
   (
    uint64_t gId,
-   uint64_t dstDevInst, const DeviceTypePtr &dstDevType, const InputPortPtr &dstPort,
-   uint64_t srcDevInst,  const DeviceTypePtr &srcDevType, const OutputPortPtr &srcPort,
+   uint64_t dstDevInst, const DeviceTypePtr &dstDevType, const InputPinPtr &dstPin,
+   uint64_t srcDevInst,  const DeviceTypePtr &srcDevType, const OutputPinPtr &srcPin,
    const TypedDataPtr &properties,
    rapidjson::Document &&metadata
   ) override
@@ -243,10 +243,10 @@ public:
     if(srcDevInst >= m_deviceIds.size())
       throw std::runtime_error("Invalid src device id.");
 
-    std::string id=m_deviceIds[dstDevInst]+":"+dstPort->getName()+"-"+m_deviceIds[srcDevInst]+":"+srcPort->getName();
+    std::string id=m_deviceIds[dstDevInst]+":"+dstPin->getName()+"-"+m_deviceIds[srcDevInst]+":"+srcPin->getName();
 
-    if(dstPort->getMessageType()->getId() != srcPort->getMessageType()->getId())
-      throw std::runtime_error("The port edge types do not match.");
+    if(dstPin->getMessageType()->getId() != srcPin->getMessageType()->getId())
+      throw std::runtime_error("The pin edge types do not match.");
 
     auto it_inserted=m_seenIds.insert(id);
     if(!it_inserted.second)
@@ -257,7 +257,7 @@ public:
     xmlTextWriterStartElement(m_dst, (const xmlChar *)"EdgeI");
     xmlTextWriterWriteAttribute(m_dst, (const xmlChar *)"path", (const xmlChar *)id.c_str());
 
-    writeTypedData(dstPort->getPropertiesSpec(), properties, "P");
+    writeTypedData(dstPin->getPropertiesSpec(), properties, "P");
     
     writeMetaData(metadata, "M");
 

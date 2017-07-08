@@ -184,8 +184,8 @@ def write_graph(dst, graph,devStates=None,edgeStates=None):
         props={}
         props["color"]=edgeTypeToColor[ei.message_type.id]
         if addLabels:
-            props["headlabel"]=ei.dst_port.name
-            props["taillabel"]=ei.src_port.name
+            props["headlabel"]=ei.dst_pin.name
+            props["taillabel"]=ei.src_pin.name
             props["label"]=ei.message_type.id
 
         for b in bind_edge:

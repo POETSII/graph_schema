@@ -135,8 +135,8 @@ def get_typed_data_size(td):
  
 _address_to_bytes_format=struct.Struct("<IHBB")
  
-def convert_address_to_bytes(address,device,port):
-    return _address_to_bytes_format.pack(address,device,port,0)
+def convert_address_to_bytes(address,device,pin):
+    return _address_to_bytes_format.pack(address,device,pin,0)
     
 class StructHolder:    
     """Builds a giant list of structs containing sub-structs."""
@@ -288,7 +288,7 @@ def render_graph_type_as_softswitch_decls(gt,dst):
         render_typed_data_as_struct(dt.state,dst,dtProps["DEVICE_TYPE_STATE_T"])
         
         for ip in dt.inputs_by_index:
-            ipProps=make_input_port_properties(ip)
+            ipProps=make_input_pin_properties(ip)
             dst.write("""
             const unsigned INPUT_INDEX_{INPUT_PORT_FULL_ID} = {INPUT_PORT_INDEX};
             enum{{ INPUT_INDEX_{INPUT_PORT_FULL_ID}_V = {INPUT_PORT_INDEX} }};
@@ -302,7 +302,7 @@ def render_graph_type_as_softswitch_decls(gt,dst):
             const unsigned OUTPUT_INDEX_{OUTPUT_PORT_FULL_ID} = {OUTPUT_PORT_INDEX};
             enum {{ OUTPUT_INDEX_{OUTPUT_PORT_FULL_ID}_V = {OUTPUT_PORT_INDEX} }};
             const uint32_t OUTPUT_FLAG_{OUTPUT_PORT_FULL_ID} = 1<<{OUTPUT_PORT_INDEX};
-            """.format(**make_output_port_properties(op)))
+            """.format(**make_output_pin_properties(op)))
     
     dst.write("extern const DeviceTypeVTable softswitch_device_vtables[];\n")
     dst.write("""
@@ -338,10 +338,10 @@ def render_rts_handler_as_softswitch(dev,dst,devProps):
     """.format(**devProps))
 
 
-def render_receive_handler_as_softswitch(port, dst, portProps):
-    portProps = portProps or make_input_port_properties(portProps)
-    portProps = add_props(portProps, {
-        "DEVICE_TYPE_C_LOCAL_CONSTANTS" : calc_device_type_c_locals(port.parent,portProps)
+def render_receive_handler_as_softswitch(pin, dst, pinProps):
+    pinProps = pinProps or make_input_pin_properties(pinProps)
+    pinProps = add_props(pinProps, {
+        "DEVICE_TYPE_C_LOCAL_CONSTANTS" : calc_device_type_c_locals(pin.parent,pinProps)
     })
     dst.write("""
     void {INPUT_PORT_FULL_ID}_receive_handler(
@@ -360,12 +360,12 @@ def render_receive_handler_as_softswitch(port, dst, portProps):
       __POETS_REVERT_PREPROC_DETOUR__
       // End custom handler
     }}
-    """.format(**portProps))
+    """.format(**pinProps))
 
-def render_send_handler_as_softswitch(port, dst, portProps):
-    portProps = portProps or make_output_port_properties(portProps)
-    portProps = add_props(portProps, {
-        "DEVICE_TYPE_C_LOCAL_CONSTANTS" : calc_device_type_c_locals(port.parent,portProps)
+def render_send_handler_as_softswitch(pin, dst, pinProps):
+    pinProps = pinProps or make_output_pin_properties(pinProps)
+    pinProps = add_props(pinProps, {
+        "DEVICE_TYPE_C_LOCAL_CONSTANTS" : calc_device_type_c_locals(pin.parent,pinProps)
     })
     dst.write("""
 bool {OUTPUT_PORT_FULL_ID}_send_handler(
@@ -383,16 +383,16 @@ bool {OUTPUT_PORT_FULL_ID}_send_handler(
   // End custom handler
   return doSend;
 }}
-""".format(**portProps))
+""".format(**pinProps))
 
 def render_device_type_as_softswitch_defs(dt,dst,dtProps):
     render_rts_handler_as_softswitch(dt,dst,dtProps)
     for ip in dt.inputs_by_index:
-        render_receive_handler_as_softswitch(ip,dst,make_input_port_properties(ip))
+        render_receive_handler_as_softswitch(ip,dst,make_input_pin_properties(ip))
     for op in dt.outputs_by_index:
-        render_send_handler_as_softswitch(op,dst,make_output_port_properties(op))
+        render_send_handler_as_softswitch(op,dst,make_output_pin_properties(op))
     
-    dst.write("InputPortVTable INPUT_VTABLES_{DEVICE_TYPE_FULL_ID}[INPUT_COUNT_{DEVICE_TYPE_FULL_ID}_V]={{\n".format(**dtProps))
+    dst.write("InputPinVTable INPUT_VTABLES_{DEVICE_TYPE_FULL_ID}[INPUT_COUNT_{DEVICE_TYPE_FULL_ID}_V]={{\n".format(**dtProps))
     i=0
     for i in range(len(dt.inputs_by_index)):
         ip=dt.inputs_by_index[i]
@@ -409,10 +409,10 @@ def render_device_type_as_softswitch_defs(dt,dst,dtProps):
                 {ACTUAL_STATE_SIZE}, //sizeof({INPUT_PORT_STATE_T}),
                 "{INPUT_PORT_NAME}"
             }}
-            """.format(ACTUAL_PROPERTIES_SIZE=propertiesSize, ACTUAL_STATE_SIZE=stateSize, **make_input_port_properties(ip)))
+            """.format(ACTUAL_PROPERTIES_SIZE=propertiesSize, ACTUAL_STATE_SIZE=stateSize, **make_input_pin_properties(ip)))
     dst.write("};\n");
     
-    dst.write("OutputPortVTable OUTPUT_VTABLES_{DEVICE_TYPE_FULL_ID}[OUTPUT_COUNT_{DEVICE_TYPE_FULL_ID}_V]={{\n".format(**dtProps))
+    dst.write("OutputPinVTable OUTPUT_VTABLES_{DEVICE_TYPE_FULL_ID}[OUTPUT_COUNT_{DEVICE_TYPE_FULL_ID}_V]={{\n".format(**dtProps))
     i=0
     for i in range(len(dt.outputs_by_index)):
         if i!=0:
@@ -424,7 +424,7 @@ def render_device_type_as_softswitch_defs(dt,dst,dtProps):
                 sizeof(packet_t)+sizeof({OUTPUT_PORT_MESSAGE_T}),
                 "{OUTPUT_PORT_NAME}"
             }}
-            """.format(**make_output_port_properties(op)))
+            """.format(**make_output_pin_properties(op)))
     dst.write("};\n");
     
     
@@ -469,7 +469,7 @@ def render_graph_instance_as_thread_context(
     dst,
     globalProperties, # Giant array of read-only BLOBs
     globalState,      # Giant array of read-write BLOBs
-    globalOutputPortTargets, # Giant array of outputport targets
+    globalOutputPinTargets, # Giant array of outputpin targets
     gi,
     thread_index, # Thread index we are working on
     devices_to_thread,      # Map from device:thread
@@ -520,7 +520,7 @@ def render_graph_instance_as_thread_context(
                     dstDev=ei.dst_device
                     tIndex=devices_to_thread[dstDev]
                     tOffset=thread_to_devices[tIndex].index(dstDev)
-                    dst.write("  {{{},{},INPUT_INDEX_{}_{}_{}_V, 0}}".format(tIndex,tOffset,dstDev.device_type.parent.id, dstDev.device_type.id, ei.dst_port.name))
+                    dst.write("  {{{},{},INPUT_INDEX_{}_{}_{}_V, 0}}".format(tIndex,tOffset,dstDev.device_type.parent.id, dstDev.device_type.id, ei.dst_pin.name))
                 dst.write("};\n")
             else:
                 blob=bytearray([])
@@ -528,16 +528,16 @@ def render_graph_instance_as_thread_context(
                     dstDev=ei.dst_device
                     tIndex=devices_to_thread[dstDev]
                     tOffset=thread_to_devices[tIndex].index(dstDev)
-                    port_index=ei.dst_port.parent.inputs_by_index.index(ei.dst_port)
-                    addr=convert_address_to_bytes(tIndex, tOffset, port_index)
+                    pin_index=ei.dst_pin.parent.inputs_by_index.index(ei.dst_pin)
+                    addr=convert_address_to_bytes(tIndex, tOffset, pin_index)
                     blob.extend(addr)
                 globalProperties.add(addressesName, blob)
         
         
         if not _use_BLOB:
-            dst.write("OutputPortTargets {}_targets[]={{\n".format(di.id))
+            dst.write("OutputPinTargets {}_targets[]={{\n".format(di.id))
         else:
-            globalOutputPortTargets.add_label("{}_targets".format(di.id))
+            globalOutputPinTargets.add_label("{}_targets".format(di.id))
         
         first=True
         for op in di.device_type.outputs_by_index:
@@ -558,16 +558,16 @@ def render_graph_instance_as_thread_context(
                     dst.write(",")                
                 dst.write("{{ {}, {} }} // {}\n".format( len(edges_out[di][op]), addressesSource, op.name ))
             else:
-                globalOutputPortTargets.add(addressesName, (len(edges_out[di][op]), addressesSource) )
+                globalOutputPinTargets.add(addressesName, (len(edges_out[di][op]), addressesSource) )
                 
         if not _use_BLOB:   
-            dst.write("};\n") # End of output port targets
+            dst.write("};\n") # End of output pin targets
         
         for ip in di.device_type.inputs_by_index:
             if ip.properties==None and ip.state==None:
                 continue
             for ei in edges_in[di][ip]:
-                name="{}_{}_{}_{}".format(ei.dst_device.id,ei.dst_port.name,ei.src_device.id,ei.src_port.name)
+                name="{}_{}_{}_{}".format(ei.dst_device.id,ei.dst_pin.name,ei.src_device.id,ei.src_pin.name)
                 if ip.properties:
                     inputPropertiesName=name+"_properties"
                     if not _use_BLOB:
@@ -588,13 +588,13 @@ def render_graph_instance_as_thread_context(
                 continue
             if len(edges_in[di][ip])==0:
                 continue
-            dst.write("InputPortBinding {}_{}_bindings[]={{\n".format(di.id,ip.name))
+            dst.write("InputPinBinding {}_{}_bindings[]={{\n".format(di.id,ip.name))
             first=True
             
             def edge_key(ei):
                 return (devices_to_thread[ei.src_device],
                         thread_to_devices[devices_to_thread[ei.src_device]].index(ei.src_device),
-                    int(props[ei.src_port]["OUTPUT_PORT_INDEX"]))
+                    int(props[ei.src_pin]["OUTPUT_PORT_INDEX"]))
             
             eiSorted=list(edges_in[di][ip])
             eiSorted.sort(key=edge_key)
@@ -604,11 +604,11 @@ def render_graph_instance_as_thread_context(
                     first=False
                 else:
                     dst.write(",\n")
-                name="{}_{}_{}_{}".format(ei.dst_device.id,ei.dst_port.name,ei.src_device.id,ei.src_port.name)
+                name="{}_{}_{}_{}".format(ei.dst_device.id,ei.dst_pin.name,ei.src_device.id,ei.src_pin.name)
                 eProps={
                     "SRC_THREAD_INDEX": devices_to_thread[ei.src_device],
                     "SRC_THREAD_OFFSET": thread_to_devices[devices_to_thread[ei.src_device]].index(ei.src_device),
-                    "SRC_PORT_INDEX": props[ei.src_port]["OUTPUT_PORT_INDEX"],
+                    "SRC_PORT_INDEX": props[ei.src_pin]["OUTPUT_PORT_INDEX"],
                     "EDGE_PROPERTIES":0,
                     "EDGE_STATE":0
                 }
@@ -633,7 +633,7 @@ def render_graph_instance_as_thread_context(
                         {{
                             {SRC_THREAD_INDEX}, // thread id
                             {SRC_THREAD_OFFSET}, // thread offset
-                            {SRC_PORT_INDEX}, // port
+                            {SRC_PORT_INDEX}, // pin
                             0
                         }},
                         {EDGE_PROPERTIES},
@@ -642,7 +642,7 @@ def render_graph_instance_as_thread_context(
                     """.format(**eProps))
             dst.write("};\n");
 
-        dst.write("InputPortSources {}_sources[]={{\n".format(di.id))
+        dst.write("InputPinSources {}_sources[]={{\n".format(di.id))
         first=True
         
         for ip in di.device_type.inputs_by_index:
@@ -694,8 +694,8 @@ def render_graph_instance_as_thread_context(
                 else:
                     diProps["DEVICE_INSTANCE_STATE"]="(void*){}".format(offset)
         if _use_BLOB:
-            offset=globalOutputPortTargets.find(diProps["DEVICE_INSTANCE_TARGETS"])
-            diProps["DEVICE_INSTANCE_TARGETS"]="softswitch_pthread_output_port_targets+{}".format(offset)
+            offset=globalOutputPinTargets.find(diProps["DEVICE_INSTANCE_TARGETS"])
+            diProps["DEVICE_INSTANCE_TARGETS"]="softswitch_pthread_output_pin_targets+{}".format(offset)
         
         diProps["DEVICE_INSTANCE_VTABLE_SOURCE"]="softswitch_device_vtables+DEVICE_TYPE_INDEX_{DEVICE_TYPE_FULL_ID}_V".format(**diProps)
         if _use_indirect_BLOB:
@@ -707,7 +707,7 @@ def render_graph_instance_as_thread_context(
             {DEVICE_INSTANCE_PROPERTIES},
             {DEVICE_INSTANCE_STATE},
             {DEVICE_INSTANCE_THREAD_OFFSET}, // device index
-            {DEVICE_INSTANCE_TARGETS}, // address lists for ports
+            {DEVICE_INSTANCE_TARGETS}, // address lists for pins
             {DEVICE_INSTANCE_ID}_sources, // source list for inputs
             "{DEVICE_INSTANCE_ID}", // id
             0, // rtsFlags
@@ -726,8 +726,8 @@ def render_graph_instance_as_softswitch(gi,dst,num_threads,device_to_thread):
     globalState=BLOBHolder()
     globalState.add("__nudge__", bytearray([0]*4))
     
-    globalOutputPortTargets=StructHolder("OutputPortTargets", 2);
-    globalOutputPortTargets.add("__nudge__", (0,0))
+    globalOutputPinTargets=StructHolder("OutputPinTargets", 2);
+    globalOutputPinTargets.add("__nudge__", (0,0))
     
     props={
         gi.graph_type:make_graph_type_properties(gi.graph_type)
@@ -735,16 +735,16 @@ def render_graph_instance_as_softswitch(gi,dst,num_threads,device_to_thread):
     for dt in gi.graph_type.device_types.values():
         props[dt]=make_device_type_properties(dt)
         for ip in dt.inputs_by_index:
-            props[ip]=make_input_port_properties(ip)
+            props[ip]=make_input_pin_properties(ip)
         for op in dt.outputs_by_index:
-            props[op]=make_output_port_properties(op)
+            props[op]=make_output_pin_properties(op)
         
-    edgesIn={ di:{ port:[] for port in di.device_type.inputs_by_index  } for di in gi.device_instances.values() }
-    edgesOut={ di:{ port:[] for port in di.device_type.outputs_by_index } for di in gi.device_instances.values() }
+    edgesIn={ di:{ pin:[] for pin in di.device_type.inputs_by_index  } for di in gi.device_instances.values() }
+    edgesOut={ di:{ pin:[] for pin in di.device_type.outputs_by_index } for di in gi.device_instances.values() }
     
     for ei in gi.edge_instances.values():
-        edgesIn[ei.dst_device][ei.dst_port].append(ei)
-        edgesOut[ei.src_device][ei.src_port].append(ei)
+        edgesIn[ei.dst_device][ei.dst_pin].append(ei)
+        edgesOut[ei.src_device][ei.src_pin].append(ei)
     
     thread_to_devices=[[] for i in range(num_threads)]
     devices_to_thread={}
@@ -784,7 +784,7 @@ def render_graph_instance_as_softswitch(gi,dst,num_threads,device_to_thread):
     for ti in range(num_threads):
         render_graph_instance_as_thread_context(
             dst,
-            globalProperties,globalState,globalOutputPortTargets,
+            globalProperties,globalState,globalOutputPinTargets,
             gi,ti,devices_to_thread, thread_to_devices,edgesIn,edgesOut,props
             )
 
@@ -838,7 +838,7 @@ def render_graph_instance_as_softswitch(gi,dst,num_threads,device_to_thread):
     globalState.write(dst, "softswitch_pthread_global_state")
     
     dst.write("const ");
-    globalOutputPortTargets.write(dst, "softswitch_pthread_output_port_targets")
+    globalOutputPinTargets.write(dst, "softswitch_pthread_output_pin_targets")
 
 import argparse
 

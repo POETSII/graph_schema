@@ -38,7 +38,7 @@ std::string format(const char *pattern, ...)
 void test_scalar(const char *name)
 {
     const char *src=R"(<?xml version="1.0"?>
-<Scalar xmlns="http://TODO.org/POETS/virtual-graph-schema-v1" name="wibble" type="%s" />
+<Scalar xmlns="https://poets-project.org/schemas/virtual-graph-schema-v2" name="wibble" type="%s" />
 )";
     auto doc=parseXML(format(src,name));
     
@@ -55,7 +55,7 @@ void test_scalar(const char *name)
     
     
     const char *srcD=R"(<?xml version="1.0"?>
-<Scalar xmlns="http://TODO.org/POETS/virtual-graph-schema-v1" name="wibble" type="%s" default="1" />
+<Scalar xmlns="https://poets-project.org/schemas/virtual-graph-schema-v2" name="wibble" type="%s" default="1" />
 )";
     doc=parseXML(format(src,name));
     
@@ -71,7 +71,7 @@ void test_scalar(const char *name)
 void test_array(unsigned length, const char *name)
 {
     const char *src=R"(<?xml version="1.0"?>
-<Array xmlns="http://TODO.org/POETS/virtual-graph-schema-v1" name="wibble" length="%u" type="%s" />
+<Array xmlns="https://poets-project.org/schemas/virtual-graph-schema-v2" name="wibble" length="%u" type="%s" />
 )";
     auto doc=parseXML(format(src,length,name));
     
@@ -88,7 +88,7 @@ void test_array(unsigned length, const char *name)
 void test_tuple_empty()
 {
     const char *src=R"(<?xml version="1.0"?>
-<Tuple xmlns="http://TODO.org/POETS/virtual-graph-schema-v1" name="wibble" />
+<Tuple xmlns="https://poets-project.org/schemas/virtual-graph-schema-v2" name="wibble" />
 )";
     auto doc=parseXML(src);
     
@@ -104,7 +104,7 @@ void test_tuple_empty()
 void test_tuple_single()
 {
     const char *src=R"(<?xml version="1.0"?>
-<Tuple xmlns="http://TODO.org/POETS/virtual-graph-schema-v1" name="wibble">
+<Tuple xmlns="https://poets-project.org/schemas/virtual-graph-schema-v2" name="wibble">
     <Scalar name="x" type="char" />
 </Tuple>
 )";
@@ -126,7 +126,7 @@ void test_tuple_single()
 void test_tuple_double()
 {
     const char *src=R"(<?xml version="1.0"?>
-<Tuple xmlns="http://TODO.org/POETS/virtual-graph-schema-v1" name="wibble">
+<Tuple xmlns="https://poets-project.org/schemas/virtual-graph-schema-v2" name="wibble">
     <Scalar name="x" type="char" />
     <Array name="y" length="10" type="char" />
 </Tuple>
@@ -151,7 +151,7 @@ void test_tuple_double()
 void test_tuple_triple()
 {
     const char *src=R"(<?xml version="1.0"?>
-<Tuple xmlns="http://TODO.org/POETS/virtual-graph-schema-v1" name="wibble">
+<Tuple xmlns="https://poets-project.org/schemas/virtual-graph-schema-v2" name="wibble">
     <Scalar name="x" type="char" />
     <Array name="y" length="11" type="char" />
     <Tuple name="z" />
