@@ -132,6 +132,8 @@
                 deviceState->round=message->round;
                 deviceState->version=0;
                 deviceState->dist=0xFFFFFFFFul;
+                deviceState->sendCount=0;
+                deviceState->recvCount=0;
                 handler_log(2, "New round=%u", message->round);
           }
           auto newDist=message->distance + edgeProperties->w;
@@ -313,6 +315,8 @@
 	    <OnReceive><![CDATA[
         assert(deviceState->round==message->round);
 
+        handler_log(3, "Round %u : sendCount=%u, recvCount=%u", deviceState->round, message->sendCount, message->recvCount);
+        
         if(message->sendCount == message->recvCount){
             // We can only receive progress if _all_ nodes have sent a progress message,
             // so as soon as things balance it is finished
@@ -340,6 +344,7 @@
         if(deviceState->round >= deviceProperties->node_count){
             handler_log(0, "Finished");
             *doSend = false;
+            handler_exit(0);
         }
 	    ]]></OnSend>
 	  </OutputPin>
