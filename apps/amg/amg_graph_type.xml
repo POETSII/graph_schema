@@ -62,6 +62,10 @@
         </Message>
     </MessageType>
 
+    <MessageType id="done">
+        <Documentation>Used to fan back in to a single exit point.</Documentation>
+    </MessageType>
+
 </MessageTypes>
 
 <DeviceTypes>
@@ -625,9 +629,19 @@
         *readyToSend=0;
         if( (deviceState->i < 16) && (0==(deviceState->i&1)) ){
             *readyToSend=RTS_FLAG_problem;
+        }else if(deviceState->i == 16){
+            *readyToSend=RTS_FLAG_finished;
         }
         handler_log(2, "test RTS : 0x%x", *readyToSend);
         ]]></ReadyToSend>
+
+        <OutputPin name="finished" messageTypeId="done">
+            <OnSend><![CDATA[
+            assert(deviceState->i==16);
+            // No payload
+            deviceState->i++;
+            ]]></OnSend>
+        </OutputPin>
 
 
         <OutputPin name="problem" messageTypeId="linear_problem">
@@ -657,6 +671,37 @@
             handler_log(3, " iter=%d, x=%g (dx=%g), r=%g, i=%d\n\n\n", deviceState->i/2, x, std::abs(x-rx), r, i);
 
             deviceState->i++;
+            ]]></OnReceive>
+        </InputPin>
+    </DeviceType>
+
+    <!--  #######################################################################################  -->
+    <!--  #######################################################################################  -->
+    <!--  #######################################################################################  -->
+    <!--  #######################################################################################  -->
+    <!--  #######################################################################################  -->
+    <!--  #######################################################################################  -->
+    
+
+    <DeviceType id="exit">
+        <Properties>
+            <Scalar type="uint32_t" name="nodes" />
+        </Properties>
+
+        <State>
+            <Scalar type="uint32_t" name="seen"/>
+        </State>
+
+        <ReadyToSend><![CDATA[
+        *readyToSend=0;
+        ]]></ReadyToSend>
+
+       <InputPin name="finished" messageTypeId="done">
+            <OnReceive><![CDATA[
+            deviceState->seen++;
+            if(deviceState->seen==deviceProperties->nodes){
+                handler_exit(0);
+            }
             ]]></OnReceive>
         </InputPin>
     </DeviceType>

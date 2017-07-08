@@ -87,6 +87,10 @@ Vagrant.configure(2) do |config|
      # Editors
      sudo apt-get install -y emacs-nox screen
 
+     # Algebraic multigrid, plus others
+     sudo apt-get install python3-pip python3-numpy python3-scipy
+     sudo pip3 install pyamg
+
      # Creating meshes
      sudo apt-get install -y octave octave-msh octave-geometry
      

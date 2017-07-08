@@ -191,6 +191,10 @@ def make_poisson_graph_instance(instName,n,m):
         x=mg.ml.solve(b,tol=residualTol)
         xRef.append(x)
     
+    exitType=amgGraphType.device_types["exit"]
+    exitNode=DeviceInstance(res, "exit_node", exitType, {"nodes":int(mg.levels[0].n)})
+    res.add_device_instance(exitNode)
+
     testerType=amgGraphType.device_types["tester"]
     for i in range(mg.levels[0].n):
         props={
@@ -204,6 +208,9 @@ def make_poisson_graph_instance(instName,n,m):
         res.add_edge_instance(ei)
         
         ei=EdgeInstance(res, fineNodes[i],"problem", di,"problem", None)
+        res.add_edge_instance(ei)
+
+        ei=EdgeInstance(res, exitNode,"finished", di, "finished", None)
         res.add_edge_instance(ei)
     
     return res
