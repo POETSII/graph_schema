@@ -21,10 +21,8 @@ $(eval $(call amg_poisson_instance_template,4_4,$(amg_FILTERS)))
 $(eval $(call amg_poisson_instance_template,3_4,$(amg_FILTERS)))
 $(eval $(call amg_poisson_instance_template,4_3,$(amg_FILTERS)))
 $(eval $(call amg_poisson_instance_template,8_8,$(amg_FILTERS)))
-$(eval $(call amg_poisson_instance_template,16_16,$(amg_FILTERS)))
+#$(eval $(call amg_poisson_instance_template,16_16,$(amg_FILTERS)))
 $(eval $(call amg_poisson_instance_template,32_32,$(amg_FILTERS)))
-$(eval $(call amg_poisson_instance_template,64_64,$(amg_FILTERS)))
-$(eval $(call amg_poisson_instance_template,128_128,$(amg_FILTERS)))
 
 amg_tests : $(ALL_amg_TESTS)
 
