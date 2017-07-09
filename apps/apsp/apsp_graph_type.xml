@@ -140,7 +140,7 @@
           if(newDist < deviceState->dist){
                 deviceState->dist = newDist;
                 deviceState->distDirty = true;
-                handler_log(2, "New dist=%u", deviceState->dist);
+                handler_log(2, "New dist=%u, ew=%u", deviceState->dist, edgeProperties->w);
           }
           deviceState->recvCount++;
           deviceState->progressDirty=true;
@@ -153,6 +153,7 @@
                 assert(deviceState->progressDirty);
 
                 deviceState->version++;
+                deviceState->sendCount++; // for this message
 
                 message->round=deviceState->round;
                 message->version=deviceState->version;
@@ -178,6 +179,8 @@
         <Scalar type="uint8_t" name="dirty" />
         <Scalar type="uint32_t" name="round" />
         <Scalar type="uint32_t" name="version" />
+        <Scalar type="uint32_t" name="localSendCount" />
+        <Scalar type="uint32_t" name="localRecvCount" />
 
 		<Scalar type="uint32_t" name="leftVersion" />
         <Scalar type="uint32_t" name="leftMaxDistance" />
@@ -204,7 +207,7 @@
 
     <InputPin name="__init__" messageTypeId="__init__">
           <OnReceive><![CDATA[
-		  deviceState->round=INT_MAX;
+		  deviceState->round=0xFFFFFFFFul; // -1
 		  ]]></OnReceive>
 		</InputPin>
 
@@ -212,11 +215,16 @@
             <OnReceive><![CDATA[
                 if(message->round != deviceState->round){
                     assert(message->version > 0);
+                    assert(deviceState->round+1 == message->round);
                     deviceState->round=message->round;
                     deviceState->version=0;
                     deviceState->leftVersion=0;
                     deviceState->rightVersion=0;
+                    deviceState->localSendCount=0;
+                    deviceState->localRecvCount=0;
                 }
+
+                deviceState->localRecvCount++;
 
                 if(message->version < deviceState->leftVersion){
                     return;
@@ -236,11 +244,16 @@
             <OnReceive><![CDATA[
                 if(message->round != deviceState->round){
                     assert(message->version > 0);
+                    assert(deviceState->round+1 == message->round);
                     deviceState->round=message->round;
                     deviceState->version=0;
                     deviceState->leftVersion=0;
                     deviceState->rightVersion=0;
+                    deviceState->localSendCount=0;
+                    deviceState->localRecvCount=0;
                 }
+
+                deviceState->localRecvCount++;
 
                 if(message->version < deviceState->rightVersion){
                     return;
@@ -262,13 +275,14 @@
             assert(deviceState->dirty && deviceState->leftVersion>0 && deviceState->rightVersion>0);
             
             deviceState->version++;
+            deviceState->localSendCount++;
 
             message->version=deviceState->version;
             message->round=deviceState->round;
             message->maxDistance=std::max(deviceState->leftMaxDistance , deviceState->rightMaxDistance);
             message->sumDistance=deviceState->leftSumDistance + deviceState->rightSumDistance;
-            message->sendCount=deviceState->leftSendCount + deviceState->rightSendCount;
-            message->recvCount=deviceState->leftRecvCount + deviceState->rightRecvCount;
+            message->sendCount=deviceState->leftSendCount + deviceState->rightSendCount + deviceState->localSendCount;
+            message->recvCount=deviceState->leftRecvCount + deviceState->rightRecvCount + deviceState->localRecvCount;
 
             deviceState->dirty=false;
             ]]></OnSend>
@@ -278,11 +292,12 @@
 	<DeviceType id="controller">
 	  <Properties>
 	    <Scalar type="uint32_t" name="node_count"/>
+        <Scalar type="uint32_t" name="refSumMaxDist"/>
+        <Scalar type="uint32_t" name="refSumSumDist"/>
 	  </Properties>
 	  
 	  <State>
-		<Scalar type="uint32_t" name="totalSent" />
-        <Scalar type="uint32_t" name="totalRecv" />
+		<Scalar type="uint32_t" name="localRecvCount" />
 
         <Scalar type="uint32_t" name="round" />
         <Scalar type="uint8_t" name="roundComplete" />
@@ -313,11 +328,14 @@
 	  
 	  <InputPin name="progress_in" messageTypeId="progress">
 	    <OnReceive><![CDATA[
+        
+        handler_log(3, "Round %u : sendCount=%u, recvCount=%u, messageRound=%u", deviceState->round, message->sendCount, message->recvCount, message->round);
+        
         assert(deviceState->round==message->round);
 
-        handler_log(3, "Round %u : sendCount=%u, recvCount=%u", deviceState->round, message->sendCount, message->recvCount);
-        
-        if(message->sendCount == message->recvCount){
+        deviceState->localRecvCount++;
+
+        if(message->sendCount == message->recvCount+deviceState->localRecvCount){
             // We can only receive progress if _all_ nodes have sent a progress message,
             // so as soon as things balance it is finished
 
@@ -338,13 +356,21 @@
 	    assert(deviceState->roundComplete);
 
         deviceState->roundComplete=false;
+        deviceState->localRecvCount=0;
 
         message->round = deviceState->round;
 
         if(deviceState->round >= deviceProperties->node_count){
-            handler_log(0, "Finished");
+            handler_log(1, "sumMaxDist=%u, refSumMaxDist=%u", deviceState->sumMaxDist, deviceProperties->refSumMaxDist);
+            handler_log(1, "sumSumDist=%u, refSumSumDist=%u", deviceState->sumSumDist, deviceProperties->refSumSumDist);
+
+            auto sumMaxDistOk = deviceState->sumMaxDist==deviceProperties->refSumMaxDist;
+            assert(sumMaxDistOk);
+            auto sumSumDistOk = deviceState->sumSumDist==deviceProperties->refSumSumDist;
+            assert(sumSumDistOk);
+
             *doSend = false;
-            handler_exit(0);
+            handler_exit(sumMaxDistOk && sumSumDistOk ? 0 : -1);
         }
 	    ]]></OnSend>
 	  </OutputPin>
