@@ -101,7 +101,6 @@ regenerate-random :
 %.checked : %.xml $(JING) master/virtual-graph-schema-v2.rnc derived/virtual-graph-schema-v2.xsd
 	java -jar $(JING) -c master/virtual-graph-schema-v2.rnc $*.xml
 	java -jar $(JING) derived/virtual-graph-schema-v2.xsd $*.xml
-	$(PYTHON) tools/print_graph_properties.py < $*.xml
 	touch $@
 
 validate-virtual/% : output/%.checked
