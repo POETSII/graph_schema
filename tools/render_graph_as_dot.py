@@ -4,6 +4,7 @@ import sys
 import os
 import argparse
 import re
+import math
 
 parser=argparse.ArgumentParser("Render a graph to dot.")
 parser.add_argument('graph', metavar="G", default="-", nargs="?")
