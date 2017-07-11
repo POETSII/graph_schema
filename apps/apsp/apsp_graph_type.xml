@@ -1,5 +1,5 @@
 <?xml version="1.0"?>
-<Graphs xmlns="http://TODO.org/POETS/virtual-graph-schema-v1">
+<Graphs xmlns="https://poets-project.org/schemas/virtual-graph-schema-v2">
   <GraphType id="apsp">
 	<Documentation><![CDATA[
 		Does all-pairs shortest-path on a graph.
@@ -90,13 +90,13 @@
             }
 		]]></ReadyToSend>
 
-        <InputPort name="__init__" messageTypeId="__init__">
+        <InputPin name="__init__" messageTypeId="__init__">
           <OnReceive><![CDATA[
 		  deviceState->round=INT_MAX;
 		  ]]></OnReceive>
-		</InputPort>
+		</InputPin>
 
-        <InputPort name="begin_in" messageTypeId="begin">
+        <InputPin name="begin_in" messageTypeId="begin">
             <OnReceive><![CDATA[
             if(message->round==deviceProperties->index){
                 // It is this device's turn
@@ -108,9 +108,9 @@
                 deviceState->recvCount=0;
             }
             ]]></OnReceive>
-        </InputPort>
+        </InputPin>
 		
-		<OutputPort name="dout" messageTypeId="dist">
+		<OutputPin name="dout" messageTypeId="dist">
 		  <OnSend><![CDATA[
           assert(deviceState->distDirty);
 
@@ -121,9 +121,9 @@
           deviceState->sendCount += deviceProperties->degree;
           deviceState->progressDirty = true;
 		  ]]></OnSend>
-		</OutputPort>
+		</OutputPin>
 		
-		<InputPort name="din" messageTypeId="dist">
+		<InputPin name="din" messageTypeId="dist">
             <Properties>
                 <Scalar type="uint32_t" name="w" default="1" />
             </Properties>
@@ -132,25 +132,28 @@
                 deviceState->round=message->round;
                 deviceState->version=0;
                 deviceState->dist=0xFFFFFFFFul;
+                deviceState->sendCount=0;
+                deviceState->recvCount=0;
                 handler_log(2, "New round=%u", message->round);
           }
           auto newDist=message->distance + edgeProperties->w;
           if(newDist < deviceState->dist){
                 deviceState->dist = newDist;
                 deviceState->distDirty = true;
-                handler_log(2, "New dist=%u", deviceState->dist);
+                handler_log(2, "New dist=%u, ew=%u", deviceState->dist, edgeProperties->w);
           }
           deviceState->recvCount++;
           deviceState->progressDirty=true;
 		  ]]></OnReceive>
-		</InputPort>
+		</InputPin>
 
-        <OutputPort name="progress_out" messageTypeId="progress">
+        <OutputPin name="progress_out" messageTypeId="progress">
             <OnSend><![CDATA[
                 assert(!deviceState->distDirty);
                 assert(deviceState->progressDirty);
 
                 deviceState->version++;
+                deviceState->sendCount++; // for this message
 
                 message->round=deviceState->round;
                 message->version=deviceState->version;
@@ -163,7 +166,7 @@
                 
                 handler_log(2, "Progress for round=%u, sendCount=%u, recvCount=%u", deviceState->round, message->sendCount, message->recvCount);
             ]]></OnSend>
-        </OutputPort>
+        </OutputPin>
       </DeviceType>
 
     <DeviceType id="branch">
@@ -176,6 +179,8 @@
         <Scalar type="uint8_t" name="dirty" />
         <Scalar type="uint32_t" name="round" />
         <Scalar type="uint32_t" name="version" />
+        <Scalar type="uint32_t" name="localSendCount" />
+        <Scalar type="uint32_t" name="localRecvCount" />
 
 		<Scalar type="uint32_t" name="leftVersion" />
         <Scalar type="uint32_t" name="leftMaxDistance" />
@@ -200,21 +205,26 @@
       }
 	  ]]></ReadyToSend>
 
-    <InputPort name="__init__" messageTypeId="__init__">
+    <InputPin name="__init__" messageTypeId="__init__">
           <OnReceive><![CDATA[
-		  deviceState->round=INT_MAX;
+		  deviceState->round=0xFFFFFFFFul; // -1
 		  ]]></OnReceive>
-		</InputPort>
+		</InputPin>
 
-        <InputPort name="progress_in_left" messageTypeId="progress">
+        <InputPin name="progress_in_left" messageTypeId="progress">
             <OnReceive><![CDATA[
                 if(message->round != deviceState->round){
                     assert(message->version > 0);
+                    assert(deviceState->round+1 == message->round);
                     deviceState->round=message->round;
                     deviceState->version=0;
                     deviceState->leftVersion=0;
                     deviceState->rightVersion=0;
+                    deviceState->localSendCount=0;
+                    deviceState->localRecvCount=0;
                 }
+
+                deviceState->localRecvCount++;
 
                 if(message->version < deviceState->leftVersion){
                     return;
@@ -228,17 +238,22 @@
                 deviceState->leftSendCount=message->sendCount;
                 deviceState->leftRecvCount=message->recvCount;
             ]]></OnReceive>
-        </InputPort>
+        </InputPin>
 
-        <InputPort name="progress_in_right" messageTypeId="progress">
+        <InputPin name="progress_in_right" messageTypeId="progress">
             <OnReceive><![CDATA[
                 if(message->round != deviceState->round){
                     assert(message->version > 0);
+                    assert(deviceState->round+1 == message->round);
                     deviceState->round=message->round;
                     deviceState->version=0;
                     deviceState->leftVersion=0;
                     deviceState->rightVersion=0;
+                    deviceState->localSendCount=0;
+                    deviceState->localRecvCount=0;
                 }
+
+                deviceState->localRecvCount++;
 
                 if(message->version < deviceState->rightVersion){
                     return;
@@ -252,35 +267,37 @@
                 deviceState->rightSendCount=message->sendCount;
                 deviceState->rightRecvCount=message->recvCount;
             ]]></OnReceive>
-        </InputPort>
+        </InputPin>
 	
 
-        <OutputPort name="progress_out" messageTypeId="progress">
+        <OutputPin name="progress_out" messageTypeId="progress">
             <OnSend><![CDATA[
             assert(deviceState->dirty && deviceState->leftVersion>0 && deviceState->rightVersion>0);
             
             deviceState->version++;
+            deviceState->localSendCount++;
 
             message->version=deviceState->version;
             message->round=deviceState->round;
             message->maxDistance=std::max(deviceState->leftMaxDistance , deviceState->rightMaxDistance);
             message->sumDistance=deviceState->leftSumDistance + deviceState->rightSumDistance;
-            message->sendCount=deviceState->leftSendCount + deviceState->rightSendCount;
-            message->recvCount=deviceState->leftRecvCount + deviceState->rightRecvCount;
+            message->sendCount=deviceState->leftSendCount + deviceState->rightSendCount + deviceState->localSendCount;
+            message->recvCount=deviceState->leftRecvCount + deviceState->rightRecvCount + deviceState->localRecvCount;
 
             deviceState->dirty=false;
             ]]></OnSend>
-        </OutputPort>
+        </OutputPin>
     </DeviceType>
 
 	<DeviceType id="controller">
 	  <Properties>
 	    <Scalar type="uint32_t" name="node_count"/>
+        <Scalar type="uint32_t" name="refSumMaxDist"/>
+        <Scalar type="uint32_t" name="refSumSumDist"/>
 	  </Properties>
 	  
 	  <State>
-		<Scalar type="uint32_t" name="totalSent" />
-        <Scalar type="uint32_t" name="totalRecv" />
+		<Scalar type="uint32_t" name="localRecvCount" />
 
         <Scalar type="uint32_t" name="round" />
         <Scalar type="uint8_t" name="roundComplete" />
@@ -300,20 +317,25 @@
       }
 	  ]]></ReadyToSend>
 
-        <InputPort name="__init__" messageTypeId="__init__">
+        <InputPin name="__init__" messageTypeId="__init__">
             <OnReceive><![CDATA[
             // trigger first begin message
             deviceState->round=0;
             deviceState->roundComplete=true;
             ]]>
             </OnReceive>
-        </InputPort>
+        </InputPin>
 	  
-	  <InputPort name="progress_in" messageTypeId="progress">
+	  <InputPin name="progress_in" messageTypeId="progress">
 	    <OnReceive><![CDATA[
+        
+        handler_log(3, "Round %u : sendCount=%u, recvCount=%u, messageRound=%u", deviceState->round, message->sendCount, message->recvCount, message->round);
+        
         assert(deviceState->round==message->round);
 
-        if(message->sendCount == message->recvCount){
+        deviceState->localRecvCount++;
+
+        if(message->sendCount == message->recvCount+deviceState->localRecvCount){
             // We can only receive progress if _all_ nodes have sent a progress message,
             // so as soon as things balance it is finished
 
@@ -327,22 +349,31 @@
         }
 
 	    ]]></OnReceive>
-	  </InputPort>
+	  </InputPin>
 	  
-	  <OutputPort name="begin_out" messageTypeId="begin">
+	  <OutputPin name="begin_out" messageTypeId="begin">
 	    <OnSend><![CDATA[
 	    assert(deviceState->roundComplete);
 
         deviceState->roundComplete=false;
+        deviceState->localRecvCount=0;
 
         message->round = deviceState->round;
 
         if(deviceState->round >= deviceProperties->node_count){
-            handler_log(0, "Finished");
+            handler_log(1, "sumMaxDist=%u, refSumMaxDist=%u", deviceState->sumMaxDist, deviceProperties->refSumMaxDist);
+            handler_log(1, "sumSumDist=%u, refSumSumDist=%u", deviceState->sumSumDist, deviceProperties->refSumSumDist);
+
+            auto sumMaxDistOk = deviceState->sumMaxDist==deviceProperties->refSumMaxDist;
+            assert(sumMaxDistOk);
+            auto sumSumDistOk = deviceState->sumSumDist==deviceProperties->refSumSumDist;
+            assert(sumSumDistOk);
+
             *doSend = false;
+            handler_exit(sumMaxDistOk && sumSumDistOk ? 0 : -1);
         }
 	    ]]></OnSend>
-	  </OutputPort>
+	  </OutputPin>
 
       </DeviceType>
 	  

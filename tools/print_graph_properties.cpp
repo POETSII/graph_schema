@@ -17,7 +17,7 @@ public:
   struct edge
   {
     uint64_t dstDevice;
-    unsigned dstPort;
+    unsigned dstPin;
     TypedDataPtr properties;
     rapidjson::Document metadata;
   };
@@ -110,8 +110,8 @@ public:
   virtual void onEdgeInstance
   (
    uint64_t graphInst,
-   uint64_t dstDevInst, const DeviceTypePtr &dstDevType, const InputPortPtr &dstPort,
-   uint64_t srcDevInst,  const DeviceTypePtr &srcDevType, const OutputPortPtr &srcPort,
+   uint64_t dstDevInst, const DeviceTypePtr &dstDevType, const InputPinPtr &dstPin,
+   uint64_t srcDevInst,  const DeviceTypePtr &srcDevType, const OutputPinPtr &srcPin,
    const TypedDataPtr &properties,
   rapidjson::Document &&metadata
   ) override
@@ -120,12 +120,12 @@ public:
     auto &src=instances.at(srcDevInst);
 
     fprintf(stderr, "  onEdgeInstance(%s.%s <- %s.%s)\n",
-	    dst.id.c_str(), dstPort->getName().c_str(),
-	    src.id.c_str(), srcPort->getName().c_str());
+	    dst.id.c_str(), dstPin->getName().c_str(),
+	    src.id.c_str(), srcPin->getName().c_str());
 
 
-    edge e{ dstDevInst, srcPort->getIndex(), properties, rapidjson::Document() };
-    src.outputs.at(srcPort->getIndex()).edges.emplace_back(std::move(e));
+    edge e{ dstDevInst, srcPin->getIndex(), properties, rapidjson::Document() };
+    src.outputs.at(srcPin->getIndex()).edges.emplace_back(std::move(e));
   }
 };
 

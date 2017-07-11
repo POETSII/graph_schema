@@ -30,7 +30,7 @@ public:
 
     virtual void writeEdgeInstance
     (
-     const InputPortPtr &dt,
+     const InputPinPtr &dt,
      const char *id,
      const TypedDataPtr &state,
      uint64_t firings,
@@ -172,7 +172,7 @@ public:
 
     virtual void writeEdgeInstance
     (
-     const InputPortPtr &et,
+     const InputPinPtr &et,
      const char *id,
      const TypedDataPtr &state,
      uint64_t firings,

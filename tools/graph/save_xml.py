@@ -7,7 +7,7 @@ import os
 import sys
 import json
 
-ns={"p":"http://TODO.org/POETS/virtual-graph-schema-v1"}
+ns={"p":"https://poets-project.org/schemas/virtual-graph-schema-v2"}
 
 def toNS(t):
     tt=t.replace("p:","{"+ns["p"]+"}")
@@ -17,8 +17,8 @@ def toNS(t):
 #    GraphType : toNS("p:GraphType"),
 #    MessageType : toNS("p:MessageType"),
 #    DeviceType : toNS("p:DeviceType"),
-#    InputPort : toNS("p:InputPort"),
-#    OutputPort : toNS("p:OutputPort"),
+#    InputPin : toNS("p:InputPin"),
+#    OutputPin : toNS("p:OutputPin"),
 #    GraphInstance : toNS("p:GraphInstance"),
 #    EdgeInstance : toNS("p:EdgeI"),
 #    DeviceInstance : toNS("p:DevI")
@@ -130,7 +130,7 @@ def save_device_type(parent,dt):
             sn.text=etree.CDATA(s)
 
     for p in dt.inputs_by_index:
-        pn=etree.SubElement(n,toNS("p:InputPort"))
+        pn=etree.SubElement(n,toNS("p:InputPin"))
         pn.attrib["name"]=p.name
         pn.attrib["messageTypeId"]=p.message_type.id
         if(p.properties):
@@ -146,7 +146,7 @@ def save_device_type(parent,dt):
         pn.append(h)
 
     for p in dt.outputs_by_index:
-        pn=etree.SubElement(n,toNS("OutputPort"))
+        pn=etree.SubElement(n,toNS("OutputPin"))
         pn.attrib["name"]=p.name
         pn.attrib["messageTypeId"]=p.message_type.id
 
@@ -184,7 +184,7 @@ _edge_instance_metadata_type=toNS("p:M")
 def save_edge_instance(parent, ei):
     n=etree.SubElement(parent, _edge_instance_tag_type, {"path":ei.id } )
 
-    save_typed_struct_instance(n, _edge_instance_properties_type, ei.dst_port.properties, ei.properties)
+    save_typed_struct_instance(n, _edge_instance_properties_type, ei.dst_pin.properties, ei.properties)
     save_metadata(n, _edge_instance_metadata_type, ei.metadata)
 
     return n
@@ -270,7 +270,7 @@ def save_graph_instance_metadata_patch(parent, id,graphMeta,deviceMeta,edgeMeta)
  
 
 def save_graph(graph,dst):
-    nsmap = { None : "http://TODO.org/POETS/virtual-graph-schema-v1" }
+    nsmap = { None : "https://poets-project.org/schemas/virtual-graph-schema-v2" }
     root=etree.Element(toNS("p:Graphs"), nsmap=nsmap)
 
     sys.stderr.write("save_graph: Constructing graph type tree\n")
@@ -294,7 +294,7 @@ def save_graph(graph,dst):
         tree.write(dst, pretty_print=True, xml_declaration=True)
 
 def save_metadata_patch(id,graphMeta,deviceMeta,edgeMeta,dst):
-    nsmap = { None : "http://TODO.org/POETS/virtual-graph-schema-v1" }
+    nsmap = { None : "https://poets-project.org/schemas/virtual-graph-schema-v2" }
     root=etree.Element(toNS("p:Graphs"), nsmap=nsmap)
 
     save_graph_instance_metadata_patch(root, id,graphMeta,deviceMeta,edgeMeta)

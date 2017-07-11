@@ -248,29 +248,29 @@ def emit_device_global_constants(dt,subs,indent):
 {indent}const unsigned RTC_FLAG_{deviceTypeId}=0x80000000ul;
 """.format(**subs)
 
-    currPortIndex=0
+    currPinIndex=0
     for ip in dt.inputs_by_index:
         res=res+"""
-{indent}const unsigned INPUT_INDEX_{deviceTypeId}_{currPortName}={currPortIndex};
-{indent}const unsigned INPUT_FLAG_{deviceTypeId}_{currPortName}=1ul<<{currPortIndex};
-{indent}const unsigned INPUT_INDEX_{currPortName}={currPortIndex};
-{indent}const unsigned INPUT_FLAG_{currPortName}=1ul<<{currPortIndex};
-""".format(currPortName=ip.name,currPortIndex=currPortIndex,**subs)
-        currPortIndex+=1
+{indent}const unsigned INPUT_INDEX_{deviceTypeId}_{currPinName}={currPinIndex};
+{indent}const unsigned INPUT_FLAG_{deviceTypeId}_{currPinName}=1ul<<{currPinIndex};
+{indent}const unsigned INPUT_INDEX_{currPinName}={currPinIndex};
+{indent}const unsigned INPUT_FLAG_{currPinName}=1ul<<{currPinIndex};
+""".format(currPinName=ip.name,currPinIndex=currPinIndex,**subs)
+        currPinIndex+=1
 
-    currPortIndex=0
+    currPinIndex=0
     for ip in dt.outputs_by_index:
         res=res+"""
-{indent}const unsigned OUTPUT_INDEX_{deviceTypeId}_{currPortName}={currPortIndex};
-{indent}const unsigned OUTPUT_FLAG_{deviceTypeId}_{currPortName}=1ul<<{currPortIndex};
-{indent}const unsigned RTS_INDEX_{deviceTypeId}_{currPortName}={currPortIndex};
-{indent}const unsigned RTS_FLAG_{deviceTypeId}_{currPortName}=1ul<<{currPortIndex};
-{indent}const unsigned OUTPUT_INDEX_{currPortName}={currPortIndex};
-{indent}const unsigned OUTPUT_FLAG_{currPortName}=1ul<<{currPortIndex};
-{indent}const unsigned RTS_INDEX_{currPortName}={currPortIndex};
-{indent}const unsigned RTS_FLAG_{currPortName}=1ul<<{currPortIndex};
-""".format(currPortName=ip.name,currPortIndex=currPortIndex,**subs)
-        currPortIndex+=1
+{indent}const unsigned OUTPUT_INDEX_{deviceTypeId}_{currPinName}={currPinIndex};
+{indent}const unsigned OUTPUT_FLAG_{deviceTypeId}_{currPinName}=1ul<<{currPinIndex};
+{indent}const unsigned RTS_INDEX_{deviceTypeId}_{currPinName}={currPinIndex};
+{indent}const unsigned RTS_FLAG_{deviceTypeId}_{currPinName}=1ul<<{currPinIndex};
+{indent}const unsigned OUTPUT_INDEX_{currPinName}={currPinIndex};
+{indent}const unsigned OUTPUT_FLAG_{currPinName}=1ul<<{currPinIndex};
+{indent}const unsigned RTS_INDEX_{currPinName}={currPinIndex};
+{indent}const unsigned RTS_FLAG_{currPinName}=1ul<<{currPinIndex};
+""".format(currPinName=ip.name,currPinIndex=currPinIndex,**subs)
+        currPinIndex+=1
 
     return res
 
@@ -281,21 +281,21 @@ def emit_device_local_constants(dt,subs,indent=""):
 {indent}typedef {deviceStateStructName} DEVICE_STATE_T;
 """.format(**subs)
 
-def emit_input_port_local_constants(dt,subs,indent=""):
+def emit_input_pin_local_constants(dt,subs,indent=""):
     return """
 {indent}typedef {pinPropertiesStructName} PORT_PROPERTIES_T;
 {indent}typedef {pinStateStructName} PORT_STATE_T;
 {indent}typedef {messageStructName} MESSAGE_T;
 """.format(**subs)
 
-def emit_output_port_local_constants(dt,subs,indent=""):
+def emit_output_pin_local_constants(dt,subs,indent=""):
     return """
 {indent}typedef {messageStructName} MESSAGE_T;
 """.format(**subs)
 
 
 
-def render_input_port_as_cpp(ip,dst):
+def render_input_pin_as_cpp(ip,dst):
     dt=ip.parent
     gt=dt.parent
     mt=ip.message_type
@@ -311,8 +311,8 @@ def render_input_port_as_cpp(ip,dst):
         "deviceStateStructName"         : "{}_state_t".format(dt.id),
         "messageTypeId"                 : mt.id,
         "messageStructName"             : "{}_message_t".format(mt.id),
-        "portName"                      : ip.name,
-        "portIndex"                     : index,
+        "pinName"                      : ip.name,
+        "pinIndex"                     : index,
         "pinPropertiesStructName"       : "{}_{}_properties_t".format(dt.id,ip.name),
         "pinStateStructName"            : "{}_{}_state_t".format(dt.id,ip.name),
         "handlerCode"                   : ip.receive_handler,
@@ -323,7 +323,7 @@ def render_input_port_as_cpp(ip,dst):
 
     subs["deviceGlobalConstants"]=emit_device_global_constants(dt,subs,"    ")
     subs["deviceLocalConstants"]=emit_device_local_constants(dt,subs, "    ")
-    subs["pinLocalConstants"]=emit_input_port_local_constants(dt,subs, "    ")
+    subs["pinLocalConstants"]=emit_input_pin_local_constants(dt,subs, "    ")
 
 
     if ip.source_line and ip.source_file:
@@ -335,20 +335,20 @@ def render_input_port_as_cpp(ip,dst):
 """
 //MessageTypePtr {messageTypeId}_Spec_get();
 
-static const char *{deviceTypeId}_{portName}_handler_code=R"CDATA({handlerCode})CDATA";
+static const char *{deviceTypeId}_{pinName}_handler_code=R"CDATA({handlerCode})CDATA";
 
-class {deviceTypeId}_{portName}_Spec
-    : public InputPortImpl {{
+class {deviceTypeId}_{pinName}_Spec
+    : public InputPinImpl {{
 public:
-  {deviceTypeId}_{portName}_Spec()
-    : InputPortImpl(
+  {deviceTypeId}_{pinName}_Spec()
+    : InputPinImpl(
         {deviceTypeId}_Spec_get,  //
-        "{portName}",
-        {portIndex},
+        "{pinName}",
+        {pinIndex},
         {messageTypeId}_Spec_get(),
         {pinPropertiesStructName}_Spec_get(),
         {pinStateStructName}_Spec_get(),
-        {deviceTypeId}_{portName}_handler_code
+        {deviceTypeId}_{pinName}_handler_code
     ) {{}} \n
 
     virtual void onReceive(
@@ -385,16 +385,16 @@ public:
   }}
 }};
 
-InputPortPtr {deviceTypeId}_{portName}_Spec_get(){{
-  static InputPortPtr singleton(new {deviceTypeId}_{portName}_Spec);
+InputPinPtr {deviceTypeId}_{pinName}_Spec_get(){{
+  static InputPinPtr singleton(new {deviceTypeId}_{pinName}_Spec);
   return singleton;
 }}
 """.format(**subs))
 
-    #    end of render_input_port_as_cpp
+    #    end of render_input_pin_as_cpp
     return None
 
-def render_output_port_as_cpp(op,dst):
+def render_output_pin_as_cpp(op,dst):
     dt=op.parent
     graph=dt.parent
     for index in range(len(dt.outputs_by_index)):
@@ -411,8 +411,8 @@ def render_output_port_as_cpp(op,dst):
         "deviceStateStructName"         : "{}_state_t".format(dt.id),
         "messageTypeId"                 : mt.id,
         "messageStructName"             : "{}_message_t".format(mt.id),
-        "portName"                      : op.name,
-        "portIndex"                     : index,
+        "pinName"                      : op.name,
+        "pinIndex"                     : index,
         "pinPropertiesStructName"       : "{}_{}_properties_t".format(dt.id,op.name),
         "pinStateStructName"            : "{}_{}_state_t".format(dt.id,op.name),
         "handlerCode"                   : op.send_handler,
@@ -423,7 +423,7 @@ def render_output_port_as_cpp(op,dst):
 
     subs["deviceGlobalConstants"]=emit_device_global_constants(dt,subs,"    ")
     subs["deviceLocalConstants"]=emit_device_local_constants(dt,subs, "    ")
-    subs["pinLocalConstants"]=emit_output_port_local_constants(dt,subs, "    ")
+    subs["pinLocalConstants"]=emit_output_pin_local_constants(dt,subs, "    ")
 
 
     if op.source_line and op.source_file:
@@ -436,8 +436,8 @@ def render_output_port_as_cpp(op,dst):
 
     dst.write('static const char *{}_{}_handler_code=R"CDATA({})CDATA";\n'.format(dt.id, op.name, op.send_handler))
 
-    dst.write("class {}_{}_Spec : public OutputPortImpl {{\n".format(dt.id,op.name))
-    dst.write('  public: {}_{}_Spec() : OutputPortImpl({}_Spec_get, "{}", {}, {}_Spec_get(), {}_{}_handler_code) {{}} \n'.format(dt.id,op.name, dt.id, op.name, index, op.message_type.id, dt.id, op.name))
+    dst.write("class {}_{}_Spec : public OutputPinImpl {{\n".format(dt.id,op.name))
+    dst.write('  public: {}_{}_Spec() : OutputPinImpl({}_Spec_get, "{}", {}, {}_Spec_get(), {}_{}_handler_code) {{}} \n'.format(dt.id,op.name, dt.id, op.name, index, op.message_type.id, dt.id, op.name))
     dst.write("""    virtual void onSend(
                       OrchestratorServices *orchestrator,
                       const typed_data_t *gGraphProperties,
@@ -468,8 +468,8 @@ def render_output_port_as_cpp(op,dst):
 
     dst.write('  }\n')
     dst.write("};\n")
-    dst.write("OutputPortPtr {}_{}_Spec_get(){{\n".format(dt.id,op.name))
-    dst.write("  static OutputPortPtr singleton(new {}_{}_Spec);\n".format(dt.id,op.name))
+    dst.write("OutputPinPtr {}_{}_Spec_get(){{\n".format(dt.id,op.name))
+    dst.write("  static OutputPinPtr singleton(new {}_{}_Spec);\n".format(dt.id,op.name))
     dst.write("  return singleton;\n")
     dst.write("}\n")
 
@@ -504,16 +504,16 @@ def render_device_type_as_cpp(dt,dst):
     dst.write("DeviceTypePtr {}_Spec_get();\n".format(dt.id))
 
     for ip in dt.inputs.values():
-        render_input_port_as_cpp(ip,dst)
+        render_input_pin_as_cpp(ip,dst)
 
     for op in dt.outputs.values():
-        render_output_port_as_cpp(op,dst)
+        render_output_pin_as_cpp(op,dst)
 
     dst.write("class {}_Spec : public DeviceTypeImpl {{\n".format(dt.id))
     dst.write("public:\n")
     dst.write("  {}_Spec()\n".format(dt.id))
     dst.write('  : DeviceTypeImpl("{}", {}_properties_t_Spec_get(), {}_state_t_Spec_get(),\n'.format(dt.id, dt.id, dt.id))
-    dst.write('      std::vector<InputPortPtr>({')
+    dst.write('      std::vector<InputPinPtr>({')
     first=True
     for i in dt.inputs_by_index:
         if first:
@@ -522,7 +522,7 @@ def render_device_type_as_cpp(dt,dst):
             dst.write(',')
         dst.write('{}_{}_Spec_get()'.format(dt.id,i.name))
     dst.write('}),\n')
-    dst.write('      std::vector<OutputPortPtr>({')
+    dst.write('      std::vector<OutputPinPtr>({')
     first=True
     for o in dt.outputs_by_index:
         if first:

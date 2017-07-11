@@ -81,20 +81,20 @@ struct QueueSim
   struct edge_t
   {
     device_t *device;
-    InputPortPtr port;
+    InputPinPtr pin;
     TypedDataPtr state;
     TypedDataPtr properties;
-    const char *portName;
-    const char *endpointName; // Endpoint name in id:port format. Probably a waste of memory, shoudl construct on the fly
+    const char *pinName;
+    const char *endpointName; // Endpoint name in id:pin format. Probably a waste of memory, shoudl construct on the fly
   };
 
 
 
   
-  struct output_port_t
+  struct output_pin_t
   {
-    const char *id; // Name in id:port format. Probably a waste of memory, better to strcat in local buffer?
-    OutputPortPtr port;
+    const char *id; // Name in id:pin format. Probably a waste of memory, better to strcat in local buffer?
+    OutputPinPtr pin;
     TypedDataSpecPtr spec; // Used to allocate messages
     std::vector<edge_bundle_id_t> batches; // Bundle to deliver to each queue.
     std::vector<edge_t> local; // edges to deliver to this queue
@@ -138,7 +138,7 @@ struct QueueSim
     uint32_t rtsFlags;
 
     unsigned outputCount;
-    std::vector<output_port_t> outputs;
+    std::vector<output_pin_t> outputs;
     
     // Each device is threaded onto a free list so that we can find
     // devices ready to send in O(1) time
@@ -158,7 +158,7 @@ struct QueueSim
     
     unsigned index; // Unique index of the queue
 
-    // Maps "sourceDevice:outputPort" -> bundleId
+    // Maps "sourceDevice:outputPin" -> bundleId
     std::unordered_map< const char* , unsigned > findBatchId;
     std::vector<edge_bundle_t> edge_bundles; // Batches of places to deliver messages to
 
@@ -366,9 +366,9 @@ struct QueueSim
 	for(edge_t &e : edges){
 	  device_t *device=e.device;
 
-	  services.setReceiver(device->id, e.portName);
+	  services.setReceiver(device->id, e.pinName);
 	  
-	  e.port->onReceive(&services, graphPropertiesPtr,
+	  e.pin->onReceive(&services, graphPropertiesPtr,
 			  device->properties.get(), device->state.get(),
 			  e.properties.get(), e.state.get(),
 			  message.get()
@@ -404,11 +404,11 @@ struct QueueSim
       assert(device->readyIndex < (int)device->outputs.size());
       auto &output=device->outputs[device->readyIndex];
 
-      SendOrchestratorServicesImpl services(logLevel, stderr, device->id, output.port->getName().c_str());
+      SendOrchestratorServicesImpl services(logLevel, stderr, device->id, output.pin->getName().c_str());
 
       TypedDataPtr message=output.spec->create();
       bool doSend=true;
-      output.port->onSend(&services, parent->m_graphProperties.get(), device->properties.get(), device->state.get(), message.get(), &doSend);
+      output.pin->onSend(&services, parent->m_graphProperties.get(), device->properties.get(), device->state.get(), message.get(), &doSend);
 
       if(logLevel>3){
         fprintf(stderr, "  Send %s\n", device->id);
@@ -649,11 +649,11 @@ struct QueueSim
       d.outputCount=dt->getOutputCount();
       d.rtsFlags=0;
       for(unsigned i=0; i<d.outputCount; i++){
-	output_port_t out;
-	out.port=dt->getOutput(i);
-	std::string pid=id+":"+out.port->getName();
+	output_pin_t out;
+	out.pin=dt->getOutput(i);
+	std::string pid=id+":"+out.pin->getName();
 	out.id=intern(pid.c_str());
-	out.spec=out.port->getMessageType()->getMessageSpec();
+	out.spec=out.pin->getMessageType()->getMessageSpec();
 	d.outputs.push_back(out);
       }
       d.readyIndex=-1;
@@ -679,7 +679,7 @@ struct QueueSim
     return index;
   }
 
-  void onEdgeInstance(uint64_t gId, uint64_t dstDevIndex, const DeviceTypePtr &dstDevType, const InputPortPtr &dstInput, uint64_t srcDevIndex, const DeviceTypePtr &srcDevType, const OutputPortPtr &srcOutput, const TypedDataPtr &properties) override
+  void onEdgeInstance(uint64_t gId, uint64_t dstDevIndex, const DeviceTypePtr &dstDevType, const InputPinPtr &dstInput, uint64_t srcDevIndex, const DeviceTypePtr &srcDevType, const OutputPinPtr &srcOutput, const TypedDataPtr &properties) override
   {
     device_t *dstDevice=m_devices.at(dstDevIndex);
     device_t *srcDevice=m_devices.at(srcDevIndex);
@@ -689,16 +689,16 @@ struct QueueSim
     
     edge_t edge;
     edge.endpointName=dstEp;
-    edge.portName=intern(dstInput->getName());
+    edge.pinName=intern(dstInput->getName());
     edge.device=dstDevice;
-    edge.port=dstInput;
+    edge.pin=dstInput;
     edge.state=dstInput->getStateSpec()->create();
     edge.properties=properties;
 
     unsigned dstQueue=dstDevice->owner;
     unsigned srcQueue=srcDevice->owner;
 
-    output_port_t &out=srcDevice->outputs[srcOutput->getIndex()];
+    output_pin_t &out=srcDevice->outputs[srcOutput->getIndex()];
     
     if(dstQueue==srcQueue){
       // local

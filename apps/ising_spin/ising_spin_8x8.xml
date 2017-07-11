@@ -1,5 +1,5 @@
 <?xml version='1.0' encoding='ASCII'?>
-<Graphs xmlns="http://TODO.org/POETS/virtual-graph-schema-v1">
+<Graphs xmlns="https://poets-project.org/schemas/virtual-graph-schema-v2">
   <GraphType id="ising_spin">
     <Properties>
       <Scalar name="endTime" type="float" default="10.0"/>
@@ -75,7 +75,7 @@
           <Scalar name="lastFlipTime" type="float"/>
           <Scalar name="rts" type="uint32_t"/>
         </State>
-        <InputPort name="__init__" messageTypeId="__init__">
+        <InputPin name="__init__" messageTypeId="__init__">
           <OnReceive><![CDATA[
 	  // Initialise RNG and choose random starting spin
 	  uint32_t seed;
@@ -121,15 +121,15 @@
 	  }
 	  
 	  ]]></OnReceive>
-        </InputPort>
-        <InputPort name="__print__" messageTypeId="__print__">
+        </InputPin>
+        <InputPin name="__print__" messageTypeId="__print__">
           <OnReceive><![CDATA[
 	  handler_log(0, "ready=%x, times={%g,%g,%g,%g,%g}",
 	    deviceState->rts,
 	    deviceState->times[0], deviceState->times[1], deviceState->times[2], deviceState->times[3], deviceState->times[4]);
 	  ]]></OnReceive>
-        </InputPort>
-        <InputPort name="in" messageTypeId="update">
+        </InputPin>
+        <InputPin name="in" messageTypeId="update">
           <Properties>
             <Scalar name="direction" type="uint32_t"/>
           </Properties>
@@ -155,8 +155,8 @@
 	  }
 
 	  ]]></OnReceive>
-        </InputPort>
-        <OutputPort name="out" messageTypeId="update">
+        </InputPin>
+        <OutputPin name="out" messageTypeId="update">
           <OnSend><![CDATA[
 	  deviceState->rts=0;
 	  
@@ -188,7 +188,7 @@
 	    }
 	    handler_log(3, "sendAgain = %x\n", deviceState->rts);
 	  ]]></OnSend>
-        </OutputPort>
+        </OutputPin>
         <ReadyToSend><![CDATA[
 	*readyToSend = deviceState->rts;
 	]]></ReadyToSend>

@@ -146,7 +146,7 @@ def extractSnapshotInstances(graphInstances,src,sink):
 
             for ei in gi.edge_instances.values():
                 et=gi.edge_instances[ei.id].message_type
-                dt=gi.edge_instances[ei.id].dst_port
+                dt=gi.edge_instances[ei.id].dst_pin
                 val=self.edgeStates[ei.id]
                 if dt.state and not val[0]:
                     assert(val[1]==0 and val[2]==[]) # Must not have seen firings or messages if we didn't get state
@@ -168,9 +168,9 @@ def extractSnapshotInstances(graphInstances,src,sink):
 
         def onEdgeInstance(self,id,state,firings,messages):
             edgeType=self.selGraphInstance.edge_instances[id].message_type
-            dstPort=self.selGraphInstance.edge_instances[id].dst_port
+            dstPin=self.selGraphInstance.edge_instances[id].dst_pin
             messages=[expand_typed_data(edgeType.message_type, msg) for msg in messages]
-            self.edgeStates[id]=(expand_typed_data(dstPort.state,state),firings,messages)
+            self.edgeStates[id]=(expand_typed_data(dstPin.state,state),firings,messages)
 
     events=SnapshotReaderEventsUpdate(graphInstances,sink)
     parseSnapshot(src,events)

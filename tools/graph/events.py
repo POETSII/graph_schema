@@ -46,25 +46,25 @@ class MessageEvent(DeviceEvent):
     def __init__(self,
         eventId:str, time:float, elapsed:float,
         dev:str, rts:int, seq:int, L:List[str], S:Optional[dict],
-        port:str
+        pin:str
     ):
         DeviceEvent.__init__(self,
             eventId,time,elapsed,
             dev, rts, seq, L, S
         )
-        self.port=port
+        self.pin=pin
         
 class SendEvent(DeviceEvent):
     def __init__(self,
         eventId:str, time:float, elapsed:float,
         dev:str, rts:int, seq:int, L:List[str], S:Optional[dict],
-        port:str,
+        pin:str,
         cancel:bool, fanout:int, M:Optional[dict]
     ):
         MessageEvent.__init__(self,
             eventId,time,elapsed,
             dev, rts, seq, L, S,
-            port
+            pin
         )
         self.cancel=cancel
         self.fanout=fanout
@@ -75,13 +75,13 @@ class RecvEvent(DeviceEvent):
     def __init__(self,
         eventId:str, time:float, elapsed:float,
         dev:str, rts:int, seq:int, L:List[str], S:Optional[dict],
-        port:str,
+        pin:str,
         sendEventId:str
     ):
         MessageEvent.__init__(self,
             eventId,time,elapsed,
             dev, rts, seq, L, S,
-            port
+            pin
         )
         self.sendEventId=sendEventId
         self.type="recv"
@@ -138,7 +138,7 @@ def extractSendEvent(n,writer):
     if S is not None and S.text is not None:
         S=json.loads("{"+S.text+"}")
         
-    port=get_attrib(n,"port")
+    pin=get_attrib(n,"pin")
     cancel=bool(get_attrib(n,"cancel"))
     fanout=int(get_attrib(n,"fanout"))
     
@@ -149,7 +149,7 @@ def extractSendEvent(n,writer):
     writer.onSendEvent( SendEvent(
         eventId, time, elapsed,
         dev, rts, seq, L, S,
-        port,
+        pin,
         cancel, fanout, M
     ) )
 
@@ -169,13 +169,13 @@ def extractRecvEvent(n,writer):
     if S is not None and S.text is not None:
         S=json.loads("{"+S.text+"}")
         
-    port=get_attrib(n,"port")
+    pin=get_attrib(n,"pin")
     sendEventId=get_attrib(n,"sendEventId")
     
     writer.onRecvEvent( RecvEvent(
         eventId, time, elapsed,
         dev, rts, seq, L, S,
-        port,
+        pin,
         sendEventId
     ) )
 

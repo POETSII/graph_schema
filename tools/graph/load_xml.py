@@ -7,7 +7,7 @@ import os
 import sys
 import json
 
-ns={"p":"http://TODO.org/POETS/virtual-graph-schema-v1"}
+ns={"p":"https://poets-project.org/schemas/virtual-graph-schema-v2"}
 
 def deNS(t):
     tt=t.replace("{"+ns["p"]+"}","p:")
@@ -145,7 +145,7 @@ def load_device_type(graph,dtNode,sourceFile):
 
     dt=DeviceType(graph,id,properties,state,metadata,shared_code)
 
-    for p in dtNode.findall("p:InputPort",ns):
+    for p in dtNode.findall("p:InputPin",ns):
         name=get_attrib(p,"name")
         message_type_id=get_attrib(p,"messageTypeId")
         if message_type_id not in graph.message_types:
@@ -174,7 +174,7 @@ def load_device_type(graph,dtNode,sourceFile):
         dt.add_input(name,message_type,properties,state,pinMetadata, handler,sourceFile,sourceLine)
         sys.stderr.write("      Added input {}\n".format(name))
 
-    for p in dtNode.findall("p:OutputPort",ns):
+    for p in dtNode.findall("p:OutputPin",ns):
         name=get_attrib(p,"name")
         message_type_id=get_attrib(p,"messageTypeId")
         if message_type_id not in graph.message_types:
@@ -270,7 +270,7 @@ def split_endpoint(endpoint,node):
 
 
 def split_path(path,node):
-    """Splits a path up into (dstDevice,dstPort,srcDevice,srcPort)"""
+    """Splits a path up into (dstDevice,dstPin,srcDevice,srcPin)"""
     parts=path.split('-')
     if len(parts)!=2:
         raise XMLSyntaxError("Path does not contain exactly two endpoints",node)
@@ -279,29 +279,29 @@ def split_path(path,node):
 def load_edge_instance(graph,eiNode):
     path=get_attrib_optional(eiNode,"path")
     if path:
-        (dst_device_id,dst_port_name,src_device_id,src_port_name)=split_path(path,eiNode)
+        (dst_device_id,dst_pin_name,src_device_id,src_pin_name)=split_path(path,eiNode)
     else:
         dst_device_id=get_attrib(eiNode,"dstDeviceId")
-        dst_port_name=get_attrib(eiNode,"dstPortName")
+        dst_pin_name=get_attrib(eiNode,"dstPinName")
         src_device_id=get_attrib(eiNode,"srcDeviceId")
-        src_port_name=get_attrib(eiNode,"srcPortName")
+        src_pin_name=get_attrib(eiNode,"srcPinName")
     
     dst_device=graph.device_instances[dst_device_id]
     src_device=graph.device_instances[src_device_id]
     
-    assert dst_port_name in dst_device.device_type.inputs, "Couldn't find input port called '{}' in device type '{}'. Inputs are [{}]".format(dst_port_name,dst_device.device_type.id, [p.name for p in dst_device.device_type.inputs])
-    assert src_port_name in src_device.device_type.outputs
+    assert dst_pin_name in dst_device.device_type.inputs, "Couldn't find input pin called '{}' in device type '{}'. Inputs are [{}]".format(dst_pin_name,dst_device.device_type.id, [p.name for p in dst_device.device_type.inputs])
+    assert src_pin_name in src_device.device_type.outputs
     
 
     properties=None
     propertiesNode=eiNode.find("p:P",ns)
     if propertiesNode is not None:
-        spec=dst_device.device_type.inputs[dst_port_name].properties
+        spec=dst_device.device_type.inputs[dst_pin_name].properties
         properties=load_struct_instance(spec, propertiesNode)
 
     metadata=load_metadata(eiNode,"p:M")
 
-    return EdgeInstance(graph,dst_device,dst_port_name,src_device,src_port_name,properties,metadata)
+    return EdgeInstance(graph,dst_device,dst_pin_name,src_device,src_pin_name,properties,metadata)
 
 def load_graph_instance(graphTypes, graphNode):
     id=get_attrib(graphNode,"id")

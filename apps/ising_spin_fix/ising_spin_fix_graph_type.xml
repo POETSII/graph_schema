@@ -1,5 +1,5 @@
 <?xml version="1.0"?>
-<Graphs xmlns="http://TODO.org/POETS/virtual-graph-schema-v1">
+<Graphs xmlns="https://poets-project.org/schemas/virtual-graph-schema-v2">
   <GraphType id="ising_spin_fix">
     <!-- This is supposed to implement the method from [lubachevsky-87-asynchronous-ising-spin-models]:
 	 "Efficient Parallel Simulations of Asynchronous Cellular Arrays", 1987, Boris D. Lubachevsky
@@ -187,7 +187,7 @@
 		<Scalar name="tag" type="uint32_t" />
 	</State>
 
-	<InputPort name="__init__" messageTypeId="__init__">
+	<InputPin name="__init__" messageTypeId="__init__">
 	  <OnReceive><![CDATA[
 	  // Initialise RNG and choose random starting spin
 	  uint32_t seed;
@@ -225,17 +225,17 @@
 		handler_log(3, "tag=%u", deviceState->tag);
 	  ]]>
 	  </OnReceive>
-	</InputPort>
+	</InputPin>
 
-	<InputPort name="__print__" messageTypeId="__print__">
+	<InputPin name="__print__" messageTypeId="__print__">
 	  <OnReceive><![CDATA[
 	  handler_log(0, "isEarliest=%x, times={%u,%u,%u,%u,%u}",
 	    deviceState->isEarliest,
 	    deviceState->times[0], deviceState->times[1], deviceState->times[2], deviceState->times[3], deviceState->times[4]);
 	  ]]></OnReceive>
-	</InputPort>
+	</InputPin>
 
-	<InputPort name="in" messageTypeId="update">
+	<InputPin name="in" messageTypeId="update">
 	  <Properties>
 	    <Scalar type="uint32_t" name="direction" /> <!-- 1=Up, 2=Right, 3=Down, 4=Left -->
 	  </Properties>
@@ -264,9 +264,9 @@
 	handler_log(4, "isEarliest = %x, time=%u", deviceState->isEarliest, deviceState->times[0]);
 
 	  ]]></OnReceive>
-	</InputPort>
+	</InputPin>
 
-	<OutputPort name="out" messageTypeId="update">
+	<OutputPin name="out" messageTypeId="update">
 	  <OnSend><![CDATA[
 	        uint32_t nx, ny;
 
@@ -295,15 +295,15 @@
 		}
 		handler_log(3, "isEarliest = %x, time=%u, send-finished=%x", deviceState->isEarliest, deviceState->times[0], deviceState->times[0] >= graphProperties->endTime );
 	  ]]></OnSend>
-	</OutputPort>
+	</OutputPin>
 
 
-	<OutputPort name="finished" messageTypeId="finished">
+	<OutputPin name="finished" messageTypeId="finished">
 	  <OnSend><![CDATA[
 		deviceState->times[0] = 0xFFFFFFFFul;
 		handler_log(4, "Finshed");
 	  ]]></OnSend>
-	</OutputPort>
+	</OutputPin>
 
 	<ReadyToSend><![CDATA[
 	if(deviceState->times[0] == 0xFFFFFFFFul){
@@ -326,7 +326,7 @@
 				<Scalar name="seen" type="uint32_t" />
 			</State>
 
-			<InputPort name="finished" messageTypeId="finished">
+			<InputPin name="finished" messageTypeId="finished">
 				<OnReceive><![CDATA[
 				deviceState->seen++;
 				handler_log(2, "seenFinished = %u, wantFinished = %u", deviceState->seen, deviceProperties->fanin);
@@ -334,7 +334,7 @@
 					handler_exit(0);
 				}
 				]]></OnReceive>
-			</InputPort>
+			</InputPin>
 
 			<ReadyToSend><![CDATA[
 			*readyToSend = 0;

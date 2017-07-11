@@ -1,5 +1,5 @@
 <?xml version="1.0"?>
-<Graphs xmlns="http://TODO.org/POETS/virtual-graph-schema-v1">
+<Graphs xmlns="https://poets-project.org/schemas/virtual-graph-schema-v2">
 <GraphType id="amg">
 
 <SharedCode><![CDATA[
@@ -82,7 +82,7 @@
         handler_log(2, "root RTS : 0x%x", *readyToSend);
         ]]></ReadyToSend>
 
-        <InputPort name="fine_up" messageTypeId="fine_to_coarse">
+        <InputPin name="fine_up" messageTypeId="fine_to_coarse">
             <Properties>
                 <Scalar type="float" name="R" ><Documentation>The component of R for this edge.</Documentation></Scalar>
             </Properties>
@@ -93,9 +93,9 @@
             deviceState->fineMaxResidual = std::max(deviceState->fineMaxResidual, message->max_r);
             handler_log(3, "maxMaxResidual=%g", deviceState->fineMaxResidual);
             ]]></OnReceive>
-        </InputPort>
+        </InputPin>
 
-        <OutputPort name="fine_down" messageTypeId="coarse_to_fine">
+        <OutputPin name="fine_down" messageTypeId="coarse_to_fine">
             <OnSend><![CDATA[
             assert(deviceState->fineSeen == deviceProperties->fineTotal);
 
@@ -107,7 +107,7 @@
             deviceState->fineAcc=0;
             deviceState->fineMaxResidual=0;
             ]]></OnSend>
-        </OutputPort>
+        </OutputPin>
     </DeviceType>
 
     <DeviceType id="leaf">
@@ -176,7 +176,7 @@
         ]]></ReadyToSend>
 
 
-        <InputPort name="problem" messageTypeId="linear_problem">
+        <InputPin name="problem" messageTypeId="linear_problem">
             <OnReceive><![CDATA[
             assert(deviceState->state==State_Idle);
 
@@ -186,10 +186,10 @@
 
             deviceState->state=State_PreSmoothBegin;
             ]]></OnReceive>
-        </InputPort>
+        </InputPin>
 
 
-        <OutputPort name="peer_out" messageTypeId="jacobi_exchange">
+        <OutputPin name="peer_out" messageTypeId="jacobi_exchange">
             <OnSend><![CDATA[
             handler_log(3, "state=%d, coarseSeen=%d, coarseCount=%d", deviceState->state, deviceState->coarseSeen, deviceProperties->coarseCount);
             if(deviceState->state==State_PreSmoothBegin){
@@ -224,9 +224,9 @@
                 assert(0);
             }
             ]]></OnSend>
-        </OutputPort>
+        </OutputPin>
 
-        <InputPort name="peer_in" messageTypeId="jacobi_exchange">
+        <InputPin name="peer_in" messageTypeId="jacobi_exchange">
             <Properties>
                 <Scalar type="float" name="A" />
             </Properties>
@@ -249,10 +249,10 @@
                 assert(0);
             }
             ]]></OnReceive>
-        </InputPort>
+        </InputPin>
 
 
-        <OutputPort name="coarse_up" messageTypeId="fine_to_coarse">
+        <OutputPin name="coarse_up" messageTypeId="fine_to_coarse">
             <OnSend><![CDATA[
             assert(deviceState->state==State_PreSmoothEnd);
             assert(deviceState->preSmoothSeen ==deviceProperties->peerCount);
@@ -269,9 +269,9 @@
 
             handler_log(3, "state=%d, msg={b=%g,r=%g}", r, r);
             ]]></OnSend>
-        </OutputPort>
+        </OutputPin>
 
-        <InputPort name="coarse_down" messageTypeId="coarse_to_fine">
+        <InputPin name="coarse_down" messageTypeId="coarse_to_fine">
             <Properties>
                 <Scalar type="float" name="P" />
             </Properties>
@@ -291,10 +291,10 @@
 
             handler_log(3, "state=%d, coarseSeen=%d, coarseCount=%d", deviceState->state, deviceState->coarseSeen, deviceProperties->coarseCount);
             ]]></OnReceive>
-        </InputPort>
+        </InputPin>
 
 
-        <OutputPort name="solution" messageTypeId="linear_solution">
+        <OutputPin name="solution" messageTypeId="linear_solution">
             <OnSend><![CDATA[
             assert(deviceState->state==State_PostSmoothEnd);
 
@@ -307,7 +307,7 @@
 
             deviceState->state=State_Idle;
             ]]></OnSend>
-        </OutputPort>
+        </OutputPin>
 
 
     </DeviceType>
@@ -331,7 +331,7 @@
         ]]></ReadyToSend>
 
 
-        <OutputPort name="problem" messageTypeId="linear_problem">
+        <OutputPin name="problem" messageTypeId="linear_problem">
             <OnSend><![CDATA[
             assert((deviceState->i&1)==0);
             assert(deviceState->i<16);
@@ -340,9 +340,9 @@
             message->b = deviceProperties->b[deviceState->i];
             deviceState->i++;
             ]]></OnSend>
-        </OutputPort>
+        </OutputPin>
 
-       <InputPort name="solution" messageTypeId="linear_solution">
+       <InputPin name="solution" messageTypeId="linear_solution">
             <OnReceive><![CDATA[
             assert((deviceState->i&1)==1);
             assert(deviceState->i<16);
@@ -359,7 +359,7 @@
 
             deviceState->i++;
             ]]></OnReceive>
-        </InputPort>
+        </InputPin>
     </DeviceType>
 
 </DeviceTypes>

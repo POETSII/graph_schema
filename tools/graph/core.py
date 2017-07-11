@@ -193,7 +193,7 @@ class MessageType(object):
         self.metadata=metadata
 
 
-class Port(object):
+class Pin(object):
     def __init__(self,parent,name,message_type,metadata,source_file,source_line):
         self.parent=parent
         self.name=name
@@ -203,16 +203,16 @@ class Port(object):
         self.source_line=source_line
 
 
-class InputPort(Port):
+class InputPin(Pin):
     def __init__(self,parent,name,message_type,properties,state,metadata,receive_handler,source_file=None,source_line=None):
-        Port.__init__(self,parent,name,message_type,metadata,source_file,source_line)
+        Pin.__init__(self,parent,name,message_type,metadata,source_file,source_line)
         self.properties=properties
         self.state=state
         self.receive_handler=receive_handler
 
-class OutputPort(Port):
+class OutputPin(Pin):
     def __init__(self,parent,name,message_type,metadata,send_handler,source_file,source_line):
-        Port.__init__(self,parent,name,message_type,metadata,source_file,source_line)
+        Pin.__init__(self,parent,name,message_type,metadata,source_file,source_line)
         self.send_handler=send_handler
 
 
@@ -226,33 +226,33 @@ class DeviceType(object):
         self.inputs_by_index=[]
         self.outputs={}
         self.outputs_by_index=[]
-        self.ports={}
+        self.pins={}
         self.metadata=metadata
         self.shared_code=shared_code
 
     def add_input(self,name,message_type,properties,state,metadata,receive_handler,source_file=None,source_line={}):
-        if name in self.ports:
-            raise GraphDescriptionError("Duplicate port {} on device type {}".format(name,self.id))
+        if name in self.pins:
+            raise GraphDescriptionError("Duplicate pin {} on device type {}".format(name,self.id))
         if message_type.id not in self.parent.message_types:
-            raise GraphDescriptionError("Unregistered message type {} on port {} of device type {}".format(message_type.id,name,self.id))
+            raise GraphDescriptionError("Unregistered message type {} on pin {} of device type {}".format(message_type.id,name,self.id))
         if message_type != self.parent.message_types[message_type.id]:
-            raise GraphDescriptionError("Incorrect message type object {} on port {} of device type {}".format(message_type.id,name,self.id))
-        p=InputPort(self, name, self.parent.message_types[message_type.id], properties, state, metadata, receive_handler, source_file, source_line)
+            raise GraphDescriptionError("Incorrect message type object {} on pin {} of device type {}".format(message_type.id,name,self.id))
+        p=InputPin(self, name, self.parent.message_types[message_type.id], properties, state, metadata, receive_handler, source_file, source_line)
         self.inputs[name]=p
         self.inputs_by_index.append(p)
-        self.ports[name]=p
+        self.pins[name]=p
 
     def add_output(self,name,message_type,metadata,send_handler,source_file=None,source_line=None):
-        if name in self.ports:
-            raise GraphDescriptionError("Duplicate port {} on device type {}".format(name,self.id))
+        if name in self.pins:
+            raise GraphDescriptionError("Duplicate pin {} on device type {}".format(name,self.id))
         if message_type.id not in self.parent.message_types:
-            raise GraphDescriptionError("Unregistered message type {} on port {} of device type {}".format(message_type.id,name,self.id))
+            raise GraphDescriptionError("Unregistered message type {} on pin {} of device type {}".format(message_type.id,name,self.id))
         if message_type != self.parent.message_types[message_type.id]:
-            raise GraphDescriptionError("Incorrect message type object {} on port {} of device type {}".format(message_type.id,name,self.id))
-        p=OutputPort(self, name, self.parent.message_types[message_type.id], metadata, send_handler, source_file, source_line)
+            raise GraphDescriptionError("Incorrect message type object {} on pin {} of device type {}".format(message_type.id,name,self.id))
+        p=OutputPin(self, name, self.parent.message_types[message_type.id], metadata, send_handler, source_file, source_line)
         self.outputs[name]=p
         self.outputs_by_index.append(p)
-        self.ports[name]=p
+        self.pins[name]=p
 
 
 class GraphType(object):
@@ -322,30 +322,30 @@ class DeviceInstance(object):
 
 
 class EdgeInstance(object):
-    def __init__(self,parent,dst_device,dst_port_name,src_device,src_port_name,properties=None,metadata=None):
+    def __init__(self,parent,dst_device,dst_pin_name,src_device,src_pin_name,properties=None,metadata=None):
         self.parent=parent
 
-        if dst_port_name not in dst_device.device_type.inputs:
-            raise GraphDescriptionError("Port '{}' does not exist on dest device type '{}'".format(dst_port_name,dst_device.device_type.id))
-        if src_port_name not in src_device.device_type.outputs:
-            raise GraphDescriptionError("Port '{}' does not exist on src device type '{}'".format(src_port_name,src_device.device_type.id))
+        if dst_pin_name not in dst_device.device_type.inputs:
+            raise GraphDescriptionError("Pin '{}' does not exist on dest device type '{}'".format(dst_pin_name,dst_device.device_type.id))
+        if src_pin_name not in src_device.device_type.outputs:
+            raise GraphDescriptionError("Pin '{}' does not exist on src device type '{}'".format(src_pin_name,src_device.device_type.id))
 
-        dst_port=dst_device.device_type.inputs[dst_port_name]
-        src_port=src_device.device_type.outputs[src_port_name]
+        dst_pin=dst_device.device_type.inputs[dst_pin_name]
+        src_pin=src_device.device_type.outputs[src_pin_name]
 
-        if dst_port.message_type != src_port.message_type:
-            raise GraphDescriptionError("Dest port has type {}, source port type {}".format(dst_port.id,src_port.id))
+        if dst_pin.message_type != src_pin.message_type:
+            raise GraphDescriptionError("Dest pin has type {}, source pin type {}".format(dst_pin.id,src_pin.id))
 
-        if not is_refinement_compatible(dst_port.properties,properties):
-            raise GraphDescriptionError("Properties are not compatible: proto={}, value={}.".format(dst_port.properties, properties))
+        if not is_refinement_compatible(dst_pin.properties,properties):
+            raise GraphDescriptionError("Properties are not compatible: proto={}, value={}.".format(dst_pin.properties, properties))
 
-        self.id = dst_device.id+":"+dst_port_name+"-"+src_device.id+":"+src_port_name
+        self.id = dst_device.id+":"+dst_pin_name+"-"+src_device.id+":"+src_pin_name
 
         self.dst_device=dst_device
         self.src_device=src_device
-        self.message_type=dst_port.message_type
-        self.dst_port=dst_port
-        self.src_port=src_port
+        self.message_type=dst_pin.message_type
+        self.dst_pin=dst_pin
+        self.src_pin=src_pin
         self.properties=properties
         self.metadata=metadata
 
@@ -365,7 +365,7 @@ class GraphInstance:
         pass
 
     def _validate_device_type(self,dt):
-        for p in dt.ports.values():
+        for p in dt.pins.values():
             if p.message_type.id not in self.graph_type.message_types:
                 raise GraphDescriptionError("DeviceType uses an message type that is uknown.")
             if p.message_type != self.graph_type.message_types[p.message_type.id]:
@@ -408,15 +408,15 @@ class GraphInstance:
         self.edge_instances[ei.id]=ei
         
         
-    #~ def add_reduction(self,dstDevInst,dstPortName,reducerFactory,maxFanIn,srcInstances,srcPortName):
+    #~ def add_reduction(self,dstDevInst,dstPinName,reducerFactory,maxFanIn,srcInstances,srcPinName):
         #~ """Adds a reduction via a tree of reduction nodes.
         
             #~ dstDevInst : the (already constructed) destination node
-            #~ dstPortName : output port name for the destination _and_ the input port for reducers
+            #~ dstPinName : output pin name for the destination _and_ the input pin for reducers
             #~ reducerFactor : a functor from (name,faninCount) -> deviceInstance
             #~ maxFanIn : largest acceptable fanin at any level of tree
             #~ srcInstances: Array of source instances
-            #~ srcPortName : output port name for the sources _and_ the output port for reducers
+            #~ srcPinName : output pin name for the sources _and_ the output pin for reducers
         
         #~ """
         

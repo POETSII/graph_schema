@@ -48,7 +48,7 @@ methods for parabolic PDEs on multiprocessors *",
 	  <Scalar type="float" name="value" />
 	</State>
 
-	<InputPort name="__init__" edgeTypeId="__init__">
+	<InputPin name="__init__" edgeTypeId="__init__">
 	  <OnReceive><![CDATA[
 	  deviceState->time=0;
 	  deviceState->value=deviceProperties->bias + deviceProperties->amplitude
@@ -58,16 +58,16 @@ methods for parabolic PDEs on multiprocessors *",
 
 	  requestSend_out = true;
 	  ]]></OnReceive>
-	</InputPort>
+	</InputPin>
 
-	<InputPort name="in" edgeTypeId="update">
+	<InputPin name="in" edgeTypeId="update">
 	  <OnReceive><![CDATA[
 	  deviceState->time = message->time;
 	  requestSend_out = true;
 	  ]]></OnReceive>
-	</InputPort>
+	</InputPin>
 
-	<OutputPort name="out" edgeTypeId="update">
+	<OutputPin name="out" edgeTypeId="update">
 	  <OnSend><![CDATA[
 
 	  deviceState->time += graphProperties->dt;
@@ -80,7 +80,7 @@ methods for parabolic PDEs on multiprocessors *",
 	    requestSend_out = false;
 	  }
 	  ]]></OnSend>
-	</OutputPort>
+	</OutputPin>
       </DeviceType>
 
       <DeviceType id="cell">
@@ -94,7 +94,7 @@ methods for parabolic PDEs on multiprocessors *",
 	  <Array type="float" name="t" length="5" />
 	</State>
 
-	<InputPort name="__init__" edgeTypeId="__init__">
+	<InputPin name="__init__" edgeTypeId="__init__">
 	  <OnReceive><![CDATA[
 	  deviceState->u[0] = deviceProperties->initValue;
 	  deviceState->t[0] = dt;
@@ -105,9 +105,9 @@ methods for parabolic PDEs on multiprocessors *",
 
 	  requestSend_out=true;
 	  ]]></OnReceive>
-	</InputPort>
+	</InputPin>
 
-	<InputPort name="in" edgeTypeId="update">
+	<InputPin name="in" edgeTypeId="update">
 	  <OnReceive><![CDATA[
 
         auto index=edgeProperties->index;
@@ -118,9 +118,9 @@ methods for parabolic PDEs on multiprocessors *",
 
 	    requestSend_out = true;
 	  ]]></OnReceive>
-	</InputPort>
+	</InputPin>
 
-	<OutputPort name="out" edgeTypeId="update">
+	<OutputPin name="out" edgeTypeId="update">
 	  <OnSend><![CDATA[
 
 	  if(deviceState->t[0] > graphProperties->tStop){
@@ -137,7 +137,7 @@ methods for parabolic PDEs on multiprocessors *",
 	    requestSend_out = true;
 	  }
 	  ]]></OnSend>
-	</OutputPort>
+	</OutputPin>
       </DeviceType>
     </DeviceTypes>
   </GraphType>

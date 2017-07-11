@@ -161,8 +161,8 @@ public:
   virtual void onEdgeInstance
   (
    uint64_t graphInst,
-   uint64_t dstDevInst, const DeviceTypePtr &dstDevType, const InputPortPtr &dstPort,
-   uint64_t srcDevInst,  const DeviceTypePtr &srcDevType, const OutputPortPtr &srcPort,
+   uint64_t dstDevInst, const DeviceTypePtr &dstDevType, const InputPinPtr &dstPin,
+   uint64_t srcDevInst,  const DeviceTypePtr &srcDevType, const OutputPinPtr &srcPin,
    const TypedDataPtr &properties
   ) {
     throw std::runtime_error("onEdgeInstance not implemented.");
@@ -175,12 +175,12 @@ public:
   virtual void onEdgeInstance
   (
    uint64_t graphInst,
-   uint64_t dstDevInst, const DeviceTypePtr &dstDevType, const InputPortPtr &dstPort,
-   uint64_t srcDevInst,  const DeviceTypePtr &srcDevType, const OutputPortPtr &srcPort,
+   uint64_t dstDevInst, const DeviceTypePtr &dstDevType, const InputPinPtr &dstPin,
+   uint64_t srcDevInst,  const DeviceTypePtr &srcDevType, const OutputPinPtr &srcPin,
    const TypedDataPtr &properties,
    rapidjson::Document &&metadata
   ) {
-    onEdgeInstance(graphInst, dstDevInst, dstDevType, dstPort, srcDevInst, srcDevType, srcPort, properties);
+    onEdgeInstance(graphInst, dstDevInst, dstDevType, dstPin, srcDevInst, srcDevType, srcPin, properties);
   }
 };
 

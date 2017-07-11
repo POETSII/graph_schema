@@ -38,8 +38,8 @@ private:
         cost_t weight; // Weight, e.g. due to reduced communication frequency
         node_t *src; // Weak (non-owning) pointers
         node_t *dst;
-        OutputPortPtr srcPort;
-        InputPortPtr dstPort;
+        OutputPinPtr srcPin;
+        InputPinPtr dstPin;
         TypedDataPtr properties;
         rapidjson::Document metadata;
     };
@@ -172,15 +172,15 @@ private:
 
     virtual void onEdgeInstance(
         uint64_t gId,
-        uint64_t dstDevInst, const DeviceTypePtr &dstDevType, const InputPortPtr &dstPort,
-        uint64_t srcDevInst,  const DeviceTypePtr &srcDevType, const OutputPortPtr &srcPort,
+        uint64_t dstDevInst, const DeviceTypePtr &dstDevType, const InputPinPtr &dstPin,
+        uint64_t srcDevInst,  const DeviceTypePtr &srcDevType, const OutputPinPtr &srcPin,
         const TypedDataPtr &properties,
         rapidjson::Document &&metadata
     ) override
     {
         //std::cerr<<"Edge : "<<srcDevInst<<" -> "<<dstDevInst<<"\n";
 
-        auto weight=calcEdgeWeight(dstPort->getMessageType(), properties);
+        auto weight=calcEdgeWeight(dstPin->getMessageType(), properties);
 
         node_t *src=m_nodes.at(srcDevInst).get();
         node_t *dst=m_nodes.at(dstDevInst).get();
@@ -188,7 +188,7 @@ private:
         if(src==dst)
             return;
 
-        m_edges.push_back(std::make_shared<edge_t>(edge_t{weight,src,dst,srcPort,dstPort,properties,std::move(metadata)}));
+        m_edges.push_back(std::make_shared<edge_t>(edge_t{weight,src,dst,srcPin,dstPin,properties,std::move(metadata)}));
         auto e=m_edges.back();
         src->outputs.push_back(e);
         dst->inputs.push_back(e);
@@ -453,8 +453,8 @@ public:
         dst->onBeginEdgeInstances(gId);
         for(auto e : m_edges){
             dst->onEdgeInstance(gId, 
-                nHandles[e->dst->index], e->dst->deviceType, e->dstPort,
-                nHandles[e->src->index], e->src->deviceType, e->srcPort,
+                nHandles[e->dst->index], e->dst->deviceType, e->dstPin,
+                nHandles[e->src->index], e->src->deviceType, e->srcPin,
                 e->properties,
                 std::move(e->metadata)
             );

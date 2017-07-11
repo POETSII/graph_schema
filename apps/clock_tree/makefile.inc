@@ -11,7 +11,7 @@ demos/clock_tree/clock_tree_$1.xml : apps/clock_tree/create_clock_tree_instance.
 	mkdir -p $$(dir $$@)
 	$$(PYTHON) apps/clock_tree/create_clock_tree_instance.py  $$(subst _, ,$1) > $$@
 
-demos/clock_tree/clock_tree_$1.snap : demos/clock_tree/clock_tree_$1.xml bin/epoch_sim clock_tree_provider demos/clock_tree/clock_tree_$1.checked
+demos/clock_tree/clock_tree_$1.snap : demos/clock_tree/clock_tree_$1.xml bin/epoch_sim providers/clock_tree.graph.so demos/clock_tree/clock_tree_$1.checked
 	bin/epoch_sim  --log-level 0 --max-steps $2 --snapshots 1 $$@  demos/clock_tree/clock_tree_$1.xml
 
 ALL_CLOCK_TREE_TESTS += demos/clock_tree/clock_tree_$1.snap
@@ -40,7 +40,7 @@ $(eval $(call softswitch_instance_template,clock_tree_$1,demos/clock_tree/clock_
 endef
 
 CLOCK_TREE_FILTERS = \
-	--bind-dev "branch" "state" "pending" "color" "blend_colors( (255,255,0), (255,0,255), 0, 2, value)" \
+	--bind-dev "branch" "state" "status" "color" "'gray' if value==0 else 'green' if value==1 else 'red'" \
 	--bind-dev "leaf" "rts" "-" "color" "'red' if value>0 else 'green'" \
 
 $(eval $(call clock_tree_instance_template,8_3,50,$(CLOCK_TREE_FILTERS)))

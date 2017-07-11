@@ -31,8 +31,8 @@ struct EpochSim
   struct output
   {
     unsigned dstDevice;
-    unsigned dstPortIndex;
-    unsigned dstPortSlot; // This is the actual landing zone within the destination, i.e. where the state is
+    unsigned dstPinIndex;
+    unsigned dstPinSlot; // This is the actual landing zone within the destination, i.e. where the state is
     const char *dstDeviceId;
     const char *dstInputName;
   };
@@ -122,7 +122,7 @@ struct EpochSim
     return d.index;
   }
 
-  void onEdgeInstance(uint64_t gId, uint64_t dstDevIndex, const DeviceTypePtr &dstDevType, const InputPortPtr &dstInput, uint64_t srcDevIndex, const DeviceTypePtr &srcDevType, const OutputPortPtr &srcOutput, const TypedDataPtr &properties) override
+  void onEdgeInstance(uint64_t gId, uint64_t dstDevIndex, const DeviceTypePtr &dstDevType, const InputPinPtr &dstInput, uint64_t srcDevIndex, const DeviceTypePtr &srcDevType, const OutputPinPtr &srcOutput, const TypedDataPtr &properties) override
   {
     input i;
     i.properties=properties;
@@ -130,13 +130,13 @@ struct EpochSim
     i.firings=0;
     i.id=intern( m_devices.at(dstDevIndex).id + ":" + dstInput->getName() + "-" + m_devices.at(srcDevIndex).id+":"+srcOutput->getName() );
     auto &slots=m_devices.at(dstDevIndex).inputs.at(dstInput->getIndex());
-    unsigned dstPortSlot=slots.size();
+    unsigned dstPinSlot=slots.size();
     slots.push_back(i);
 
     output o;
     o.dstDevice=dstDevIndex;
-    o.dstPortIndex=dstInput->getIndex();
-    o.dstPortSlot=dstPortSlot;
+    o.dstPinIndex=dstInput->getIndex();
+    o.dstPinSlot=dstPinSlot;
     o.dstDeviceId=m_devices.at(dstDevIndex).name;
     o.dstInputName=intern(dstInput->getName());
     m_devices.at(srcDevIndex).outputs.at(srcOutput->getIndex()).push_back(o);
@@ -303,12 +303,12 @@ struct EpochSim
       }
 
       if(logLevel>3){
-        fprintf(stderr, "    output port %d ready\n", sel);
+        fprintf(stderr, "    output pin %d ready\n", sel);
       }
 
       m_statsSends++;
 
-      const OutputPortPtr &output=src.type->getOutput(sel);
+      const OutputPinPtr &output=src.type->getOutput(sel);
       TypedDataPtr message(output->getMessageType()->getMessageSpec()->create());
       
       std::string idSend;      
@@ -360,8 +360,8 @@ struct EpochSim
 
       for(auto &out : src.outputs[sel]){
         auto &dst=m_devices[out.dstDevice];
-        auto &in=dst.inputs[out.dstPortIndex];
-        auto &slot=in[out.dstPortSlot];
+        auto &in=dst.inputs[out.dstPinIndex];
+        auto &slot=in[out.dstPinSlot];
 
         slot.firings++;
 
@@ -369,10 +369,10 @@ struct EpochSim
           fprintf(stderr, "    sending to device %d = %s\n", dst.index, dst.id.c_str());
         }
 
-        const auto &port=dst.type->getInput(out.dstPortIndex);
+        const auto &pin=dst.type->getInput(out.dstPinIndex);
 
         receiveServices.setReceiver(out.dstDeviceId, out.dstInputName);
-        port->onReceive(&receiveServices, m_graphProperties.get(), dst.properties.get(), dst.state.get(), slot.properties.get(), slot.state.get(), message.get());
+        pin->onReceive(&receiveServices, m_graphProperties.get(), dst.properties.get(), dst.state.get(), slot.properties.get(), slot.state.get(), message.get());
         dst.readyToSend = dst.type->calcReadyToSend(&receiveServices, m_graphProperties.get(), dst.properties.get(), dst.state.get());
 
         if(m_log){
@@ -389,7 +389,7 @@ struct EpochSim
             id,
             std::vector<std::string>(),
             dst.state,
-            port,
+            pin,
             idSend.c_str()
           );
         }

@@ -25,7 +25,7 @@
    - We want richly typed structures for debugging purposes. Persisted forms should be
    human readable (for debuggable size graphs)
 
-   - We need to be able to bind code to arbitrary input/output ports in the graph
+   - We need to be able to bind code to arbitrary input/output pins in the graph
 
    - We want speed for simulation purposes. Structured data can get in the way of that.
 
@@ -367,10 +367,10 @@ public:
   virtual rapidjson::Document &getMetadata() =0;
 };
 
-class Port
+class Pin
 {
 public:
-  virtual ~Port()
+  virtual ~Pin()
   {}
 
   virtual const DeviceTypePtr &getDeviceType() const=0;
@@ -382,7 +382,7 @@ public:
 
   virtual rapidjson::Document &getMetadata() =0;
 };
-typedef std::shared_ptr<Port> PortPtr;
+typedef std::shared_ptr<Pin> PinPtr;
 
 /* This provides and OS level services to the handler that it might need,
    such as logging.
@@ -429,8 +429,8 @@ public:
 };
 
 
-class InputPort
-  : public Port
+class InputPin
+  : public Pin
 {
 public:
   virtual void onReceive(OrchestratorServices *orchestrator,
@@ -447,10 +447,10 @@ public:
 
   virtual const std::string &getHandlerCode() const=0;
 };
-typedef std::shared_ptr<InputPort> InputPortPtr;
+typedef std::shared_ptr<InputPin> InputPinPtr;
 
-class OutputPort
-  : public Port
+class OutputPin
+  : public Pin
 {
 public:
   virtual void onSend(OrchestratorServices *orchestrator,
@@ -463,7 +463,7 @@ public:
 
   virtual const std::string &getHandlerCode() const=0;
 };
-typedef std::shared_ptr<OutputPort> OutputPortPtr;
+typedef std::shared_ptr<OutputPin> OutputPinPtr;
 
 class DeviceType
 {
@@ -477,14 +477,14 @@ public:
   virtual const TypedDataSpecPtr &getStateSpec() const=0;
 
   virtual unsigned getInputCount() const=0;
-  virtual const InputPortPtr &getInput(unsigned index) const=0;
-  virtual InputPortPtr getInput(const std::string &name) const=0;
-  virtual const std::vector<InputPortPtr> &getInputs() const=0;
+  virtual const InputPinPtr &getInput(unsigned index) const=0;
+  virtual InputPinPtr getInput(const std::string &name) const=0;
+  virtual const std::vector<InputPinPtr> &getInputs() const=0;
 
   virtual unsigned getOutputCount() const=0;
-  virtual const OutputPortPtr &getOutput(unsigned index) const=0;
-  virtual OutputPortPtr getOutput(const std::string &name) const=0;
-  virtual const std::vector<OutputPortPtr> &getOutputs() const=0;
+  virtual const OutputPinPtr &getOutput(unsigned index) const=0;
+  virtual OutputPinPtr getOutput(const std::string &name) const=0;
+  virtual const std::vector<OutputPinPtr> &getOutputs() const=0;
 
   virtual uint32_t calcReadyToSend(
 				   OrchestratorServices *orchestrator,

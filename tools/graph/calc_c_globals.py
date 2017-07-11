@@ -9,7 +9,7 @@ def add_props(a,b):
     return r
     
 # c_globals : constants and typedefs that are in scope throughout the graph
-# c_locals : constants and typedefs that are only in scope for a particular device or port
+# c_locals : constants and typedefs that are only in scope for a particular device or pin
 
 def calc_graph_type_c_globals(gt,gtProps=None):
     gtProps=gtProps or make_graph_type_properties(gt)
@@ -22,7 +22,7 @@ def calc_graph_type_c_globals(gt,gtProps=None):
     for dt in gt.device_types.values():
         dtProps=make_device_type_properties(dt)
         for op in dt.outputs_by_index:
-            opProps=add_props(dtProps,make_output_port_properties(op))
+            opProps=add_props(dtProps,make_output_pin_properties(op))
             res=res+"""
             const unsigned RTS_INDEX_{DEVICE_TYPE_ID}_{OUTPUT_PORT_NAME} = {OUTPUT_PORT_INDEX};\n
             const unsigned RTS_FLAG_{DEVICE_TYPE_ID}_{OUTPUT_PORT_NAME} = 1<<{OUTPUT_PORT_INDEX};\n      
@@ -39,7 +39,7 @@ def calc_device_type_c_locals(dt,dtProps):
     typedef {DEVICE_TYPE_STATE_T} DEVICE_TYPE_STATE_T;
     """.format(**dtProps)
     for op in dt.outputs_by_index:
-        opProps=make_output_port_properties(op)
+        opProps=make_output_pin_properties(op)
         res=res+"""
         const unsigned RTS_INDEX_{OUTPUT_PORT_NAME} = {OUTPUT_PORT_INDEX};\n
         const unsigned RTS_FLAG_{OUTPUT_PORT_NAME} = 1<<{OUTPUT_PORT_INDEX};\n      

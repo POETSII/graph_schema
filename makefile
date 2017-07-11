@@ -77,7 +77,7 @@ graph_library : $(wildcard tools/graph/*.py)
 derived/%.rng derived/%.xsd : master/%.rnc $(TRANG) $(JING) $(wildcard master/%-example*.xml)
 	# Check the claimed examples in order to make sure that
 	# they validate
-	for i in master/*-example*.xml; do \
+	for i in master/$*-example*.xml; do \
 		echo "Checking file $$i"; \
 		java -jar $(JING) -c master/$*.rnc $$i; \
 	done
@@ -89,6 +89,8 @@ derived/%.rng derived/%.xsd : master/%.rnc $(TRANG) $(JING) $(wildcard master/%-
 
 build-virtual-schema-v1 : derived/virtual-graph-schema-v1.rng derived/virtual-graph-schema-v1.xsd
 
+build-virtual-schema-v2 : derived/virtual-graph-schema-v2.rng derived/virtual-graph-schema-v2.xsd
+
 regenerate-random :
 	python3.4 tools/create_random_graph.py 1 > test/virtual/random1.xml
 	python3.4 tools/create_random_graph.py 2 > test/virtual/random2.xml
@@ -96,10 +98,9 @@ regenerate-random :
 	python3.4 tools/create_random_graph.py 8 > test/virtual/random4.xml
 
 
-%.checked : %.xml $(JING) master/virtual-graph-schema-v1.rnc derived/virtual-graph-schema-v1.xsd
-	java -jar $(JING) -c master/virtual-graph-schema-v1.rnc $*.xml
-	java -jar $(JING) derived/virtual-graph-schema-v1.xsd $*.xml
-	$(PYTHON) tools/print_graph_properties.py < $*.xml
+%.checked : %.xml $(JING) master/virtual-graph-schema-v2.rnc derived/virtual-graph-schema-v2.xsd
+	java -jar $(JING) -c master/virtual-graph-schema-v2.rnc $*.xml
+	java -jar $(JING) derived/virtual-graph-schema-v2.xsd $*.xml
 	touch $@
 
 validate-virtual/% : output/%.checked
@@ -151,7 +152,7 @@ define provider_rules_template
 providers/$1.graph.cpp providers/$1.graph.hpp : apps/$1/$1_graph_type.xml $(JING)
 
 	mkdir -p providers
-	java -jar $(JING) -c master/virtual-graph-schema-v1.rnc apps/$1/$1_graph_type.xml
+	java -jar $(JING) -c master/virtual-graph-schema-v2.rnc apps/$1/$1_graph_type.xml
 	$$(PYTHON) tools/render_graph_as_cpp.py apps/$1/$1_graph_type.xml providers/$1.graph.cpp
 	$$(PYTHON) tools/render_graph_as_cpp.py --header < apps/$1/$1_graph_type.xml > providers/$1.graph.hpp
 
@@ -190,6 +191,7 @@ include apps/clocked_izhikevich_fix/makefile.inc
 include apps/gals_izhikevich/makefile.inc
 include apps/gals_heat/makefile.inc
 include apps/gals_heat_fix/makefile.inc
+include apps/storm/makefile.inc
 
 include apps/amg/makefile.inc
 include apps/apsp/makefile.inc

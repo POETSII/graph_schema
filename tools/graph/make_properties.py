@@ -39,7 +39,7 @@ def make_message_type_properties(mt):
         "MESSAGE_TYPE_T" : "{}_{}_message_t".format(mt.parent.id,mt.id)
     })
     
-def make_input_port_properties(ip):
+def make_input_pin_properties(ip):
     if ip.source_line and ip.source_file: 
         preProc = '#line {} "{}"\n'.format(ip.source_line-1,ip.source_file) 
     else:
@@ -56,7 +56,7 @@ def make_input_port_properties(ip):
         "INPUT_PORT_RECEIVE_HANDLER_SOURCE_LOCATION" : preProc
     })
     
-def make_output_port_properties(op):
+def make_output_pin_properties(op):
     if op.source_line and op.source_file: 
         preProc = '#line {} "{}"\n'.format(op.source_line-1,op.source_file) 
     else:
