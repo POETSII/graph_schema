@@ -82,6 +82,7 @@ derived/%.rng derived/%.xsd : master/%.rnc $(TRANG) $(JING) $(wildcard master/%-
 		java -jar $(JING) -c master/$*.rnc $$i; \
 	done
 	# Update the derived shemas
+	mkdir -p derived
 	java -jar $(TRANG) -I rnc -O rng master/$*.rnc derived/$*.rng
 	java -jar $(TRANG) -I rnc -O xsd master/$*.rnc derived/$*.xsd
 
@@ -150,14 +151,13 @@ bin/% : tools/%.cpp
 define provider_rules_template
 
 providers/$1.graph.cpp providers/$1.graph.hpp : apps/$1/$1_graph_type.xml $(JING)
-
 	mkdir -p providers
 	java -jar $(JING) -c master/virtual-graph-schema-v2.rnc apps/$1/$1_graph_type.xml
 	$$(PYTHON) tools/render_graph_as_cpp.py apps/$1/$1_graph_type.xml providers/$1.graph.cpp
 	$$(PYTHON) tools/render_graph_as_cpp.py --header < apps/$1/$1_graph_type.xml > providers/$1.graph.hpp
 
 providers/$1.graph.so : providers/$1.graph.cpp
-	g++ $$(CPPFLAGS) $$(SO_CPPFLAGS) $$< -o $$@ $$(LDFLAGS) $(LDLIBS)
+	g++ $$(CPPFLAGS) -Wno-unused-but-set-variable $$(SO_CPPFLAGS) $$< -o $$@ $$(LDFLAGS) $(LDLIBS)
 
 $1_provider : providers/$1.graph.so
 
@@ -229,3 +229,4 @@ clean :
 	-rm -rf providers/*
 	-rm -rf external/trang-20091111
 	-rm -rf external/jing-20081028
+	-rm -rf derived/*
