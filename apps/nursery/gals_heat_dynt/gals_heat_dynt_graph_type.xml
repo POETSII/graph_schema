@@ -1,0 +1,196 @@
+<?xml version="1.0"?>
+<Graph>
+<GraphType id="gals_heat_dynt">
+<Configuration>
+    <Scalar name="A" type="uint32_t" default="3" />
+</Configuration>
+
+<DeviceType id="dirichlet">
+    <State>
+        <Scalar name="t" type="uint32_t" />
+        <Scalar name="dt" type="uint32_t" />
+
+        <Scalar name="et" type="uint32_t" />
+    </State>
+
+    <ReadyToSend><![CDATA[
+    *readyToSend = deviceState->et <= deviceState->t ? RTS_FLAG_exchange_out;
+    ]]></ReadyToSend>
+
+    <InputPin name="exchange_in">
+        <OnReceive><![CDATA[
+        deviceState->et = max(deviceState->et, message->t);
+        ]]></OnReceive>
+    </InputPin>
+
+    <OutputPin name="exchange_out">
+        <OnSend><![CDATA[
+        deviceState->t = deviceState->t + deviceState->dt;
+        ]]>>/OnSend>
+    </OutputPin>
+</DeviceType>
+
+<DeviceType id="tri_patch">
+    <State>
+        <Scalar name="t" type="uint32_t" />
+        <Scalar name="dt" type="uint32_t" />
+        <Array name="interior" type="int32_t" length="A*A" />
+
+        <Array name="bt" type="uint32_t" length="4" />
+        <Array name="et" type="uint32_t" length="4" />
+        <Array name="ft" type="uint32_t" length="4" />
+        <Array name="bv" type="int32_t" length="A*4" />
+        <Array name="ev" type="int32_t" length="A*4" />
+        <Array name="fv" type="int32_t" length="A*4" />
+    </State>
+
+    <SharedCode><![CDATA[
+    template<class TP,class TS>
+    void assert_conditions_tri(const TP *p, const TS *s)
+    {
+        for(unsigned i=0; i<3; i++){
+            assert(s->bt[i] < s->et[i] && s->et[i] <= s->ft[i]);
+            assert(s->bt[i] < s->t );
+            assert( (s->t <= s->et[i]) || (s->et[i]==s->ft[i] && s->ft[i] > s->t));
+        }
+    }
+
+    void lerp_setup(int shift, int32_t bt, int32_t et, int32_t &bWeight, int32_t &eWeight, int32_t &bias)
+    {
+        int32_t dt=et-bt;
+        int32_t one=1<<shift;
+        #error "here"
+    }
+
+    int32_t lerp_point(int32_t bWeight, int32_t eWeight, int shift, int32_t bias, int32_t bValue, int32_t eValue)
+    {   
+        int bias=1<<(shift-1);
+        return (bWeight*bValue+eWeight*eValue+bias)>>shift;
+    }
+
+    template<class DS>
+    void lerp_boundary(DS *state, int32_t *dst, int dx, int dy, int o)
+    {
+        int32_t *pvb=state->vb+A*o, pve=state->ve+A*o;
+        int32_t bt=state->bt[o], et=state->et[0];
+        auto dt=et-bt;
+        for(int i=0; i<A; i++){
+
+        }
+    }
+
+    void step_tri(
+        int32_t WO, int32_t WS, int SHIFT,
+        int32_t *next,          // grid of A*A
+        const int32_t *prev     // grid of (A+2)*(A+2)
+        )
+    {
+        const int S=A+2;
+
+        prev=prev+S+1;
+
+        /* A=3,
+           y=0, x=0,1,2,3,4 < 5=6-1=2*A-1
+           y=1, x=0,1,2     < 3=6-3=2*A-1-2*y
+           y=2, x=0         < 1=6-5=2*A-1-2*y
+        */
+
+        const int32_t BIAS=(1<<(SHIFT-1));
+        for(int y=0; y<A; y++){
+            for(int x=0; x < 2*A-1-2*y; x++){
+                int32_t left=prev[x-1], right=prev[x+1];
+                int32_t vert=(x&1) ? prev[x-1+S] : prev[x+1-S];
+                int32_t curr=prev[0];
+                next[x]=((left+right+vert)*WO + curr*WS + BIAS)>>SHIFT;
+            }
+            prev+=S;
+            next+=A;
+        }
+    }
+    
+    ]]></SharedCode>
+
+    <InputPin name="exchange_in" messageTypeId="exchange">
+        <OnRecieve><![CDATA[
+        assert_conditions_tri(deviceProperties, deviceState);
+
+        unsigned i=edgeProperties->index;
+        auto mt=message->t;
+        auto t=deviceState->t;
+        auto &bt=deviceState->bt[i];
+        auto &et=deviceState->et[i];
+        auto &ft=deviceState->ft[i];
+        
+        if(mt < bt){
+            // discard
+        }else if(mt==bt){
+            assert(0); // Contract violation. Two messages with same time from same node
+        }else if(mt < et){  // bt < mt < et
+            if( mt < t ){   // bt < mt < t
+                bt=mt; // Take the more recent beginning point
+                deviceState->bv=message->v;
+            }else{          // t <= mt < et
+                // discard. No good reason to choose mt over et without more analysis.
+            }
+        }else if(mt == et){
+            assert(0); // Contract violation. Two messages with same time from same node
+        }else if(mt < ft){ // et < mt < ft
+            // discard. No good reason to choose mt over et without more analysis
+        }else if(mt == ft){
+            assert(0); // Contract violation. Two messages with same time from same node
+        }else{  // ft < mt
+            ft=mt;
+            deviceState->fv=message->v;
+        }
+
+        uint32_t flag=1<<i;
+        // Block by default
+        deviceState->blocked = deviceState->blocked | flag;
+        if( t <= ft ){
+            // We are unblocked. Remove bit
+            deviceState->blocked = deviceState->blocked ^ flag;
+        }
+
+        assert_conditions_tri(deviceProperties, deviceState);
+        ]]></OnReceive>
+    </InputPin>
+
+    <OutputPin name="exchange_out" messageTypeId="exchange">
+        <OnSend><![CDATA[
+        assert_conditions_tri(deviceProperties, deviceState);
+    
+        const int S=A+2;
+        int32_t prevStg[S*S];
+        auto prevAt=[=](int x, int y){
+            return prevStg+(y+1)*S+x+1;
+        };
+        
+        lerp_boundary(deviceState, prevAt(-1,0),      0, +1,   0);   // Left boundary, start at (-1,0), walk up
+        lerp_boundary(deviceState, prevAt(1,A-1),    +1, -1,   1);   // diag boundary, start at (1,A-1), walk right+down
+        lerp_boundary(deviceState, prevAt(2*A-1,-1), -1,  0,   2);   // bottom boundary, start at (2*A-1,-1), walk left
+        
+        int32_t *src=deviceState->v;
+        int32_t *dst=prev+S+1;
+        for(unsigned y=0; y<A; y++){
+            for(unsigned x=0; x<A; x++){
+                dst[x]=src[x];
+            }
+            dst+=S;
+            src+=A;
+        }
+
+        dst=deviceState->v;
+        src=prev+S+1;
+        for(unsigned y=0; y<A; y++){
+            for(unsigned x=0; x<A; x++){
+                dst[x]=step(graphProperties, deviceProperties, src);
+            }
+        }
+
+        assert_conditions_tri(deviceProperties, deviceState);
+        ]]></OnSend>
+    </OutputPin>
+
+</DeviceType>
+</GraphType>
+</Graph>

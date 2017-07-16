@@ -1020,7 +1020,7 @@ grammar {
 
   primitiveScalarType = primitiveIntType | primitiveFloatType
 
-  primitiveIntType = "int32_t" | "uint32_t" | "int16_t" | "uint16_t" | "uint8_t" | "int8_t" | "char"
+  primitiveIntType = "int64_t" | "uint64_t" | "int32_t" | "uint32_t" | "int16_t" | "uint16_t" | "uint8_t" | "int8_t" | "char"
 
   primitiveFloatType = "half" | "float" | "double"
 
