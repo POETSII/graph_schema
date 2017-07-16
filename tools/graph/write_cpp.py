@@ -72,10 +72,10 @@ def render_typed_data_load_v4_tuple(proto,dst,prefix,indent):
         dst.write('{}  const rapidjson::Value &n=document["{}"];\n'.format(indent,elt.name))
         if isinstance(elt,ScalarTypedDataSpec):
 
-            if elt.type=="int32_t" or elt.type=="int16_t" or elt.type=="int8_t" or elt.type=="char" :
+            if elt.type=="int64_t" or elt.type=="int32_t" or elt.type=="int16_t" or elt.type=="int8_t" or elt.type=="char" :
                 dst.write('{}  {}{}=n.GetInt();\n'.format(indent, prefix, elt.name))
 
-            elif elt.type=="uint32_t" or elt.type=="uint16_t" or elt.type=="uint8_t":
+            elif elt.type=="uint64_t" or elt.type=="uint32_t" or elt.type=="uint16_t" or elt.type=="uint8_t":
                 dst.write('{}  {}{}=n.GetUint();\n'.format(indent, prefix, elt.name))
 
             elif elt.type=="float":
@@ -89,11 +89,11 @@ def render_typed_data_load_v4_tuple(proto,dst,prefix,indent):
             dst.write('{}  assert(n.IsArray());\n')
             for i in range(0,elt.length):
 
-                if elt.type.type=="int32_t" or elt.type.type=="int16_t" or elt.type.type=="int8_t" or elt.type=="char":
+                if elt.type.type=="int64_t" or elt.type.type=="int32_t" or elt.type.type=="int16_t" or elt.type.type=="int8_t" or elt.type=="char":
                     dst.write('{}  assert(n[{}].IsInt());\n'.format(indent,i))
                     dst.write('{}  {}{}[{}]=n[{}].GetInt();\n'.format(indent, prefix, elt.name,i,i))
 
-                elif elt.type.type=="uint32_t" or elt.type.type=="uint16_t" or elt.type.type=="uint8_t":
+                elif elt.type.type=="uint64_t" or elt.type.type=="uint32_t" or elt.type.type=="uint16_t" or elt.type.type=="uint8_t":
                     dst.write('{}  assert(n[{}].IsUint());\n'.format(indent,i))
                     dst.write('{}  {}{}[{}]=n[{}].GetUint();\n'.format(indent, prefix,elt.name,i,i))
 
@@ -134,9 +134,9 @@ def render_typed_data_save_v4(proto,dst,elt,prefix,indent):
 def render_typed_data_save(proto, dst, prefix, indent):
     if isinstance(proto,ScalarTypedDataSpec):
 
-        if proto.type=="uint32_t" or proto.type=="uint16_t" or proto.type=="uint8_t":
+        if proto.type=="uint64_t" or proto.type=="uint32_t" or proto.type=="uint16_t" or proto.type=="uint8_t":
             dst.write('{}if({}{} != {}){{ if(sep){{ dst<<","; }}; dst<<"\\"{}\\":"<<(uint32_t){}{}; sep=true; }}\n'.format(indent, prefix, proto.name, proto.default, proto.name, prefix, proto.name))
-        elif proto.type=="int32_t" or proto.type=="int16_t" or proto.type=="int8_t":
+        elif proto.type=="int64_t" or proto.type=="int32_t" or proto.type=="int16_t" or proto.type=="int8_t":
             dst.write('{}if({}{} != {}){{ if(sep){{ dst<<","; }}; dst<<"\\"{}\\":"<<(int32_t){}{}; sep=true; }}\n'.format(indent, prefix, proto.name, proto.default, proto.name, prefix, proto.name))
         else:
             dst.write('{}if({}{} != {}){{ if(sep){{ dst<<","; }}; dst<<"\\"{}\\":"<<{}{}; sep=true; }}\n'.format(indent, prefix, proto.name, proto.default, proto.name, prefix, proto.name))
