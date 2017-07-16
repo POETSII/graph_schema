@@ -53,7 +53,7 @@ nodes={}
 for x in range(0,n):
     sys.stderr.write(" Devices : Row {} of {}\n".format(x, n))
     for y in range(0,n):
-        meta={"loc":[x,y]}
+        meta={"loc":[x,y],"hull":[ [x-0.5,y-0.5], [x+0.5,y-0.5], [x+0.5,y+0.5], [x-0.5,y+0.5] ]}
         edgeX = x==0 or x==n-1
         edgeY = y==0 or y==n-1
         if x==n//2 and y==n//2:

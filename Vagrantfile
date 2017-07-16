@@ -56,12 +56,12 @@ Vagrant.configure(2) do |config|
   #
   #   # Customize the amount of memory on the VM:
      vb.memory = "6000"
-  end
-
-
-  config.vm.provider "virtualbox" do |v|
+  
     # If clock drifts more than 500ms, then force it (instead of smooth adjust)
-    v.customize ["guestproperty","set", :id, "/VirtualBox/GuestAdd/VBoxService/--timesync-set-threshold", "500"]
+    vb.customize ["guestproperty","set", :id, "/VirtualBox/GuestAdd/VBoxService/--timesync-set-threshold", "500"]
+
+    # Turn off audio, so that VM doesn't keep machine awake
+    vb.customize ["modifyvm", :id, "--audio", "none"]
   end
 
 
