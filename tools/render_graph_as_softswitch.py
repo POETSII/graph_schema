@@ -12,6 +12,7 @@ import sys
 import os
 import logging
 import random
+import math
 
 # The alignment to pad to for the next cache line
 _cache_line_size=32
@@ -880,7 +881,9 @@ import argparse
 parser = argparse.ArgumentParser(description='Render graph instance as softswitch.')
 parser.add_argument('source', type=str, help='source file (xml graph instance)')
 parser.add_argument('--dest', help="Directory to write the output to", default=".")
-parser.add_argument('--threads', help='number of threads', type=int, default=2)
+parser.add_argument('--threads', help='number of logical threads to use (active threads)', type=int, default=2)
+parser.add_argument('--hardware-threads', help='number of threads used in hardware (default=threads)', type=int, default=0)
+parser.add_argument('--contraction', help='if threads < hardware-threads, how to do mapping. "dense", "sparse", or "random"', type=str, default="dense")
 parser.add_argument('--log-level', dest="logLevel", help='logging level (INFO,ERROR,...)', default='WARNING')
 parser.add_argument('--placement-seed', dest="placementSeed", help="Choose a specific random placement", default=None)
 
@@ -890,6 +893,10 @@ logLevel = getattr(logging, args.logLevel.upper(), None)
 logging.basicConfig(level=logLevel)
 
 nThreads=args.threads
+if args.hardware_threads==0:
+    hwThreads=nThreads
+else:
+    hwThreads=args.hardware_threads
 
 if args.source=="-":
     source=sys.stdin
@@ -963,9 +970,25 @@ if(len(instances)>0):
         logging.info("Generating random partition from seed {}.".format(seed))
         random.seed(seed)
         device_to_thread = { id:random.randint(0,nThreads-1) for id in inst.device_instances.keys() }
+        
+    if nThreads!=hwThreads:
+        logging.info("Contracting from {} logical to {} physical using {}".format(nThreads,hwThreads,args.contraction))
+        assert nThreads<hwThreads
+        if args.contraction=="dense":
+            logicalToPhysical=[i for i in range(nThreads)]
+        elif args.contraction=="sparse":
+            scale=hwThreads/nThreads
+            logicalToPhysical=[ math.floor(i*scale) for i in range(nThreads)]
+        elif args.contraction=="random":
+            logicalToPhysical=list(range(hwThreads))
+            random.shuffle(logicalToPhysical)
+            logicalToPhysical=logicalToPhysical[0:nThreads]
+        else:
+            assert False, "Unknown contraction method '{}'".format(args.contraction)
     
+        device_to_thread = { id:logicalToPhysical[thread] for (id,thread) in device_to_thread.items() }
 
     destInstPath=os.path.abspath("{}/{}_{}_inst.cpp".format(destPrefix,graph.id,inst.id))
     destInst=open(destInstPath,"wt")
         
-    render_graph_instance_as_softswitch(inst,destInst,nThreads,device_to_thread)
+    render_graph_instance_as_softswitch(inst,destInst,hwThreads,device_to_thread)

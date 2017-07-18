@@ -13,7 +13,7 @@ import copy
 import os
 appBase=os.path.dirname(os.path.realpath(__file__))
 
-src=appBase+"/apsp_graph_type.xml"
+src=appBase+"/apsp_graph_type_v1_broken.xml"
 (graphTypes,graphInstances)=load_graph_types_and_instances(src,src)
 
 urand=random.random
@@ -30,7 +30,7 @@ if len(sys.argv)>2:
 graphType=graphTypes["apsp"]
 nodeType=graphType.device_types["node"]
 controllerType=graphType.device_types["controller"]
-branchType=graphType.device_types["control_fanout"]
+branchType=graphType.device_types["branch"]
 
 def make_random(n,d):
     connections={}
@@ -116,6 +116,9 @@ for i in range(0,n):
     nodes[i]=DeviceInstance(res, "n{}".format(i), nodeType, props, meta)
     res.add_device_instance(nodes[i])
     
+    begin=EdgeInstance(res,nodes[i],"begin_in",controller,"begin_out")
+    res.add_edge_instance(begin)
+    
     progress.append(nodes[i])
     
 for i in range(0,n):
@@ -145,20 +148,16 @@ while len(progress)>1:
     for i in range(0,len(progress),2):
         src1=progress[i]
         src2=progress[i+1]
-        branch=DeviceInstance(res, "b_{}_{}".format(depth,i), branchType, {"degree":2}, None)
+        branch=DeviceInstance(res, "b_{}_{}".format(depth,i), branchType, None, None)
         res.add_device_instance(branch)
         next.append(branch)
         
-        res.add_edge_instance(EdgeInstance(res,branch,"response_in",src1,"response_out"))
-        res.add_edge_instance(EdgeInstance(res,branch,"response_in",src2,"response_out"))
-        
-        res.add_edge_instance(EdgeInstance(res,src1,"request_in",branch,"request_out"))
-        res.add_edge_instance(EdgeInstance(res,src2,"request_in",branch,"request_out"))
+        res.add_edge_instance(EdgeInstance(res,branch,"progress_in_left",src1,"progress_out"))
+        res.add_edge_instance(EdgeInstance(res,branch,"progress_in_right",src2,"progress_out"))
 
     depth=depth+1        
     progress=next
 
-res.add_edge_instance(EdgeInstance(res,progress[0],"request_in",controller,"request_out"))
-res.add_edge_instance(EdgeInstance(res,controller,"response_in",progress[0],"response_out"))
+res.add_edge_instance(EdgeInstance(res,controller,"progress_in",progress[0],"progress_out"))
     
 save_graph(res,sys.stdout)        

@@ -22,7 +22,7 @@
 			<Scalar type="uint32_t" name="exportDeltaMask" default="15">
 				<Documentation><![CDATA[
 				Controls the rate at which values are exported. Interior cells will
-				export when (t & exportDeltaMask)==0
+				export when t>0 && (t & exportDeltaMask)==0
 				]]></Documentation>
 			</Scalar>
     </Properties>
@@ -273,7 +273,7 @@
 			assert(deviceState->cs == deviceProperties->nhood);
 
 			// TODO : move this out of the send handler into compute
-			if( (deviceState->t & graphProperties->exportDeltaMask)==0 ){
+			if( (deviceState->t>0) && (deviceState->t & graphProperties->exportDeltaMask)==0 ){
 				handler_log(2, "export %u", deviceState->v);
 				handler_export_key_value(0, 0x80000000ul+(uint32_t)(deviceState->v));
 			}

@@ -1,0 +1,22 @@
+Every cell tracks a time bracket for each cell:
+- bt[i] < et[i] <= ft[i] - beginning and end and future time of bracket for neighbour i
+- bv[i],ev[i],fv[i] - beginning and end and future values for bracket for neighbour i
+
+The current time of a cell is given by t, and its time step by dt.
+
+A cell can advance from t to t' = t+dt if for all neighbours i:
+- bt[i] < t    (always holds)
+- t <= et[i]   (may not hold if we haven't received updated)
+
+After advancing, each neighbour is updated as:
+- if t' <=et[i], then bracket stays the same
+- if t' > et[i], then bt'=et, et'=ft, and ft is unchanged
+
+
+So the possible orderings are:
+- bt[i] < t <= et[i] <= ft[i]   ready to update based on i
+- bt[i] < et[i] = ft[i] < t    blocked on neighbour i
+
+What isn't possible is:
+- bt[i] < et[i] < t <= ft[i]    impossible, we remove this situation when receiving the update
+

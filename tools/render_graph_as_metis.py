@@ -107,7 +107,8 @@ def create_metis_partition(graph,partitions):
     
     (key,graphMeta)=create_device_instance_key(tagName, graph.metadata or {})
     graphMeta[tagName]= {
-        "counts" : counts
+        "counts" : counts,
+        "key" : key
     }
     deviceMeta={
         id:{key:idToPartition[id]} for id in idToPartition
