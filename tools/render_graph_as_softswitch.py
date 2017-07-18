@@ -24,6 +24,32 @@ _use_BLOB=True
 # been removed by other methods. Remove?
 _use_indirect_BLOB=False and _use_BLOB
 
+# If 0, then don't sort edges. If 1, then sort by furthest first. If -1, then sort by closest first
+sort_edges_by_distance=0
+
+threads_per_core=16
+cores_per_mailbox=4
+mailboxes_per_board=16
+
+threads_per_mailbox=threads_per_core*cores_per_mailbox
+
+inter_mbox_cost=5
+intra_mbox_cost=1
+
+def decompose_thread(id):
+    return (id//threads_per_mailbox, (id%threads_per_mailbox)//threads_per_core, id%threads_per_core)
+
+def thread_distance(dst,src):
+    (srcMbox,srcCore,srcThread)=decompose_thread(src)
+    (dstMbox,dstCore,dstThread)=decompose_thread(dst)
+
+    if srcMbox!=dstMbox:
+        return math.abs( srcMbox-dstMbox ) * inter_mbox_cost
+    if srcCore!=dstCore:
+        return intra_mbox_cost
+    return 0
+
+
 def render_typed_data_as_type_decl(td,dst,indent,name=None):
     if name==None:
         name=td.name
@@ -509,10 +535,17 @@ def render_graph_instance_as_thread_context(
         
         for op in di.device_type.outputs_by_index:
             addressesName="{}_{}_addresses".format(di.id, op.name)
+
+            edges=edges_out[di][op]
+            if sort_edges_by_distance!=0:
+                srcId=thread_index
+                key=lambda ei: thread_distance(devices_to_thread[ei.dst_device], srcId)
+                edges=sorted(edges, key, reverse=sort_edges_by_distance>0)
+
             if not _use_BLOB:
                 dst.write("address_t {}[]={{\n".format(addressesName))
                 first=True
-                for ei in edges_out[di][op]:
+                for ei in edges:
                     if first:
                         first=False
                     else:
@@ -524,7 +557,7 @@ def render_graph_instance_as_thread_context(
                 dst.write("};\n")
             else:
                 blob=bytearray([])
-                for ei in edges_out[di][op]:
+                for ei in edges:
                     dstDev=ei.dst_device
                     tIndex=devices_to_thread[dstDev]
                     tOffset=thread_to_devices[tIndex].index(dstDev)
