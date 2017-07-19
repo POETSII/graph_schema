@@ -26,7 +26,7 @@ _use_BLOB=True
 _use_indirect_BLOB=False and _use_BLOB
 
 # If 0, then don't sort edges. If 1, then sort by furthest first. If -1, then sort by closest first
-sort_edges_by_distance=0
+sort_edges_by_distance=+1
 
 threads_per_core=16
 cores_per_mailbox=4
@@ -45,7 +45,7 @@ def thread_distance(dst,src):
     (dstMbox,dstCore,dstThread)=decompose_thread(dst)
 
     if srcMbox!=dstMbox:
-        return math.abs( srcMbox-dstMbox ) * inter_mbox_cost
+        return abs( srcMbox-dstMbox ) * inter_mbox_cost
     if srcCore!=dstCore:
         return intra_mbox_cost
     return 0
@@ -454,7 +454,7 @@ def render_device_type_as_softswitch_defs(dt,dst,dtProps):
             """.format(**make_output_pin_properties(op)))
     dst.write("};\n");
     
-    
+edgeCosts=[]
 
 def render_graph_type_as_softswitch_defs(gt,dst):
     dst.write("""#include "{}.hpp"\n""".format(gt.id))
@@ -512,8 +512,6 @@ def render_graph_instance_as_thread_context(
         
     dst.write("//////// Thread {}\n".format(thread_index))  
 
-
-    
     for di in thread_to_devices[thread_index]:
         devicePropertiesOffset=None
         deviceStateOffset=None
@@ -533,163 +531,12 @@ def render_graph_instance_as_thread_context(
             else:
                 blob=convert_typed_data_inst_to_bytes(di.device_type.state, None) # TODO : This could be much cheaper, as it is always the same
                 deviceStateOffset=globalState.add(deviceStateName, blob)
-        
-        for op in di.device_type.outputs_by_index:
-            addressesName="{}_{}_addresses".format(di.id, op.name)
 
-            edges=edges_out[di][op]
-            if sort_edges_by_distance!=0:
-                srcId=thread_index
-                key=lambda ei: thread_distance(devices_to_thread[ei.dst_device], srcId)
-                edges=sorted(edges, key, reverse=sort_edges_by_distance>0)
+        render_device_instance_outputs(devices_to_thread, di, dst, edges_out, globalOutputPinTargets, globalProperties,
+                                        thread_index, thread_to_devices)
 
-            if not _use_BLOB:
-                dst.write("address_t {}[]={{\n".format(addressesName))
-                first=True
-                for ei in edges:
-                    if first:
-                        first=False
-                    else:
-                        dst.write(",")
-                    dstDev=ei.dst_device
-                    tIndex=devices_to_thread[dstDev]
-                    tOffset=thread_to_devices[tIndex].index(dstDev)
-                    dst.write("  {{{},{},INPUT_INDEX_{}_{}_{}_V, 0}}".format(tIndex,tOffset,dstDev.device_type.parent.id, dstDev.device_type.id, ei.dst_pin.name))
-                dst.write("};\n")
-            else:
-                blob=bytearray([])
-                for ei in edges:
-                    dstDev=ei.dst_device
-                    tIndex=devices_to_thread[dstDev]
-                    tOffset=thread_to_devices[tIndex].index(dstDev)
-                    pin_index=ei.dst_pin.parent.inputs_by_index.index(ei.dst_pin)
-                    addr=convert_address_to_bytes(tIndex, tOffset, pin_index)
-                    blob.extend(addr)
-                globalProperties.add(addressesName, blob)
-        
-        
-        if not _use_BLOB:
-            dst.write("OutputPinTargets {}_targets[]={{\n".format(di.id))
-        else:
-            globalOutputPinTargets.add_label("{}_targets".format(di.id))
-        
-        first=True
-        for op in di.device_type.outputs_by_index:
-            addressesName="{}_{}_addresses".format(di.id, op.name)
-            if not _use_BLOB:
-                addressesSource=addressesName
-            else:
-                (offset,length)=globalProperties.find(addressesName)
-                if not _use_indirect_BLOB:
-                    addressesSource="(address_t*)(softswitch_pthread_global_properties+{})".format(offset)
-                else:
-                    addressesSource="(address_t*)({})".format(offset)
-            
-            if not _use_BLOB:
-                if first:
-                    first=False
-                else:
-                    dst.write(",")                
-                dst.write("{{ {}, {} }} // {}\n".format( len(edges_out[di][op]), addressesSource, op.name ))
-            else:
-                globalOutputPinTargets.add(addressesName, (len(edges_out[di][op]), addressesSource) )
-                
-        if not _use_BLOB:   
-            dst.write("};\n") # End of output pin targets
-        
-        for ip in di.device_type.inputs_by_index:
-            if ip.properties==None and ip.state==None:
-                continue
-            for ei in edges_in[di][ip]:
-                name="{}_{}_{}_{}".format(ei.dst_device.id,ei.dst_pin.name,ei.src_device.id,ei.src_pin.name)
-                if ip.properties:
-                    inputPropertiesName=name+"_properties"
-                    if not _use_BLOB:
-                        render_typed_data_inst(ip.properties, props[ip]["INPUT_PORT_PROPERTIES_T"], ei.properties, inputPropertiesName, dst,True)
-                    else:
-                        blob=convert_typed_data_inst_to_bytes(ip.properties, ei.properties)
-                        inputPropertiesOffset=globalProperties.add(inputPropertiesName, blob)
-                if ip.state:
-                    inputStateName=name+"_state"
-                    if not _use_BLOB:
-                        render_typed_data_inst(ip.state, props[ip]["INPUT_PORT_STATE_T"], None, inputStateName, dst)
-                    else:
-                        blob=convert_typed_data_inst_to_bytes(ip.state, None) # TODO : This could be much cheaper, as it is always the same
-                        inputStateOffset=globalState.add(inputStateName, blob)
-
-        for ip in di.device_type.inputs_by_index:
-            if ip.properties==None and ip.state==None:
-                continue
-            if len(edges_in[di][ip])==0:
-                continue
-            dst.write("InputPinBinding {}_{}_bindings[]={{\n".format(di.id,ip.name))
-            first=True
-            
-            def edge_key(ei):
-                return (devices_to_thread[ei.src_device],
-                        thread_to_devices[devices_to_thread[ei.src_device]].index(ei.src_device),
-                    int(props[ei.src_pin]["OUTPUT_PORT_INDEX"]))
-            
-            eiSorted=list(edges_in[di][ip])
-            eiSorted.sort(key=edge_key)
-            
-            for ei in eiSorted:
-                if first:
-                    first=False
-                else:
-                    dst.write(",\n")
-                name="{}_{}_{}_{}".format(ei.dst_device.id,ei.dst_pin.name,ei.src_device.id,ei.src_pin.name)
-                eProps={
-                    "SRC_THREAD_INDEX": devices_to_thread[ei.src_device],
-                    "SRC_THREAD_OFFSET": thread_to_devices[devices_to_thread[ei.src_device]].index(ei.src_device),
-                    "SRC_PORT_INDEX": props[ei.src_pin]["OUTPUT_PORT_INDEX"],
-                    "EDGE_PROPERTIES":0,
-                    "EDGE_STATE":0
-                }
-                if ip.properties:
-                    if not _use_BLOB:
-                        eProps["EDGE_PROPERTIES"]="&{}_properties".format(name)
-                    else:
-                        (offset,length)=globalProperties.find("{}_properties".format(name))
-                        if not _use_indirect_BLOB:
-                            edgePropertiesBinding="softswitch_pthread_global_properties+{}".format(offset)
-                        else:
-                            edgePropertiesBinding="(const void *){}".format(offset)
-                        eProps["EDGE_PROPERTIES"]=edgePropertiesBinding
-                if ip.state:
-                    if not _use_BLOB:
-                        eProps["EDGE_STATE"]="&{}_state".format(name)
-                    else:
-                        (offset,length)=globalState.find("{}_state".format(name))
-                        eProps["EDGE_STATE"]="softswitch_pthread_global_state+{}".format(offset)
-                dst.write("""
-                    {{
-                        {{
-                            {SRC_THREAD_INDEX}, // thread id
-                            {SRC_THREAD_OFFSET}, // thread offset
-                            {SRC_PORT_INDEX}, // pin
-                            0
-                        }},
-                        {EDGE_PROPERTIES},
-                        {EDGE_STATE}
-                    }}
-                    """.format(**eProps))
-            dst.write("};\n");
-
-        dst.write("InputPinSources {}_sources[]={{\n".format(di.id))
-        first=True
-        
-        for ip in di.device_type.inputs_by_index:
-            if first:
-                first=False
-            else:
-                dst.write(",")
-            if ip.properties==None and ip.state==None:
-                dst.write("  {{0,0}} // {}\n".format(ip.name))
-            else:
-                dst.write("  {{ {}, {}_{}_bindings }}\n // {}\n".format( len(edges_in[di][ip]), di.id, ip.name, ip.name ))
-        dst.write("};\n")
-        
+        render_device_instance_inputs(devices_to_thread, di, dst, edges_in, globalProperties, globalState, props,
+                                      thread_to_devices)
 
     dst.write("""
     DeviceContext DEVICE_INSTANCE_CONTEXTS_thread{THREAD_INDEX}[DEVICE_INSTANCE_COUNT_thread{THREAD_INDEX}_V]={{
@@ -751,6 +598,172 @@ def render_graph_instance_as_thread_context(
         }}
         """.format(**diProps))
     dst.write("};\n")
+
+
+def render_device_instance_inputs(devices_to_thread, di, dst, edges_in, globalProperties, globalState, props,
+                                  thread_to_devices):
+    for ip in di.device_type.inputs_by_index:
+        if ip.properties == None and ip.state == None:
+            continue
+        for ei in edges_in[di][ip]:
+            name = "{}_{}_{}_{}".format(ei.dst_device.id, ei.dst_pin.name, ei.src_device.id, ei.src_pin.name)
+            if ip.properties:
+                inputPropertiesName = name + "_properties"
+                if not _use_BLOB:
+                    render_typed_data_inst(ip.properties, props[ip]["INPUT_PORT_PROPERTIES_T"], ei.properties,
+                                           inputPropertiesName, dst, True)
+                else:
+                    blob = convert_typed_data_inst_to_bytes(ip.properties, ei.properties)
+                    inputPropertiesOffset = globalProperties.add(inputPropertiesName, blob)
+            if ip.state:
+                inputStateName = name + "_state"
+                if not _use_BLOB:
+                    render_typed_data_inst(ip.state, props[ip]["INPUT_PORT_STATE_T"], None, inputStateName, dst)
+                else:
+                    blob = convert_typed_data_inst_to_bytes(ip.state,
+                                                            None)  # TODO : This could be much cheaper, as it is always the same
+                    inputStateOffset = globalState.add(inputStateName, blob)
+    for ip in di.device_type.inputs_by_index:
+        if ip.properties == None and ip.state == None:
+            continue
+        if len(edges_in[di][ip]) == 0:
+            continue
+        dst.write("InputPinBinding {}_{}_bindings[]={{\n".format(di.id, ip.name))
+        first = True
+
+        def edge_key(ei):
+            return (devices_to_thread[ei.src_device],
+                    thread_to_devices[devices_to_thread[ei.src_device]].index(ei.src_device),
+                    int(props[ei.src_pin]["OUTPUT_PORT_INDEX"]))
+
+        eiSorted = list(edges_in[di][ip])
+        eiSorted.sort(key=edge_key)
+
+        for ei in eiSorted:
+            if first:
+                first = False
+            else:
+                dst.write(",\n")
+            name = "{}_{}_{}_{}".format(ei.dst_device.id, ei.dst_pin.name, ei.src_device.id, ei.src_pin.name)
+            eProps = {
+                "SRC_THREAD_INDEX": devices_to_thread[ei.src_device],
+                "SRC_THREAD_OFFSET": thread_to_devices[devices_to_thread[ei.src_device]].index(ei.src_device),
+                "SRC_PORT_INDEX": props[ei.src_pin]["OUTPUT_PORT_INDEX"],
+                "EDGE_PROPERTIES": 0,
+                "EDGE_STATE": 0
+            }
+            if ip.properties:
+                if not _use_BLOB:
+                    eProps["EDGE_PROPERTIES"] = "&{}_properties".format(name)
+                else:
+                    (offset, length) = globalProperties.find("{}_properties".format(name))
+                    if not _use_indirect_BLOB:
+                        edgePropertiesBinding = "softswitch_pthread_global_properties+{}".format(offset)
+                    else:
+                        edgePropertiesBinding = "(const void *){}".format(offset)
+                    eProps["EDGE_PROPERTIES"] = edgePropertiesBinding
+            if ip.state:
+                if not _use_BLOB:
+                    eProps["EDGE_STATE"] = "&{}_state".format(name)
+                else:
+                    (offset, length) = globalState.find("{}_state".format(name))
+                    eProps["EDGE_STATE"] = "softswitch_pthread_global_state+{}".format(offset)
+            dst.write("""
+                    {{
+                        {{
+                            {SRC_THREAD_INDEX}, // thread id
+                            {SRC_THREAD_OFFSET}, // thread offset
+                            {SRC_PORT_INDEX}, // pin
+                            0
+                        }},
+                        {EDGE_PROPERTIES},
+                        {EDGE_STATE}
+                    }}
+                    """.format(**eProps))
+        dst.write("};\n");
+    dst.write("InputPinSources {}_sources[]={{\n".format(di.id))
+    first = True
+    for ip in di.device_type.inputs_by_index:
+        if first:
+            first = False
+        else:
+            dst.write(",")
+        if ip.properties == None and ip.state == None:
+            dst.write("  {{0,0}} // {}\n".format(ip.name))
+        else:
+            dst.write("  {{ {}, {}_{}_bindings }}\n // {}\n".format(len(edges_in[di][ip]), di.id, ip.name, ip.name))
+    dst.write("};\n")
+
+
+def render_device_instance_outputs(devices_to_thread, di, dst, edges_out, globalOutputPinTargets, globalProperties,
+                                    thread_index, thread_to_devices):
+    for op in di.device_type.outputs_by_index:
+        addressesName = "{}_{}_addresses".format(di.id, op.name)
+
+        edges = edges_out[di][op]
+        if sort_edges_by_distance != 0:
+            srcId = thread_index
+            key = lambda ei: thread_distance(devices_to_thread[ei.dst_device], srcId)
+            # print([key(i) for i in edges])
+            edges = sorted(edges, key=key, reverse=sort_edges_by_distance > 0)
+            # print([key(i) for i in edges])
+
+        cost = sum([key(x) for x in edges])
+        if cost >= len(edgeCosts):
+            edgeCosts.extend([0] * (1 + cost - len(edgeCosts)))
+        edgeCosts[cost] += 1
+
+        if not _use_BLOB:
+            dst.write("address_t {}[]={{\n".format(addressesName))
+            first = True
+            for ei in edges:
+                if first:
+                    first = False
+                else:
+                    dst.write(",")
+                dstDev = ei.dst_device
+                tIndex = devices_to_thread[dstDev]
+                tOffset = thread_to_devices[tIndex].index(dstDev)
+                dst.write("  {{{},{},INPUT_INDEX_{}_{}_{}_V, 0}}".format(tIndex, tOffset, dstDev.device_type.parent.id,
+                                                                         dstDev.device_type.id, ei.dst_pin.name))
+            dst.write("};\n")
+        else:
+            blob = bytearray([])
+            for ei in edges:
+                dstDev = ei.dst_device
+                tIndex = devices_to_thread[dstDev]
+                tOffset = thread_to_devices[tIndex].index(dstDev)
+                pin_index = ei.dst_pin.parent.inputs_by_index.index(ei.dst_pin)
+                addr = convert_address_to_bytes(tIndex, tOffset, pin_index)
+                blob.extend(addr)
+            globalProperties.add(addressesName, blob)
+    if not _use_BLOB:
+        dst.write("OutputPinTargets {}_targets[]={{\n".format(di.id))
+    else:
+        globalOutputPinTargets.add_label("{}_targets".format(di.id))
+    first = True
+    for op in di.device_type.outputs_by_index:
+        addressesName = "{}_{}_addresses".format(di.id, op.name)
+        if not _use_BLOB:
+            addressesSource = addressesName
+        else:
+            (offset, length) = globalProperties.find(addressesName)
+            if not _use_indirect_BLOB:
+                addressesSource = "(address_t*)(softswitch_pthread_global_properties+{})".format(offset)
+            else:
+                addressesSource = "(address_t*)({})".format(offset)
+
+        if not _use_BLOB:
+            if first:
+                first = False
+            else:
+                dst.write(",")
+            dst.write("{{ {}, {} }} // {}\n".format(len(edges_out[di][op]), addressesSource, op.name))
+        else:
+            globalOutputPinTargets.add(addressesName, (len(edges_out[di][op]), addressesSource))
+    if not _use_BLOB:
+        dst.write("};\n")  # End of output pin targets
+
 
 def render_graph_instance_as_softswitch(gi,dst,num_threads,device_to_thread):
     
@@ -873,6 +886,15 @@ def render_graph_instance_as_softswitch(gi,dst,num_threads,device_to_thread):
     
     dst.write("const ");
     globalOutputPinTargets.write(dst, "softswitch_pthread_output_pin_targets")
+
+    sumEdgeCost=0
+    numEdgeCost=0
+    for x in range(len(edgeCosts)):
+        print("total edge cost {} : {}".format(x,edgeCosts[x]))
+        sumEdgeCost+=x*edgeCosts[x]
+        numEdgeCost+=edgeCosts[x]
+    print("average edge cost = {}".format(sumEdgeCost/numEdgeCost))
+    
 
 import argparse
 
