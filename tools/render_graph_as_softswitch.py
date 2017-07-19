@@ -887,13 +887,14 @@ def render_graph_instance_as_softswitch(gi,dst,num_threads,device_to_thread):
     dst.write("const ");
     globalOutputPinTargets.write(dst, "softswitch_pthread_output_pin_targets")
 
-    sumEdgeCost=0
-    numEdgeCost=0
-    for x in range(len(edgeCosts)):
-        print("total edge cost {} : {}".format(x,edgeCosts[x]))
-        sumEdgeCost+=x*edgeCosts[x]
-        numEdgeCost+=edgeCosts[x]
-    print("average edge cost = {}".format(sumEdgeCost/numEdgeCost))
+    if 0:
+        sumEdgeCost=0
+        numEdgeCost=0
+        for x in range(len(edgeCosts)):
+            print("total edge cost {} : {}".format(x,edgeCosts[x]))
+            sumEdgeCost+=x*edgeCosts[x]
+            numEdgeCost+=edgeCosts[x]
+        print("average edge cost = {}".format(sumEdgeCost/numEdgeCost))
     
 
 import argparse
