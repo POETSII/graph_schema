@@ -7,7 +7,7 @@ import sys
 import os
 import math
 import random
-import numpy
+#import numpy
 import copy
 
 import os
@@ -89,8 +89,11 @@ def apsp_ref(conn):
         sumMaxDist+=max(dist)
     
     return (sumMaxDist,sumSumDist)
-    
-(refSumMaxDist,refSumSumDist)=apsp_ref(connections)
+
+if len(connections)<1000:
+    (refSumMaxDist,refSumSumDist)=apsp_ref(connections)
+else:
+    (refSumMaxDist,refSumSumDist)=(0,0)
 sys.stderr.write("{},{}\n".format(refSumMaxDist,refSumSumDist))
 
 
@@ -119,13 +122,15 @@ for i in range(0,n):
     progress.append(nodes[i])
     
 for i in range(0,n):
-    sys.stderr.write(" Edges : Node {} of {}\n".format( i, n) )
+    if n<1000:
+        sys.stderr.write(" Edges : Node {} of {}\n".format( i, n) )
     
     srcN=nodes[i]
     for (dst,w) in connections[i].items():
         props={"w": w }
         dstN=nodes[dst]
-        sys.stderr.write("    dst={}, src={}\n".format(dstN.id,srcN.id))
+        if n<100:
+            sys.stderr.write("    dst={}, src={}\n".format(dstN.id,srcN.id))
         ei=EdgeInstance(res,dstN,"din",srcN,"dout",props)
         res.add_edge_instance(ei)
         

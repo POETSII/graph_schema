@@ -7,7 +7,7 @@ import sys
 import os
 import math
 import random
-import numpy
+#import numpy
 import copy
 
 import os
