@@ -1,5 +1,5 @@
 from graph.load_xml import load_graph
-from graph.save_xml import save_graph
+from graph.save_xml_stream import save_graph
 from graph.core import *
 import sys
 import os
@@ -44,15 +44,6 @@ def make_random_float32_spec(name=None,pEmpty=0.5):
         
     return ScalarTypedDataSpec(name, "float", value)
 
-def make_random_bool_spec(name=None,pEmpty=0.5):
-    if name==None:
-        name=make_random_string("v")
-    
-    value=None
-    if urng()<pEmpty:
-        value=bool(random.randint(0,1))
-        
-    return ScalarTypedDataSpec(name, "bool", value)
 
 def make_random_tuple_spec(name=None,pEmpty=0.5):
     if urng() < 0.25:
@@ -69,7 +60,7 @@ def make_random_tuple_spec(name=None,pEmpty=0.5):
     return TupleTypedDataSpec(name, elts)
 
 def make_random_data_spec(name=None):
-    creators=[make_void_spec,make_random_int32_spec,make_random_float32_spec,make_random_bool_spec,make_random_tuple_spec]
+    creators=[make_void_spec,make_random_int32_spec,make_random_float32_spec,make_random_tuple_spec]
     return random.choice(creators)(name)
 
 
@@ -101,7 +92,7 @@ def make_random_instance(proto):
     else:
         raise RuntimeError("Unknown data type.")
 
-graphType=GraphType("random", 0, make_random_tuple_spec())
+graphType=GraphType("random", 0, make_random_tuple_spec(), None)
 graphProperties=make_random_instance(graphType.properties)
 graphInstance=GraphInstance("random", graphType)
 

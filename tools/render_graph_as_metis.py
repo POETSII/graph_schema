@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 
 from graph.load_xml import load_graph
-from graph.save_xml import save_graph, save_metadata_patch
+from graph.save_xml_stream import save_graph, save_metadata_patch
 from graph.metadata import *
 import sys
 import os

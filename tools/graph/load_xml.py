@@ -3,11 +3,18 @@ from graph.core import *
 import xml.etree.ElementTree as ET
 from lxml import etree
 
+import re
 import os
 import sys
 import json
 
 ns={"p":"https://poets-project.org/schemas/virtual-graph-schema-v2"}
+
+# Precalculate, as these are on inner loop for DevI and EdgeI
+_ns_P="{{{}}}P".format(ns["p"])
+_ns_M="{{{}}}M".format(ns["p"])
+_ns_DevI="{{{}}}DevI".format(ns["p"])
+_ns_EdgeI="{{{}}}EdgeI".format(ns["p"])
 
 def deNS(t):
     tt=t.replace("{"+ns["p"]+"}","p:")
@@ -254,11 +261,23 @@ def load_device_instance(graph,diNode):
     device_type=graph.graph_type.device_types[device_type_id]
 
     properties=None
-    propertiesNode=diNode.find("p:P",ns)
-    if propertiesNode is not None:
-        properties=load_struct_instance(device_type.properties, propertiesNode)
+    metadata=None
 
-    metadata=load_metadata(diNode,"p:M")
+    for n in diNode: # walk over children rather than using find. Better performance
+        if n.tag==_ns_P:
+            assert not properties
+            
+            spec=device_type.properties
+            assert spec is not None, "Can't have properties value for device with no properties spec"
+
+            value=json.loads("{"+n.text+"}")
+            assert(spec.is_refinement_compatible(value))
+            properties=spec.expand(value)
+        elif n.tag==_ns_M:
+            assert not metadata
+            metadata=json.loads("{"+n.text+"}")
+        else:
+            assert "Unknown tag type in EdgeI"
 
     return DeviceInstance(graph,id,device_type,properties,metadata)
 
@@ -276,15 +295,11 @@ def split_path(path,node):
         raise XMLSyntaxError("Path does not contain exactly two endpoints",node)
     return split_endpoint(parts[0],node)+split_endpoint(parts[1],node)
 
+_split_path_re=re.compile("^([^:]+):([^-]+)-([^:]+):([^-]+)$")
+
 def load_edge_instance(graph,eiNode):
-    path=get_attrib_optional(eiNode,"path")
-    if path:
-        (dst_device_id,dst_pin_name,src_device_id,src_pin_name)=split_path(path,eiNode)
-    else:
-        dst_device_id=get_attrib(eiNode,"dstDeviceId")
-        dst_pin_name=get_attrib(eiNode,"dstPinName")
-        src_device_id=get_attrib(eiNode,"srcDeviceId")
-        src_pin_name=get_attrib(eiNode,"srcPinName")
+    path=eiNode.attrib["path"]
+    (dst_device_id,dst_pin_name,src_device_id,src_pin_name)=_split_path_re.match(path).groups()
     
     dst_device=graph.device_instances[dst_device_id]
     src_device=graph.device_instances[src_device_id]
@@ -292,14 +307,23 @@ def load_edge_instance(graph,eiNode):
     assert dst_pin_name in dst_device.device_type.inputs, "Couldn't find input pin called '{}' in device type '{}'. Inputs are [{}]".format(dst_pin_name,dst_device.device_type.id, [p.name for p in dst_device.device_type.inputs])
     assert src_pin_name in src_device.device_type.outputs
     
-
     properties=None
-    propertiesNode=eiNode.find("p:P",ns)
-    if propertiesNode is not None:
-        spec=dst_device.device_type.inputs[dst_pin_name].properties
-        properties=load_struct_instance(spec, propertiesNode)
+    metadata=None
+    for n in eiNode: # walk over children rather than using find. Better performance
+        if n.tag==_ns_P:
+            assert not properties
+            
+            spec=dst_device.device_type.inputs[dst_pin_name].properties
+            assert spec is not None, "Can't have properties value for edge with no properties spec"
 
-    metadata=load_metadata(eiNode,"p:M")
+            value=json.loads("{"+n.text+"}")
+            assert(spec.is_refinement_compatible(value))
+            properties=spec.expand(value)
+        elif n.tag==_ns_M:
+            assert not metadata
+            metadata=json.loads("{"+n.text+"}")
+        else:
+            assert "Unknown tag type in EdgeI"
 
     return EdgeInstance(graph,dst_device,dst_pin_name,src_device,src_pin_name,properties,metadata)
 
@@ -318,11 +342,17 @@ def load_graph_instance(graphTypes, graphNode):
 
     graph=GraphInstance(id,graphType,properties,metadata)
 
-    for diNode in graphNode.findall("p:DeviceInstances/p:DevI",ns):
+    disNode=graphNode.findall("p:DeviceInstances",ns)
+    assert(len(disNode)==1)
+    for diNode in disNode[0]:
+        assert diNode.tag==_ns_DevI
         di=load_device_instance(graph,diNode)
         graph.add_device_instance(di)
 
-    for eiNode in graphNode.findall("p:EdgeInstances/p:EdgeI",ns):
+    eisNode=graphNode.findall("p:EdgeInstances",ns)
+    assert(len(eisNode)==1)
+    for eiNode in eisNode[0]:
+        assert eiNode.tag==_ns_EdgeI
         ei=load_edge_instance(graph,eiNode)
         graph.add_edge_instance(ei)
 
