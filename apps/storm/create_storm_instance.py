@@ -1,7 +1,7 @@
 from graph.core import *
 
 from graph.load_xml import load_graph_types_and_instances
-from graph.save_xml import save_graph
+from graph.save_xml_stream import save_graph
 
 import sys
 import os

@@ -3,7 +3,7 @@
 from graph.core import *
 
 from graph.load_xml import load_graph_types_and_instances
-from graph.save_xml import save_graph
+from graph.save_xml_stream import save_graph
 import sys
 import os
 import math
@@ -185,9 +185,10 @@ create_fanin(
 srcIToDstI=[[] for i in range(N)]  # Map from src index to array of dest indexes
 
 for dstI in range(N):
-    free=list(range(N))
-    random.shuffle(free)
-    srcs=free[:K]
+    #free=list(range(N))
+    #random.shuffle(free)
+    #srcs=free[:K]
+    srcs=random.sample(range(N),K)
     
     for si in srcs:
         srcIToDstI[si].append(dstI)
