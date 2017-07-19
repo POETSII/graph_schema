@@ -1,4 +1,4 @@
-#!/usr/bin/python3
+#!/usr/bin/env python3
 
 from graph.load_xml import load_graph
 from graph.save_xml_stream import save_graph, save_metadata_patch
