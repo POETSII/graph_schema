@@ -3,8 +3,6 @@ from graph.save_xml import save_graph_type,toNS
 
 from lxml import etree
 
-import loxun
-
 import os
 import sys
 import json
