@@ -93,6 +93,9 @@ Vagrant.configure(2) do |config|
 
      # Creating meshes
      sudo apt-get install -y octave octave-msh octave-geometry
+     # Fix a bug in geometry package for svg.
+     # Note that sed is _not_ using extended regular expressions (no "-r")
+     sudo sed -i -e 's/,{1},/,"{1}",/g' -e 's/,{1},/,"{1}",/g'  /usr/share/octave/packages/geometry-2.1.0/io/@svg/parseSVGData.py
      
      # Used to support generation of documentation from schema
      sudo apt-get install -y xsltproc ant libsaxon-java docbook docbook-xsl-ns pandoc
