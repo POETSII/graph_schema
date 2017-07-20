@@ -84,7 +84,7 @@ instName="heat_mesh"
 urand=random.random
 
 
-graphProperties={"exportDeltaMask":1023}
+graphProperties={"exportDeltaMask":1023,"maxTime":600}
 graphMetadata={"location.dimensions" : 2}
 res=GraphInstance(instName, graphType, graphProperties, graphMetadata)
 

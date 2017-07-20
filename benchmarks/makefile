@@ -58,6 +58,7 @@ FILES += gals_heat_fix_regular_16k.xml.gz
 
 ##################################
 
+# 20 sec
 gals_heat_fix_noedge_regular_1k.xml.gz :
 	 $(GS_ROOT)/apps/gals_heat_fix_noedge/create_gals_heat_fix_noedge_instance.py 32 4000 4095 | gzip > $@
 
@@ -76,6 +77,7 @@ FILES += gals_heat_fix_noedge_regular_16k.xml.gz
 
 ########################
 
+# 40 seconds (?)
 gals_heat_irregular_12k.xml.gz : 
 	(cd $(GS_ROOT)/apps/gals_heat/create_mesh/ && octave octave_svg_to_geo.m)
 	(cd $(GS_ROOT)/apps/gals_heat/create_mesh/ && octave octave_write_csv_delauney.m poets.svg_8) > poets.8.csv
@@ -83,28 +85,38 @@ gals_heat_irregular_12k.xml.gz :
 
 FILES += gals_heat_irregular_12k.xml.gz
 
+
+############################
+
+# exec: 73 sec
 apsp_sparse_4k.xml.gz :
 	$(GS_ROOT)/apps/apsp/create_apsp_instance.py 4096 8 | gzip > $@
 
 FILES += apsp_sparse_4k.xml.gz
 
+# exec: 100 sec
 apsp_dense_1k.xml.gz :
 	$(GS_ROOT)/apps/apsp/create_apsp_instance.py 1024 256 | gzip > $@
 
 FILES += apsp_dense_1k.xml.gz
 
+###################################
+
+# 15 sec
 ising_spin_fix_1k.xml.gz :
-	$(GS_ROOT)/apps/ising_spin_fix/create_ising_spin_fix_instance.py 32 1 4000 | gzip > $@
+	$(GS_ROOT)/apps/ising_spin_fix/create_ising_spin_fix_instance.py 32 1 16000 | gzip > $@
 
 FILES += ising_spin_fix_1k.xml.gz
 
+# 8 sec
 ising_spin_fix_4k.xml.gz :
-	$(GS_ROOT)/apps/ising_spin_fix/create_ising_spin_fix_instance.py 64 1 1000 | gzip > $@
+	$(GS_ROOT)/apps/ising_spin_fix/create_ising_spin_fix_instance.py 64 1 4000 | gzip > $@
 
 FILES += ising_spin_fix_4k.xml.gz
 
+# 12 sec
 ising_spin_fix_16k.xml.gz :
-	$(GS_ROOT)/apps/ising_spin_fix/create_ising_spin_fix_instance.py 128 1 250 | gzip > $@
+	$(GS_ROOT)/apps/ising_spin_fix/create_ising_spin_fix_instance.py 128 1 1000 | gzip > $@
 
 FILES += ising_spin_fix_16k.xml.gz
 
