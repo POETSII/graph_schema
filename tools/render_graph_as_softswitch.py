@@ -13,6 +13,25 @@ import os
 import logging
 import random
 import math
+import statistics
+
+
+def print_statistics(dst, baseName, unit, data):
+    print("{}Count, -, {}, {}\n".format(baseName, len(data), unit), file=measure_file)
+    print("{}Min, -, {}, {}\n".format(baseName, min(data), unit), file=measure_file)
+    print("{}Max, -, {}, {}\n".format(baseName, max(data), unit), file=measure_file)
+
+    if len(data)>0:
+        print("{}Median, -, {}, {}\n".format(baseName, statistics.median(data), unit), file=measure_file)
+        mean=statistics.mean(data)
+        print("{}Mean, -, {}, {}\n".format(baseName, mean, unit), file=measure_file)
+
+        if len(data)>1:
+            stddev=statistics.stdev(data)
+            skewness=sum( [math.pow(float(x),3) for x in data] ) / pow(stddev,3)
+            print("{}StdDev, -, {}, {}\n".format(baseName, stddev, unit), file=measure_file)
+            print("{}Skewness, -, {}, {}\n".format(baseName, skewness, unit), file=measure_file)
+
 
 # The alignment to pad to for the next cache line
 _cache_line_size=32
@@ -36,6 +55,8 @@ threads_per_mailbox=threads_per_core*cores_per_mailbox
 
 inter_mbox_cost=5
 intra_mbox_cost=1
+
+measure_file=None
 
 def decompose_thread(id):
     return (id//threads_per_mailbox, (id%threads_per_mailbox)//threads_per_core, id%threads_per_core)
@@ -699,11 +720,11 @@ def render_device_instance_outputs(devices_to_thread, di, dst, edges_out, global
                                     thread_index, thread_to_devices):
     for op in di.device_type.outputs_by_index:
         addressesName = "{}_{}_addresses".format(di.id, op.name)
+        srcId = thread_index
+        key = lambda ei: thread_distance(devices_to_thread[ei.dst_device], srcId)
 
         edges = edges_out[di][op]
         if sort_edges_by_distance != 0:
-            srcId = thread_index
-            key = lambda ei: thread_distance(devices_to_thread[ei.dst_device], srcId)
             # print([key(i) for i in edges])
             edges = sorted(edges, key=key, reverse=sort_edges_by_distance > 0)
             # print([key(i) for i in edges])
@@ -805,6 +826,7 @@ def render_graph_instance_as_softswitch(gi,dst,num_threads,device_to_thread):
 
     # calculate statistics of distribution
     device_per_thread_hist=[]
+    device_per_thread_median=0
     for d in thread_to_devices:
         c=len(d)
         while c >= len(device_per_thread_hist):
@@ -812,7 +834,11 @@ def render_graph_instance_as_softswitch(gi,dst,num_threads,device_to_thread):
         device_per_thread_hist[c] += 1
     for i in range(len(device_per_thread_hist)):
         if device_per_thread_hist[i]!=0:
-            sys.stderr.write("{} devices/thread -> {} threads\n".format(i, device_per_thread_hist[i]))
+            print("renderSoftswitchDevicesPerThreadHist, {}, {}, threads\n".format(i, device_per_thread_hist[i]), file=measure_file)
+    device_per_thread_counts=[len(x) for x in thread_to_devices]
+    print_statistics(dst, "renderSoftswitchDevicesPerThread", "devices/thread", device_per_thread_counts)
+    
+
         
     dst.write("""
     #include "{GRAPH_TYPE_ID}.hpp"
@@ -887,15 +913,9 @@ def render_graph_instance_as_softswitch(gi,dst,num_threads,device_to_thread):
     dst.write("const ");
     globalOutputPinTargets.write(dst, "softswitch_pthread_output_pin_targets")
 
-    if 0:
-        sumEdgeCost=0
-        numEdgeCost=0
-        for x in range(len(edgeCosts)):
-            print("total edge cost {} : {}".format(x,edgeCosts[x]))
-            sumEdgeCost+=x*edgeCosts[x]
-            numEdgeCost+=edgeCosts[x]
-        print("average edge cost = {}".format(sumEdgeCost/numEdgeCost))
-    
+    print("graphOutputInstCount, -, {}, \n".format(len(edgeCosts)), file=measure_file)
+    print_statistics(dst, "renderSoftswitchOutputInstCost", "estimatedTotalOutgoingEdgeDistance", edgeCosts)
+  
 
 import argparse
 
@@ -910,6 +930,7 @@ parser.add_argument('--contraction', help='if threads < hardware-threads, how to
 parser.add_argument('--log-level', dest="logLevel", help='logging level (INFO,ERROR,...)', default='WARNING')
 parser.add_argument('--placement-seed', dest="placementSeed", help="Choose a specific random placement", default=None)
 parser.add_argument('--destination-ordering', dest="destinationOrdering", help="Should messages be send 'furthest-first', 'random', 'nearest-first'", default="random")
+parser.add_argument('--measure', help="Destination for measured properties", default="tinsel.render_softswitch.csv")
 
 args = parser.parse_args()
 
@@ -930,6 +951,8 @@ elif args.destinationOrdering=="random":
     sort_edges_by_distance=0
 else:
     assert False, "Didn't understand destination-ordering={}".format(args.destinationOrdering)
+
+measure_file=open(args.measure, "wt")
 
 if args.source=="-":
     source=sys.stdin
@@ -990,6 +1013,9 @@ if(len(instances)>0):
         break
         
     assert(inst.graph_type.id==graph.id)
+
+    print("graphDeviceInstCount, -, {}, devices".format(len(inst.device_instances)), file=measure_file)
+    print("graphEdgeInstCount, -, {}, edges".format(len(inst.edge_instances)), file=measure_file)
     
     partitionInfoKey="dt10.partitions.{}".format(nThreads)
     partitionInfo=(inst.metadata or {}).get(partitionInfoKey,None)
