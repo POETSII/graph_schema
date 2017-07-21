@@ -1,6 +1,6 @@
 SHELL=/usr/bin/env bash
 
-.PRECIOUS : %.xml.gz %.elf %.build.csv
+.PRECIOUS : %.xml.gz %.elf %.build.csv %.execute.csv
 
 GS_ROOT=$(dir $(abspath $(lastword $(MAKEFILE_LIST))))/..
 TS_ROOT=$(abspath $(GS_ROOT)/../toy_softswitch)
@@ -9,13 +9,19 @@ TS_ROOT=$(abspath $(GS_ROOT)/../toy_softswitch)
 %.elf %.build.csv : %.xml.gz
 	$(TS_ROOT)/tools/build_tinsel_elf.sh <( gunzip -c $*.xml.gz ) -o $*.elf --measure=$*.build.csv --release
 
+%.execute.csv : %.elf
+	$(TS_ROOT)/tools/execute_tinsel_elf.sh $*.elf --measure=$*.execute.csv
+
+
+
+
 clock_tree_deep_32k.xml.gz :
-	$(GS_ROOT)/apps/clock_tree/create_clock_tree_instance.py 14 2 | gzip > $@
+	$(GS_ROOT)/apps/clock_tree/create_clock_tree_instance.py 14 2 800 | gzip > $@
 
 FILES += clock_tree_deep_32k.xml.gz
 
 clock_tree_broad_32k.xml.gz :
-	$(GS_ROOT)/apps/clock_tree/create_clock_tree_instance.py 3 25 | gzip > $@
+	$(GS_ROOT)/apps/clock_tree/create_clock_tree_instance.py 3 25 1000 | gzip > $@
 
 FILES += clock_tree_broad_32k.xml.gz
 
@@ -56,6 +62,11 @@ gals_heat_fix_regular_16k.xml.gz :
 
 FILES += gals_heat_fix_regular_16k.xml.gz
 
+gals_heat_fix_regular_64k.xml.gz :
+	 $(GS_ROOT)/apps/gals_heat_fix/create_gals_heat_fix_instance.py 256 250 255 | gzip > $@
+
+FILES += gals_heat_fix_regular_64k.xml.gz
+
 ##################################
 
 # 20 sec
@@ -73,6 +84,11 @@ gals_heat_fix_noedge_regular_16k.xml.gz :
 	 $(GS_ROOT)/apps/gals_heat_fix_noedge/create_gals_heat_fix_noedge_instance.py 128 250 255 | gzip > $@
 
 FILES += gals_heat_fix_noedge_regular_16k.xml.gz
+
+gals_heat_fix_noedge_regular_64k.xml.gz :
+	 $(GS_ROOT)/apps/gals_heat_fix_noedge/create_gals_heat_fix_noedge_instance.py 256 125 255 | gzip > $@
+
+FILES += gals_heat_fix_noedge_regular_64k.xml.gz
 
 
 ########################
@@ -102,12 +118,6 @@ FILES += apsp_dense_1k.xml.gz
 
 ###################################
 
-# 15 sec
-ising_spin_fix_1k.xml.gz :
-	$(GS_ROOT)/apps/ising_spin_fix/create_ising_spin_fix_instance.py 32 1 16000 | gzip > $@
-
-FILES += ising_spin_fix_1k.xml.gz
-
 # 8 sec
 ising_spin_fix_4k.xml.gz :
 	$(GS_ROOT)/apps/ising_spin_fix/create_ising_spin_fix_instance.py 64 1 4000 | gzip > $@
@@ -120,10 +130,18 @@ ising_spin_fix_16k.xml.gz :
 
 FILES += ising_spin_fix_16k.xml.gz
 
+# 12 sec
+ising_spin_fix_64k.xml.gz :
+	$(GS_ROOT)/apps/ising_spin_fix/create_ising_spin_fix_instance.py 256 1 250 | gzip > $@
+
+FILES += ising_spin_fix_64k.xml.gz
+
 ################################################
 
 all_xml : $(FILES)
 
 all_elf : $(subst .xml.gz,.elf,$(FILES))
+
+all_exec : $(subst .xml.gz,.execute.csv,$(FILES))
 
 .DELETE_ON_ERROR : 
