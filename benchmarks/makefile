@@ -150,6 +150,12 @@ all_exec : $(subst .xml.gz,.execute.csv,$(FILES))
 all.csv :
 	-rm $@
 	for x in *.build.csv ; do \
+		BN="$(basename $$x .build.csv)"; \
+		while read y ; do \
+			( echo "$$BN, $$y" >> $@ ) ; \
+		done < $$x ; \
+	done
+	for x in *.execute.csv ; do \
 		BN="$(basename $$x .execute.csv)"; \
 		while read y ; do \
 			( echo "$$BN, $$y" >> $@ ) ; \
