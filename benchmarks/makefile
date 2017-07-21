@@ -51,22 +51,22 @@ FILES += clocked_izhikevich_fix_dense_1k.xml.gz
 ####################################################
 
 gals_heat_fix_regular_1k.xml.gz :
-	 $(GS_ROOT)/apps/gals_heat_fix/create_gals_heat_fix_instance.py 32 4000 4095 | gzip > $@
+	 $(GS_ROOT)/apps/gals_heat_fix/create_gals_heat_fix_instance.py 32 64000 65535 | gzip > $@
 
 FILES += gals_heat_fix_regular_1k.xml.gz
 
 gals_heat_fix_regular_4k.xml.gz :
-	 $(GS_ROOT)/apps/gals_heat_fix/create_gals_heat_fix_instance.py 64 1000 1023 | gzip > $@
+	 $(GS_ROOT)/apps/gals_heat_fix/create_gals_heat_fix_instance.py 64 16000 16383 | gzip > $@
 
 FILES += gals_heat_fix_regular_4k.xml.gz
 
 gals_heat_fix_regular_16k.xml.gz :
-	 $(GS_ROOT)/apps/gals_heat_fix/create_gals_heat_fix_instance.py 128 250 255 | gzip > $@
+	 $(GS_ROOT)/apps/gals_heat_fix/create_gals_heat_fix_instance.py 128 4000 4095 | gzip > $@
 
 FILES += gals_heat_fix_regular_16k.xml.gz
 
 gals_heat_fix_regular_64k.xml.gz :
-	 $(GS_ROOT)/apps/gals_heat_fix/create_gals_heat_fix_instance.py 256 250 255 | gzip > $@
+	 $(GS_ROOT)/apps/gals_heat_fix/create_gals_heat_fix_instance.py 256 500 511 | gzip > $@
 
 FILES += gals_heat_fix_regular_64k.xml.gz
 
@@ -74,35 +74,43 @@ FILES += gals_heat_fix_regular_64k.xml.gz
 
 # 20 sec
 gals_heat_fix_noedge_regular_1k.xml.gz :
-	 $(GS_ROOT)/apps/gals_heat_fix_noedge/create_gals_heat_fix_noedge_instance.py 32 4000 4095 | gzip > $@
+	 $(GS_ROOT)/apps/gals_heat_fix_noedge/create_gals_heat_fix_noedge_instance.py 32 64000 65535 | gzip > $@
 
 FILES += gals_heat_fix_noedge_regular_1k.xml.gz
 
 gals_heat_fix_noedge_regular_4k.xml.gz :
-	 $(GS_ROOT)/apps/gals_heat_fix_noedge/create_gals_heat_fix_noedge_instance.py 64 1000 1023 | gzip > $@
+	 $(GS_ROOT)/apps/gals_heat_fix_noedge/create_gals_heat_fix_noedge_instance.py 64 16000 16383 | gzip > $@
 
 FILES += gals_heat_fix_noedge_regular_4k.xml.gz
 
 gals_heat_fix_noedge_regular_16k.xml.gz :
-	 $(GS_ROOT)/apps/gals_heat_fix_noedge/create_gals_heat_fix_noedge_instance.py 128 250 255 | gzip > $@
+	 $(GS_ROOT)/apps/gals_heat_fix_noedge/create_gals_heat_fix_noedge_instance.py 128 4000 4095 | gzip > $@
 
 FILES += gals_heat_fix_noedge_regular_16k.xml.gz
 
 gals_heat_fix_noedge_regular_64k.xml.gz :
-	 $(GS_ROOT)/apps/gals_heat_fix_noedge/create_gals_heat_fix_noedge_instance.py 256 125 255 | gzip > $@
+	 $(GS_ROOT)/apps/gals_heat_fix_noedge/create_gals_heat_fix_noedge_instance.py 256 500 511 | gzip > $@
 
 FILES += gals_heat_fix_noedge_regular_64k.xml.gz
 
 
 ########################
 
-# 40 seconds (?)
-gals_heat_irregular_12k.xml.gz : 
+gals_heat_fix_irregular_12k.xml.gz : 
 	(cd $(GS_ROOT)/apps/gals_heat/create_mesh/ && octave octave_svg_to_geo.m)
 	(cd $(GS_ROOT)/apps/gals_heat/create_mesh/ && octave octave_write_csv_delauney.m poets.svg_8) > poets.8.csv
-	$(GS_ROOT)/apps/gals_heat/create_mesh/csv_mesh_to_graph_fix.py poets.8.csv | gzip > $@
+	$(GS_ROOT)/apps/gals_heat/create_mesh/csv_mesh_to_graph_fix.py poets.8.csv 6000 | gzip > $@
+	rm poets.8.csv
 
-FILES += gals_heat_irregular_12k.xml.gz
+FILES += gals_heat_fix_irregular_12k.xml.gz
+
+gals_heat_fix_irregular_32k.xml.gz : 
+	(cd $(GS_ROOT)/apps/gals_heat/create_mesh/ && octave octave_svg_to_geo.m)
+	(cd $(GS_ROOT)/apps/gals_heat/create_mesh/ && octave octave_write_csv_delauney.m poets.svg_16) > poets.16.csv
+	$(GS_ROOT)/apps/gals_heat/create_mesh/csv_mesh_to_graph_fix.py  poets.16.csv 3000 | gzip > $@
+	rm poets.16.csv
+
+FILES += gals_heat_fix_irregular_32k.xml.gz
 
 
 ############################
