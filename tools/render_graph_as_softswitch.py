@@ -699,11 +699,11 @@ def render_device_instance_outputs(devices_to_thread, di, dst, edges_out, global
                                     thread_index, thread_to_devices):
     for op in di.device_type.outputs_by_index:
         addressesName = "{}_{}_addresses".format(di.id, op.name)
+        srcId = thread_index
+        key = lambda ei: thread_distance(devices_to_thread[ei.dst_device], srcId)
 
         edges = edges_out[di][op]
         if sort_edges_by_distance != 0:
-            srcId = thread_index
-            key = lambda ei: thread_distance(devices_to_thread[ei.dst_device], srcId)
             # print([key(i) for i in edges])
             edges = sorted(edges, key=key, reverse=sort_edges_by_distance > 0)
             # print([key(i) for i in edges])

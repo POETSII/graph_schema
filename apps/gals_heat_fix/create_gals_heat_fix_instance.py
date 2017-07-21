@@ -64,7 +64,7 @@ exitNodeType=graphType.device_types["exit_node"]
 
 instName="heat_{}_{}".format(n,n)
 
-properties={"exportDeltaMask":exportDeltaMask,"maxTime":maxTime,"}
+properties={"exportDeltaMask":exportDeltaMask,"maxTime":maxTime}
 
 res=GraphInstance(instName, graphType, properties)
 

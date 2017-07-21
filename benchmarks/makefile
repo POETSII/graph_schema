@@ -72,9 +72,9 @@ FILES += gals_heat_fix_regular_64k.xml.gz
 
 ##################################
 
-# 20 sec
+
 gals_heat_fix_noedge_regular_1k.xml.gz :
-	 $(GS_ROOT)/apps/gals_heat_fix_noedge/create_gals_heat_fix_noedge_instance.py 32 64000 65535 | gzip > $@
+	 $(GS_ROOT)/apps/gals_heat_fix_noedge/create_gals_heat_fix_noedge_instance.py 32 64000 1048575 | gzip > $@
 
 FILES += gals_heat_fix_noedge_regular_1k.xml.gz
 
