@@ -5,6 +5,7 @@ SHELL=/usr/bin/env bash
 GS_ROOT=$(dir $(abspath $(lastword $(MAKEFILE_LIST))))/..
 TS_ROOT=$(abspath $(GS_ROOT)/../toy_softswitch)
 
+##########################################
 
 %.elf %.build.csv : %.xml.gz
 	$(TS_ROOT)/tools/build_tinsel_elf.sh <( gunzip -c $*.xml.gz ) -o $*.elf --measure=$*.build.csv --release
@@ -13,6 +14,8 @@ TS_ROOT=$(abspath $(GS_ROOT)/../toy_softswitch)
 	$(TS_ROOT)/tools/execute_tinsel_elf.sh $*.elf --measure=$*.execute.csv
 
 
+
+###########################################
 
 
 clock_tree_deep_32k.xml.gz :
@@ -143,5 +146,14 @@ all_xml : $(FILES)
 all_elf : $(subst .xml.gz,.elf,$(FILES))
 
 all_exec : $(subst .xml.gz,.execute.csv,$(FILES))
+
+all.csv :
+	-rm $@
+	for x in *.build.csv ; do \
+		BN="$(basename $$x .execute.csv)"; \
+		while read y ; do \
+			( echo "$$BN, $$y" >> $@ ) ; \
+		done < $$x ; \
+	done
 
 .DELETE_ON_ERROR : 

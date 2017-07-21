@@ -26,7 +26,7 @@ _use_BLOB=True
 _use_indirect_BLOB=False and _use_BLOB
 
 # If 0, then don't sort edges. If 1, then sort by furthest first. If -1, then sort by closest first
-sort_edges_by_distance=+1
+sort_edges_by_distance=0
 
 threads_per_core=16
 cores_per_mailbox=4
@@ -909,6 +909,7 @@ parser.add_argument('--hardware-threads', help='number of threads used in hardwa
 parser.add_argument('--contraction', help='if threads < hardware-threads, how to do mapping. "dense", "sparse", or "random"', type=str, default="dense")
 parser.add_argument('--log-level', dest="logLevel", help='logging level (INFO,ERROR,...)', default='WARNING')
 parser.add_argument('--placement-seed', dest="placementSeed", help="Choose a specific random placement", default=None)
+parser.add_argument('--destination-ordering', dest="destinationOrdering", help="Should messages be send 'furthest-first', 'random', 'nearest-first'", default="random")
 
 args = parser.parse_args()
 
@@ -920,6 +921,15 @@ if args.hardware_threads==0:
     hwThreads=nThreads
 else:
     hwThreads=args.hardware_threads
+
+if args.destinationOrdering=="furthest-first":
+    sort_edges_by_distance=+1
+elif args.destinationOrdering=="nearest-first":
+    sort_edges_by_distance=-1
+elif args.destinationOrdering=="random":
+    sort_edges_by_distance=0
+else:
+    assert False, "Didn't understand destination-ordering={}".format(args.destinationOrdering)
 
 if args.source=="-":
     source=sys.stdin

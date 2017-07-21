@@ -1,6 +1,8 @@
 # -*- mode: ruby -*-
 # vi: set ft=ruby :
 
+require 'etc'
+
 # All Vagrant configuration is done below. The "2" in Vagrant.configure
 # configures the configuration version (we support older styles for
 # backwards compatibility). Please don't change it unless you know what
@@ -54,8 +56,19 @@ Vagrant.configure(2) do |config|
   #   # Display the VirtualBox GUI when booting the machine
   #   vb.gui = true
   #
-  #   # Customize the amount of memory on the VM:
-     vb.memory = "6000"
+  #  
+  
+    vcpu = Etc.nprocessors > 4 ? 4 : ( Etc.nprocessors > 1 ? Etc.nprocessors - 1 : 1 )
+    
+    vb.cpus = vcpu
+  
+   # Customize the amount of memory on the VM:
+   # 1  hcpu -> 1 vcpu : 6GB
+   # 2  hcpu -> 1 vcpu : 6GB
+   # 3  hcpu -> 2 vcpu : 8GB
+   # 4  hcpu -> 3 vcpu : 10GB
+   # 5+ hcpu -> 4 vcpu : 12GB
+    vb.memory = 4000 + vcpu * 2000     
   
     # If clock drifts more than 500ms, then force it (instead of smooth adjust)
     vb.customize ["guestproperty","set", :id, "/VirtualBox/GuestAdd/VBoxService/--timesync-set-threshold", "500"]
@@ -95,7 +108,7 @@ Vagrant.configure(2) do |config|
      sudo apt-get install -y octave octave-msh octave-geometry
      # Fix a bug in geometry package for svg.
      # Note that sed is _not_ using extended regular expressions (no "-r")
-     sudo sed -i -e 's/,{1},/,"{1}",/g' -e 's/,{1},/,"{1}",/g'  /usr/share/octave/packages/geometry-2.1.0/io/@svg/parseSVGData.py
+     sudo sed -i -e 's/,{0},/,"{0}",/g' -e 's/,{1},/,"{1}",/g'  /usr/share/octave/packages/geometry-2.1.0/io/@svg/parseSVGData.py
      
      # Used to support generation of documentation from schema
      sudo apt-get install -y xsltproc ant libsaxon-java docbook docbook-xsl-ns pandoc
