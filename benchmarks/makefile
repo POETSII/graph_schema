@@ -10,8 +10,30 @@ TS_ROOT=$(abspath $(GS_ROOT)/../toy_softswitch)
 %.elf %.build.csv : %.xml.gz
 	$(TS_ROOT)/tools/build_tinsel_elf.sh <( gunzip -c $*.xml.gz ) -o $*.elf --measure=$*.build.csv --release
 
+
+%.cluster.elf %.build.csv : %.xml.gz
+	$(TS_ROOT)/tools/build_tinsel_elf.sh <( gunzip -c $*.xml.gz ) -o $*.cluster.elf --measure=$*.cluster.build.csv --placement=cluster
+
+%.random.elf %.random.csv : %.xml.gz
+	$(TS_ROOT)/tools/build_tinsel_elf.sh <( gunzip -c $*.xml.gz ) -o $*.cluster.elf --measure=$*.cluster.build.csv --placement=random
+
+
+%.furthest_order.elf %.furthest_order.csv : %.xml.gz
+	$(TS_ROOT)/tools/build_tinsel_elf.sh <( gunzip -c $*.xml.gz ) -o $*.furthest_order.elf --measure=$*.furthest_order.build.csv --destination-order=furthest
+
+%.nearest_order.elf %.nearest_order.csv : %.xml.gz
+	$(TS_ROOT)/tools/build_tinsel_elf.sh <( gunzip -c $*.xml.gz ) -o $*.nearest_order.elf --measure=$*.nearest_order.build.csv --destination-order=nearest
+
+%.random_order.elf %.random_order.csv : %.xml.gz
+	$(TS_ROOT)/tools/build_tinsel_elf.sh <( gunzip -c $*.xml.gz ) -o $*.random_order.elf --measure=$*.random_order.build.csv --destination-order=random
+
+VARIANTS = cluster random furthest_order nearest_order random_order
+
+
 %.execute.csv : %.elf
 	$(TS_ROOT)/tools/execute_tinsel_elf.sh $*.elf --measure=$*.execute.csv
+
+
 
 
 
@@ -169,5 +191,7 @@ all.csv :
 			( echo "$$BN, $$y" >> $@ ) ; \
 		done < $$x ; \
 	done
+
+all_variants_elf : $(foreach v,$(VARIANTS),$(subst .xml.gz,.$(v).elf,gals_heat_fix_noedge_regular_1k.xml.gz)
 
 .DELETE_ON_ERROR : 
