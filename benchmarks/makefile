@@ -192,6 +192,6 @@ all.csv :
 		done < $$x ; \
 	done
 
-all_variants_elf : $(foreach v,$(VARIANTS),$(subst .xml.gz,.$(v).elf,gals_heat_fix_noedge_regular_1k.xml.gz)
+all_variants_elf : $(foreach v,$(VARIANTS),$(subst .xml.gz,.$(v).elf,gals_heat_fix_noedge_regular_1k.xml.gz))
 
 .DELETE_ON_ERROR : 

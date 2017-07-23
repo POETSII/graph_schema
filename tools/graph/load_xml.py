@@ -109,7 +109,11 @@ def load_metadata(parent, name):
     metadata={}
     metadataNode=parent.find(name,ns)
     if metadataNode is not None and metadataNode.text is not None:
-        metadata=json.loads("{"+metadataNode.text+"}")
+        try:
+            metadata=json.loads("{"+metadataNode.text+"}")
+        except:
+            sys.stderr.write("Couldn't parse '{}'".format(metadataNode.text))
+            raise
 
     return metadata
 
