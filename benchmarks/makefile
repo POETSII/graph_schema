@@ -12,20 +12,20 @@ TS_ROOT=$(abspath $(GS_ROOT)/../toy_softswitch)
 
 
 %.cluster.elf %.build.csv : %.xml.gz
-	$(TS_ROOT)/tools/build_tinsel_elf.sh <( gunzip -c $*.xml.gz ) -o $*.cluster.elf --measure=$*.cluster.build.csv --placement=cluster
+	$(TS_ROOT)/tools/build_tinsel_elf.sh <( gunzip -c $*.xml.gz ) -o $*.cluster.elf --measure=$*.cluster.build.csv --release --placement=cluster
 
 %.random.elf %.random.csv : %.xml.gz
-	$(TS_ROOT)/tools/build_tinsel_elf.sh <( gunzip -c $*.xml.gz ) -o $*.cluster.elf --measure=$*.cluster.build.csv --placement=random
+	$(TS_ROOT)/tools/build_tinsel_elf.sh <( gunzip -c $*.xml.gz ) -o $*.random.elf --measure=$*.cluster.build.csv --release  --placement=random
 
 
 %.furthest_order.elf %.furthest_order.csv : %.xml.gz
-	$(TS_ROOT)/tools/build_tinsel_elf.sh <( gunzip -c $*.xml.gz ) -o $*.furthest_order.elf --measure=$*.furthest_order.build.csv --destination-order=furthest
+	$(TS_ROOT)/tools/build_tinsel_elf.sh <( gunzip -c $*.xml.gz ) -o $*.furthest_order.elf --measure=$*.furthest_order.build.csv --release --destination-order=furthest
 
 %.nearest_order.elf %.nearest_order.csv : %.xml.gz
-	$(TS_ROOT)/tools/build_tinsel_elf.sh <( gunzip -c $*.xml.gz ) -o $*.nearest_order.elf --measure=$*.nearest_order.build.csv --destination-order=nearest
+	$(TS_ROOT)/tools/build_tinsel_elf.sh <( gunzip -c $*.xml.gz ) -o $*.nearest_order.elf --measure=$*.nearest_order.build.csv --destination-order=nearest --release
 
 %.random_order.elf %.random_order.csv : %.xml.gz
-	$(TS_ROOT)/tools/build_tinsel_elf.sh <( gunzip -c $*.xml.gz ) -o $*.random_order.elf --measure=$*.random_order.build.csv --destination-order=random
+	$(TS_ROOT)/tools/build_tinsel_elf.sh <( gunzip -c $*.xml.gz ) -o $*.random_order.elf --measure=$*.random_order.build.csv --destination-order=random --release
 
 VARIANTS = cluster random furthest_order nearest_order random_order
 
@@ -193,5 +193,7 @@ all.csv :
 	done
 
 all_variants_elf : $(foreach v,$(VARIANTS),$(subst .xml.gz,.$(v).elf,gals_heat_fix_noedge_regular_1k.xml.gz))
+
+all_variants_exec : $(foreach v,$(VARIANTS),$(subst .xml.gz,.$(v).execute.csv,gals_heat_fix_noedge_regular_1k.xml.gz))
 
 .DELETE_ON_ERROR : 
