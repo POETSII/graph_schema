@@ -71,6 +71,9 @@
       </MessageType>
 
 			<MessageType id="finished">
+				<MetaData>
+					"dt10.partition.weight":0
+				</MetaData>
 			</MessageType>
 
       <MessageType id="update">
