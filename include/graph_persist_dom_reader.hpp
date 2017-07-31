@@ -373,8 +373,8 @@ GraphTypePtr loadGraphTypeElement(const filepath &srcPath, xmlpp::Element *eGrap
   }
   
   std::vector<std::string> sharedCode;
-  for(auto *nMessageType : eGraphType->find("./g:SharedCode", ns)){
-    std::string x=((xmlpp::Element*)nMessageType)->get_child_text()->get_content();
+  for(auto *nSharedCode : eGraphType->find("./g:SharedCode", ns)){
+    std::string x=readTextContent((xmlpp::Element*)nSharedCode);
     sharedCode.push_back(x);
   }
   
@@ -561,7 +561,7 @@ void loadGraph(Registry *registry, const filepath &srcPath, xmlpp::Element *pare
 
     uint64_t dId;
     if(parseMetaData){
-      rapidjson::Document metadata=parse_meta_data(eGraph, "g:M", ns);
+      rapidjson::Document metadata=parse_meta_data(eDevice, "g:M", ns);
       dId=events->onDeviceInstance(gId, dt, id, deviceProperties, std::move(metadata));
     }else{
       dId=events->onDeviceInstance(gId, dt, id, deviceProperties);
@@ -642,7 +642,7 @@ void loadGraph(Registry *registry, const filepath &srcPath, xmlpp::Element *pare
 
 
     if(parseMetaData){
-      auto metadata=parse_meta_data(eGraph, "g:M", ns);
+      auto metadata=parse_meta_data(eEdge, "g:M", ns);
       events->onEdgeInstance(gId,
                  dstDevice.first, dstDevice.second, dstPin,
                  srcDevice.first, srcDevice.second, srcPin,
