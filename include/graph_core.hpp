@@ -11,6 +11,7 @@
 #include <cassert>
 #include <type_traits>
 
+#define RAPIDJSON_HAS_STDSTRING 1
 #include "rapidjson/document.h"
 
 #include "typed_data_spec.hpp"

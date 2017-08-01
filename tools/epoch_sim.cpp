@@ -458,7 +458,7 @@ int main(int argc, char *argv[])
     int ia=1;
     while(ia < argc){
       if(!strcmp("--help",argv[ia])){
-	usage();
+	      usage();
       }else if(!strcmp("--log-level",argv[ia])){
         if(ia+1 >= argc){
           fprintf(stderr, "Missing argument to --log-level\n");
