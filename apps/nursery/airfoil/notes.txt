@@ -1,0 +1,111 @@
+Sets:
+
+- nodes
+  | x[2]
+
+- edges
+
+- bedges
+  | p_bound
+
+- cells
+  | q[4]
+  | qold[4]
+  | p_adt
+  | res[4]
+
+Maps:
+- pedge:    edges -> 2 * nodes
+- pecell:   edges -> 2 * cells
+- pbedge:   bedges -> 2 * nodes
+- pbecell:  bedges -> 1 * cells
+- pcell:    cells  -> 4 * nodes
+
+
+
+// Pre: cells.res==0
+// cells.qold is dead
+
+# Save old flow solution
+for(x : cells){
+    q_old = q
+}
+
+for k=0..1{
+
+    // Pre: cells.res==0
+    //      cells.adt is dead
+
+    # Calculate area/timestep
+    for( c : cells){
+        adt_calc(
+            nodes[pcell[c][0]].x[0:1], // in, read, remote, constant
+            nodes[pcell[c][1]].x[0:1], // in, read, remote, constant
+            nodes[pcell[c][2]].x[0:1], // in, read, remote, constant
+            nodes[pcell[c][3]].x[0:1], // in, read, remote, constant
+            c.q // in, read, local
+            c.adt // out, write, local
+        )
+        // Send (adt,q) from cell to edges, using pecell^-1
+        // Send (adt,q) from cell to bedges, using pbecell^1
+    }
+
+    // dependency on adt, generated above, used below
+
+    # Calculate flux residual
+    par{
+        // Both loops can run together
+
+        for( e : edges){
+            // Receive (adt,q) from two edges to cell, using pecell
+            res_calc(
+                nodes[pedge[e][0]].x[0:1],   // in, read, remote, constant
+                nodes[pedge[e][1]].x[0:1],   // in, read, remote, constant
+                cells[pecell[e][0]].q, // in, read, remote, variable
+                cells[pecell[e][1]].q, // in, read, remote, variable
+                cells[pecell[e][0]].adt, // in, read, remote, variable
+                cells[pecell[e][1]].adt, // in, read, remote, variable
+                cells[pecell[e][0]].res, // out, sum, remote, 
+                cells[pecell[e][1]].res, // out, sum, remote
+            )
+            // Send res1 from edge to 1 cell, using pecell[0]^1
+            // Send res2 from edge to 1 cell, using pecell[1]^1
+        }
+
+        for( be : bedges){
+            // Receive (q,adt) from one cell over pbecell
+            bres_calc(
+                nodes[pbedge[be][0]].x[0:1], // in, read, remote, constant
+                nodes[pbedge[be][1]].x[0:1], // in, read, remote, constant
+                cells[pbecell[be][0]].q, // in, read, remote, variable
+                cells[pbecell[be][0]].adt, // in, read, remote, variable
+                cells[pbecell[be][0]].res, // out, sum, remote, variable
+                be.bedges // in, read, local, constant
+            )
+            // Send res from bedge to 1 cell, using pbecell^1
+        }
+    }
+
+    # Update flow field
+    rms=0
+    for( c : cells ) {
+        // Collect res from 1(?) edge, using pecell
+        // Collect res from 1(?) bedge, using pbecell
+        update(
+            c.qold,  // in, read, local
+            c.q,     // out, write, local
+            c.res,   // inout, read/write, local
+            c.adt,   // in, read, local
+            rms,     // out, sum, remote
+        )
+        // Send rms to global
+    }
+
+    // College rms from cells
+    rms = sqrt(rms.data / cells.size)
+
+    // Post: c.res==0
+    // c.adt is dead
+    // 
+
+}
