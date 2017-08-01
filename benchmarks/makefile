@@ -50,6 +50,8 @@ clock_tree_broad_32k.xml.gz :
 
 FILES += clock_tree_broad_32k.xml.gz
 
+########################################################
+
 storm_global_2k.xml.gz :
 	$(GS_ROOT)/apps/storm/create_storm_instance.py 2048 16 2048 | gzip > $@
 
@@ -59,6 +61,8 @@ storm_local_2k.xml.gz :
 	$(GS_ROOT)/apps/storm/create_storm_instance.py 2048 16 32 | gzip > $@
 
 FILES += storm_local_2k.xml.gz
+
+#####################################################
 
 clocked_izhikevich_fix_sparse_10k.xml.gz :
 	$(GS_ROOT)/apps/clocked_izhikevich_fix/create_clocked_izhikevich_fix_instance.py 8000 2000 20 1000 32 32 | gzip > $@
