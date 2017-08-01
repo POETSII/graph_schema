@@ -80,7 +80,7 @@ for k=0..1{
                 cells[pbecell[be][0]].q, // in, read, remote, variable
                 cells[pbecell[be][0]].adt, // in, read, remote, variable
                 cells[pbecell[be][0]].res, // out, sum, remote, variable
-                be.bedges // in, read, local, constant
+                be.bound // in, read, local, constant
             )
             // Send res from bedge to 1 cell, using pbecell^1
         }
