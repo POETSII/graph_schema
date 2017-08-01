@@ -295,6 +295,9 @@ private:
   TypedDataSpecPtr m_properties;
   TypedDataSpecPtr m_state;
 
+  std::string m_readyToSendCode;
+  std::string m_sharedCode;
+
   std::vector<InputPinPtr> m_inputsByIndex;
   std::map<std::string,InputPinPtr> m_inputsByName;
 
@@ -329,6 +332,12 @@ public:
 
   virtual const TypedDataSpecPtr &getStateSpec() const override
   { return m_state; }
+
+  virtual const std::string &getReadyToSendCode() const override
+  { return m_readyToSendCode; }
+
+  virtual const std::string &getSharedCode() const override
+  { return m_sharedCode; }
 
   virtual unsigned getInputCount() const override
   { return m_inputsByIndex.size(); }

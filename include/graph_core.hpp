@@ -477,6 +477,10 @@ public:
   virtual const TypedDataSpecPtr &getPropertiesSpec() const=0;
   virtual const TypedDataSpecPtr &getStateSpec() const=0;
 
+  virtual const std::string &getReadyToSendCode() const=0;
+
+  virtual const std::string &getSharedCode() const=0;
+
   virtual unsigned getInputCount() const=0;
   virtual const InputPinPtr &getInput(unsigned index) const=0;
   virtual InputPinPtr getInput(const std::string &name) const=0;

@@ -528,13 +528,12 @@ void loadGraph(Registry *registry, const filepath &srcPath, xmlpp::Element *pare
   }
 
   uint64_t gId;
+  rapidjson::Document graphMetadata;
   if(parseMetaData){
-    auto metadata=parse_meta_data(eGraph, "g:MetaData", ns);
-    gId=events->onBeginGraphInstance(graphType, graphId, graphProperties, std::move(metadata));
-  }else{
-    gId=events->onBeginGraphInstance(graphType, graphId, graphProperties);
+    graphMetadata=parse_meta_data(eGraph, "g:MetaData", ns);
   }
-
+  gId=events->onBeginGraphInstance(graphType, graphId, graphProperties, std::move(graphMetadata));
+  
   std::unordered_map<std::string, std::pair<uint64_t,DeviceTypePtr> > devices;
 
   auto *eDeviceInstances=find_single(eGraph, "./g:DeviceInstances", ns);
@@ -560,12 +559,11 @@ void loadGraph(Registry *registry, const filepath &srcPath, xmlpp::Element *pare
     }
 
     uint64_t dId;
+    rapidjson::Document deviceMetadata;
     if(parseMetaData){
-      rapidjson::Document metadata=parse_meta_data(eDevice, "g:M", ns);
-      dId=events->onDeviceInstance(gId, dt, id, deviceProperties, std::move(metadata));
-    }else{
-      dId=events->onDeviceInstance(gId, dt, id, deviceProperties);
+      deviceMetadata=parse_meta_data(eDevice, "g:M", ns);
     }
+    dId=events->onDeviceInstance(gId, dt, id, deviceProperties, std::move(deviceMetadata));
 
     devices.insert(std::make_pair( id, std::make_pair(dId, dt)));
   }
@@ -640,21 +638,16 @@ void loadGraph(Registry *registry, const filepath &srcPath, xmlpp::Element *pare
       edgeProperties=et->create();
     }
 
-
+    rapidjson::Document metadata;
     if(parseMetaData){
-      auto metadata=parse_meta_data(eEdge, "g:M", ns);
-      events->onEdgeInstance(gId,
-                 dstDevice.first, dstDevice.second, dstPin,
-                 srcDevice.first, srcDevice.second, srcPin,
-                 edgeProperties,
-                 std::move(metadata)
-      );
-    }else{
-      events->onEdgeInstance(gId,
-                 dstDevice.first, dstDevice.second, dstPin,
-                 srcDevice.first, srcDevice.second, srcPin,
-                 edgeProperties);
+      metadata=parse_meta_data(eEdge, "g:M", ns);
     }
+    events->onEdgeInstance(gId,
+                dstDevice.first, dstDevice.second, dstPin,
+                srcDevice.first, srcDevice.second, srcPin,
+                edgeProperties,
+                std::move(metadata)
+    );
   }
 
   events->onBeginEdgeInstances(gId);
