@@ -1,25 +1,31 @@
+import h5py
+import math
+import sys
 
-gam=...
-gm1=...
-cfl=...
-eps=...
-mach=...
-alpha=...
-qinf=...
+sys.stderr.write("Loading globals\n")
+src=h5py.File("new_grid.h5")
+
+gam=src["gam"][0]
+gm1=src["gm1"][0]
+cfl=src["cfl"][0]
+eps=src["eps"][0]
+mach=src["mach"][0]
+alpha=src["alpha"][0]
+qinf=list(src["qinf"])
 
 
-class Set:
+class Set(object):
     def __init__(self,id):
         self.id=id
 
 class Node(Set):
-    def __init__(self,id,x):
-        super().__init_(id)
-        self.x=x # Vector of two numbers
+    def __init__(self,id):
+        super().__init__(id)
+        self.x=[0.0,0.0]
 
 class Edge(Set):
     def __init__(self,id):
-        super().__init_(id)
+        super().__init__(id)
 
     def res_calc(self,x1,x2,q1,q2,adt1,adt2):
         # double dx,dy,mu, ri, p1,vol1, p2,vol2, f;
@@ -35,7 +41,7 @@ class Edge(Set):
         ri   = 1.0/q2[0]
         p2   = gm1*(q2[3]-0.5*ri*(q2[1]*q2[1]+q2[2]*q2[2]))
         vol2 =  ri*(q2[1]*dy - q2[2]*dx)
-        mu = 0.5*((*adt1)+(*adt2))*eps
+        mu = 0.5*((adt1)+(adt2))*eps
         f = 0.5*(vol1* q1[0]         + vol2* q2[0]        ) + mu*(q1[0]-q2[0])
         res1[0] += f
         res2[0] -= f
@@ -52,9 +58,9 @@ class Edge(Set):
         return (res1,res2)
 
 class BEdge(Set):
-    def __init__(self,id,bound):
-        super().__init_(id)
-        self.bound=bound # scalar
+    def __init__(self,id):
+        super().__init__(id)
+        self.bound=0 # scalar
 
     def bres_calc(self,x1,x2,q1,adt1):
         bound=self.bound
@@ -86,9 +92,9 @@ class BEdge(Set):
 
 
 class Cell(Set):
-    def __init__(self,id,q):
-        super().__init_(id)
-        self.q=q
+    def __init__(self,id):
+        super().__init__(id)
+        self.q=[0.0,0.0,0.0,0.0]
         self.qold=[0.0,0.0,0.0,0.0]
         self.adt=0.0
         self.res=[0.0,0.0,0.0,0.0]
@@ -127,9 +133,10 @@ class Cell(Set):
         qold=self.qold
         q=self.q
         res=self.res
+        adt=self.adt
         rms=0.0
 
-        adti = 1.0/(*adt)
+        adti = 1.0/(adt)
         for n in range(4):
             ddel    = adti*res[n]
             q[n]   = qold[n] - ddel
@@ -139,51 +146,83 @@ class Cell(Set):
         return (rms,)
 
 
-nodes = [] # Lots of Nodes
-edges = [] # Lots of Edges
-bedges = [] # Lots of BEdges
-cells = [] # Lots of Cells
+nodes = [ Node(i) for i in range(src["nodes"][0]) ]
+edges = [ Edge(i) for i in range(src["edges"][0]) ]
+bedges = [ BEdge(i) for i in range(src["bedges"][0]) ]
+cells = [ Cell(i) for i in range(src["cells"][0]) ]
 
-pedge = {} # Edge -> [Node]*2
-pecell = {} # Edge -> [Cell]*2
-pbedge = {} # BEdge -> [Node]*2
-pbecell = {} # BEdge -> [Cell]
-pcell = {} # Cell -> [Node]*4
+def load_dat(set, name, data):    
+    for i in range(len(set)):
+        if len(data[0])==1:
+            setattr(set[i], name, data[i][0])
+        else:
+            setattr(set[i], name, list(data[i]))
 
+sys.stderr.write("Loading dats\n")            
+load_dat(nodes, "x", src["p_x"])    
+load_dat(cells, "q", src["p_q"])    
+load_dat(cells, "qold", src["p_qold"])    
+load_dat(cells, "adt", src["p_adt"])    
+load_dat(cells, "res", src["p_res"])    
+load_dat(bedges, "bound", src["p_bound"])    
+
+
+
+def load_map(fromList, toList, data):
+    return [
+        tuple(j for j in data[i])
+        for
+        i in range(len(fromList))
+    ]
+
+sys.stderr.write("Loading maps\n")
+pedge = load_map(edges, nodes, src["pedge"]) # EdgeIndex -> [NodeIndex]*2
+pecell = load_map(edges, cells, src["pecell"]) # EdgeIndex -> [CellIndex]*2
+pbedge = load_map(bedges, nodes, src["pbedge"]) # BEdgeIndex -> [NodeIndex]*2
+pbecell = load_map(bedges, cells, src["pbecell"]) # BEdgeIndex -> [CellIndex]
+pcell = load_map(cells, nodes, src["pcell"]) # CellIndex -> [NodeIndex]*4
+
+
+sys.stderr.write("Running\n")
 niter = 1000
-for i in range(1, niter + 1):
+for iter in range(1, niter + 1):
+    sys.stderr.write("  Iter {}\n".format(iter))
 
-    for c : cells:
+    for c in cells:
         c.save_soln()
 
     for k in range(2):
-
-        for c in cells:
-            c.adt_calc(
-                nodes[pcell[c][0]].x,
-                nodes[pcell[c][1]].x,
-                nodes[pcell[c][2]].x,
-                nodes[pcell[c][3]].x,
-            )
-
-        for e in edges:
-            (res1Delta,res2Delta)=e.res_calc(
-                nodes[pedge[e][0]].x,
-                nodes[pedge[e][1]].x,
-                cells[pecell[e][0]].adt,
-                cells[pecell[e][1]].adt
-            )
-            cells[pecell[e][0]].res += res1Delta
-            cells[pecell[e][1]].res += res2Delta
         
-        for be : bedges:
-            (res,)=be.bres_calc(
-                nodes[pbedge[be][0]].x,
-                nodes[pbedge[be][1]].x,
-                cells[pbecell[be][0]].q,
-                cells[pbecell[be][0]].adt
+        for ci in range(len(cells)):
+            cells[ci].adt_calc(
+                nodes[pcell[ci][0]].x,
+                nodes[pcell[ci][1]].x,
+                nodes[pcell[ci][2]].x,
+                nodes[pcell[ci][3]].x,
             )
-            cells[pbecell[be][0]].res += res
+
+        for ei in range(len(edges)):
+            (res1Delta,res2Delta)=edges[ei].res_calc(
+                nodes[pedge[ei][0]].x,
+                nodes[pedge[ei][1]].x,
+                cells[pecell[ei][0]].q,
+                cells[pecell[ei][1]].q,
+                cells[pecell[ei][0]].adt,
+                cells[pecell[ei][1]].adt
+            )
+            for i in range(4):
+                cells[pecell[ei][0]].res[i] += res1Delta[i]
+                cells[pecell[ei][1]].res[i] += res2Delta[i]
+        
+        for bei in range(len(bedges)):
+            (res,)=bedges[bei].bres_calc(
+                nodes[pbedge[bei][0]].x,
+                nodes[pbedge[bei][1]].x,
+                cells[pbecell[bei][0]].q,
+                cells[pbecell[bei][0]].adt
+            )
+            for i in range(4):
+                cells[pbecell[bei][0]].res[i] += res[i]
 
         rms=0.0
         for c in cells:
@@ -191,5 +230,5 @@ for i in range(1, niter + 1):
             rms += rmsDelta
     
     rms = math.sqrt(rms / len(cells) )
-    if i%100==0:
-        print " %d  %10.5e " % (i, rms)
+    if (iter%100)==0:
+        print(" {:d}  {:10.5e} ".format(iter, rms))
