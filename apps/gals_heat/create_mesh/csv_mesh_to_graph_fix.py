@@ -13,6 +13,9 @@ import os
 
 sourceFile=sys.argv[1]
 
+endTime=2**32-1
+if len(sys.argv)>1:
+    endTime=int(sys.argv[2])
 
 
 class Patch:
@@ -84,7 +87,7 @@ instName="heat_mesh"
 urand=random.random
 
 
-graphProperties={"exportDeltaMask":1023,"maxTime":600}
+graphProperties={"exportDeltaMask":65535,"maxTime":endTime}
 graphMetadata={"location.dimensions" : 2}
 res=GraphInstance(instName, graphType, graphProperties, graphMetadata)
 

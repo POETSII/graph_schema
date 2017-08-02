@@ -11,6 +11,7 @@
 #include <cassert>
 #include <type_traits>
 
+#define RAPIDJSON_HAS_STDSTRING 1
 #include "rapidjson/document.h"
 
 #include "typed_data_spec.hpp"
@@ -475,6 +476,10 @@ public:
 
   virtual const TypedDataSpecPtr &getPropertiesSpec() const=0;
   virtual const TypedDataSpecPtr &getStateSpec() const=0;
+
+  virtual const std::string &getReadyToSendCode() const=0;
+
+  virtual const std::string &getSharedCode() const=0;
 
   virtual unsigned getInputCount() const=0;
   virtual const InputPinPtr &getInput(unsigned index) const=0;

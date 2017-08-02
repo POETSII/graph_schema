@@ -1,3 +1,10 @@
+
+MessageType:
+
+// integer weight to apply to edge instances with this type.
+// 0 implies it doesn't matter, and the edge can be deleted when partitioning
+"dt10.partition.weight" : num 
+
 GraphInstance:
 
 "device.keys" : [

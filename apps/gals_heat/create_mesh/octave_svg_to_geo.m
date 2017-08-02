@@ -44,7 +44,7 @@ P  = simplifypolygon(P, 'tol', 1e-3);
 
 pkg load msh
 
-for d=[1 2 4 8]
+for d=[1 2 4 8 16]
     filename = sprintf("%s_%d", sourceSVG, d)
     meshsize = sqrt (mean (sumsq (diff (P, 1, 1), 2))) / d;
     data2geo (P, meshsize, "output", [filename ".geo"]);

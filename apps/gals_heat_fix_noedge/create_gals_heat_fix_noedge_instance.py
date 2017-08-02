@@ -65,6 +65,7 @@ exitNodeType=graphType.device_types["exit_node"]
 instName="heat_{}_{}".format(n,n)
 
 properties={
+    "maxTime":maxTime,
     "exportDeltaMask":exportDeltaMask,
     "wSelf":weightSelfFix,
     "wOther":weightOtherFix

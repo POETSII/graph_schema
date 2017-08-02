@@ -75,7 +75,7 @@ def save_graph(graph,dst):
         dst.write('   </Properties>\n')
     if graph.metadata:
         dst.write('   <MetaData>\n')
-        dst.write(json.dumps(graph.metadata,indent=2))
+        dst.write(json.dumps(graph.metadata,indent=2)[1:-1])
         dst.write('\n')
         dst.write('   </MetaData>\n')
     dst.write('  <DeviceInstances>\n')
