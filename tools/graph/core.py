@@ -301,8 +301,8 @@ class GraphTypeReference(object):
 
 
 class DeviceInstance(object):
-    def __init__(self,parent,id,device_type,properties,metadata=None):
-        if not is_refinement_compatible(device_type.properties,properties):
+    def __init__(self,parent,id,device_type,properties=None,metadata=None):
+        if properties is not None and not is_refinement_compatible(device_type.properties,properties):
             raise GraphDescriptionError("Properties not compatible with device type properties: proto={}, value={}".format(device_type.properties, properties))
 
         self.parent=parent
@@ -386,6 +386,13 @@ class GraphInstance:
             self._validated=False
 
         self.device_instances[di.id]=di
+        
+        return di
+        
+    def create_device_instance(self, id,device_type,properties=None,metadata=None):
+        di=DeviceInstance(self,id,device_type,properties,metadata)
+        return self.add_device_instance(di)
+        
 
     def add_edge_instance(self,ei,validate=True):
         if ei.id in self.edge_instances:
@@ -398,6 +405,12 @@ class GraphInstance:
 
         self.edge_instances[ei.id]=ei
         
+        return ei
+        
+    def create_edge_instance(self,dst_device,dst_pin_name,src_device,src_pin_name,properties=None,metadata=None):
+        ei=EdgeInstance(self,dst_device,dst_pin_name,src_device,src_pin_name,properties,metadata)
+        return self.add_edge_instance(ei)
+            
         
     #~ def add_reduction(self,dstDevInst,dstPinName,reducerFactory,maxFanIn,srcInstances,srcPinName):
         #~ """Adds a reduction via a tree of reduction nodes.

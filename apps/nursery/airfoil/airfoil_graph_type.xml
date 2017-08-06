@@ -63,6 +63,11 @@
 
     </MessageTypes>
 
+		<!-- ######################################################################### -->
+		<!-- ######################################################################### -->
+		<!-- ######################################################################### -->
+		<!-- ######################################################################### -->
+
     <DeviceTypes>
       <DeviceType id="node">
 				<Properties>
@@ -104,6 +109,10 @@
 
       </DeviceType>
 
+			<!-- ######################################################################### -->
+			<!-- ######################################################################### -->
+			
+
       <DeviceType id="cell">
 				<SharedCode><![CDATA[
 				enum Phase{
@@ -130,13 +139,7 @@
 				]]></SharedCode>
 
 				<Properties>
-					<!--<Array type="float" name="x" length="2" />
-					<Scalar type="uint32_t" name="fanout">
-						<Documentation>
-							The number of people who will receive
-							and acknowledge each x broadcast.
-						</Documentation>
-					</Scalar>-->
+					<Array name="qinit" type="float" length="4"/>
 				</Properties>
 
 				<State>
@@ -264,9 +267,13 @@
 				</InputPin>
       </DeviceType>
 
+			<!-- ######################################################################### -->
+			<!-- ######################################################################### -->
+			
+
 			<DeviceType id="edge">
 				<State>
-					<!-- receive x positions from four nodes defining edge corners -->
+					<!-- receive x positions from two nodes defining edge corners -->
 					<Array name="x_buff" type="float" length="8" />
 					<Scalar name="x_buff_got" type="uint32_t" />
 					<Scalar name="x_ack_pending" type="uint32_t" /> <!-- Boolean. Set once we have used the x, and want the next one -->
@@ -361,7 +368,6 @@
 						);
 
 						deviceState->q_adt_buff_got=0;
-						deviceState->x_buff_got=0;
 						deviceState->x_ack_pending=1;
 						deviceState->res2_pending=1;
 					]]></OnSend>
@@ -383,7 +389,106 @@
 				<OutputPin name="pos_ack_out" messageTypeId="node_pos_ack">
 					<!-- Lower priority than res_calc* outputs -->
 					<OnSend><![CDATA[
-					assert(deviceState->x_buff_got==4);
+					assert(deviceState->x_buff_got==2);
+					assert(deviceState->x_ack_pending);
+					deviceState->x_buff_got=0;
+					deviceState->x_ack_pending=0;
+					]]></OnSend>
+				</OutputPin>
+			</DeviceType>
+
+			<!-- ######################################################################### -->
+			<!-- ######################################################################### -->
+			
+
+			<DeviceType id="bedge">
+				<Properties>
+					<Scalar name="bound" type="uint32_t" /><!--Boolean. dat on set. -->
+				</Properties>
+				<State>
+					<!-- receive x positions from two nodes defining edge corners -->
+					<Array name="x_buff" type="float" length="8" />
+					<Scalar name="x_buff_got" type="uint32_t" />
+					<Scalar name="x_ack_pending" type="uint32_t" /> <!-- Boolean. Set once we have used the x, and want the next one -->
+
+					<Array name="q_buff" type="float" length="4" />   <!-- Single 4-tuples --> 
+					<Array name="adt_buff" type="float" length="1" /> <!-- one scalars -->
+					<Scalar name="q_adt_buff_got" type="uint32_t" />
+				</State>
+
+				<SharedCode><![CDATA[
+				template<class TGP>
+				void res_calc(
+						const TGP *graphProperties,
+						const float x1[2],
+						const float x2[2],
+						const float q1[4],
+						float adt1,
+						float res1[4]
+					);
+				]]></SharedCode>
+
+				<ReadyToSend><![CDATA[
+				*readyToSend=0;
+				if(deviceState->x_ack_pending){
+					*readyToSend |= RTS_FLAG_pos_ack_out;
+				}
+				if( deviceState->q_adt_buff_got==1
+						&& deviceState->x_buff_got==2
+						&& !deviceState->x_ack_pending
+				){
+					*readyToSend |= RTS_FLAG_res_calc;
+				}
+				]]></ReadyToSend>
+
+				<InputPin name="pos_in" messageTypeId="node_pos">
+					<Properties>
+						<Scalar type="uint8_t" name="index" />
+					</Properties>
+					<OnReceive><![CDATA[
+						assert(deviceState->x_buff_got<4);
+						assert(!deviceState->x_ack_pending);
+						uint32_t offset=2*edgeProperties->index;
+						deviceState->x_buff[offset+0]=message->x[0];
+						deviceState->x_buff[offset+1]=message->x[1];
+						deviceState->x_buff_got++;
+					]]></OnReceive>
+				</InputPin>
+
+				<InputPin name="q_adt_in" messageTypeId="cell_q_adt">
+					<OnReceive><![CDATA[
+						assert(deviceState->q_adt_buff_got<1);
+						for(unsigned i=0; i<4; i++){
+							deviceState->q_buff[i]=message->q[i];
+						}
+						deviceState->adt_buff[0]=message->adt;
+						deviceState->q_adt_buff_got++;
+					]]></OnReceive>
+				</InputPin>
+
+				<OutputPin name="res_calc" messageTypeId="res_inc">
+					<OnSend><![CDATA[
+						assert(deviceState->q_adt_buff_got==1);
+						assert(deviceState->x_buff_got==2);
+						assert(!deviceState->x_ack_pending);
+
+						res_calc(
+							graphProperties,
+							deviceState->x_buff+0,
+							deviceState->x_buff+2,
+							deviceState->q_buff,
+							deviceState->adt_buff[0],
+							message->res
+						);
+
+						deviceState->q_adt_buff_got=0;
+						deviceState->x_ack_pending=1;
+					]]></OnSend>
+				</OutputPin>
+
+				<OutputPin name="pos_ack_out" messageTypeId="node_pos_ack">
+					<OnSend><![CDATA[
+					assert(deviceState->x_buff_got==2);
 					assert(deviceState->x_ack_pending);
 					deviceState->x_buff_got=0;
 					deviceState->x_ack_pending=0;

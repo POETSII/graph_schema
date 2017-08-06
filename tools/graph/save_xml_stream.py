@@ -33,7 +33,11 @@ def write_edge_instance(dst,ei):
 
 def write_device_instance(dst,di):
     properties=di.properties
-    properties=properties and json.dumps(properties)
+    try:
+        properties=properties and json.dumps(properties)
+    except:
+        sys.stderr.write("properties for device '{}' = {}\n".format(di.id, properties))
+        raise
     properties=properties and properties[1:-1]
 
     metadata=di.metadata
