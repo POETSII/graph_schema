@@ -21,6 +21,7 @@ def render_model(m):
     cellType=graphType.device_types["cell"]
     edgeType=graphType.device_types["edge"]
     bedgeType=graphType.device_types["bedge"]
+    printerType=graphType.device_types["printer"]
     
     graph=GraphInstance("airfoil_inst", graphType, {
         "gam":m["globals"].gam,
@@ -36,6 +37,7 @@ def render_model(m):
     cells=[ graph.create_device_instance("c{}".format(c.id),cellType,{"qinit":c.q}) for c in m["cells"] ]
     edges=[ graph.create_device_instance("e{}".format(e.id),edgeType) for e in m["edges"] ]
     bedges=[ graph.create_device_instance("be{}".format(be.id),bedgeType,{"bound":int(be.bound)}) for be in m["bedges"] ] 
+    printer=graph.create_device_instance("print",printerType,{"fanin":len(cells),"delta_print":100,"delta_exit":1000})
     
     for (ci,nis) in enumerate(m["pcell"]):
         dstNode=cells[ci]
@@ -71,6 +73,10 @@ def render_model(m):
         srcNode=cells[ci]
         graph.create_edge_instance(dstNode,"q_adt_in",srcNode,"adt_calc")
         graph.create_edge_instance(srcNode,"res_inc_in",dstNode,"res_calc")
+        
+    for c in cells:
+        graph.create_edge_instance(printer,"rms_inc",c,"update")
+        graph.create_edge_instance(c,"rms_ack",printer,"rms_ack")
     
     return graph
     
