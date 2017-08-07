@@ -632,6 +632,9 @@ def render_graph_as_cpp(graph,dst, destPath, asHeader=False):
     dst.write('#include "rapidjson/document.h"\n')
 
     render_typed_data_as_spec(gt.properties, "{}_properties_t".format(gt.id),"pp:Properties",dst,asHeader)
+    
+    dst.write("#undef assert")
+    dst.write("#define assert handler_assert\n")
 
     dst.write("/////////////////////////////////\n")
     dst.write("// FWD\n")

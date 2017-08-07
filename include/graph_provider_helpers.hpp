@@ -609,6 +609,44 @@ public:
   }
 };
 
+class provider_assertion_error
+  : public std::runtime_error
+{
+private:
+  const char *m_file;
+  int m_line;
+  const char *m_assertFunc;
+  const char *m_cond;
+
+  static std::string make_what(const char *file, int line, const char *assertFunc,const char *cond)
+  {
+    std::stringstream tmp;
+    tmp<<file<<":"<<line<<": "<<assertFunc<<" Assertion `"<<cond<<"' failed.";
+    return tmp.str();
+  }
+public:
+  provider_assertion_error(const char *file, int line, const char *assertFunc,const char *cond)
+    : std::runtime_error(make_what(file,line,assertFunc,cond))
+    , m_file(file)
+    , m_line(line)
+    , m_assertFunc(assertFunc)
+    , m_cond(cond)
+  {
+
+  }
+};
+
+void handler_assert_func (const char *file, int line, const char *assertFunc,const char *cond)
+{
+  throw provider_assertion_error(file,line,assertFunc,cond);
+}
+
+#ifndef NDEBUG
+#define handler_assert(cond) if(!(cond)){ handler_assert_func(__FILE__,__LINE__,__FUNCTION__,#cond); }
+#else
+#define handler_assert(cond) (void)0
+#endif
+
 class unknown_graph_type_error
   : public std::runtime_error
 {

@@ -49,8 +49,8 @@ def plot_model(model,path=None):
     p = PatchCollection(patches, alpha=0.4)
     p.set_array(np.array(colors))
     ax.add_collection(p)
-    ax.set_xlim(-2,+4)
-    ax.set_ylim(-3,+3)
+    #ax.set_xlim(-2,+4)
+    #ax.set_ylim(-3,+3)
     fig.colorbar(p, ax=ax)
   
     plt.quiver(qx,qy,qu,qv)

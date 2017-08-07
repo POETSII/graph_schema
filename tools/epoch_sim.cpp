@@ -234,7 +234,7 @@ struct EpochSim
   unsigned m_epoch=0;
 
   template<class TRng>
-  bool step(TRng &rng, double probSend)
+  bool step(TRng &rng, double probSend,bool accurateAssertionInfo)
   {
     // Within each step every object gets the chance to send a message with probability probSend
 
@@ -264,6 +264,8 @@ struct EpochSim
       sendSel[i]=pick_bit(src.outputCount, src.readyToSend, rotA+i);
     }
 
+    // If accurateAssertionInfo, then we capture full state before each send/recv
+    TypedDataPtr prevState;
 
     bool sent=false;
     bool anyReady=false;
@@ -315,14 +317,32 @@ struct EpochSim
       
       bool doSend=true;
       {
+        #ifndef NDEBUG
         uint32_t check=src.type->calcReadyToSend(&sendServices, m_graphProperties.get(), src.properties.get(), src.state.get());
         assert(check);
         assert( (check>>sel) & 1);
+        #endif
 
+        if(accurateAssertionInfo){
+          prevState=src.state.clone();
+        }
         sendServices.setSender(src.name, src.outputNames[sel]);
-        output->onSend(&sendServices, m_graphProperties.get(), src.properties.get(), src.state.get(), message.get(), &doSend);
+        try{
+          // Do the actual send handler
+          output->onSend(&sendServices, m_graphProperties.get(), src.properties.get(), src.state.get(), message.get(), &doSend);
+        }catch(provider_assertion_error &e){
+          fprintf(stderr, "Caught handler exception during send. devId=%s, devType=%s, outPin=%s.", src.name, src.type->getId().c_str(), output->getName().c_str());
+          fprintf(stderr, "  %s\n", e.what());
+          
+          if(accurateAssertionInfo){
+            fprintf(stderr, "  preSendState = %s\n", src.type->getStateSpec()->toJSON(prevState).c_str());
+          }
+          fprintf(stderr, "     currState = %s\n", src.type->getStateSpec()->toJSON(src.state).c_str());
+          throw;
+        }
 
         src.readyToSend = src.type->calcReadyToSend(&sendServices, m_graphProperties.get(), src.properties.get(), src.state.get());
+        
         
         if(m_log){
           auto id=nextSeqUnq();
@@ -372,7 +392,20 @@ struct EpochSim
         const auto &pin=dst.type->getInput(out.dstPinIndex);
 
         receiveServices.setReceiver(out.dstDeviceId, out.dstInputName);
-        pin->onReceive(&receiveServices, m_graphProperties.get(), dst.properties.get(), dst.state.get(), slot.properties.get(), slot.state.get(), message.get());
+        try{
+          pin->onReceive(&receiveServices, m_graphProperties.get(), dst.properties.get(), dst.state.get(), slot.properties.get(), slot.state.get(), message.get());
+        }catch(provider_assertion_error &e){
+          fprintf(stderr, "Caught handler exception during Receive. devId=%s, devType=%s, outPin=%s.\n", src.name, src.type->getId().c_str(), pin->getName().c_str());
+          fprintf(stderr, "  %s\n", e.what());
+          
+          fprintf(stderr, "     message = %s\n", pin->getMessageType()->getMessageSpec()->toJSON(message).c_str());
+          if(accurateAssertionInfo){
+            fprintf(stderr, "  preRecvState = %s\n", src.type->getStateSpec()->toJSON(prevState).c_str());
+          }
+          fprintf(stderr, "     currState = %s\n", src.type->getStateSpec()->toJSON(src.state).c_str());
+          
+          throw;
+        }
         dst.readyToSend = dst.type->calcReadyToSend(&receiveServices, m_graphProperties.get(), dst.properties.get(), dst.state.get());
 
         if(m_log){
@@ -416,6 +449,7 @@ void usage()
   fprintf(stderr, "  --log-events destFile\n");
   fprintf(stderr, "  --prob-send probability\n");
   fprintf(stderr, "  --key-value destFile\n");
+  fprintf(stderr, "  --accurate-assertions : Capture device state before send/recv in case of assertions.\n");
   exit(1);
 }
 
@@ -452,6 +486,8 @@ int main(int argc, char *argv[])
     int maxSteps=INT_MAX;
 
     double probSend=0.9;
+    
+    bool enableAccurateAssertions=false;
 
     std::string keyValueName;
 
@@ -509,6 +545,9 @@ int main(int argc, char *argv[])
         }
         keyValueName=argv[ia+1];
         ia+=2;
+      }else if(!strcmp("--accurate-assertions",argv[ia])){
+        enableAccurateAssertions=true;
+        ia+=1;
       }else{
         srcFilePath=argv[ia];
         ia++;
@@ -585,7 +624,7 @@ int main(int argc, char *argv[])
     int snapshotSequenceNum=1;
 
     for(int i=0; i<maxSteps; i++){
-      bool running = graph.step(rng, probSend) && !graph.m_deviceExitCalled;
+      bool running = graph.step(rng, probSend, enableAccurateAssertions) && !graph.m_deviceExitCalled;
 
       if(logLevel>2 || i==nextStats){
         fprintf(stderr, "Epoch %u : sends/device/epoch = %f (%f / %u)\n\n", i, graph.m_statsSends / graph.m_devices.size() / statsDelta, graph.m_statsSends/statsDelta, (unsigned)graph.m_devices.size());

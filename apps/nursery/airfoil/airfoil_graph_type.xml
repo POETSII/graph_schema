@@ -18,6 +18,12 @@
 
     <SharedCode><![CDATA[
 		#include <cmath>
+		#include <cfloat>
+
+		void check_not_nan(float x)
+		{
+
+		}
 
 		template<class TGP, class TDS>
 		void adt_calc(
@@ -40,18 +46,28 @@
 			u  =   ri*q[1];
 			v  =   ri*q[2];
 			c  = sqrt(g.gam*g.gm1*(ri*q[3]-0.5*(u*u+v*v)));
+			check_not_nan(c);
+
 			dx = x2[0] - x1[0];
 			dy = x2[1] - x1[1];
 			adt += fabs(u*dy-v*dx) + c*sqrt(dx*dx+dy*dy);
+			check_not_nan(adt);
+
 			dx = x3[0] - x2[0];
 			dy = x3[1] - x2[1];
 			adt += fabs(u*dy-v*dx) + c*sqrt(dx*dx+dy*dy);
+			check_not_nan(adt);
+
 			dx = x4[0] - x3[0];
 			dy = x4[1] - x3[1];
 			adt += fabs(u*dy-v*dx) + c*sqrt(dx*dx+dy*dy);
+			check_not_nan(adt);
+
 			dx = x1[0] - x4[0];
 			dy = x1[1] - x4[1];
 			adt += fabs(u*dy-v*dx) + c*sqrt(dx*dx+dy*dy);
+			check_not_nan(adt);
+
 			adt = adt / g.cfl;
 		}
 
@@ -166,6 +182,7 @@
       <MessageType id="node_pos">
 				<Message>
 					<Array type="float" name="x" length="2" />
+					<Scalar type="uint32_t" name="round" />
 				</Message>
       </MessageType>
 
@@ -175,12 +192,14 @@
 				<Message>
 					<Array type="float" name="q" length="4" />
 					<Scalar type="float" name="adt" />
+					<Scalar type="uint32_t" name="round" />
 				</Message>
       </MessageType>
 
 			<MessageType id="res_inc">
 				<Message>
 					<Array type="float" name="res" length="4" />
+					<Scalar type="uint32_t" name="round" />
 				</Message>
       </MessageType>
 
@@ -188,6 +207,7 @@
 			<MessageType id="rms_inc">
 				<Message>
 					<Scalar type="float" name="rms" />
+					<Scalar type="uint32_t" name="round" />
 				</Message>
       </MessageType>
 
@@ -230,6 +250,7 @@
 						handler_log(2, "r=%u, %f,%f", deviceState->round, deviceProperties->x[0], deviceProperties->x[1]);
 						message->x[0]=deviceProperties->x[0];
 						message->x[1]=deviceProperties->x[1];
+						message->round=deviceState->round;
 						deviceState->acks_pending=deviceProperties->fanout;
 						deviceState->round++;
 					]]></OnSend>
@@ -301,17 +322,26 @@
 						*readyToSend |= RTS_FLAG_update;
 					}
 				}
-
-				
 				]]></ReadyToSend>
+
+				<InputPin name="__init__" messageTypeId="__init__">
+					<OnReceive><![CDATA[
+					for(unsigned i=0;i<4;i++){
+						deviceState->q[i]=deviceProperties->qinit[i];
+					}
+					]]></OnReceive>
+				</InputPin>
 
 				<InputPin name="pos_in" messageTypeId="node_pos">
 					<Properties>
 						<Scalar type="uint8_t" name="index" />
 					</Properties>
 					<OnReceive><![CDATA[
-						handler_log(3, "r=%u, x_buff_got=%u", deviceState->round, deviceState->x_buff_got);
+						handler_log(3, "ds.r=%u, msg.r=%u, x_buff_got=%u, nIdx=%u, pos=(%f,%f)", deviceState->round, message->round, deviceState->x_buff_got,
+							edgeProperties->index, message->x[0], message->x[1]
+						);
 
+						assert(message->round==deviceState->round || message->round==deviceState->round+1);
 						assert(deviceState->x_buff_got<4);
 						assert(!deviceState->x_ack_pending);
 						uint32_t offset=2*edgeProperties->index;
@@ -324,9 +354,31 @@
 				<OutputPin name="adt_calc" messageTypeId="cell_q_adt">
 					<OnSend><![CDATA[
 					handler_log(2, "r=%u", deviceState->round);
+					handler_log(4, "adt=%f, res=[%f,%f,%f,%f], q=[%f,%f,%f,%f], qold=[%f,%f,%f,%f]",
+						deviceState->adt,
+						deviceState->res[0], deviceState->res[1], deviceState->res[2], deviceState->res[3],
+						deviceState->q[0], deviceState->q[1], deviceState->q[2], deviceState->q[3],
+						deviceState->qold[0], deviceState->qold[1], deviceState->qold[2], deviceState->qold[3]
+					);
+					for(unsigned i=0; i<4; i++){
+						handler_log(4, "x[%d]=(%f,%f)", i, deviceState->x_buff[2*i+0], deviceState->x_buff[2*i+1]);
+					}
 					assert(deviceState->phase==Phase_AdtCalc);
 					assert(deviceState->x_buff_got==4);
 					assert(deviceState->x_ack_pending==0);
+
+					if((deviceState->round&1)==0){
+						// TODO: mild hack. This is the equivalent of the save_soln kernel in OP2 version. Too lazy
+						// to add in more states and messages.
+						for(unsigned i=0;i<4;i++){
+							deviceState->qold[i]=deviceState->q[i];
+						}
+					}
+
+					for(unsigned i=0; i<4; i++){
+							check_not_nan(deviceState->q[i]);
+					}
+
 
 					adt_calc(
 						graphProperties, // For the globals
@@ -337,11 +389,17 @@
 						deviceState->x_buff+6
 					);
 
+					for(unsigned i=0; i<4; i++){
+							check_not_nan(deviceState->q[i]);
+					}
+					check_not_nan(deviceState->adt);
+
 					// Send q and adt to the four edge/bedge
 					for(unsigned j=0; j<4; j++){
 						message->q[j]=deviceState->q[j];
 					}
 					message->adt=deviceState->adt;
+					message->round=deviceState->round;
 
 					deviceState->x_ack_pending=1; // Might as well request the next x (Note: the whole x movement is pointless)
 					deviceState->phase=Phase_Update;
@@ -373,9 +431,19 @@
 				<OutputPin name="update" messageTypeId="rms_inc">
 					<OnSend><![CDATA[
 					handler_log(2, "r=%u", deviceState->round);
+					handler_log(4, "adt=%f, res=[%f,%f,%f,%f], q=[%f,%f,%f,%f], q=[%f,%f,%f,%f]",
+						deviceState->adt,
+						deviceState->res[0], deviceState->res[1], deviceState->res[2], deviceState->res[3],
+						deviceState->q[0], deviceState->q[1], deviceState->q[2], deviceState->q[3],
+						deviceState->qold[0], deviceState->qold[1], deviceState->qold[2], deviceState->qold[3]
+					);
 					assert(deviceState->phase==Phase_Update);
 					assert(deviceState->res_pending==0);
 					assert(!deviceState->rms_inc_ack_pending); // Don't send this update if a previous rms has not acked yet
+
+					for(unsigned i=0; i<4; i++){
+							check_not_nan(deviceState->q[i]);
+					}
 
 					float rms=0;
 					update(
@@ -384,6 +452,11 @@
 						rms
 					);
 					message->rms=rms;
+					message->round=deviceState->round;
+
+					for(unsigned i=0; i<4; i++){
+							check_not_nan(deviceState->q[i]);
+					}
 
 					deviceState->phase=Phase_AdtCalc;
 					deviceState->rms_inc_ack_pending=1;
@@ -417,6 +490,8 @@
 					<!-- buffer needed due to the two-way send -->
 					<Array name="res2_buff" type="float" length="4" /> 
 					<Scalar name="res2_pending" type="uint32_t" /> <!-- Boolean. Set if we need to complete the two-way send -->
+
+					<Scalar name="round" type="uint32_t" />
 				</State>
 
 				<SharedCode><![CDATA[
@@ -444,6 +519,9 @@
 						<Scalar type="uint8_t" name="index" />
 					</Properties>
 					<OnReceive><![CDATA[
+						handler_log(3, "ds.round=%u, msg.round=%u", deviceState->round, message->round);
+
+						assert(message->round==deviceState->round || message->round==deviceState->round+1);
 						assert(deviceState->x_buff_got<4);
 						assert(!deviceState->x_ack_pending);
 						uint32_t offset=2*edgeProperties->index;
@@ -458,6 +536,7 @@
 						<Scalar type="uint8_t" name="index" />
 					</Properties>
 					<OnReceive><![CDATA[
+						assert(message->round==deviceState->round);
 						assert(deviceState->q_adt_buff_got<2);
 						uint32_t offset=4*edgeProperties->index;
 						for(unsigned i=0; i<4; i++){
@@ -486,10 +565,12 @@
 							message->res,	// First half of the send
 							deviceState->res2_buff // Will do second half later
 						);
+						message->round=deviceState->round;
 
 						deviceState->q_adt_buff_got=0;
 						deviceState->x_ack_pending=1;
 						deviceState->res2_pending=1;
+						deviceState->round++;
 					]]></OnSend>
 				</OutputPin>
 
@@ -501,8 +582,10 @@
 						for(int j=0; j<4; j++){
 							message->res[j]=deviceState->res2_buff[j];
 						}
+						message->round=deviceState->round-1; // It actually came from the _previous_ round
 
 						deviceState->res2_pending=0;
+						
 					]]></OnSend>
 				</OutputPin>
 
@@ -534,6 +617,8 @@
 					<Array name="q_buff" type="float" length="4" />   <!-- Single 4-tuples --> 
 					<Array name="adt_buff" type="float" length="1" /> <!-- one scalars -->
 					<Scalar name="q_adt_buff_got" type="uint32_t" />
+
+					<Scalar name="round" type="uint32_t" />
 				</State>
 
 				<SharedCode><![CDATA[
@@ -558,6 +643,7 @@
 						<Scalar type="uint8_t" name="index" />
 					</Properties>
 					<OnReceive><![CDATA[
+						assert(deviceState->round==message->round || deviceState->round+1==message->round);
 						assert(deviceState->x_buff_got<4);
 						assert(!deviceState->x_ack_pending);
 						uint32_t offset=2*edgeProperties->index;
@@ -569,6 +655,7 @@
 
 				<InputPin name="q_adt_in" messageTypeId="cell_q_adt">
 					<OnReceive><![CDATA[
+						assert(deviceState->round==message->round);
 						assert(deviceState->q_adt_buff_got<1);
 						for(unsigned i=0; i<4; i++){
 							deviceState->q_buff[i]=message->q[i];
@@ -593,9 +680,11 @@
 							deviceState->adt_buff[0],
 							message->res
 						);
+						message->round=deviceState->round;
 
 						deviceState->q_adt_buff_got=0;
 						deviceState->x_ack_pending=1;
+						deviceState->round++;
 					]]></OnSend>
 				</OutputPin>
 
@@ -638,6 +727,7 @@
 				<InputPin name="rms_inc" messageTypeId="rms_inc">
 					<OnReceive><![CDATA[
 						handler_log(3, "r=%u, pending=%u", deviceState->iter, deviceState->rms_pending);
+						assert(message->round==deviceState->iter);
 						assert(deviceState->rms_pending>0);
 						deviceState->rms_sum+=message->rms;
 						deviceState->rms_pending--;

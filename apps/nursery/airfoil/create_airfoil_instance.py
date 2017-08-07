@@ -85,10 +85,12 @@ if __name__=="__main__":
     import mock
     
 
-    src=h5py.File(appBase+"/new_grid.h5")
-
-    model=mock.load(src)
-
+    if 1:
+        src=h5py.File(appBase+"/new_grid.h5")
+        model=mock.load(src)
+    else:
+        model=mock.create_square(2)
+    
     graph=render_model(model)
     
     save_graph(graph,sys.stdout)        

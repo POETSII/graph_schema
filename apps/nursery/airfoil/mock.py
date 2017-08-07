@@ -125,6 +125,8 @@ class Cell(Set):
         gam=g.gam
         gm1=g.gm1
         cfl=g.cfl
+        
+        print( (x1[0],x1[1]),(x2[0],x2[1]),(x3[0],x3[1]),(x4[0],x4[1]), )
 
         ri =  1.0/q[0]
         u  =   ri*q[1]
@@ -178,6 +180,109 @@ def load_dat(set, name, data):
             setattr(set[i], name, data[i][0])
         else:
             setattr(set[i], name, list(data[i]))
+
+def create_square(n):
+    #   0  1  2  3  4  5  6  7  8=2*n
+    # 0 p--b--p--b--p--b--p--b--p
+    #   |     |     |     |     |
+    # 1 b  c  e  c  e  c  e  c  b
+    #   |     |     |     |     |
+    # 2 p--e--p--e--p--e--p--e--p
+    #   |     |     |     |     |
+    # 3 b  c  e  c  e  c  e  c  b
+    #   |     |     |     |     |
+    # 4 p--b--p--b--p--b--p--b--p
+    #   |     |     |     |     |
+    # 5 b  c  e  c  e  c  e  c  b
+    #   |     |     |     |     |
+    # 6 p--b--p--b--p--b--p--b--p
+    #   |     |     |     |     |
+    # 7 b  c  e  c  e  c  e  c  b
+    #   |     |     |     |     |
+    # 8 p--b--p--b--p--b--p--b--p
+    #   0  1  2  3  4  5  6  7  8=2*n
+    
+    
+    qinf=[1.        ,  0.47328639,  0.        ,  2.61200015]
+    
+    g=Globals()
+    g.qinf=qinf
+    g.gam=1.3999999761581421
+    g.gm1=0.39999997615814209
+    g.cfl=0.89999997615814209
+    g.mach=0.40000000596046448
+    g.alpha=0.052359877559829883
+    
+    nodes={}
+    cells={}
+    edges={}
+    bedges={}
+    for x in range(0,2*n+1):
+        for y in range(0,2*n+1):
+            if (x+y)%2==0:  # Either a node or a cell
+                if x%2==0: # A node
+                    nodes[(x,y)]=Node(len(nodes))
+                    nodes[(x,y)].x=[x/n,y/n]
+                else:  # A cell
+                    cells[(x,y)]=Cell(len(cells))
+            else: # Either an edge or a bedge
+                if x==0 or x==2*n or y==0 or y==2*n:
+                    bedges[(x,y)]=BEdge(len(bedges))
+                else:
+                    edges[(x,y)]=Edge(len(edges))
+    
+    pcell=[None]*len(cells)
+    for ((x,y),cell) in cells.items():
+        # clock-wise list
+        pcell[cell.id]=( nodes[(x-1,y-1)].id,nodes[(x+1,y-1)].id,nodes[(x+1,y+1)].id,nodes[(x-1,y+1)].id )
+        cell.q=list(qinf)
+        
+    pedge=[None]*len(edges)
+    pecell=[None]*len(edges)
+    for ((x,y),edge) in edges.items():
+        if x%2==0: # vert edge
+            pedge[edge.id]=( nodes[(x,y-1)].id,nodes[(x,y+1)].id )
+            pecell[edge.id]=( cells[(x-1,y)].id,cells[(x+1,y)].id )
+        else: # horz edge
+            pedge[edge.id]=( nodes[(x+1,y)].id,nodes[(x-1,y)].id )
+            pecell[edge.id]=( cells[(x,y-1)].id,cells[(x,y+1)].id )
+            
+    pbedge=[None]*len(bedges)
+    pbecell=[None]*len(bedges)
+    for ((x,y),bedge) in bedges.items():
+        if x==0:
+            pbedge[bedge.id]=( nodes[(x,y+1)].id , nodes[(x,y-1)].id )
+            pbecell[bedge.id]=( cells[(x+1,y)].id , )
+            bedge.bound=1
+        elif x==2*n:
+            pbedge[bedge.id]=( nodes[(x,y-1)].id , nodes[(x,y+1)].id )
+            pbecell[bedge.id]=( cells[(x-1,y)].id , )
+            bedge.bound=1
+        elif y==0:
+            pbedge[bedge.id]=( nodes[(x-1,y)].id , nodes[(x+1,y)].id )
+            pbecell[bedge.id]=( cells[(x,y+1)].id , )
+            bedge.bound=1
+        else:
+            pbedge[bedge.id]=( nodes[(x+1,y)].id , nodes[(x-1,y)].id )
+            pbecell[bedge.id]=( cells[(x,y-1)].id , )
+            bedge.bound=1
+
+    def to_set(m):
+        return [nn for (ni,nn) in sorted([(n.id,n) for n in m.values()]) ]
+        
+     
+    return {
+        "globals" : g,
+        "nodes" : to_set(nodes),
+        "edges" : to_set(edges),
+        "bedges" : to_set(bedges),
+        "cells" : to_set(cells),
+        "pedge" : pedge,
+        "pecell" : pecell,
+        "pbedge" : pbedge,
+        "pbecell" : pbecell,
+        "pcell" : pcell
+    }
 
 def load(src):
     g=Globals()
@@ -290,7 +395,8 @@ def run_model(model,plot_path):
 
 if __name__=="__main__":
     sys.stderr.write("Loading globals\n")
-    src=h5py.File("new_grid.h5")
-    model=load(src)
+    #src=h5py.File("new_grid.h5")
+    #model=load(src)
+    model=create_square(20)
    
     run_model(model,"out")

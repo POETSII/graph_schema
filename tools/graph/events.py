@@ -136,7 +136,11 @@ def extractSendEvent(n,writer):
     
     S=n.find("p:S",ns)
     if S is not None and S.text is not None:
-        S=json.loads("{"+S.text+"}")
+        try:
+            S=json.loads("{"+S.text+"}")
+        except:
+            sys.stderr.write("p:S = '{}'".format("{"+S.text+"}"))
+            raise
         
     pin=get_attrib(n,"pin")
     cancel=bool(get_attrib(n,"cancel"))
