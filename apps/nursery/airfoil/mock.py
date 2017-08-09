@@ -3,6 +3,7 @@
 import h5py
 import math
 import sys
+import json
 
 class Set(object):
     def __init__(self,id):
@@ -74,11 +75,12 @@ class BEdge(Set):
         gm1=g.gm1
         
         # HACK, to change airflow direction
-        qinf=list(qinf)
-        qinf1=qinf[1] * math.cos(self.t) - qinf[2]*math.sin(self.t)
-        qinf2=qinf[1] * math.sin(self.t) + qinf[2]*math.cos(self.t)
-        qinf[1]=qinf1
-        qinf[2]=qinf2
+        if False:
+            qinf=list(qinf)
+            qinf1=qinf[1] * math.cos(self.t) - qinf[2]*math.sin(self.t)
+            qinf2=qinf[1] * math.sin(self.t) + qinf[2]*math.cos(self.t)
+            qinf[1]=qinf1
+            qinf[2]=qinf2
 
         dx = x1[0] - x2[0]
         dy = x1[1] - x2[1]
@@ -114,6 +116,9 @@ class Cell(Set):
         self.qold=[0.0,0.0,0.0,0.0]
         self.adt=0.0
         self.res=[0.0,0.0,0.0,0.0]
+        
+    def to_struct(self):
+        return {"q":self.q,"qold":self.qold,"adt":self.adt,"res":self.res}
 
     def save_soln(self,g):
         self.qold=list(self.q)
@@ -126,7 +131,7 @@ class Cell(Set):
         gm1=g.gm1
         cfl=g.cfl
         
-        print( (x1[0],x1[1]),(x2[0],x2[1]),(x3[0],x3[1]),(x4[0],x4[1]), )
+        #print( (x1[0],x1[1]),(x2[0],x2[1]),(x3[0],x3[1]),(x4[0],x4[1]), )
 
         ri =  1.0/q[0]
         u  =   ri*q[1]
@@ -329,13 +334,14 @@ def load(src):
         "pcell" : pcell
     }
     
-def run_model(model,plot_path):
+def run_model(model,plot_path,log_array=None):
     import plot
     
     globals().update(model)
     
     sys.stderr.write("Running\n")
     niter = 1000
+    round=0
     for iter in range(1, niter + 1):
         sys.stderr.write("  Iter {}\n".format(iter))
 
@@ -343,7 +349,7 @@ def run_model(model,plot_path):
             c.save_soln(globals)
 
         for k in range(2):
-            
+        
             for ci in range(len(cells)):
                 cells[ci].adt_calc(globals,
                     nodes[pcell[ci][0]].x,
@@ -375,10 +381,23 @@ def run_model(model,plot_path):
                 for i in range(4):
                     cells[pbecell[bei][0]].res[i] += res[i]
 
+            if log_array!=None:
+                for c in cells:
+                    log_array.append( "{}, c{}, {:12.8}, {:12.8},{:12.8},{:12.8},{:12.8}, {:12.8},{:12.8},{:12.8},{:12.8}, {:12.8},{:12.8},{:12.8},{:12.8}\n".format(2*round,c.id,c.adt,c.q[0],c.q[1],c.q[2],c.q[3],c.qold[0],c.qold[1],c.qold[2],c.qold[3],c.res[0],c.res[1],c.res[2],c.res[3]))
+
             rms=0.0
             for c in cells:
                 (rmsDelta,)=c.update(globals)
                 rms += rmsDelta
+                    
+            
+                        
+            if log_array!=None:
+                for c in cells:
+                    log_array.append( "{}, c{}, {:12.8}, {:12.8},{:12.8},{:12.8},{:12.8}, {:12.8},{:12.8},{:12.8},{:12.8}, {:12.8},{:12.8},{:12.8},{:12.8}\n".format(2*round+1,c.id,c.adt,c.q[0],c.q[1],c.q[2],c.q[3],c.qold[0],c.qold[1],c.qold[2],c.qold[3],c.res[0],c.res[1],c.res[2],c.res[3]))
+            
+            round+=1
+                        
         
         rms = math.sqrt(rms / len(cells) )
         if (iter%100)==0:
@@ -389,14 +408,21 @@ def run_model(model,plot_path):
         if plot_path:
             plot.plot_model(model, "{}{:04}.png".format(plot_path,iter))
         
+        if log_array!=None and iter>4:
+            break
     
+    if log_array!=None:
+        dst="py-log-array.csv"
+        with open(dst,"wt") as f:
+            for x in log_array:
+                f.write(x)
 
 
 
 if __name__=="__main__":
     sys.stderr.write("Loading globals\n")
-    #src=h5py.File("new_grid.h5")
-    #model=load(src)
-    model=create_square(20)
+    src=h5py.File("new_grid.h5")
+    model=load(src)
+    #model=create_square(20)
    
-    run_model(model,"out")
+    run_model(model,"out",[])

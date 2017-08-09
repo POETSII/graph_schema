@@ -34,7 +34,7 @@ def render_model(m):
     })
     
     nodes=[ graph.create_device_instance("n{}".format(n.id),nodeType,{"x":n.x,"fanout":0}) for n in m["nodes"] ]
-    cells=[ graph.create_device_instance("c{}".format(c.id),cellType,{"qinit":c.q}) for c in m["cells"] ]
+    cells=[ graph.create_device_instance("c{}".format(c.id),cellType,{"id":c.id,"qinit":c.q}) for c in m["cells"] ]
     edges=[ graph.create_device_instance("e{}".format(e.id),edgeType) for e in m["edges"] ]
     bedges=[ graph.create_device_instance("be{}".format(be.id),bedgeType,{"bound":int(be.bound)}) for be in m["bedges"] ] 
     printer=graph.create_device_instance("print",printerType,{"fanin":len(cells),"delta_print":100,"delta_exit":1000})

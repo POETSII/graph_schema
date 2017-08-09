@@ -475,8 +475,7 @@ public:
 };
 
 
-
-class ReceiveOrchestratorServicesImpl
+class OrchestratorServicesImpl
   : public OrchestratorServices
 {
 private:
@@ -486,19 +485,23 @@ private:
   const char *m_input;
   std::function<void (const char *,uint32_t,uint32_t)> m_onExportKeyValue;
   std::function<void (const char *,int)> m_onApplicationExit;
+  std::function<void (const char *,uint32_t,bool,int)> m_onCheckpoint;
 public:
-  ReceiveOrchestratorServicesImpl(
+  OrchestratorServicesImpl(
+    const char *prefix,
     unsigned logLevel, FILE *dst, const char *device, const char *input,
     std::function<void (const char *, uint32_t,uint32_t)> onExportKeyValue, // It is up to application to manage sequence
-    std::function<void (const char *,int)> onApplicationExit
+    std::function<void (const char *,int)> onApplicationExit,
+    std::function<void (const char *,uint32_t,bool,int)> onCheckpoint
   )
     : OrchestratorServices(logLevel)
     , m_dst(dst)
-    , m_prefix("Recv: ")
+    , m_prefix(prefix)
     , m_device(device)
     , m_input(input)
     , m_onExportKeyValue(onExportKeyValue)
     , m_onApplicationExit(onApplicationExit)
+    , m_onCheckpoint(onCheckpoint)
   {}
 
   void setPrefix(const char *prefix)
@@ -506,7 +509,7 @@ public:
     m_prefix=prefix;
   }
 
-  void setReceiver(const char *device, const char *input)
+  void setDevice(const char *device, const char *input)
   {
     m_device=device;
     m_input=input;
@@ -521,6 +524,11 @@ public:
     }
   }
   
+  virtual void checkpoint(uint32_t key, bool preEvent, int level) override
+  {
+    m_onCheckpoint(m_device, key, preEvent, level);
+  }
+  
   virtual void export_key_value(uint32_t key, uint32_t value) override
   {
     m_onExportKeyValue(m_device, key, value);
@@ -532,61 +540,42 @@ public:
   }
 };
 
+
+class ReceiveOrchestratorServicesImpl
+  : public OrchestratorServicesImpl
+{
+public:
+  ReceiveOrchestratorServicesImpl(
+    unsigned logLevel, FILE *dst, const char *device, const char *input,
+    std::function<void (const char *, uint32_t,uint32_t)> onExportKeyValue, // It is up to application to manage sequence
+    std::function<void (const char *,int)> onApplicationExit,
+    std::function<void (const char *,uint32_t,bool,int)> onCheckpoint
+  )
+    : OrchestratorServicesImpl(
+        "Recv : ",
+        logLevel,dst,device,input,
+        onExportKeyValue,onApplicationExit,onCheckpoint
+    )
+  {}
+};
+
 // TODO : Fold the services into one class. No reason for separation
 class SendOrchestratorServicesImpl
-  : public OrchestratorServices
+  : public OrchestratorServicesImpl
 {
-private:
-  FILE *m_dst;
-  std::string m_prefix;
-  const char *m_device;
-  const char *m_output;
-
-  std::function<void (const char *,uint32_t,uint32_t)> m_onExportKeyValue;
-  std::function<void (const char *,int)> m_onApplicationExit;
 public:
-  SendOrchestratorServicesImpl(unsigned logLevel, FILE *dst, const char *device, const char *output,
+  SendOrchestratorServicesImpl(
+    unsigned logLevel, FILE *dst, const char *device, const char *input,
     std::function<void (const char *, uint32_t,uint32_t)> onExportKeyValue, // It is up to application to manage sequence
-    std::function<void (const char *,int)> onApplicationExit
+    std::function<void (const char *,int)> onApplicationExit,
+    std::function<void (const char *,uint32_t,bool,int)> onCheckpoint
   )
-    : OrchestratorServices(logLevel)
-    , m_dst(dst)
-    , m_prefix("Send: ")
-    , m_device(device)
-    , m_output(output)
-    , m_onExportKeyValue(onExportKeyValue)
-    , m_onApplicationExit(onApplicationExit)
-  {}
-
-  void setPrefix(const std::string &prefix)
-  {
-    m_prefix=m_prefix;
-  }
-
-  void setSender(const char *device, const char *output)
-  {
-    m_device=device;
-    m_output=output;
-  }
-
-  virtual void vlog(unsigned level, const char *msg, va_list args) override
-  {
-    if(m_logLevel >= level){
-      fprintf(m_dst, "%s%s:%s : ", m_prefix.c_str(), m_device, m_output);
-      vfprintf(m_dst, msg, args);
-      fprintf(m_dst, "\n");
-    }
-  }
-
-  virtual void export_key_value(uint32_t key, uint32_t value) override
-  {
-    m_onExportKeyValue(m_device, key, value);
-  }
-  
-  virtual void application_exit(int code)
-  {
-    m_onApplicationExit(m_device, code);
-  }
+    : OrchestratorServicesImpl(
+        "Send : ",
+        logLevel,dst,device,input,
+        onExportKeyValue,onApplicationExit,onCheckpoint
+    )
+    {}
 };
 
 class HandlerLogImpl

@@ -80,6 +80,15 @@ struct EpochSim
   
   std::function<void (const char*,uint32_t,uint32_t)> m_onExportKeyValue;
   
+  std::function<void (const char*,uint32_t,bool,int)> m_onCheckpoint;
+  
+  FILE *m_checkpointDest=0;
+  int m_checkpointLevel=0;
+  bool m_checkpointPreHit=false;
+  std::vector<uint32_t> m_checkpointPreKeys;
+  bool m_checkpointPostHit=false;
+  std::vector<uint32_t> m_checkpointPostKeys;
+  
   bool m_deviceExitCalled=false;
   bool m_deviceExitCode=0;
   std::function<void (const char*,int)> m_onDeviceExit;
@@ -177,6 +186,32 @@ struct EpochSim
 
     dst->endSnapshot();
   }
+  
+  void flushCheckpoints(const char *id, DeviceTypePtr deviceType, const TypedDataPtr &pre, const TypedDataPtr &post)
+  {
+    if(m_checkpointPreHit){
+      std::string payload=deviceType->getStateSpec()->toJSON(pre);
+      while(m_checkpointPreKeys.size()>0){
+        auto key=m_checkpointPreKeys.back();
+        
+        fprintf(m_checkpointDest, "  {\"dev\":\"%s\",\"key\":%u,\"state\":%s},\n", id, key, payload.c_str());
+        
+        m_checkpointPreKeys.pop_back();
+      }
+    }
+    if(m_checkpointPostHit){
+      std::string payload=deviceType->getStateSpec()->toJSON(post);
+      while(m_checkpointPostKeys.size()>0){
+        auto key=m_checkpointPostKeys.front();
+        
+        fprintf(m_checkpointDest, "  {\"dev\":\"%s\",\"key\":%u,\"state\":%s},\n", id, key, payload.c_str());
+        
+        m_checkpointPostKeys.pop_back();
+      }
+    }
+    m_checkpointPreHit=false;
+    m_checkpointPostHit=false;
+  }
 
   void init()
   {
@@ -200,8 +235,32 @@ struct EpochSim
       fprintf(stderr, "  device '%s' called application_exit(%d)\n", id, code);
     };
     
+    if(m_checkpointDest==0){
+      m_onCheckpoint=[this](const char *id, uint32_t key, bool preEvent, int level)
+      {};
+    }else{
+      m_onCheckpoint=[this](const char *id, uint32_t key, bool preEvent, int level)
+      {
+        if(level<=m_checkpointLevel){
+          // We don't mind if this is slow. It shouldn't be enabled for huge graphs and runs
+          auto it=m_deviceIdToIndex.find(id);
+          if(it==m_deviceIdToIndex.end()){
+            throw std::runtime_error("Checkpoint of invalid or non-interned device id.");
+          }
+          
+          if(preEvent){
+            m_checkpointPreHit=true;
+            m_checkpointPreKeys.push_back(key);
+          }else{
+            m_checkpointPostHit=true;
+            m_checkpointPostKeys.push_back(key);
+          }
+        }
+      };
+    }
+    
     for(auto &dev : m_devices){
-      ReceiveOrchestratorServicesImpl receiveServices{logLevel, stderr, dev.name, "__init__", m_onExportKeyValue, m_onDeviceExit  };
+      ReceiveOrchestratorServicesImpl receiveServices{logLevel, stderr, dev.name, "__init__", m_onExportKeyValue, m_onDeviceExit, m_onCheckpoint  };
       auto init=dev.type->getInput("__init__");
       if(init){
         if(logLevel>2){
@@ -234,20 +293,20 @@ struct EpochSim
   unsigned m_epoch=0;
 
   template<class TRng>
-  bool step(TRng &rng, double probSend,bool accurateAssertionInfo)
+  bool step(TRng &rng, double probSend,bool capturePreEventState)
   {
     // Within each step every object gets the chance to send a message with probability probSend
 
     std::uniform_real_distribution<> udist;
 
-    ReceiveOrchestratorServicesImpl receiveServices{logLevel, stderr, 0, 0, m_onExportKeyValue, m_onDeviceExit};
+    ReceiveOrchestratorServicesImpl receiveServices{logLevel, stderr, 0, 0, m_onExportKeyValue, m_onDeviceExit, m_onCheckpoint};
     {
       std::stringstream tmp;
       tmp<<"Epoch "<<m_epoch<<", Recv: ";
       receiveServices.setPrefix(tmp.str().c_str());
     }
 
-    SendOrchestratorServicesImpl sendServices{logLevel, stderr, 0, 0, m_onExportKeyValue, m_onDeviceExit};
+    SendOrchestratorServicesImpl sendServices{logLevel, stderr, 0, 0, m_onExportKeyValue, m_onDeviceExit, m_onCheckpoint};
     {
       std::stringstream tmp;
       tmp<<"Epoch "<<m_epoch<<", Send: ";
@@ -323,10 +382,10 @@ struct EpochSim
         assert( (check>>sel) & 1);
         #endif
 
-        if(accurateAssertionInfo){
+        if(capturePreEventState){
           prevState=src.state.clone();
         }
-        sendServices.setSender(src.name, src.outputNames[sel]);
+        sendServices.setDevice(src.name, src.outputNames[sel]);
         try{
           // Do the actual send handler
           output->onSend(&sendServices, m_graphProperties.get(), src.properties.get(), src.state.get(), message.get(), &doSend);
@@ -334,12 +393,18 @@ struct EpochSim
           fprintf(stderr, "Caught handler exception during send. devId=%s, devType=%s, outPin=%s.", src.name, src.type->getId().c_str(), output->getName().c_str());
           fprintf(stderr, "  %s\n", e.what());
           
-          if(accurateAssertionInfo){
+          if(capturePreEventState){
             fprintf(stderr, "  preSendState = %s\n", src.type->getStateSpec()->toJSON(prevState).c_str());
           }
           fprintf(stderr, "     currState = %s\n", src.type->getStateSpec()->toJSON(src.state).c_str());
           throw;
         }
+
+        if(m_checkpointDest){
+          flushCheckpoints(src.name, src.type, prevState, src.state);
+        }
+
+        
 
         src.readyToSend = src.type->calcReadyToSend(&sendServices, m_graphProperties.get(), src.properties.get(), src.state.get());
         
@@ -391,7 +456,10 @@ struct EpochSim
 
         const auto &pin=dst.type->getInput(out.dstPinIndex);
 
-        receiveServices.setReceiver(out.dstDeviceId, out.dstInputName);
+        if(capturePreEventState){
+          prevState=dst.state.clone();
+        }
+        receiveServices.setDevice(out.dstDeviceId, out.dstInputName);
         try{
           pin->onReceive(&receiveServices, m_graphProperties.get(), dst.properties.get(), dst.state.get(), slot.properties.get(), slot.state.get(), message.get());
         }catch(provider_assertion_error &e){
@@ -399,7 +467,7 @@ struct EpochSim
           fprintf(stderr, "  %s\n", e.what());
           
           fprintf(stderr, "     message = %s\n", pin->getMessageType()->getMessageSpec()->toJSON(message).c_str());
-          if(accurateAssertionInfo){
+          if(capturePreEventState){
             fprintf(stderr, "  preRecvState = %s\n", src.type->getStateSpec()->toJSON(prevState).c_str());
           }
           fprintf(stderr, "     currState = %s\n", src.type->getStateSpec()->toJSON(src.state).c_str());
@@ -408,6 +476,10 @@ struct EpochSim
         }
         dst.readyToSend = dst.type->calcReadyToSend(&receiveServices, m_graphProperties.get(), dst.properties.get(), dst.state.get());
 
+        if(m_checkpointDest){
+          flushCheckpoints(dst.name, dst.type, prevState, dst.state);
+        }
+        
         if(m_log){
           auto id=nextSeqUnq();
           auto idStr=std::to_string(id);
@@ -453,25 +525,39 @@ void usage()
   exit(1);
 }
 
+FILE *g_checkpointDest=0;
+
 std::shared_ptr<LogWriter> g_pLog; // for flushing purposes on exit
 
-void atexit_close_log()
+void close_resources()
 {
+  if(g_checkpointDest){
+    fprintf(g_checkpointDest,"  {}\n]\n");
+    fclose(g_checkpointDest);
+    g_checkpointDest=0;
+  }
   if(g_pLog){
     g_pLog->close();
+    g_pLog=0;
   }
 }
 
-void onsignal_close_log (int)
+void atexit_close_resources()
 {
-  if(g_pLog){
-    g_pLog->close();
-  }
+  close_resources();
+}
+
+void onsignal_close_resources (int)
+{
+  close_resources();
   exit(1);
 }
 
 int main(int argc, char *argv[])
 {
+  
+    
+  
   try{
 
     std::string srcFilePath="-";
@@ -480,6 +566,8 @@ int main(int argc, char *argv[])
     unsigned snapshotDelta=0;
     
     std::string logSinkName;
+    
+    std::string checkpointName;
 
     unsigned statsDelta=1;
 
@@ -490,7 +578,7 @@ int main(int argc, char *argv[])
     bool enableAccurateAssertions=false;
 
     std::string keyValueName;
-
+    
     int ia=1;
     while(ia < argc){
       if(!strcmp("--help",argv[ia])){
@@ -545,6 +633,13 @@ int main(int argc, char *argv[])
         }
         keyValueName=argv[ia+1];
         ia+=2;
+      }else if(!strcmp("--checkpoints",argv[ia])){
+        if(ia+1 >= argc){
+          fprintf(stderr, "Missing argument to --checkpoints\n");
+          usage();
+        }
+        checkpointName=argv[ia+1];
+        ia+=2;
       }else if(!strcmp("--accurate-assertions",argv[ia])){
         enableAccurateAssertions=true;
         ia+=1;
@@ -582,15 +677,16 @@ int main(int argc, char *argv[])
     if(logLevel>1){
       fprintf(stderr, "Parsed XML\n");
     }
+    
+    atexit(atexit_close_resources);
+    signal(SIGABRT, onsignal_close_resources);
+    signal(SIGINT, onsignal_close_resources);
 
     EpochSim graph;
     
     if(!logSinkName.empty()){
       graph.m_log.reset(new LogWriterToFile(logSinkName.c_str()));
       g_pLog=graph.m_log;
-      atexit(atexit_close_log);
-      signal(SIGABRT, onsignal_close_log);
-      signal(SIGINT, onsignal_close_log);
     }
 
     FILE *keyValueDst=0;
@@ -601,6 +697,16 @@ int main(int argc, char *argv[])
             exit(1);
         }
     }
+    
+    if(!checkpointName.empty()){
+        g_checkpointDest=fopen(checkpointName.c_str(), "wt");
+        if(g_checkpointDest==0){
+            fprintf(stderr, "Couldn't open checkpoint dest '%s'\n", checkpointName.c_str());
+            exit(1);
+        }
+        fprintf(g_checkpointDest, "[\n");
+        graph.m_checkpointDest=g_checkpointDest;
+    }    
 
     loadGraph(&registry, srcPath, parser.get_document()->get_root_node(), &graph);
     if(logLevel>1){
@@ -622,9 +728,11 @@ int main(int argc, char *argv[])
     int nextStats=0;
     int nextSnapshot=snapshotDelta ? snapshotDelta-1 : -1;
     int snapshotSequenceNum=1;
+    
+    bool capturePreEventState=enableAccurateAssertions || !checkpointName.empty();
 
     for(int i=0; i<maxSteps; i++){
-      bool running = graph.step(rng, probSend, enableAccurateAssertions) && !graph.m_deviceExitCalled;
+      bool running = graph.step(rng, probSend, capturePreEventState) && !graph.m_deviceExitCalled;
 
       if(logLevel>2 || i==nextStats){
         fprintf(stderr, "Epoch %u : sends/device/epoch = %f (%f / %u)\n\n", i, graph.m_statsSends / graph.m_devices.size() / statsDelta, graph.m_statsSends/statsDelta, (unsigned)graph.m_devices.size());
@@ -659,17 +767,14 @@ int main(int argc, char *argv[])
         }
         fflush(keyValueDst);
     }
-  
+    
+    close_resources();
   }catch(std::exception &e){
-    if(g_pLog){
-      g_pLog->close();
-    }
+    close_resources();
     std::cerr<<"Exception : "<<e.what()<<"\n";
     exit(1);
   }catch(...){
-    if(g_pLog){
-      g_pLog->close();
-    }
+    close_resources();
     std::cerr<<"Exception of unknown type\n";
     exit(1);
   }

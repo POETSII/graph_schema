@@ -7,20 +7,35 @@
     </MetaData>
 
     <Properties>
-      <Scalar type="float" name="gam" />
-			<Scalar type="float" name="gm1" />
-			<Scalar type="float" name="cfl" />
-			<Scalar type="float" name="eps" />
-			<Scalar type="float" name="mach" />
-			<Scalar type="float" name="alpha" />
-			<Array type="float" name="qinf" length="4" />
+      <Scalar type="double" name="gam" />
+			<Scalar type="double" name="gm1" />
+			<Scalar type="double" name="cfl" />
+			<Scalar type="double" name="eps" />
+			<Scalar type="double" name="mach" />
+			<Scalar type="double" name="alpha" />
+			<Array type="double" name="qinf" length="4" />
     </Properties>
 
     <SharedCode><![CDATA[
 		#include <cmath>
 		#include <cfloat>
 
-		void check_not_nan(float x)
+		FILE *dump=0;
+
+		template<class TDP,class TDS>
+		void dump_cell(int round, const TDP *dp, const TDS *ds)
+		{
+			/*if(dump==0){
+				dump=fopen("graph-log-array.csv","wt");
+			}
+			fprintf(dump,"%u, \"c%u\", %12.8f",round, dp->id, ds->adt);
+			fprintf(dump,", %12.8f,%12.8f,%12.8f,%12.8f",ds->q[0],ds->q[1],ds->q[2],ds->q[3]);
+			fprintf(dump,", %12.8f,%12.8f,%12.8f,%12.8f",ds->qold[0],ds->qold[1],ds->qold[2],ds->qold[3]);
+			fprintf(dump,", %12.8f,%12.8f,%12.8f,%12.8f",ds->res[0],ds->res[1],ds->res[2],ds->res[3]);
+			fprintf(dump,"\n");*/
+		}
+
+		void check_not_nan(double x)
 		{
 
 		}
@@ -29,16 +44,16 @@
 		void adt_calc(
 			const TGP *graphProperties, // For the globals
 			TDS *deviceState, // For the "members"
-			float x1[2],
-			float x2[2],
-			float x3[2],
-			float x4[4]
+			double x1[2],
+			double x2[2],
+			double x3[2],
+			double x4[4]
 		){
 			auto &g=*graphProperties;
 			auto &adt=deviceState->adt;
 			auto &q=deviceState->q;
 
-			float dx,dy, ri,u,v,c;
+			double dx,dy, ri,u,v,c;
         
 			adt=0.0;
 			
@@ -75,14 +90,14 @@
 		void update(
 			const TGP *graphProperties, // For the globals
 			TDS *deviceState, // For the "members"
-			float &rms
+			double &rms
 		){
 			auto &adt=deviceState->adt;
 			auto &res=deviceState->res;
 			auto &q=deviceState->q;
 			auto &qold=deviceState->qold;
 
-			float adti = 1.0/adt;
+			double adti = 1.0/adt;
 			for(unsigned i=0; i<4; i++){
 					auto ddel    = adti*res[i];
 					q[i]   = qold[i] - ddel;
@@ -94,18 +109,18 @@
 		template<class TGP>
 		void res_calc(
 				const TGP *graphProperties,
-				const float x1[2],
-				const float x2[2],
-				const float q1[4],
-				const float q2[4],
-				float adt1,
-				float adt2,
-				float res1[4],
-				float res2[4]
+				const double x1[2],
+				const double x2[2],
+				const double q1[4],
+				const double q2[4],
+				double adt1,
+				double adt2,
+				double res1[4],
+				double res2[4]
 			)
 		{
 			auto &g=*graphProperties;
-			float dx,dy,mu, ri, p1,vol1, p2,vol2, f;
+			double dx,dy,mu, ri, p1,vol1, p2,vol2, f;
 
 			dx = x1[0] - x2[0];
 			dy = x1[1] - x2[1];
@@ -135,15 +150,15 @@
 		void bres_calc(
 				const TGP *graphProperties,
 				const TDP *deviceProperties,
-				const float x1[2],
-				const float x2[2],
-				const float q1[4],
-				float adt1,
-				float res1[4]
+				const double x1[2],
+				const double x2[2],
+				const double q1[4],
+				double adt1,
+				double res1[4]
 			){
 				auto &g=*graphProperties;
 				auto bound=deviceProperties->bound;
-				float dx, dy, ri, p1, p2, vol1, vol2, mu, f;
+				double dx, dy, ri, p1, p2, vol1, vol2, mu, f;
         
         dx = x1[0] - x2[0];
         dy = x1[1] - x2[1];
@@ -181,7 +196,7 @@
 
       <MessageType id="node_pos">
 				<Message>
-					<Array type="float" name="x" length="2" />
+					<Array type="double" name="x" length="2" />
 					<Scalar type="uint32_t" name="round" />
 				</Message>
       </MessageType>
@@ -190,15 +205,15 @@
 
 			<MessageType id="cell_q_adt">
 				<Message>
-					<Array type="float" name="q" length="4" />
-					<Scalar type="float" name="adt" />
+					<Array type="double" name="q" length="4" />
+					<Scalar type="double" name="adt" />
 					<Scalar type="uint32_t" name="round" />
 				</Message>
       </MessageType>
 
 			<MessageType id="res_inc">
 				<Message>
-					<Array type="float" name="res" length="4" />
+					<Array type="double" name="res" length="4" />
 					<Scalar type="uint32_t" name="round" />
 				</Message>
       </MessageType>
@@ -206,7 +221,7 @@
 
 			<MessageType id="rms_inc">
 				<Message>
-					<Scalar type="float" name="rms" />
+					<Scalar type="double" name="rms" />
 					<Scalar type="uint32_t" name="round" />
 				</Message>
       </MessageType>
@@ -223,7 +238,7 @@
     <DeviceTypes>
       <DeviceType id="node">
 				<Properties>
-					<Array type="float" name="x" length="2" />
+					<Array type="double" name="x" length="2" />
 					<Scalar type="uint32_t" name="fanout">
 						<Documentation>
 							The number of people who will receive
@@ -282,21 +297,22 @@
 				]]></SharedCode>
 
 				<Properties>
-					<Array name="qinit" type="float" length="4"/>
+					<Array name="qinit" type="double" length="4"/>
+					<Scalar name="id" type="uint32_t" />
 				</Properties>
 
 				<State>
 					<!-- Intrinsic state of the cell -->
-					<Array name="q" type="float" length="4" />
-					<Array name="qold" type="float" length="4" />
-					<Array name="res" type="float" length="4" />
-					<Scalar name="adt" type="float" />
+					<Array name="q" type="double" length="4" />
+					<Array name="qold" type="double" length="4" />
+					<Array name="res" type="double" length="4" />
+					<Scalar name="adt" type="double" />
 
 					<!-- Which phase we are in: 0==adt, 1==update -->
 					<Scalar name="phase" type="uint32_t" />
 
 					<!-- receive x positions from four nodes defining edge corners -->
-					<Array name="x_buff" type="float" length="8" />
+					<Array name="x_buff" type="double" length="8" />
 					<Scalar name="x_buff_got" type="uint32_t" />
 					<Scalar name="x_ack_pending" type="uint32_t" /> <!-- Boolean. Set once we have used the x, and want the next one -->
 
@@ -445,7 +461,10 @@
 							check_not_nan(deviceState->q[i]);
 					}
 
-					float rms=0;
+					dump_cell(deviceState->round*2, deviceProperties, deviceState);
+					handler_checkpoint(deviceState->round*2, true);
+
+					double rms=0;
 					update(
 						graphProperties,
 						deviceState,
@@ -458,9 +477,15 @@
 							check_not_nan(deviceState->q[i]);
 					}
 
+					dump_cell(deviceState->round*2+1, deviceProperties, deviceState);
+					handler_checkpoint(deviceState->round*2+1, false);
+
 					deviceState->phase=Phase_AdtCalc;
 					deviceState->rms_inc_ack_pending=1;
 					deviceState->round++;
+
+					
+
 					]]></OnSend>
 				</OutputPin>
 
@@ -479,16 +504,16 @@
 			<DeviceType id="edge">
 				<State>
 					<!-- receive x positions from two nodes defining edge corners -->
-					<Array name="x_buff" type="float" length="8" />
+					<Array name="x_buff" type="double" length="8" />
 					<Scalar name="x_buff_got" type="uint32_t" />
 					<Scalar name="x_ack_pending" type="uint32_t" /> <!-- Boolean. Set once we have used the x, and want the next one -->
 
-					<Array name="q_buff" type="float" length="8" />   <!-- Pair of 4-tuples --> 
-					<Array name="adt_buff" type="float" length="2" /> <!-- two scalars -->
+					<Array name="q_buff" type="double" length="8" />   <!-- Pair of 4-tuples --> 
+					<Array name="adt_buff" type="double" length="2" /> <!-- two scalars -->
 					<Scalar name="q_adt_buff_got" type="uint32_t" />
 
 					<!-- buffer needed due to the two-way send -->
-					<Array name="res2_buff" type="float" length="4" /> 
+					<Array name="res2_buff" type="double" length="4" /> 
 					<Scalar name="res2_pending" type="uint32_t" /> <!-- Boolean. Set if we need to complete the two-way send -->
 
 					<Scalar name="round" type="uint32_t" />
@@ -610,12 +635,12 @@
 				</Properties>
 				<State>
 					<!-- receive x positions from two nodes defining edge corners -->
-					<Array name="x_buff" type="float" length="8" />
+					<Array name="x_buff" type="double" length="8" />
 					<Scalar name="x_buff_got" type="uint32_t" />
 					<Scalar name="x_ack_pending" type="uint32_t" /> <!-- Boolean. Set once we have used the x, and want the next one -->
 
-					<Array name="q_buff" type="float" length="4" />   <!-- Single 4-tuples --> 
-					<Array name="adt_buff" type="float" length="1" /> <!-- one scalars -->
+					<Array name="q_buff" type="double" length="4" />   <!-- Single 4-tuples --> 
+					<Array name="adt_buff" type="double" length="1" /> <!-- one scalars -->
 					<Scalar name="q_adt_buff_got" type="uint32_t" />
 
 					<Scalar name="round" type="uint32_t" />
@@ -710,7 +735,7 @@
 				<State>
 					<Scalar name="iter" type="uint32_t" />
 					<Scalar name="iter_print" type="uint32_t" />
-					<Scalar name="rms_sum" type="float" />
+					<Scalar name="rms_sum" type="double" />
 					<Scalar name="rms_pending" type="uint32_t" />
 				</State>
 
@@ -743,7 +768,7 @@
 							deviceState->iter_print++;
 							
 							if(deviceState->iter_print==deviceProperties->delta_print){
-								float rms=std::sqrt( deviceState->rms_sum / deviceProperties->fanin );
+								double rms=std::sqrt( deviceState->rms_sum / deviceProperties->fanin );
 
 								int rmsScaled=(int)(rms*100000000);
 								handler_log(0, "  %d  %d*10^-8", deviceState->iter, rmsScaled);

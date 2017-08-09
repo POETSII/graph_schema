@@ -4,4 +4,4 @@ CPPFLAGS += -W -Wall -Wno-unused-variable -Wno-unused-parameter
 LDFLAGS += -L/usr/lib/x86_64-linux-gnu
 LDLIBS += -lhdf5_serial -lhdf5_cpp
 
-CPPFLAGS += -DNDEBUG=1 -O2
+#CPPFLAGS += -DNDEBUG=1 -O2

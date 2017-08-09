@@ -193,6 +193,7 @@ int main(int argc, char *argv[])
     
     fprintf(stderr, "Running\n");
     int niter = 1000;
+    unsigned round=0;
     for(int iter=1; iter <= niter; iter++)
     {
         fprintf(stderr, "  Iter %d\n", iter);
@@ -211,6 +212,10 @@ int main(int argc, char *argv[])
                     nodes[pcell[ci][2]].x,// read
                     nodes[pcell[ci][3]].x// read                
                 );
+                
+                for(unsigned tt=0; tt<4; tt++){
+                    assert(cells[ci].res[tt]==0);
+                }
             }
             
             for(unsigned ei=0; ei<edges.size(); ei++)
@@ -250,12 +255,34 @@ int main(int argc, char *argv[])
             );
             */
             
+            /*
+            for(unsigned ci=0;ci<cells.size(); ci++){
+                Cell *ds=&cells[ci];
+                fprintf(stdout,"%u, \"c%u\", %12.8f",2*round, ci, ds->adt);
+                fprintf(stdout,", %12.8f,%12.8f,%12.8f,%12.8f",ds->q[0],ds->q[1],ds->q[2],ds->q[3]);
+                fprintf(stdout,", %12.8f,%12.8f,%12.8f,%12.8f",ds->qold[0],ds->qold[1],ds->qold[2],ds->qold[3]);
+                fprintf(stdout,", %12.8f,%12.8f,%12.8f,%12.8f",ds->res[0],ds->res[1],ds->res[2],ds->res[3]);
+                fprintf(stdout,"\n");
+            }
+            */
+            
             rms=0.0;
             for(unsigned ci=0; ci<cells.size(); ci++){
                 cells[ci].update(globals,
                     rms
                 );
             }
+            /*
+            for(unsigned ci=0;ci<cells.size(); ci++){
+                Cell *ds=&cells[ci];
+                fprintf(stdout,"%u, \"c%u\", %12.8f",2*round+1, ci, ds->adt);
+                fprintf(stdout,", %12.8f,%12.8f,%12.8f,%12.8f",ds->q[0],ds->q[1],ds->q[2],ds->q[3]);
+                fprintf(stdout,", %12.8f,%12.8f,%12.8f,%12.8f",ds->qold[0],ds->qold[1],ds->qold[2],ds->qold[3]);
+                fprintf(stdout,", %12.8f,%12.8f,%12.8f,%12.8f",ds->res[0],ds->res[1],ds->res[2],ds->res[3]);
+                fprintf(stdout,"\n");
+            }*/
+
+            round++;
         }
         
         /*

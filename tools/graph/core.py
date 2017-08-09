@@ -31,6 +31,8 @@ class ScalarTypedDataSpec(TypedDataSpec):
             assert(0 <= res < 2**8)
         elif self.type=="float":
             res=float(value)
+        elif self.type=="double":
+            res=float(value)
         else:
             assert False, "Unknown data type {}.".format(self.type)
         return res

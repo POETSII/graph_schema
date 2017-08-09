@@ -78,7 +78,7 @@ def render_typed_data_load_v4_tuple(proto,dst,prefix,indent):
             elif elt.type=="uint64_t" or elt.type=="uint32_t" or elt.type=="uint16_t" or elt.type=="uint8_t":
                 dst.write('{}  {}{}=n.GetUint();\n'.format(indent, prefix, elt.name))
 
-            elif elt.type=="float":
+            elif elt.type=="float" or elt.type=="double":
                 dst.write('{}  {}{}=n.GetDouble();\n'.format(indent, prefix, elt.name))
             else:
                 raise RuntimeError("Unknown scalar data type.")
@@ -97,7 +97,7 @@ def render_typed_data_load_v4_tuple(proto,dst,prefix,indent):
                     dst.write('{}  assert(n[{}].IsUint());\n'.format(indent,i))
                     dst.write('{}  {}{}[{}]=n[{}].GetUint();\n'.format(indent, prefix,elt.name,i,i))
 
-                elif elt.type.type=="float":
+                elif elt.type.type=="float" or elt.type.type=="double":
                     dst.write('{}  assert(n[{}].IsDouble());\n'.format(indent,i))
                     dst.write('{}  {}{}[{}]=n[{}].GetDouble();\n'.format(indent, prefix,elt.name,i,i))
                 else:
@@ -404,7 +404,7 @@ public:
     HandlerLogImpl handler_log(orchestrator);
     auto handler_exit=[&](int code) -> void {{ orchestrator->application_exit(code); }};
     auto handler_export_key_value=[&](uint32_t key, uint32_t value) -> void {{ orchestrator->export_key_value(key, value); }};
-    
+    auto handler_checkpoint=[&](uint32_t key, bool preEvent=false, int level=0) -> void {{ orchestrator->checkpoint(key,preEvent,level); }};
 
     // Begin custom handler
     {preProcLinePragma}
@@ -487,6 +487,7 @@ def render_output_pin_as_cpp(op,dst):
     dst.write('    HandlerLogImpl handler_log(orchestrator);\n')
     dst.write('    auto handler_exit=[&](int code) -> void { orchestrator->application_exit(code); };\n')
     dst.write('    auto handler_export_key_value=[&](uint32_t key, uint32_t value) -> void { orchestrator->export_key_value(key, value); };\n')   
+    dst.write('    auto handler_checkpoint=[&](uint32_t key, bool preEvent=false, int level=0) -> void {{ orchestrator->checkpoint(key,preEvent,level); }};\n');
 
     dst.write('    // Begin custom handler\n')
     if op.source_line and op.source_file:
