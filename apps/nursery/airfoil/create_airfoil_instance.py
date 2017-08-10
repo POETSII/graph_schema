@@ -69,16 +69,12 @@ def render_model(m):
         for (index,ci) in enumerate(cis):
             srcNode=cells[ci]
             graph.create_edge_instance(dstNode,"q_adt_in",srcNode,"adt_calc",{"index":index})
-            # TODO : There shouldn't be four res_inc_in ports, this is for debugging
-            target_index=cell_edges[ci].index("e{}".format(ei))
-            graph.create_edge_instance(srcNode,"res{}_inc_in".format(target_index),dstNode,"res_calc_res{}".format(index+1))
+            graph.create_edge_instance(srcNode,"res_inc_in",dstNode,"res_calc_res{}".format(index+1))
     for (bei, (ci,) ) in enumerate(m["pbecell"]):
         dstNode=bedges[bei]
         srcNode=cells[ci]
-        # TODO : There shouldn't be four res_inc_in ports, this is for debugging
-        target_index=cell_edges[ci].index("be{}".format(bei))
         graph.create_edge_instance(dstNode,"q_adt_in",srcNode,"adt_calc")
-        graph.create_edge_instance(srcNode,"res{}_inc_in".format(target_index),dstNode,"bres_calc")
+        graph.create_edge_instance(srcNode,"res_inc_in",dstNode,"bres_calc")
         
     for c in cells:
         graph.create_edge_instance(printer,"rms_inc",c,"update")

@@ -443,7 +443,7 @@
 					]]></OnSend>
 				</OutputPin>
 
-				<InputPin name="res0_inc_in" messageTypeId="res_inc">
+				<InputPin name="res_inc_in" messageTypeId="res_inc">
 					<OnReceive><![CDATA[
 					assert(deviceState->phase==Phase_Update);
 					assert(deviceState->res_pending>0);
@@ -451,72 +451,6 @@
 						deviceState->res[j] += message->res[j];
 					}
 					deviceState->res_pending--;
-
-					// Debug only
-					for(unsigned i=0;i<4;i++){
-						deviceState->res0_in[i]=message->res[i];
-					}
-					deviceState->res_senders[0]=message->sender;
-					]]></OnReceive>
-				</InputPin>
-
-				<InputPin name="res1_inc_in" messageTypeId="res_inc">
-					<OnReceive><![CDATA[
-					// TODO: This should really be combined with res0. It is only seperate
-					// for debugging purposes so that we can capture res0..res3 seperately.
-
-					assert(deviceState->phase==Phase_Update);
-					assert(deviceState->res_pending>0);
-					for(int j=0; j<4; j++){
-						deviceState->res[j] += message->res[j];
-					}
-					deviceState->res_pending--;
-
-					// Debug only
-					for(unsigned i=0;i<4;i++){
-						deviceState->res1_in[i]=message->res[i];
-					}
-					deviceState->res_senders[1]=message->sender;
-					]]></OnReceive>
-				</InputPin>
-
-				<InputPin name="res2_inc_in" messageTypeId="res_inc">
-					<OnReceive><![CDATA[
-					// TODO: This should really be combined with res0. It is only seperate
-					// for debugging purposes so that we can capture res0..res3 seperately.
-
-					assert(deviceState->phase==Phase_Update);
-					assert(deviceState->res_pending>0);
-					for(int j=0; j<4; j++){
-						deviceState->res[j] += message->res[j];
-					}
-					deviceState->res_pending--;
-
-					// Debug only
-					for(unsigned i=0;i<4;i++){
-						deviceState->res2_in[i]=message->res[i];
-					}
-					deviceState->res_senders[2]=message->sender;
-					]]></OnReceive>
-				</InputPin>
-
-				<InputPin name="res3_inc_in" messageTypeId="res_inc">
-					<OnReceive><![CDATA[
-					// TODO: This should really be combined with res0. It is only seperate
-					// for debugging purposes so that we can capture res0..res3 seperately.
-
-					assert(deviceState->phase==Phase_Update);
-					assert(deviceState->res_pending>0);
-					for(int j=0; j<4; j++){
-						deviceState->res[j] += message->res[j];
-					}
-					deviceState->res_pending--;
-
-					// Debug only
-					for(unsigned i=0;i<4;i++){
-						deviceState->res3_in[i]=message->res[i];
-					}
-					deviceState->res_senders[3]=message->sender;
 					]]></OnReceive>
 				</InputPin>
 

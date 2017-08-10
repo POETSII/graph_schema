@@ -383,9 +383,6 @@ def run_model(model,plot_path,checkpoints=None):
                         {"adt":c.adt,"q":c.q,"qold":c.qold,"res":c.res}
                     )
                     
-            if checkpoints:
-                cell_res_inputs=[ [None]*4 for i in range(len(cells)) ]
-
             for ei in range(len(edges)):
                 if checkpoints:
                     checkpoints.add(
@@ -415,10 +412,6 @@ def run_model(model,plot_path,checkpoints=None):
                         "post-res_calc-{}".format(round),
                         {"res1_buff":res1Delta,"res2_buff":res2Delta}
                     )
-                    c1=pecell[ei][0]
-                    cell_res_inputs[c1][ cell_edges[c1].index("e{}".format(ei)) ]=res1Delta
-                    c2=pecell[ei][1]
-                    cell_res_inputs[c2][ cell_edges[c2].index("e{}".format(ei)) ]=res2Delta
             
             
             for bei in range(len(bedges)):
@@ -436,8 +429,6 @@ def run_model(model,plot_path,checkpoints=None):
                         "post-bres_calc-{}".format(round),
                         {"res_buff":res}
                     )
-                    c1=pbecell[bei][0]
-                    cell_res_inputs[c1][ cell_edges[c1].index("be{}".format(bei)) ]=res
 
             rms=0.0
             for c in cells:
@@ -446,13 +437,7 @@ def run_model(model,plot_path,checkpoints=None):
                     checkpoints.add(
                         "c{}".format(c.id),
                         "pre-update-{}".format(round),
-                        {"adt":c.adt,"q":c.q,"qold":c.qold,"res":c.res,
-                            "res0_in":cell_res_inputs[c.id][0],
-                            "res1_in":cell_res_inputs[c.id][1],
-                            "res2_in":cell_res_inputs[c.id][2],
-                            "res3_in":cell_res_inputs[c.id][3],
-                            "res_senders":senders
-                        }
+                        {"adt":c.adt,"q":c.q,"qold":c.qold,"res":c.res}
                     )
                 (rmsDelta,)=c.update(globals)
                 rms += rmsDelta
