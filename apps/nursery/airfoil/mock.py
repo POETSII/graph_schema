@@ -5,6 +5,8 @@ import math
 import sys
 import json
 
+import graph.checkpoints
+
 class Set(object):
     def __init__(self,id):
         self.id=id
@@ -251,7 +253,7 @@ def create_square(n):
         else: # horz edge
             pedge[edge.id]=( nodes[(x+1,y)].id,nodes[(x-1,y)].id )
             pecell[edge.id]=( cells[(x,y-1)].id,cells[(x,y+1)].id )
-            
+                
     pbedge=[None]*len(bedges)
     pbecell=[None]*len(bedges)
     for ((x,y),bedge) in bedges.items():
@@ -274,9 +276,8 @@ def create_square(n):
 
     def to_set(m):
         return [nn for (ni,nn) in sorted([(n.id,n) for n in m.values()]) ]
-        
-     
-    return {
+    
+    return add_cell_edges({
         "globals" : g,
         "nodes" : to_set(nodes),
         "edges" : to_set(edges),
@@ -287,7 +288,7 @@ def create_square(n):
         "pbedge" : pbedge,
         "pbecell" : pbecell,
         "pcell" : pcell
-    }
+    })
 
 def load(src):
     g=Globals()
@@ -320,8 +321,8 @@ def load(src):
     pbedge = load_map(bedges, nodes, src["pbedge"]) # BEdgeIndex -> [NodeIndex]*2
     pbecell = load_map(bedges, cells, src["pbecell"]) # BEdgeIndex -> [CellIndex]
     pcell = load_map(cells, nodes, src["pcell"]) # CellIndex -> [NodeIndex]*4
-
-    return {
+    
+    return add_cell_edges({
         "globals" : g,
         "nodes" : nodes,
         "edges" : edges,
@@ -332,9 +333,26 @@ def load(src):
         "pbedge" : pbedge,
         "pbecell" : pbecell,
         "pcell" : pcell
-    }
+    })
     
-def run_model(model,plot_path,log_array=None):
+def add_cell_edges(m):
+    # Work out a unique mapping from a cell to the set of four edges and/or bedges
+    # This shouldn't matter, but is needed for debugging in order to route to a unique
+    # res{n}_inc_in
+    cell_edges=[ [] for i in range(len(m["cells"])) ]
+    for (edgeI,(leftCellI,rightCellI)) in enumerate(m["pecell"]):
+        cell_edges[leftCellI].append("e{}".format(edgeI))
+        cell_edges[rightCellI].append("e{}".format(edgeI))
+    for (bedgeI,(cellI,)) in enumerate(m["pbecell"]):
+        cell_edges[cellI].append("be{}".format(bedgeI))
+    for (ci,edgeNames) in enumerate(cell_edges):
+        assert len(set(edgeNames))==4, "Wrong edge count for cell {}".format(ci)
+
+    m["cell_edges"]=cell_edges
+    return m
+
+    
+def run_model(model,plot_path,checkpoints=None):
     import plot
     
     globals().update(model)
@@ -357,8 +375,28 @@ def run_model(model,plot_path,log_array=None):
                     nodes[pcell[ci][2]].x,
                     nodes[pcell[ci][3]].x,
                 )
+                if checkpoints:
+                    c=cells[ci]
+                    checkpoints.add(
+                        "c{}".format(ci),
+                        "post-adt-{}".format(round),
+                        {"adt":c.adt,"q":c.q,"qold":c.qold,"res":c.res}
+                    )
+                    
+            if checkpoints:
+                cell_res_inputs=[ [None]*4 for i in range(len(cells)) ]
 
             for ei in range(len(edges)):
+                if checkpoints:
+                    checkpoints.add(
+                        "e{}".format(ei),
+                        "pre-res_calc-{}".format(round),
+                        {
+                            "q_buff":cells[pecell[ei][0]].q+cells[pecell[ei][1]].q,
+                            "adt_buff":[cells[pecell[ei][0]].adt,cells[pecell[ei][1]].adt]
+                        }
+                    )
+                
                 (res1Delta,res2Delta)=edges[ei].res_calc(globals,
                     nodes[pedge[ei][0]].x,
                     nodes[pedge[ei][1]].x,
@@ -370,6 +408,18 @@ def run_model(model,plot_path,log_array=None):
                 for i in range(4):
                     cells[pecell[ei][0]].res[i] += res1Delta[i]
                     cells[pecell[ei][1]].res[i] += res2Delta[i]
+                
+                if checkpoints:
+                    checkpoints.add(
+                        "e{}".format(ei),
+                        "post-res_calc-{}".format(round),
+                        {"res1_buff":res1Delta,"res2_buff":res2Delta}
+                    )
+                    c1=pecell[ei][0]
+                    cell_res_inputs[c1][ cell_edges[c1].index("e{}".format(ei)) ]=res1Delta
+                    c2=pecell[ei][1]
+                    cell_res_inputs[c2][ cell_edges[c2].index("e{}".format(ei)) ]=res2Delta
+            
             
             for bei in range(len(bedges)):
                 (res,)=bedges[bei].bres_calc(globals,
@@ -380,49 +430,66 @@ def run_model(model,plot_path,log_array=None):
                 )
                 for i in range(4):
                     cells[pbecell[bei][0]].res[i] += res[i]
-
-            if log_array!=None:
-                for c in cells:
-                    log_array.append( "{}, c{}, {:12.8}, {:12.8},{:12.8},{:12.8},{:12.8}, {:12.8},{:12.8},{:12.8},{:12.8}, {:12.8},{:12.8},{:12.8},{:12.8}\n".format(2*round,c.id,c.adt,c.q[0],c.q[1],c.q[2],c.q[3],c.qold[0],c.qold[1],c.qold[2],c.qold[3],c.res[0],c.res[1],c.res[2],c.res[3]))
+                if checkpoints:
+                    checkpoints.add(
+                        "be{}".format(bei),
+                        "post-bres_calc-{}".format(round),
+                        {"res_buff":res}
+                    )
+                    c1=pbecell[bei][0]
+                    cell_res_inputs[c1][ cell_edges[c1].index("be{}".format(bei)) ]=res
 
             rms=0.0
             for c in cells:
+                if checkpoints:
+                    senders=[ int(x[2:])+0x80000000 if x[0:2]=="be" else int(x[1:]) for x in cell_edges[c.id] ]
+                    checkpoints.add(
+                        "c{}".format(c.id),
+                        "pre-update-{}".format(round),
+                        {"adt":c.adt,"q":c.q,"qold":c.qold,"res":c.res,
+                            "res0_in":cell_res_inputs[c.id][0],
+                            "res1_in":cell_res_inputs[c.id][1],
+                            "res2_in":cell_res_inputs[c.id][2],
+                            "res3_in":cell_res_inputs[c.id][3],
+                            "res_senders":senders
+                        }
+                    )
                 (rmsDelta,)=c.update(globals)
                 rms += rmsDelta
-                    
+                if checkpoints:
+                    checkpoints.add(
+                        "c{}".format(c.id),
+                        "post-update-{}".format(round),
+                        {"adt":c.adt,"q":c.q,"qold":c.qold,"res":c.res}
+                    )
             
                         
-            if log_array!=None:
-                for c in cells:
-                    log_array.append( "{}, c{}, {:12.8}, {:12.8},{:12.8},{:12.8},{:12.8}, {:12.8},{:12.8},{:12.8},{:12.8}, {:12.8},{:12.8},{:12.8},{:12.8}\n".format(2*round+1,c.id,c.adt,c.q[0],c.q[1],c.q[2],c.q[3],c.qold[0],c.qold[1],c.qold[2],c.qold[3],c.res[0],c.res[1],c.res[2],c.res[3]))
             
             round+=1
                         
+                        
+        if checkpoints and round>20:
+            checkpoints.close()
+            checkpoints=None
         
         rms = math.sqrt(rms / len(cells) )
         if (iter%100)==0:
             print(" {:d}  {:10.5e} ".format(iter, rms))
-            if not plot_path:
-                plot.plot_model()
+            #if not plot_path:
+            #    plot.plot_model()
             
-        if plot_path:
-            plot.plot_model(model, "{}{:04}.png".format(plot_path,iter))
+        #if plot_path:
+        #    plot.plot_model(model, "{}{:04}.png".format(plot_path,iter))
         
-        if log_array!=None and iter>4:
-            break
-    
-    if log_array!=None:
-        dst="py-log-array.csv"
-        with open(dst,"wt") as f:
-            for x in log_array:
-                f.write(x)
-
 
 
 if __name__=="__main__":
     sys.stderr.write("Loading globals\n")
     src=h5py.File("new_grid.h5")
     model=load(src)
-    #model=create_square(20)
+    #model=create_square(3)
+    
+    with open("checkpoints.xml","wt") as cp:
+        checkpoints=graph.checkpoints.CheckpointLog(cp)
    
-    run_model(model,"out",[])
+        run_model(model,"out",checkpoints)

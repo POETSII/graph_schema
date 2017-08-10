@@ -215,6 +215,7 @@
 				<Message>
 					<Array type="double" name="res" length="4" />
 					<Scalar type="uint32_t" name="round" />
+					<Scalar type="uint32_t" name="sender" /><!--Debugging only. MSB means it is a bedge -->
 				</Message>
       </MessageType>
 
@@ -320,6 +321,14 @@
 
 					<Scalar name="rms_inc_ack_pending" type="uint32_t" /> <!-- Boolean. Set if we have sent an rms_inc, but it is not acked -->
 
+
+					<!-- debugging only -->
+					<Array name="res_senders" type="uint32_t" length="4" />
+					<Array name="res0_in" type="double" length="4" />
+					<Array name="res1_in" type="double" length="4" />
+					<Array name="res2_in" type="double" length="4" />
+					<Array name="res3_in" type="double" length="4" />
+
 					<Scalar name="round" type="uint32_t" />
 				</State>
 
@@ -404,6 +413,7 @@
 						deviceState->x_buff+4,
 						deviceState->x_buff+6
 					);
+					handler_checkpoint(false, 0, "post-adt-%u", deviceState->round);
 
 					for(unsigned i=0; i<4; i++){
 							check_not_nan(deviceState->q[i]);
@@ -433,7 +443,7 @@
 					]]></OnSend>
 				</OutputPin>
 
-				<InputPin name="res_inc_in" messageTypeId="res_inc">
+				<InputPin name="res0_inc_in" messageTypeId="res_inc">
 					<OnReceive><![CDATA[
 					assert(deviceState->phase==Phase_Update);
 					assert(deviceState->res_pending>0);
@@ -441,6 +451,72 @@
 						deviceState->res[j] += message->res[j];
 					}
 					deviceState->res_pending--;
+
+					// Debug only
+					for(unsigned i=0;i<4;i++){
+						deviceState->res0_in[i]=message->res[i];
+					}
+					deviceState->res_senders[0]=message->sender;
+					]]></OnReceive>
+				</InputPin>
+
+				<InputPin name="res1_inc_in" messageTypeId="res_inc">
+					<OnReceive><![CDATA[
+					// TODO: This should really be combined with res0. It is only seperate
+					// for debugging purposes so that we can capture res0..res3 seperately.
+
+					assert(deviceState->phase==Phase_Update);
+					assert(deviceState->res_pending>0);
+					for(int j=0; j<4; j++){
+						deviceState->res[j] += message->res[j];
+					}
+					deviceState->res_pending--;
+
+					// Debug only
+					for(unsigned i=0;i<4;i++){
+						deviceState->res1_in[i]=message->res[i];
+					}
+					deviceState->res_senders[1]=message->sender;
+					]]></OnReceive>
+				</InputPin>
+
+				<InputPin name="res2_inc_in" messageTypeId="res_inc">
+					<OnReceive><![CDATA[
+					// TODO: This should really be combined with res0. It is only seperate
+					// for debugging purposes so that we can capture res0..res3 seperately.
+
+					assert(deviceState->phase==Phase_Update);
+					assert(deviceState->res_pending>0);
+					for(int j=0; j<4; j++){
+						deviceState->res[j] += message->res[j];
+					}
+					deviceState->res_pending--;
+
+					// Debug only
+					for(unsigned i=0;i<4;i++){
+						deviceState->res2_in[i]=message->res[i];
+					}
+					deviceState->res_senders[2]=message->sender;
+					]]></OnReceive>
+				</InputPin>
+
+				<InputPin name="res3_inc_in" messageTypeId="res_inc">
+					<OnReceive><![CDATA[
+					// TODO: This should really be combined with res0. It is only seperate
+					// for debugging purposes so that we can capture res0..res3 seperately.
+
+					assert(deviceState->phase==Phase_Update);
+					assert(deviceState->res_pending>0);
+					for(int j=0; j<4; j++){
+						deviceState->res[j] += message->res[j];
+					}
+					deviceState->res_pending--;
+
+					// Debug only
+					for(unsigned i=0;i<4;i++){
+						deviceState->res3_in[i]=message->res[i];
+					}
+					deviceState->res_senders[3]=message->sender;
 					]]></OnReceive>
 				</InputPin>
 
@@ -462,7 +538,7 @@
 					}
 
 					dump_cell(deviceState->round*2, deviceProperties, deviceState);
-					handler_checkpoint(deviceState->round*2, true);
+					handler_checkpoint(true, 0, "pre-update-%u", deviceState->round);
 
 					double rms=0;
 					update(
@@ -478,7 +554,7 @@
 					}
 
 					dump_cell(deviceState->round*2+1, deviceProperties, deviceState);
-					handler_checkpoint(deviceState->round*2+1, false);
+					handler_checkpoint(false, 0, "post-update-%u", deviceState->round);
 
 					deviceState->phase=Phase_AdtCalc;
 					deviceState->rms_inc_ack_pending=1;
@@ -502,6 +578,10 @@
 			
 
 			<DeviceType id="edge">
+				<Properties>
+					<Scalar name="id" type="uint32_t" /><!--Mainly for debugging -->
+				</Properties>
+
 				<State>
 					<!-- receive x positions from two nodes defining edge corners -->
 					<Array name="x_buff" type="double" length="8" />
@@ -511,6 +591,9 @@
 					<Array name="q_buff" type="double" length="8" />   <!-- Pair of 4-tuples --> 
 					<Array name="adt_buff" type="double" length="2" /> <!-- two scalars -->
 					<Scalar name="q_adt_buff_got" type="uint32_t" />
+
+					<!-- this is only for debugging purposes -->
+					<Array name="res1_buff" type="double" length="4" /> 
 
 					<!-- buffer needed due to the two-way send -->
 					<Array name="res2_buff" type="double" length="4" /> 
@@ -535,7 +618,7 @@
 						&& !deviceState->x_ack_pending
 						&& !deviceState->res2_pending
 				){
-					*readyToSend |= RTS_FLAG_res_calc;
+					*readyToSend |= RTS_FLAG_res_calc_res1;
 				}
 				]]></ReadyToSend>
 
@@ -572,13 +655,20 @@
 					]]></OnReceive>
 				</InputPin>
 
-				<OutputPin name="res_calc" messageTypeId="res_inc">
+				<OutputPin name="res_calc_res1" messageTypeId="res_inc">
 					<OnSend><![CDATA[
 						assert(deviceState->q_adt_buff_got==2);
 						assert(deviceState->x_buff_got==2);
 						assert(!deviceState->x_ack_pending);
 						assert(!deviceState->res2_pending);
 
+						handler_checkpoint(true, 0, "pre-res_calc-%u", deviceState->round);
+
+						for(unsigned i=0; i<4; i++){
+							deviceState->res1_buff[i]=0;
+							message->res[i]=0;
+							deviceState->res2_buff[i]=0;
+						}
 						res_calc(
 							graphProperties,
 							deviceState->x_buff+0,
@@ -591,7 +681,17 @@
 							deviceState->res2_buff // Will do second half later
 						);
 						message->round=deviceState->round;
+						
+						// Debugging
+						message->sender= deviceProperties->id;
 
+						// Note: debugging purposes only
+						for(unsigned i=0; i<4; i++){
+							deviceState->res1_buff[i]=message->res[i];
+						}
+
+						handler_checkpoint(false, 0, "post-res_calc-%u", deviceState->round);
+						
 						deviceState->q_adt_buff_got=0;
 						deviceState->x_ack_pending=1;
 						deviceState->res2_pending=1;
@@ -608,6 +708,9 @@
 							message->res[j]=deviceState->res2_buff[j];
 						}
 						message->round=deviceState->round-1; // It actually came from the _previous_ round
+
+						// Debugging
+						message->sender= deviceProperties->id;
 
 						deviceState->res2_pending=0;
 						
@@ -631,6 +734,7 @@
 
 			<DeviceType id="bedge">
 				<Properties>
+					<Scalar name="id" type="uint32_t" /><!--Mainly for debugging -->
 					<Scalar name="bound" type="uint32_t" /><!--Boolean. dat on set. -->
 				</Properties>
 				<State>
@@ -642,6 +746,9 @@
 					<Array name="q_buff" type="double" length="4" />   <!-- Single 4-tuples --> 
 					<Array name="adt_buff" type="double" length="1" /> <!-- one scalars -->
 					<Scalar name="q_adt_buff_got" type="uint32_t" />
+
+					<!-- debug only -->
+					<Array name="res_buff" type="double" length="4" />
 
 					<Scalar name="round" type="uint32_t" />
 				</State>
@@ -659,7 +766,7 @@
 						&& deviceState->x_buff_got==2
 						&& !deviceState->x_ack_pending
 				){
-					*readyToSend |= RTS_FLAG_res_calc;
+					*readyToSend |= RTS_FLAG_bres_calc;
 				}
 				]]></ReadyToSend>
 
@@ -690,12 +797,15 @@
 					]]></OnReceive>
 				</InputPin>
 
-				<OutputPin name="res_calc" messageTypeId="res_inc">
+				<OutputPin name="bres_calc" messageTypeId="res_inc">
 					<OnSend><![CDATA[
 						assert(deviceState->q_adt_buff_got==1);
 						assert(deviceState->x_buff_got==2);
 						assert(!deviceState->x_ack_pending);
 
+						for(unsigned i=0; i<4; i++){
+							message->res[i]=0;
+						}
 						bres_calc(
 							graphProperties,
 							deviceProperties,
@@ -706,6 +816,15 @@
 							message->res
 						);
 						message->round=deviceState->round;
+						
+						// Debugging
+						message->sender=0x80000000ul | deviceProperties->id;
+
+						for(unsigned i=0; i<4; i++){
+							deviceState->res_buff[i]=message->res[i];
+						}
+
+						handler_checkpoint(false, 0, "post-bres_calc-%u", deviceState->round);
 
 						deviceState->q_adt_buff_got=0;
 						deviceState->x_ack_pending=1;

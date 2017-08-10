@@ -35,10 +35,12 @@ def render_model(m):
     
     nodes=[ graph.create_device_instance("n{}".format(n.id),nodeType,{"x":n.x,"fanout":0}) for n in m["nodes"] ]
     cells=[ graph.create_device_instance("c{}".format(c.id),cellType,{"id":c.id,"qinit":c.q}) for c in m["cells"] ]
-    edges=[ graph.create_device_instance("e{}".format(e.id),edgeType) for e in m["edges"] ]
-    bedges=[ graph.create_device_instance("be{}".format(be.id),bedgeType,{"bound":int(be.bound)}) for be in m["bedges"] ] 
+    edges=[ graph.create_device_instance("e{}".format(e.id),edgeType,{"id":e.id}) for e in m["edges"] ]
+    bedges=[ graph.create_device_instance("be{}".format(be.id),bedgeType,{"bound":int(be.bound),"id":be.id}) for be in m["bedges"] ] 
     printer=graph.create_device_instance("print",printerType,{"fanin":len(cells),"delta_print":100,"delta_exit":1000})
     
+    cell_edges=m["cell_edges"]
+       
     for (ci,nis) in enumerate(m["pcell"]):
         dstNode=cells[ci]
         for (index,ni) in enumerate(nis):
@@ -67,12 +69,16 @@ def render_model(m):
         for (index,ci) in enumerate(cis):
             srcNode=cells[ci]
             graph.create_edge_instance(dstNode,"q_adt_in",srcNode,"adt_calc",{"index":index})
-            graph.create_edge_instance(srcNode,"res_inc_in",dstNode,"res_calc")
+            # TODO : There shouldn't be four res_inc_in ports, this is for debugging
+            target_index=cell_edges[ci].index("e{}".format(ei))
+            graph.create_edge_instance(srcNode,"res{}_inc_in".format(target_index),dstNode,"res_calc_res{}".format(index+1))
     for (bei, (ci,) ) in enumerate(m["pbecell"]):
         dstNode=bedges[bei]
         srcNode=cells[ci]
+        # TODO : There shouldn't be four res_inc_in ports, this is for debugging
+        target_index=cell_edges[ci].index("be{}".format(bei))
         graph.create_edge_instance(dstNode,"q_adt_in",srcNode,"adt_calc")
-        graph.create_edge_instance(srcNode,"res_inc_in",dstNode,"res_calc")
+        graph.create_edge_instance(srcNode,"res{}_inc_in".format(target_index),dstNode,"bres_calc")
         
     for c in cells:
         graph.create_edge_instance(printer,"rms_inc",c,"update")
@@ -85,11 +91,11 @@ if __name__=="__main__":
     import mock
     
 
-    if 1:
+    if True:
         src=h5py.File(appBase+"/new_grid.h5")
         model=mock.load(src)
     else:
-        model=mock.create_square(2)
+        model=mock.create_square(3)
     
     graph=render_model(model)
     
