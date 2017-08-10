@@ -135,9 +135,11 @@ def render_typed_data_save(proto, dst, prefix, indent):
     if isinstance(proto,ScalarTypedDataSpec):
 
         if proto.type=="uint64_t" or proto.type=="uint32_t" or proto.type=="uint16_t" or proto.type=="uint8_t":
-            dst.write('{}if({}{} != {}){{ if(sep){{ dst<<","; }}; dst<<"\\"{}\\":"<<(uint32_t){}{}; sep=true; }}\n'.format(indent, prefix, proto.name, proto.default, proto.name, prefix, proto.name))
+            dst.write('{}if({}{} != {}){{ if(sep){{ dst<<","; }}; dst<<"\\"{}\\":"<<(uint64_t){}{}; sep=true; }}\n'.format(indent, prefix, proto.name, proto.default, proto.name, prefix, proto.name))
         elif proto.type=="int64_t" or proto.type=="int32_t" or proto.type=="int16_t" or proto.type=="int8_t":
-            dst.write('{}if({}{} != {}){{ if(sep){{ dst<<","; }}; dst<<"\\"{}\\":"<<(int32_t){}{}; sep=true; }}\n'.format(indent, prefix, proto.name, proto.default, proto.name, prefix, proto.name))
+            dst.write('{}if({}{} != {}){{ if(sep){{ dst<<","; }}; dst<<"\\"{}\\":"<<(int64_t){}{}; sep=true; }}\n'.format(indent, prefix, proto.name, proto.default, proto.name, prefix, proto.name))
+        elif proto.type=="float" or proto.type=="double":
+            dst.write('{}if({}{} != {}){{ if(sep){{ dst<<","; }}; dst<<"\\"{}\\":"<<float_to_string({}{}); sep=true; }}\n'.format(indent, prefix, proto.name, proto.default, proto.name, prefix, proto.name))
         else:
             dst.write('{}if({}{} != {}){{ if(sep){{ dst<<","; }}; dst<<"\\"{}\\":"<<{}{}; sep=true; }}\n'.format(indent, prefix, proto.name, proto.default, proto.name, prefix, proto.name))
 
@@ -148,7 +150,10 @@ def render_typed_data_save(proto, dst, prefix, indent):
         for i in range(proto.length):
             if i>0:
                 dst.write('{}  dst<<",";\n'.format(indent))
-            dst.write('{}  dst<<{}{}[{}];\n'.format(indent, prefix, proto.name, i))
+            if proto.type.type=="float" or proto.type.type=="double":
+                dst.write('{}  dst<<float_to_string({}{}[{}]);\n'.format(indent, prefix, proto.name, i))
+            else:
+                dst.write('{}  dst<<{}{}[{}];\n'.format(indent, prefix, proto.name, i))
         dst.write('{}dst<<"]"; sep=true;\n'.format(indent))
     elif isinstance(proto,TupleTypedDataSpec):
         dst.write('{}if(sep){ dst<<","; } sep=true;\n'.format(indent))
@@ -404,7 +409,12 @@ public:
     HandlerLogImpl handler_log(orchestrator);
     auto handler_exit=[&](int code) -> void {{ orchestrator->application_exit(code); }};
     auto handler_export_key_value=[&](uint32_t key, uint32_t value) -> void {{ orchestrator->export_key_value(key, value); }};
-    auto handler_checkpoint=[&](uint32_t key, bool preEvent=false, int level=0) -> void {{ orchestrator->checkpoint(key,preEvent,level); }};
+    auto handler_checkpoint=[&](bool preEvent, int level, const char *fmt, ...) -> void {{
+        va_list a;
+        va_start(a,fmt);
+        orchestrator->vcheckpoint(preEvent,level,fmt,a);
+        va_end(a);
+    }};
 
     // Begin custom handler
     {preProcLinePragma}
@@ -487,7 +497,14 @@ def render_output_pin_as_cpp(op,dst):
     dst.write('    HandlerLogImpl handler_log(orchestrator);\n')
     dst.write('    auto handler_exit=[&](int code) -> void { orchestrator->application_exit(code); };\n')
     dst.write('    auto handler_export_key_value=[&](uint32_t key, uint32_t value) -> void { orchestrator->export_key_value(key, value); };\n')   
-    dst.write('    auto handler_checkpoint=[&](uint32_t key, bool preEvent=false, int level=0) -> void {{ orchestrator->checkpoint(key,preEvent,level); }};\n');
+    dst.write("""
+auto handler_checkpoint=[&](bool preEvent, int level, const char *fmt, ...) -> void {
+    va_list a;
+    va_start(a,fmt);
+    orchestrator->vcheckpoint(preEvent,level,fmt,a);
+    va_end(a);
+};
+""")
 
     dst.write('    // Begin custom handler\n')
     if op.source_line and op.source_file:

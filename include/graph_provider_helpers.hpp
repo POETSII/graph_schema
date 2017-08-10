@@ -67,6 +67,24 @@ T *cast_typed_data(typed_data_t *data)
 
 
 
+// Write a round-trippable number
+std::string float_to_string(float x)
+{
+  // https://randomascii.wordpress.com/2012/03/08/float-precisionfrom-zero-to-100-digits-2/
+  char buffer[16]={0};
+  snprintf(buffer, 15, "%.9g", x);
+  return buffer;
+}
+
+std::string float_to_string(double x)
+{
+  // https://randomascii.wordpress.com/2012/03/08/float-precisionfrom-zero-to-100-digits-2/
+  char buffer[32]={0};
+  snprintf(buffer, 31, "%.17g", x);
+  return buffer;
+}
+
+
 class TypedDataSpecImpl
   : public TypedDataSpec
 {
@@ -485,14 +503,14 @@ private:
   const char *m_input;
   std::function<void (const char *,uint32_t,uint32_t)> m_onExportKeyValue;
   std::function<void (const char *,int)> m_onApplicationExit;
-  std::function<void (const char *,uint32_t,bool,int)> m_onCheckpoint;
+  std::function<void (const char *,uint32_t,bool,const char *)> m_onCheckpoint;
 public:
   OrchestratorServicesImpl(
     const char *prefix,
     unsigned logLevel, FILE *dst, const char *device, const char *input,
     std::function<void (const char *, uint32_t,uint32_t)> onExportKeyValue, // It is up to application to manage sequence
     std::function<void (const char *,int)> onApplicationExit,
-    std::function<void (const char *,uint32_t,bool,int)> onCheckpoint
+    std::function<void (const char *,uint32_t,bool,const char *)> onCheckpoint
   )
     : OrchestratorServices(logLevel)
     , m_dst(dst)
@@ -524,9 +542,14 @@ public:
     }
   }
   
-  virtual void checkpoint(uint32_t key, bool preEvent, int level) override
+  virtual void vcheckpoint(bool preEvent, int level, const char *fmt, va_list args) override
   {
-    m_onCheckpoint(m_device, key, preEvent, level);
+    char buffer[256]={0};
+    unsigned p=vsnprintf(buffer, sizeof(buffer)-1, fmt, args);
+    if(p>=sizeof(buffer)-2){
+      throw std::runtime_error("vcheckpoint buffer overflow");
+    }
+    m_onCheckpoint(m_device, preEvent, level, buffer);
   }
   
   virtual void export_key_value(uint32_t key, uint32_t value) override
@@ -549,7 +572,7 @@ public:
     unsigned logLevel, FILE *dst, const char *device, const char *input,
     std::function<void (const char *, uint32_t,uint32_t)> onExportKeyValue, // It is up to application to manage sequence
     std::function<void (const char *,int)> onApplicationExit,
-    std::function<void (const char *,uint32_t,bool,int)> onCheckpoint
+    std::function<void (const char *,uint32_t,bool,const char *)> onCheckpoint
   )
     : OrchestratorServicesImpl(
         "Recv : ",
@@ -568,7 +591,7 @@ public:
     unsigned logLevel, FILE *dst, const char *device, const char *input,
     std::function<void (const char *, uint32_t,uint32_t)> onExportKeyValue, // It is up to application to manage sequence
     std::function<void (const char *,int)> onApplicationExit,
-    std::function<void (const char *,uint32_t,bool,int)> onCheckpoint
+    std::function<void (const char *,uint32_t,bool,const char *)> onCheckpoint
   )
     : OrchestratorServicesImpl(
         "Send : ",

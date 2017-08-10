@@ -80,14 +80,10 @@ struct EpochSim
   
   std::function<void (const char*,uint32_t,uint32_t)> m_onExportKeyValue;
   
-  std::function<void (const char*,uint32_t,bool,int)> m_onCheckpoint;
+  std::function<void (const char*,bool,int,const char *)> m_onCheckpoint;
   
-  FILE *m_checkpointDest=0;
   int m_checkpointLevel=0;
-  bool m_checkpointPreHit=false;
-  std::vector<uint32_t> m_checkpointPreKeys;
-  bool m_checkpointPostHit=false;
-  std::vector<uint32_t> m_checkpointPostKeys;
+  std::vector<std::pair<bool,std::string> > m_checkpointKeys;
   
   bool m_deviceExitCalled=false;
   bool m_deviceExitCode=0;
@@ -186,32 +182,6 @@ struct EpochSim
 
     dst->endSnapshot();
   }
-  
-  void flushCheckpoints(const char *id, DeviceTypePtr deviceType, const TypedDataPtr &pre, const TypedDataPtr &post)
-  {
-    if(m_checkpointPreHit){
-      std::string payload=deviceType->getStateSpec()->toJSON(pre);
-      while(m_checkpointPreKeys.size()>0){
-        auto key=m_checkpointPreKeys.back();
-        
-        fprintf(m_checkpointDest, "  {\"dev\":\"%s\",\"key\":%u,\"state\":%s},\n", id, key, payload.c_str());
-        
-        m_checkpointPreKeys.pop_back();
-      }
-    }
-    if(m_checkpointPostHit){
-      std::string payload=deviceType->getStateSpec()->toJSON(post);
-      while(m_checkpointPostKeys.size()>0){
-        auto key=m_checkpointPostKeys.front();
-        
-        fprintf(m_checkpointDest, "  {\"dev\":\"%s\",\"key\":%u,\"state\":%s},\n", id, key, payload.c_str());
-        
-        m_checkpointPostKeys.pop_back();
-      }
-    }
-    m_checkpointPreHit=false;
-    m_checkpointPostHit=false;
-  }
 
   void init()
   {
@@ -235,26 +205,14 @@ struct EpochSim
       fprintf(stderr, "  device '%s' called application_exit(%d)\n", id, code);
     };
     
-    if(m_checkpointDest==0){
-      m_onCheckpoint=[this](const char *id, uint32_t key, bool preEvent, int level)
+    if(!m_log){
+      m_onCheckpoint=[this](const char *id, bool preEvent, int level, const char *key)
       {};
     }else{
-      m_onCheckpoint=[this](const char *id, uint32_t key, bool preEvent, int level)
+      m_onCheckpoint=[this](const char *id, bool preEvent, int level, const char *key)
       {
         if(level<=m_checkpointLevel){
-          // We don't mind if this is slow. It shouldn't be enabled for huge graphs and runs
-          auto it=m_deviceIdToIndex.find(id);
-          if(it==m_deviceIdToIndex.end()){
-            throw std::runtime_error("Checkpoint of invalid or non-interned device id.");
-          }
-          
-          if(preEvent){
-            m_checkpointPreHit=true;
-            m_checkpointPreKeys.push_back(key);
-          }else{
-            m_checkpointPostHit=true;
-            m_checkpointPostKeys.push_back(key);
-          }
+          m_checkpointKeys.push_back(std::make_pair(preEvent,key));
         }
       };
     }
@@ -272,12 +230,16 @@ struct EpochSim
       dev.readyToSend = dev.type->calcReadyToSend(&receiveServices, m_graphProperties.get(), dev.properties.get(), dev.state.get());
       
       if(m_log){
+        // Try to avoid allocation, while gauranteeing m_checkpointKeys is left in empty() state
+        std::vector<std::pair<bool,std::string> > tags;
+        std::swap(tags,m_checkpointKeys);
         auto id=nextSeqUnq();
         auto idStr=std::to_string(id);
         m_log->onInitEvent(
           idStr.c_str(),
           0.0,
           0.0,
+          std::move(tags),
           dev.type,
           dev.name,
           dev.readyToSend,
@@ -331,7 +293,8 @@ struct EpochSim
 
     unsigned rot=rng();
 
-    uint32_t threshSend=(uint32_t)ldexp(probSend, 32);
+    double threshSendDbl=ldexp(probSend, 32);
+    uint32_t threshSend=(uint32_t)std::max((double)0xFFFFFFFFul,std::min(0.0,threshSendDbl));
     uint32_t threshRng=rng();
 
     for(unsigned i=0;i<m_devices.size();i++){
@@ -400,16 +363,14 @@ struct EpochSim
           throw;
         }
 
-        if(m_checkpointDest){
-          flushCheckpoints(src.name, src.type, prevState, src.state);
-        }
-
-        
-
         src.readyToSend = src.type->calcReadyToSend(&sendServices, m_graphProperties.get(), src.properties.get(), src.state.get());
         
         
         if(m_log){
+          // Try to avoid allocation, while gauranteeing m_checkpointKeys is left in empty() state
+          std::vector<std::pair<bool,std::string> > tags;
+          std::swap(tags, m_checkpointKeys);
+        
           auto id=nextSeqUnq();
           auto idStr=std::to_string(id);
           idSend=idStr;
@@ -418,6 +379,7 @@ struct EpochSim
             idStr.c_str(),
             m_epoch,
             0.0,
+            std::move(tags),
             src.type,
             src.name,
             src.readyToSend,
@@ -475,12 +437,11 @@ struct EpochSim
           throw;
         }
         dst.readyToSend = dst.type->calcReadyToSend(&receiveServices, m_graphProperties.get(), dst.properties.get(), dst.state.get());
-
-        if(m_checkpointDest){
-          flushCheckpoints(dst.name, dst.type, prevState, dst.state);
-        }
         
         if(m_log){
+          std::vector<std::pair<bool,std::string> > tags;
+          std::swap(tags, m_checkpointKeys);
+          
           auto id=nextSeqUnq();
           auto idStr=std::to_string(id);
           
@@ -488,6 +449,7 @@ struct EpochSim
             idStr.c_str(),
             m_epoch,
             0.0,
+            std::move(tags),
             dst.type,
             dst.name,
             dst.readyToSend,
@@ -525,17 +487,10 @@ void usage()
   exit(1);
 }
 
-FILE *g_checkpointDest=0;
-
 std::shared_ptr<LogWriter> g_pLog; // for flushing purposes on exit
 
 void close_resources()
 {
-  if(g_checkpointDest){
-    fprintf(g_checkpointDest,"  {}\n]\n");
-    fclose(g_checkpointDest);
-    g_checkpointDest=0;
-  }
   if(g_pLog){
     g_pLog->close();
     g_pLog=0;
@@ -633,13 +588,6 @@ int main(int argc, char *argv[])
         }
         keyValueName=argv[ia+1];
         ia+=2;
-      }else if(!strcmp("--checkpoints",argv[ia])){
-        if(ia+1 >= argc){
-          fprintf(stderr, "Missing argument to --checkpoints\n");
-          usage();
-        }
-        checkpointName=argv[ia+1];
-        ia+=2;
       }else if(!strcmp("--accurate-assertions",argv[ia])){
         enableAccurateAssertions=true;
         ia+=1;
@@ -698,16 +646,6 @@ int main(int argc, char *argv[])
         }
     }
     
-    if(!checkpointName.empty()){
-        g_checkpointDest=fopen(checkpointName.c_str(), "wt");
-        if(g_checkpointDest==0){
-            fprintf(stderr, "Couldn't open checkpoint dest '%s'\n", checkpointName.c_str());
-            exit(1);
-        }
-        fprintf(g_checkpointDest, "[\n");
-        graph.m_checkpointDest=g_checkpointDest;
-    }    
-
     loadGraph(&registry, srcPath, parser.get_document()->get_root_node(), &graph);
     if(logLevel>1){
       fprintf(stderr, "Loaded\n");

@@ -426,18 +426,17 @@ public:
     current event, and associate with the given numeric id. The id should
     be unique for any check-point on the calling device.
   
-    \param id Unique event id. Not required to be ascending or contiguous, but
-    should be unique for device within run.
-  
     \param preEvent If true, then log the state before the event. Otherwise log after
   
     \param level Used to establish different levels of checkpointing.
+  
+    \param tagFmt format string used to tag the event
   
     It is legal to call handler_checkpoint multiple times within a handler,
     as long as the id is different. For example, you might want to call with
     both pre and post event checkpoints.
   */
-  virtual void checkpoint(uint32_t id, bool preEvent=false, int level=0) =0;
+  virtual void vcheckpoint(bool preEvent, int level, const char *tagFmt, va_list tagArgs) =0;
   
   // Mark the application as complete. As soon as any device calls this,
   // the whole graph is considered complete. If multiple devices call
