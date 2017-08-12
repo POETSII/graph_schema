@@ -175,18 +175,19 @@ class Cell(Set):
 
 
 def load_map(fromList, toList, data):
-    return [
-        tuple(j for j in data[i])
-        for
-        i in range(len(fromList))
-    ]
+    assert len(fromList)==data.shape[0]
+    return [ tuple(row) for row in data[:] ]
 
 def load_dat(set, name, data):    
-    for i in range(len(set)):
-        if len(data[0])==1:
-            setattr(set[i], name, data[i][0])
-        else:
-            setattr(set[i], name, list(data[i]))
+    assert len(set)==data.shape[0]
+    if data.shape[1]==1:
+        # Scalar
+        for (i,val) in enumerate(data[:]):
+            setattr(set[i], name, val[0])
+    else:
+        # Vector
+        for (i,row) in enumerate(data[:]):
+            setattr(set[i], name, list(row))
 
 def create_square(n):
     #   0  1  2  3  4  5  6  7  8=2*n
