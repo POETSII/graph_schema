@@ -64,8 +64,11 @@ std::vector<T> read_set(H5::CommonFG &file,const char *name)
 template<class TIterType, class TOtherType, unsigned D>
 struct op2_map
 {
+    typedef TIterType iter_type;
+    typedef TOtherType other_type;
+    
     std::vector<TIterType> &iterSet;
-    std::vector<TOtherType> &otherType;
+    std::vector<TOtherType> &otherSet;
     std::vector<std::array<unsigned,D> > mapping;
     
     const std::array<unsigned,D> &operator[](unsigned i) const
@@ -74,6 +77,7 @@ struct op2_map
         return mapping[i];
     }
 };
+
 
 template<unsigned D, class TA, class TB>
 op2_map<TA,TB,D> read_map(H5::CommonFG &file,const char *name, std::vector<TA> &from, std::vector<TB> &to)
