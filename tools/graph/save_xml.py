@@ -272,26 +272,30 @@ def save_graph_instance_metadata_patch(parent, id,graphMeta,deviceMeta,edgeMeta)
 def save_graph(graph,dst):
     nsmap = { None : "https://poets-project.org/schemas/virtual-graph-schema-v2" }
     root=etree.Element(toNS("p:Graphs"), nsmap=nsmap)
-
-    sys.stderr.write("save_graph: Constructing graph type tree\n")
-    save_graph_type(root,graph.graph_type)
-    sys.stderr.write("save_graph: Constructing graph inst tree\n")
-    save_graph_instance(root,graph)
-
-    sys.stderr.write("save_graph: writing\n")
-    # The wierdness is because stdout is in text mode, so we send
-    # it via a string. Ideally it would write it straight to the file...
-    tree = etree.ElementTree(root)
-    #s=etree.tostring(root,pretty_print=True,xml_declaration=True).decode("utf8")
-    #dst.write(s)
     
-    # TODO : Fix this!
-    if (sys.version_info > (3, 0)):
-        # Python3
-        tree.write(dst.buffer, pretty_print=True, xml_declaration=True)
+    if dst is str:
+        with open(dst,"wt") as dstFile:
+            save_graph(graph,dstFile)
     else:
-        #Python2
-        tree.write(dst, pretty_print=True, xml_declaration=True)
+        sys.stderr.write("save_graph: Constructing graph type tree\n")
+        save_graph_type(root,graph.graph_type)
+        sys.stderr.write("save_graph: Constructing graph inst tree\n")
+        save_graph_instance(root,graph)
+
+        sys.stderr.write("save_graph: writing\n")
+        # The wierdness is because stdout is in text mode, so we send
+        # it via a string. Ideally it would write it straight to the file...
+        tree = etree.ElementTree(root)
+        #s=etree.tostring(root,pretty_print=True,xml_declaration=True).decode("utf8")
+        #dst.write(s)
+        
+        # TODO : Fix this!
+        if (sys.version_info > (3, 0)):
+            # Python3
+            tree.write(dst.buffer, pretty_print=True, xml_declaration=True)
+        else:
+            #Python2
+            tree.write(dst, pretty_print=True, xml_declaration=True)
 
 def save_metadata_patch(id,graphMeta,deviceMeta,edgeMeta,dst):
     nsmap = { None : "https://poets-project.org/schemas/virtual-graph-schema-v2" }

@@ -304,7 +304,7 @@ class GraphTypeReference(object):
 
 class DeviceInstance(object):
     def __init__(self,parent,id,device_type,properties=None,metadata=None):
-        if properties is not None and not is_refinement_compatible(device_type.properties,properties):
+        if __debug__ and (properties is not None and not is_refinement_compatible(device_type.properties,properties)):
             raise GraphDescriptionError("Properties not compatible with device type properties: proto={}, value={}".format(device_type.properties, properties))
 
         self.parent=parent
@@ -318,21 +318,21 @@ class EdgeInstance(object):
     def __init__(self,parent,dst_device,dst_pin_name,src_device,src_pin_name,properties=None,metadata=None):
         self.parent=parent
 
-        if dst_pin_name not in dst_device.device_type.inputs:
+        if __debug__ and (dst_pin_name not in dst_device.device_type.inputs):
             raise GraphDescriptionError("Pin '{}' does not exist on dest device type '{}'".format(dst_pin_name,dst_device.device_type.id))
-        if src_pin_name not in src_device.device_type.outputs:
+        if __debug__ and (src_pin_name not in src_device.device_type.outputs):
             raise GraphDescriptionError("Pin '{}' does not exist on src device type '{}'".format(src_pin_name,src_device.device_type.id))
 
         dst_pin=dst_device.device_type.inputs[dst_pin_name]
         src_pin=src_device.device_type.outputs[src_pin_name]
 
-        if dst_pin.message_type != src_pin.message_type:
+        if __debug__ and (dst_pin.message_type != src_pin.message_type):
             raise GraphDescriptionError("Dest pin has type {}, source pin type {}".format(dst_pin.id,src_pin.id))
 
-        if not is_refinement_compatible(dst_pin.properties,properties):
+        if __debug__ and (not is_refinement_compatible(dst_pin.properties,properties)):
             raise GraphDescriptionError("Properties are not compatible: proto={}, value={}.".format(dst_pin.properties, properties))
 
-        self.id = dst_device.id+":"+dst_pin_name+"-"+src_device.id+":"+src_pin_name
+        self.id = "{}:{}-{}:{}".format(dst_device.id,dst_pin_name,src_device.id,src_pin_name)
 
         self.dst_device=dst_device
         self.src_device=src_device
@@ -378,15 +378,15 @@ class GraphInstance:
         pass
 
 
-    def add_device_instance(self,di,validate=True):
-        if di.id in self.device_instances:
+    def add_device_instance(self,di,validate=False):
+        if __debug__ and (di.id in self.device_instances):
             raise GraphDescriptionError("Duplicate deviceInstance id {}".format(id))
 
-        if validate:
+        if __debug__ or validate:
             self._validate_device_instance(di)
         else:
             self._validated=False
-
+        
         self.device_instances[di.id]=di
         
         return di
@@ -396,11 +396,11 @@ class GraphInstance:
         return self.add_device_instance(di)
         
 
-    def add_edge_instance(self,ei,validate=True):
-        if ei.id in self.edge_instances:
+    def add_edge_instance(self,ei,validate=False):
+        if __debug__ and (ei.id in self.edge_instances):
             raise GraphDescriptionError("Duplicate edgeInstance id {}".format(ei.id))
 
-        if validate:
+        if __debug__ or validate:
             self._validate_edge_instance(ei)
         else:
             self._validated=False
