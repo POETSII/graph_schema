@@ -56,9 +56,16 @@ def write_device_instance(dst,di):
 
 def save_graph(graph,dst):
     if isinstance(dst, str):
-        with open(dst,"wt") as dstFile:
-            assert not isinstance(dstFile,str)
-            save_graph(graph,dstFile)
+        if dst.endswith(".gz"):
+            import gzip
+            # TODO: this does compression on this thread, slowing things down. Spawn another process?
+            # Compress to level 6, as there is not much difference with 9, and it is a fair bit faster
+            with gzip.open(dst, 'wt', compresslevel=6) as dstFile:
+                save_graph(graph,dstFile)
+        else:
+            with open(dst,"wt") as dstFile:
+                assert not isinstance(dstFile,str)
+                save_graph(graph,dstFile)
     else:
         assert not isinstance(dst,str)
         

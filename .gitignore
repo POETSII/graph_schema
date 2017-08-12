@@ -30,3 +30,4 @@ instruments*.trace
 /*.elf
 /*.svg
 /*.dot
+.mypy_cache

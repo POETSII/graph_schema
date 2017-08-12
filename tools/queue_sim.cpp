@@ -443,6 +443,7 @@ struct QueueSim
             idRecvStr.c_str(),
             getNow(),
             0.0,
+            std::vector<std::pair<bool,std::string> >(),
             device->type,
             device->id,
             device->rtsFlags,
@@ -497,6 +498,7 @@ struct QueueSim
           idSendStr.c_str(),
           getNow(),
           0.0,
+          std::vector<std::pair<bool,std::string> >(),
           device->type,
           device->id,
           device->rtsFlags,
@@ -603,7 +605,7 @@ struct QueueSim
       auto print=device->type->getInput("__print__");
       if(print){
         fprintf(stderr, "Dump\n");
-        services.setReceiver(device->id, "__print__");
+        services.setDevice(device->id, "__print__");
         print->onReceive(&services, m_graphProperties.get(), device->properties.get(), device->state.get(), 0, 0, 0);
       }
     }
@@ -667,6 +669,7 @@ struct QueueSim
           idRecvStr.c_str(),
           now,
           0.0,
+          std::vector<std::pair<bool,std::string> >(),
           device->type,
           device->id,
           device->rtsFlags,
@@ -786,7 +789,7 @@ struct QueueSim
     for(unsigned i=0; i<m_queues.size(); i++){
       auto &q=m_queues[i];
 
-      fprintf(stderr, "queue %u : %u devices\n", i, q.devices.size());
+      fprintf(stderr, "queue %u : %u devices\n", i, (unsigned)q.devices.size());
 
     }
     //exit(1);
@@ -870,7 +873,7 @@ struct QueueSim
     return index;
   }
 
-  void onEdgeInstance(uint64_t gId, uint64_t dstDevIndex, const DeviceTypePtr &dstDevType, const InputPinPtr &dstInput, uint64_t srcDevIndex, const DeviceTypePtr &srcDevType, const OutputPinPtr &srcOutput, const TypedDataPtr &properties) override
+  void onEdgeInstance(uint64_t gId, uint64_t dstDevIndex, const DeviceTypePtr &dstDevType, const InputPinPtr &dstInput, uint64_t srcDevIndex, const DeviceTypePtr &srcDevType, const OutputPinPtr &srcOutput, const TypedDataPtr &properties, rapidjson::Document &&) override
   {
     device_t *dstDevice=m_devices.at(dstDevIndex);
     device_t *srcDevice=m_devices.at(srcDevIndex);
@@ -1034,31 +1037,25 @@ int main(int argc, char *argv[])
 
 
     RegistryImpl registry;
+    
+    xmlpp::DomParser parser;
 
-    std::istream *src=&std::cin;
-    std::ifstream srcFile;
     filepath srcPath(current_path());
 
     if(srcFilePath!="-"){
       filepath p(srcFilePath);
       p=absolute(p);
       if(logLevel>1){
-        fprintf(stderr,"Reading from '%s' ( = '%s' absolute)\n", srcFilePath.c_str(), p.c_str());
+        fprintf(stderr,"Parsing XML from '%s' ( = '%s' absolute)\n", srcFilePath.c_str(), p.c_str());
       }
-      srcFile.open(p.c_str());
-      if(!srcFile.is_open())
-        throw std::runtime_error(std::string("Couldn't open '")+p.native()+"'");
-      src=&srcFile;
-      srcPath=p.parent_path();    
-
+      srcPath=p.parent_path();
+      parser.parse_file(p.c_str());
+    }else{
+      if(logLevel>1){
+        fprintf(stderr, "Parsing XML from stdin (this will fail if it is compressed\n");
+      }
+      parser.parse_stream(std::cin);
     }
-
-    xmlpp::DomParser parser;
-
-    if(logLevel>1){
-      fprintf(stderr, "Parsing XML\n");
-    }
-    parser.parse_stream(*src);
     if(logLevel>1){
       fprintf(stderr, "Parsed XML\n");
     }

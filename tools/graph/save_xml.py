@@ -274,8 +274,14 @@ def save_graph(graph,dst):
     root=etree.Element(toNS("p:Graphs"), nsmap=nsmap)
     
     if dst is str:
-        with open(dst,"wt") as dstFile:
-            save_graph(graph,dstFile)
+        if dst.endswith(".gz"):
+            import gzip
+            with gzip.open(dst, 'wt', compresslevel=6) as dstFile:
+                save_graph(graph,dstFile)
+        else:
+            with open(dst,"wt") as dstFile:
+                assert not isinstance(dstFile,str)
+                save_graph(graph,dstFile)
     else:
         sys.stderr.write("save_graph: Constructing graph type tree\n")
         save_graph_type(root,graph.graph_type)

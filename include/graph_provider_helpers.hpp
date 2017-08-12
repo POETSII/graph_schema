@@ -521,6 +521,11 @@ public:
     , m_onApplicationExit(onApplicationExit)
     , m_onCheckpoint(onCheckpoint)
   {}
+  
+  static void onCheckpointDefault(const char *,uint32_t,bool,const char *)
+  {
+    // Do nothing
+  }
 
   void setPrefix(const char *prefix)
   {
@@ -572,7 +577,7 @@ public:
     unsigned logLevel, FILE *dst, const char *device, const char *input,
     std::function<void (const char *, uint32_t,uint32_t)> onExportKeyValue, // It is up to application to manage sequence
     std::function<void (const char *,int)> onApplicationExit,
-    std::function<void (const char *,uint32_t,bool,const char *)> onCheckpoint
+    std::function<void (const char *,uint32_t,bool,const char *)> onCheckpoint = onCheckpointDefault
   )
     : OrchestratorServicesImpl(
         "Recv : ",
@@ -591,7 +596,7 @@ public:
     unsigned logLevel, FILE *dst, const char *device, const char *input,
     std::function<void (const char *, uint32_t,uint32_t)> onExportKeyValue, // It is up to application to manage sequence
     std::function<void (const char *,int)> onApplicationExit,
-    std::function<void (const char *,uint32_t,bool,const char *)> onCheckpoint
+    std::function<void (const char *,uint32_t,bool,const char *)> onCheckpoint = onCheckpointDefault
   )
     : OrchestratorServicesImpl(
         "Send : ",

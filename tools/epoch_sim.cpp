@@ -598,30 +598,25 @@ int main(int argc, char *argv[])
     }
 
     RegistryImpl registry;
+    
+    xmlpp::DomParser parser;
 
-    std::istream *src=&std::cin;
-    std::ifstream srcFile;
     filepath srcPath(current_path());
 
     if(srcFilePath!="-"){
       filepath p(srcFilePath);
       p=absolute(p);
       if(logLevel>1){
-        fprintf(stderr,"Reading from '%s' ( = '%s' absolute)\n", srcFilePath.c_str(), p.c_str());
+        fprintf(stderr,"Parsing XML from '%s' ( = '%s' absolute)\n", srcFilePath.c_str(), p.c_str());
       }
-      srcFile.open(p.c_str());
-      if(!srcFile.is_open())
-        throw std::runtime_error(std::string("Couldn't open '")+p.native()+"'");
-      src=&srcFile;
-      srcPath=p.parent_path();    
+      srcPath=p.parent_path();
+      parser.parse_file(p.c_str());
+    }else{
+      if(logLevel>1){
+        fprintf(stderr, "Parsing XML from stdin (this will fail if it is compressed\n");
+      }
+      parser.parse_stream(std::cin);
     }
-
-    xmlpp::DomParser parser;
-
-    if(logLevel>1){
-      fprintf(stderr, "Parsing XML\n");
-    }
-    parser.parse_stream(*src);
     if(logLevel>1){
       fprintf(stderr, "Parsed XML\n");
     }
