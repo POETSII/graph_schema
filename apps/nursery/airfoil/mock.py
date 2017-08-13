@@ -220,6 +220,7 @@ def create_square(n):
     g.cfl=0.89999997615814209
     g.mach=0.40000000596046448
     g.alpha=0.052359877559829883
+    g.eps=0.05000000074505806
     
     nodes={}
     cells={}
@@ -347,7 +348,7 @@ def add_cell_edges(m):
     for (bedgeI,(cellI,)) in enumerate(m["pbecell"]):
         cell_edges[cellI].append("be{}".format(bedgeI))
     for (ci,edgeNames) in enumerate(cell_edges):
-        assert len(set(edgeNames))==4, "Wrong edge count for cell {}".format(ci)
+        assert len(set(edgeNames))==4, "Wrong edge count for cell {}. Expected 4, got len={}".format(ci, len(set(edgeNames)))
 
     m["cell_edges"]=cell_edges
     return m

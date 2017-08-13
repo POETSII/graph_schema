@@ -102,7 +102,7 @@ Vagrant.configure(2) do |config|
      sudo apt-get install -y emacs-nox screen
 
      # Algebraic multigrid, plus others
-     sudo apt-get install -y python3-pip python3-numpy python3-scipy ujson
+     sudo apt-get install -y python3-pip python3-numpy python3-scipy ujson svgwrite
      sudo pip3 install pyamg
 
      # Creating meshes
