@@ -2,7 +2,11 @@ import enum
 import numpy
 import functools
 import typing
-from typing import Union, Sequence, List, Tuple, Optional, Dict
+
+from typing import Union, Sequence, List, Tuple, Optional, Dict, Any
+from abc import ABC, abstractmethod
+
+import h5py
 
 class AccessMode(enum.IntEnum):
     READ = 1
@@ -11,27 +15,58 @@ class AccessMode(enum.IntEnum):
     INC = 4
 
 class DataType(object):
-    def __init__(self, type:Union[str,numpy.dtype]='double', shape:Union[int,Tuple[int,...]]=1) -> None:
+    def __init__(self, dtype:Union[str,numpy.dtype]='double', shape:Union[int,Tuple[int,...]]=1) -> None:
         if isinstance(type,str):
-            self.type=numpy.dtype(type)
+            self.dtype=numpy.dtype(type)
         else:
-            self.type=type
+            self.dtype=type
         if isinstance(shape,int):
-            self.shape=(shape,) # type:Tuple[int,...]
+            self.shape=() # type:Tuple[int,...]
         else:
             self.shape=shape # TODO : Canonicalise this?
-        assert 0 < functools.reduce(lambda x,y: x*y, self.shape, 1), "Data type cannot be empty"
+        self.size=functools.reduce(lambda x,y: x*y, self.shape, 1)
+        assert self.size>0, "Data type cannot be empty"
+    
+    @property
+    def is_scalar(self) -> bool:
+        return self.size==1
+    
+    def create_default_value(self) -> numpy.ndarray:
+        return numpy.zeros(self.shape,dtype=self.dtype)
+        
+    def import_value(self, value:Any) -> numpy.ndarray:
+        res=numpy.array(value,dtype=self.dtype)
+        if res.shape!=self.shape:
+            raise RuntimeError("Expected shape of {}, got shape of {}".format(self.shape,res.shape))
     
     def __eq__(self, other:object) -> bool:
         if isinstance(other,DataType):
-            return self.type==other.type and self.shape==other.shape
+            return self.dtype==other.dtype and self.shape==other.shape
         else:
             return False
 
-class Global(object):
+class Global(ABC):
     def __init__(self, id:str, type:DataType) -> None:
         self.id=id
         self.data_type=type
+
+    @abstractmethod
+    def __call__(self, access_mode:AccessMode) -> GlobalArgument:
+        raise NotImplementedError()
+        
+
+class ConstGlobal(Global):
+    def __init__(self, id:str, type:DataType) -> None:
+        super().__init__(id, type)
+
+    def __call__(self, access_mode:AccessMode) -> GlobalArgument:
+        if access_mode!=AccessMode.READ:
+            raise RuntimeError("Attempt to access constant global {} using mode {}".format(self.id,access_mode))
+        return GlobalArgument(access_mode, self)
+        
+class MutableGlobal(Global):
+    def __init__(self, id:str, type:DataType) -> None:
+        super().__init__(id, type)
 
     def __call__(self, access_mode:AccessMode) -> GlobalArgument:
         return GlobalArgument(access_mode, self)
@@ -68,7 +103,7 @@ class Map(object):
         self.to_set=to_set
         self.arity=arity
         
-class System(object):
+class SystemSpecification(object):
     def __init__(self):
         self._ids=set()
         self.globals={}
@@ -176,3 +211,38 @@ class ParFor(Statement):
         self.iter_set=iter_set
         self.arguments=list(arguments)
    
+
+class SystemInstance(object):
+    def __init__(self, spec:SystemSpecification, src:Dict[str,Any]) -> None:
+        """Given a system instance, load the state from hdf5 (well, a dictionary)
+        
+        Size of sets is given by scalar int with the same name, and must exist.
+        
+        Globals must match the data_type, and will be zero initialised if they don't exist.
+        
+        Maps are given by integer arrays of shape (len(set),arity), and must exist.
+        
+        Dats are optionally given by arrays of (len(set),*). If they don't exist, they will be zero initialised.
+        """
+        self.spec=spec
+        self.globals={} # type:Dict[str,Global]
+        self.sets={}    # type:Dict[str,int]
+        
+        for g in spec.globals.values():
+            if g.id in src:
+                value=g.data_type.import_value(src[g.id])
+            else:
+                value=g.data_type.create_default_value()
+            self.globals[g.id]=value
+        
+        for s in spec.sets.values():
+            if not s.id in src:
+                raise RuntimeError("No value in dictionary called '{}' for set size.".format(s.id))
+            raw=src[s.id]
+            if isinstance(raw,int):
+                val=raw
+            else:
+                val=int(numpy.array(raw))
+            assert val>=0
+            self.sets[s.id]=val
+        
