@@ -354,7 +354,7 @@ def add_cell_edges(m):
     return m
 
     
-def run_model(model,plot_path,checkpoints=None):
+def run_model(model,plot_path=None,checkpoints=None):
     import plot
     
     globals().update(model)
@@ -460,6 +460,7 @@ def run_model(model,plot_path,checkpoints=None):
             checkpoints=None
         
         rms = math.sqrt(rms / len(cells) )
+        print(" {:d}  {:10.5e} ".format(iter, rms))
         if (iter%100)==0:
             print(" {:d}  {:10.5e} ".format(iter, rms))
             #if not plot_path:
@@ -476,7 +477,10 @@ if __name__=="__main__":
     model=load(src)
     #model=create_square(3)
     
-    with open("checkpoints.xml","wt") as cp:
-        checkpoints=graph.checkpoints.CheckpointLog(cp)
-   
-        run_model(model,"out",checkpoints)
+    if False:
+        with open("checkpoints.xml","wt") as cp:
+            checkpoints=graph.checkpoints.CheckpointLog(cp)
+       
+            run_model(model,"out",checkpoints)
+    else:
+        run_model(model)

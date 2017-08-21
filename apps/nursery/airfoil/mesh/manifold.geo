@@ -90,15 +90,3 @@ Mesh.SubdivisionAlgorithm=1;
 
 //+
 Line Loop(21) = {19, 20, 18, 12, -11, -10};
-//+
-Line Loop(22) = {13, 14, 15, 16, 17};
-//+
-Plane Surface(23) = {5, 7, 21, 22};
-//+
-Transfinite Surface {23} = {4, 5, 6, 7};
-//+
-Recombine Surface {23};
-//+
-Recombine Surface {23};
-//+
-Recombine Surface {23};
