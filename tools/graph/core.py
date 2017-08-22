@@ -188,7 +188,8 @@ def is_refinement_compatible(proto,inst):
 
 
 class MessageType(object):
-    def __init__(self,parent,id,message,metadata):
+    def __init__(self,parent,id,message,metadata=None):
+        assert (message is None) or isinstance(message,TypedDataSpec)
         self.id=id
         self.parent=parent
         self.message=message
@@ -220,6 +221,8 @@ class OutputPin(Pin):
 
 class DeviceType(object):
     def __init__(self,parent,id,properties,state,metadata=None,shared_code=[]):
+        assert (state is None) or isinstance(state,TypedDataSpec)
+        assert (properties is None) or isinstance(properties,TypedDataSpec)
         self.id=id
         self.parent=parent
         self.state=state
@@ -231,8 +234,11 @@ class DeviceType(object):
         self.pins={}
         self.metadata=metadata
         self.shared_code=shared_code
+        self.ready_to_send_handler="" # Hrmm, this was missing as an explicit member, but is used by load/save
 
     def add_input(self,name,message_type,properties,state,metadata,receive_handler,source_file=None,source_line={}):
+        assert (state is None) or isinstance(state,TypedDataSpec)
+        assert (properties is None) or isinstance(properties,TypedDataSpec)
         if name in self.pins:
             raise GraphDescriptionError("Duplicate pin {} on device type {}".format(name,self.id))
         if message_type.id not in self.parent.message_types:
@@ -258,7 +264,7 @@ class DeviceType(object):
 
 
 class GraphType(object):
-    def __init__(self,id,properties,metadata,shared_code):
+    def __init__(self,id,properties,metadata=None,shared_code=[]):
         self.id=id
         if properties:
             assert isinstance(properties,TupleTypedDataSpec), "Expected TupleTypedDataSpec, got={}".format(properties)

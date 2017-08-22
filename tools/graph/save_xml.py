@@ -190,7 +190,7 @@ def save_edge_instance(parent, ei):
     return n
 
 
-def save_graph_type(parent, graph):
+def save_graph_type(parent, graph):    
     gn = etree.SubElement(parent,toNS("p:GraphType"))
     gn.attrib["id"]=graph.id
 
