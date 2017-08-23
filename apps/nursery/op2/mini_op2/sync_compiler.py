@@ -71,6 +71,13 @@ class DeviceTypeBuilder(object):
         assert name not in self.state
         self.state[name]=import_data_type(name,type)
         
+    def merge_state(self, name:str, type:DataType):
+        type=import_data_type(name,type)
+        if name not in self.state:
+            self.state[name]=type
+        else:
+            assert type==self.state[name]
+        
     def add_input_pin(self, name:str, msgType:str, properties:None, state:None, body:str):
         assert name not in self.inputs
         assert properties is None
@@ -118,14 +125,16 @@ class GraphTypeBuilder:
         
         yield
         
-        for (k,v) in old_vals.items():
-            self._subst[k]=v
+        for k in kwargs:
+            if k in old_vals:
+                self._subst[k]=old_vals[k]
+            else:
+                del self._subst[k]
             
     def s(self, x:str) -> str:
         if len(self._subst)==0:
             return x
         else:
-            print(self._subst)
             return x.format(**self._subst)
     
     def __init__(self, id:str) -> None:
@@ -148,6 +157,15 @@ class GraphTypeBuilder:
         self.message_types[msgType]=(msgType, members)
         return msgType
         
+    def merge_message_type(self, msgType:str, members:Dict[str,DataType]) -> str :
+        msgType=self.s(msgType)
+        members=[ import_data_type(self.s(n),t) for (n,t) in members.items() ]
+        if msgType not in self.message_types:
+            self.message_types[msgType]=(msgType, members)
+        else:
+            assert (msgType, members)==self.message_types[msgType], "name={}, original type = {}, new type = {}".format(msgType, str(self.message_types[msgType][1]),str(members))
+        return msgType
+        
     def add_device_property(self, devType:str, name:str, type:DataType) -> None :
         devType=self.device_types[ self.s(devType) ]
         devType.add_property(self.s(name), type)
@@ -160,6 +178,11 @@ class GraphTypeBuilder:
     def add_device_state(self, devType:str, name:str, type:DataType) -> None :
         devType=self.device_types[ self.s(devType) ]
         devType.add_state(self.s(name), type)
+        
+    def merge_device_state(self, devType, name:str, type:DataType) -> bool :
+        """Adds the device state if it doesn't already exists. Checks that the type is the same."""
+        devType=self.device_types[ self.s(devType) ]
+        devType.merge_state(self.s(name), type)
         
     def add_input_pin(self, devType:str, name:str, msgType:str, properties:None, state:None, body:str) -> None:
         devType=self.s(devType)
@@ -236,7 +259,8 @@ TODO, lots of corner cases:
 
 def compile_invocation(spec:SystemSpecification, builder:GraphTypeBuilder, stat:ParFor):
     invocation=get_unique_id(stat)
-    global_reads=set() # type:List[(int,GlobalArgument)]
+    const_global_reads=set() # type:List[(int,GlobalArgument)]
+    mutable_global_reads=set() # type:List[(int,GlobalArgument)]
     global_writes=set() # type:List[(int,GlobalArgument)]
     indirect_reads=set() # type:List[(int,IndirectArgument)]
     indirect_writes=set() # type:List[(int,IndirectArgument)]
@@ -257,7 +281,10 @@ def compile_invocation(spec:SystemSpecification, builder:GraphTypeBuilder, stat:
                 raise RuntimeError("Unexpected access mode for indirect dat.")
         elif isinstance(arg,GlobalArgument):
             if arg.access_mode==AccessMode.READ:
-                global_reads.add( (i,arg) )
+                if isinstance(arg.global_,ConstGlobal):
+                    const_global_reads.add( (i,arg) )
+                else:
+                    mutable_global_reads.add( (i,arg) )
             elif arg.access_mode==AccessMode.INC:
                 global_writes.add( (i,arg) )
             else:
@@ -276,7 +303,8 @@ def compile_invocation(spec:SystemSpecification, builder:GraphTypeBuilder, stat:
                 raise RuntimeError("Unexpected access mode for direct dat.")
         else:
             raise RuntimeError("Unexpected argument type.")
-    logging.info("Invocation %s : global reads = %s", invocation, global_reads)
+    logging.info("Invocation %s : const global reads = %s", invocation, const_global_reads)
+    logging.info("Invocation %s : mutable global reads = %s", invocation, mutable_global_reads)
     logging.info("Invocation %s : global writes = %s", invocation, global_writes)
     logging.info("Invocation %s : indirect reads = %s", invocation, indirect_reads)
     logging.info("Invocation %s : indirect writes = %s", invocation, indirect_writes)
@@ -286,12 +314,24 @@ def compile_invocation(spec:SystemSpecification, builder:GraphTypeBuilder, stat:
     with builder.subst(base=invocation):
         directDevType="set_"+stat.iter_set.id
         
-        mutableGlobals=dict()
-        for (i,mg) in global_reads:
-            mutableGlobals["global_"+mg.global_.id]=mg.data_type
-        triggerMsgType=builder.create_message_type("{base}_trigger", mutableGlobals)
-
+        triggerMsgType=builder.create_message_type(
+            "{base}_trigger",
+            { "global_"+mg.global_.id : mg.data_type for (i,mg) in mutable_global_reads }
+        )
         
+        completeMsgType=builder.create_message_type(
+            "{base}_complete",
+            { "global_"+mg.global_.id : mg.data_type for (i,mg) in global_writes }
+        )
+        
+        for (i,arg) in mutable_global_reads | global_writes:
+            # If it doesn't already exist, we need a buffer
+            builder.merge_device_state(directDevType, "global_"+arg.global_.id, arg.data_type)
+        
+        for (i,arg) in indirect_reads | indirect_writes:
+            # We need a working area for the argument in the state of the home set
+            builder.add_device_state(directDevType, "{base}_arg"+str(i), arg.data_type)
+                    
         ###########################################
         ## Deal with indirect reads.
         ## - Message broadcast from global to all indirect sets
@@ -329,10 +369,7 @@ def compile_invocation(spec:SystemSpecification, builder:GraphTypeBuilder, stat:
                     """
                 )
 
-                
-                # We need a landing pad for the dat in the state of the home set
-                builder.add_device_state(directDevType, "{base}_in_arg{index}", arg.data_type)
-                # And when the message arrives, just copy it in
+                # And when the message arrives, just copy it into the landing pad
                 builder.add_input_pin(directDevType,"{base}_recv_arg{index}", dataMsgType, None, None,
                     """
                     copy_value(deviceState->{base}_arg{index}, message->value);
@@ -354,14 +391,18 @@ def compile_invocation(spec:SystemSpecification, builder:GraphTypeBuilder, stat:
             deviceState->{base}_received++;
             """
         )
-        for k in mutableGlobals.keys():
+        for (ai,arg) in mutable_global_reads:
             builder.extend_input_pin_handler(directDevType, "{base}_trigger",
                 """
                 copy_value(deviceState->{}, message->{});
-                """.format(k,k)
+                """.format(arg.global_.id,arg.global_.id)
             )
         
-        with builder.subst(exec_thresh=total_read_args_pending):
+        # This tracks how many outputs have been sent. Each index >1 represents an indirect
+        # output argument, and index==1 represents the final completion message.
+        builder.add_device_state(directDevType, "{base}_to_send", scalar_uint32)
+                
+        with builder.subst(exec_thresh=total_read_args_pending, output_count=len(indirect_writes)):
             builder.add_output_pin(directDevType, "{base}_execute", "executeMsgType",
                 """
                 if(deviceState->{base}_received=={exec_thresh}){{
@@ -369,10 +410,49 @@ def compile_invocation(spec:SystemSpecification, builder:GraphTypeBuilder, stat:
                 }}
                 """,
                 """
+                
                     TODO
+                    
+                deviceState->{base}_to_send = 1+{output_count};    
                 """
             )
-    
+        
+        ## Send all the output indirect values
+        
+        ordered_indirect_writes=list(indirect_writes) # Impose an ordering on the outputs
+        for (order,(index,arg)) in enumerate(ordered_indirect_writes):
+            with builder.subst(trigger_num=1+order, dat_name=arg.dat.id, index=index):
+                indirectDevType="set_"+arg.to_set.id
+                
+                # Might already exist if it is a RW type, so merge
+                dataMsgType=builder.merge_message_type("{base}_indirect_arg{index}", { "value":arg.data_type })
+            
+                
+                builder.add_output_pin(directDevType, "{base}_send_arg{index}", dataMsgType,
+                    """
+                    if(deviceState->{base}_to_send=={trigger_num}){{
+                        *readyToSend|=RTS_FLAG_{base}_send_arg{index};
+                    }}
+                    """,
+                    """
+                    copy_value(message->value, deviceState->{base}_arg{index});
+                    deviceState->{base}_to_send--;
+                    """
+                )
+                
+                builder.add_input_pin(indirectDevType, "{base}_recv_arg{index}", dataMsgType, None, None,
+                    """
+                    copy_value(deviceState->{dat_name}, message->value);
+                    deviceState->{base}_received++;
+                    """
+                )
+        
+        ## TODO : for all devices in indirect receive set, send completion when all indirects received
+                
+        
+        ## Send back the complete message from the home set
+        
+            
     
    
     
