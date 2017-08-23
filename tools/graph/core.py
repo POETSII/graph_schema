@@ -62,6 +62,9 @@ class ScalarTypedDataSpec(TypedDataSpec):
             return self.create_default()
         else:
             return self._check_value(inst)
+            
+    def __eq__(self, o):
+        return isinstance(o, ScalarTypedDataSpec) and self.name==o.name and self.type==o.type and self.default==o.default
 
     def __str__(self):
         return "{}:{}={}".format(self.type,self.name,self.default)
@@ -85,8 +88,10 @@ class TupleTypedDataSpec(TypedDataSpec):
     def elements_by_index(self):
         return self._elts_by_index
 
-    def __str__(self):
+    def __eq__(self, o):
+        return isinstance(o, TupleTypedDataSpec) and self.name==o.name and self._elts_by_index==o._elts_by_index
 
+    def __str__(self):
         acc="Tuple:{}[\n".format(self.name)
         for i in range(len(self._elts_by_index)):
             if i!=0:
@@ -133,8 +138,10 @@ class ArrayTypedDataSpec(TypedDataSpec):
         self.type=type
         self.length=length
 
-    def __str__(self):
+    def __eq__(self, o):
+        return isinstance(o, ArrayTypedDataSpec) and self.name==o.name and self.length==o.length and self.type==o.type
 
+    def __repr__(self):
         return "Array:{}[{}*{}]\n".format(self.name,self.type,self.length)
 
     def create_default(self):
