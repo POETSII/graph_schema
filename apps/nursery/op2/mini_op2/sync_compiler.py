@@ -1,17 +1,16 @@
 import typing
 from typing import Any, Dict, List
 
+import sys
+
 from contextlib import contextmanager
 
 from mini_op2.core import *
 from mini_op2.control_flow import Statement, ParFor
 from mini_op2.system import SystemSpecification
 from mini_op2.airfoil import build_system
+from mini_op2.builder import GraphTypeBuilder
 
-from graph.core import *
-from graph.save_xml import *
-
-from lxml import etree
 
 _unq_id_to_obj={} # type:Dict[Any,str]
 _unq_obj_to_id={} # type:Dict[str,Any]
@@ -28,307 +27,108 @@ def make_unique_id(obj:Any,base:str) -> str:
 def get_unique_id(obj:Any) -> str:
     return _unq_obj_to_id[obj]
 
-
-_scalar_type_map={
-    numpy.dtype("float64"):"double",
-    numpy.dtype("uint32"):"uint32_t",
-    numpy.dtype("uint16"):"uint16_t",
-    numpy.dtype("uint8"):"uint8_t",
-    numpy.double:"double",
-    numpy.float:"float",
-    numpy.uint32:"uint32_t",
-    numpy.uint16:"uint16_t",
-    numpy.uint8:"uint8_t"
-}
-
-def import_data_type(name:str,ot:DataType) -> TypedDataSpec:
-    if ot.shape==():
-        return ScalarTypedDataSpec(name,_scalar_type_map[ot.dtype])
-    elif len(ot.shape)==1:
-        return ArrayTypedDataSpec(name,ot.shape[0],ScalarTypedDataSpec("_", _scalar_type_map[ot.dtype]))
-    elif len(ot.shape)==2 and ot.shape[1]==1:
-        return ArrayTypedDataSpec(name,ot.shape[0],ScalarTypedDataSpec("_", _scalar_type_map[ot.dtype]))
-    else:
-        raise RuntimeError("data type not supported yet.")
-        
-def import_data_type_tuple(name:str, members:Sequence[DataType]):
-    return TupleTypedDataSpec(name, members)
-
-
-class DeviceTypeBuilder(object):
-    def __init__(self, id:str):
-        self.id=id
-        self.properties={} # type:Dict[str,TypedDataSpec]
-        self.state={} # type:Dict[str,TypedDataSpec]
-        self.inputs={} # type:Dict[str,Tuple[str,str,str]]
-        self.outputs={} # type:Dict[str,Tuple[str,str,str,str]]
-
-    def add_property(self, name:str, type:DataType):
-        assert name not in self.properties
-        self.properties[name]=import_data_type(name,type)
-        
-    def add_state(self, name:str, type:DataType):
-        assert name not in self.state
-        self.state[name]=import_data_type(name,type)
-        
-    def merge_state(self, name:str, type:DataType):
-        type=import_data_type(name,type)
-        if name not in self.state:
-            self.state[name]=type
-        else:
-            assert type==self.state[name]
-        
-    def add_input_pin(self, name:str, msgType:str, properties:None, state:None, body:str):
-        assert name not in self.inputs
-        assert properties is None
-        assert state is None
-        self.inputs[name]=(name, msgType, body)
     
-    def extend_input_pin_handler(self, name:str, code:str):
-        assert name in self.inputs
-        (name,msgType,body)=self.inputs[name]
-        self.inputs[name]=(name,msgType,body+code)
-        
-    def add_output_pin(self, name:str, msgType:str, rts:str, body:str):
-        assert name not in self.outputs
-        self.outputs[name]=(name, msgType, body, rts)
-        
-    def build(self, graph:GraphType) -> DeviceType:
-        device_properties=import_data_type_tuple("_", self.properties.values())
-        assert isinstance(device_properties,TypedDataSpec)
-        device_state=import_data_type_tuple("_", self.state.values())
-        assert isinstance(device_state,TypedDataSpec)
-        d=DeviceType(graph, self.id, device_properties, device_state)
-        for (name,msgType,handler) in self.inputs.values():
-            message_type=graph.message_types[msgType]
-            input_properties=None
-            input_state=None
-            d.add_input(name,message_type,input_properties,input_state,None,handler)
-        for (name,msgType,handler,rts) in self.outputs.values():
-            message_type=graph.message_types[msgType]
-            output_properties=None
-            output_state=None
-            d.add_output(name,message_type,None,handler)
-            d.ready_to_send_handler+=rts
-        return d
+    
 
-class GraphTypeBuilder:
-    _subst={} # type:Dict[str,str]
 
-    @contextmanager
-    def subst(self, **kwargs):
-        old_vals={}
-        for (k,v) in kwargs.items():
-            if k in self._subst:
-                old_vals[k]=self._subst[k]
-            self._subst[k]=v
+
+class InvocationContext(object):
+    def get_indirect_reads(self) -> Dict[ Set, List[ Tuple[int,Args] ] ]:
+        """Find all the sets that are involve as indirect reads, and all the arguments (i.e. dats) that
+        then are read from that set."""
+        res={}
+        for (i,arg) in self.indirect_reads:
+            res.setdefault(arg.iter_set,[]).append( (i,arg) )
+        return res
+    
+    def get_indirect_writes(self) -> Dict[ Set, List[ Tuple[int,Args] ] ]:
+        """Find all the sets that are involve as indirect writes, and all the arguments (i.e. dats) that
+        then are read from that set."""
+        res={}
+        for (i,arg) in self.indirect_reads:
+            res.setdefault(arg.iter_set,[]).append( (i,arg) )
+        return res
+    
+    def __init__(self, spec:SystemSpecification, stat:ParFor) -> None:
+        super().__init__()
+        self.spec=spec
+        self.stat=stat
         
-        yield
-        
-        for k in kwargs:
-            if k in old_vals:
-                self._subst[k]=old_vals[k]
+        self.invocation=get_unique_id(stat)
+        self.const_global_reads=set() # type:List[(int,GlobalArgument)]
+        self.mutable_global_reads=set() # type:List[(int,GlobalArgument)]
+        self.global_writes=set() # type:List[(int,GlobalArgument)]
+        self.indirect_reads=set() # type:List[(int,IndirectArgument)]
+        self.indirect_writes=set() # type:List[(int,IndirectArgument)]
+        self.direct_reads=set() # type:List[(int,DirectDatArgument)]
+        self.direct_writes=set() # type:List[(int,DirectDatArgument)]
+        for (i,arg) in enumerate(stat.arguments):
+            if isinstance(arg,IndirectDatArgument):
+                if arg.access_mode==AccessMode.READ:
+                    self.indirect_reads.add( (i,arg) )
+                elif arg.access_mode==AccessMode.WRITE:
+                    self.indirect_writes.add( (i,arg) )
+                elif arg.access_mode==AccessMode.RW:
+                    self.indirect_reads.add( (i,arg) )
+                    self.indirect_writes.add( (i,arg) )
+                elif arg.access_mode==AccessMode.INC:
+                    self.indirect_writes.add( (i,arg) )
+                else:
+                    raise RuntimeError("Unexpected access mode for indirect dat.")
+            elif isinstance(arg,GlobalArgument):
+                if arg.access_mode==AccessMode.READ:
+                    if isinstance(arg.global_,ConstGlobal):
+                        self.const_global_reads.add( (i,arg) )
+                    else:
+                        self.mutable_global_reads.add( (i,arg) )
+                elif arg.access_mode==AccessMode.INC:
+                    self.global_writes.add( (i,arg) )
+                else:
+                    raise RuntimeError("Unexpected access mode for global.")
+            elif isinstance(arg,DirectDatArgument):
+                if arg.access_mode==AccessMode.READ:
+                    self.direct_reads.add( (i,arg) )
+                elif arg.access_mode==AccessMode.WRITE:
+                    self.direct_writes.add( (i,arg) )
+                elif arg.access_mode==AccessMode.RW:
+                    self.direct_reads.add( (i,arg) )
+                    self.direct_writes.add( (i,arg) )
+                elif arg.access_mode==AccessMode.INC:
+                    self.direct_writes.add( (i,arg) )
+                else:
+                    raise RuntimeError("Unexpected access mode for direct dat.")
             else:
-                del self._subst[k]
-            
-    def s(self, x:str) -> str:
-        if len(self._subst)==0:
-            return x
-        else:
-            return x.format(**self._subst)
-    
-    def __init__(self, id:str) -> None:
-        self.id=id
-        self.properties={} # type:Dict[str,TypedDataSpec]
-        self.device_types={} # type:Dict[str,DeviceTypeBuilder]
-        self.message_types={} # type:Dict[str,Tuple[str,TypedDataSpec]]
-    
-    
-    def create_device_type(self, devType:str) -> str :
-        devType=self.s(devType)
-        assert str not in self.device_types
-        self.device_types[devType]=DeviceTypeBuilder(devType)
-        return devType
-        
-    def create_message_type(self, msgType:str, members:Dict[str,DataType]) -> str :
-        msgType=self.s(msgType)
-        assert msgType not in self.message_types
-        members=[ import_data_type(self.s(n),t) for (n,t) in members.items() ]
-        self.message_types[msgType]=(msgType, members)
-        return msgType
-        
-    def merge_message_type(self, msgType:str, members:Dict[str,DataType]) -> str :
-        msgType=self.s(msgType)
-        members=[ import_data_type(self.s(n),t) for (n,t) in members.items() ]
-        if msgType not in self.message_types:
-            self.message_types[msgType]=(msgType, members)
-        else:
-            assert (msgType, members)==self.message_types[msgType], "name={}, original type = {}, new type = {}".format(msgType, str(self.message_types[msgType][1]),str(members))
-        return msgType
-        
-    def add_device_property(self, devType:str, name:str, type:DataType) -> None :
-        devType=self.device_types[ self.s(devType) ]
-        devType.add_property(self.s(name), type)
-        
-    def add_graph_property(self, name:str, type:DataType) -> None :
-        assert name not in self.properties
-        self.properties[name]=import_data_type(name,type)
+                raise RuntimeError("Unexpected argument type.")
+        logging.info("Invocation %s : const global reads = %s", self.invocation, self.const_global_reads)
+        logging.info("Invocation %s : mutable global reads = %s", self.invocation, self.mutable_global_reads)
+        logging.info("Invocation %s : global writes = %s", self.invocation, self.global_writes)
+        logging.info("Invocation %s : indirect reads = %s", self.invocation, self.indirect_reads)
+        logging.info("Invocation %s : indirect writes = %s", self.invocation, self.indirect_writes)
+        logging.info("Invocation %s : direct reads = %s", self.invocation, self.direct_reads)
+        logging.info("Invocation %s : direct writes = %s", self.invocation, self.direct_writes)    
 
-        
-    def add_device_state(self, devType:str, name:str, type:DataType) -> None :
-        devType=self.device_types[ self.s(devType) ]
-        devType.add_state(self.s(name), type)
-        
-    def merge_device_state(self, devType, name:str, type:DataType) -> bool :
-        """Adds the device state if it doesn't already exists. Checks that the type is the same."""
-        devType=self.device_types[ self.s(devType) ]
-        devType.merge_state(self.s(name), type)
-        
-    def add_input_pin(self, devType:str, name:str, msgType:str, properties:None, state:None, body:str) -> None:
-        devType=self.s(devType)
-        msgType=self.s(msgType)
-        name=self.s(name)
-        body=self.s(body)
-        assert devType in self.device_types
-        assert msgType in self.message_types
-        self.device_types[devType].add_input_pin(name, msgType, properties, state, body)
-        
-    def extend_input_pin_handler(self, devType:str, pinName:str, code:str) -> None:
-        devType=self.s(devType)
-        pinName=self.s(pinName)
-        code=self.s(code)
-        self.device_types[devType].extend_input_pin_handler(pinName, code)
-
-    def add_output_pin(self, devType:str, name:str, msgType:str, rts:str, body:str) -> None:
-        devType=self.s(devType)
-        msgType=self.s(msgType)
-        name=self.s(name)
-        body=self.s(body)
-        rts=self.s(rts)
-        assert devType in self.device_types
-        assert msgType in self.message_types
-        self.device_types[devType].add_output_pin(name, msgType, rts, body)
-
-
-
-    def build(self) -> GraphType:
-        graph_properties=import_data_type_tuple("_", self.properties.values())
-        
-        graph=GraphType(self.id, graph_properties)
-        
-        for (name,type) in self.message_types.values():
-            graph.add_message_type(MessageType(graph, name, import_data_type_tuple("_", type)))
-            
-        for db in self.device_types.values():
-            graph.add_device_type(db.build(graph))
-        
-        return graph
-    
-    
-""" Compilation strategy
-
-- Every set is turned into a device type called "set_{id}"
-  - Each dat is mapped to a state member of the relevant device called "dat_{id}"
-  
-- There is a single "global" device type that contains mutable globals
-  - Each mutable global is mapped to a state member called "global_{id}"
-  
-- Constant globals are mapped to graph properties called "global_{id}"
-
-A parallel invocation consists of:
- - Single message to global object
-   - Broadcast message to indirect dats (both send and receive) identifying invocation
-     - Each indirect input set (READ,RW) sends dat value to direct element on set
-   - Broadcast message to direct set containing global values
-     - direct set devices apply kernel
-     - for each indirect (RW,INC) dat
-       - send a message with new dat value
-     - send a message back to globals including any global INC values
-   - Each indirect (RW,INC) device waits for update
-     - After update, sends back ack.
-   - Global object waits for:
-     - ack + global updates from direct set
-     - ack from indirect write set
- - Single message from global object back, with new mutable globals
- 
-TODO, lots of corner cases:
-- One dat appearing as both direct and indirect parameters (legal? With what access mode?)
-- One device appearing as part of both read and write indirect set (on different and/or same dat)
- 
-"""
 
 def compile_invocation(spec:SystemSpecification, builder:GraphTypeBuilder, stat:ParFor):
-    invocation=get_unique_id(stat)
-    const_global_reads=set() # type:List[(int,GlobalArgument)]
-    mutable_global_reads=set() # type:List[(int,GlobalArgument)]
-    global_writes=set() # type:List[(int,GlobalArgument)]
-    indirect_reads=set() # type:List[(int,IndirectArgument)]
-    indirect_writes=set() # type:List[(int,IndirectArgument)]
-    direct_reads=set() # type:List[(int,DirectDatArgument)]
-    direct_writes=set() # type:List[(int,DirectDatArgument)]
-    for (i,arg) in enumerate(stat.arguments):
-        if isinstance(arg,IndirectDatArgument):
-            if arg.access_mode==AccessMode.READ:
-                indirect_reads.add( (i,arg) )
-            elif arg.access_mode==AccessMode.WRITE:
-                indirect_writes.add( (i,arg) )
-            elif arg.access_mode==AccessMode.RW:
-                indirect_reads.add( (i,arg) )
-                indirect_writes.add( (i,arg) )
-            elif arg.access_mode==AccessMode.INC:
-                indirect_writes.add( (i,arg) )
-            else:
-                raise RuntimeError("Unexpected access mode for indirect dat.")
-        elif isinstance(arg,GlobalArgument):
-            if arg.access_mode==AccessMode.READ:
-                if isinstance(arg.global_,ConstGlobal):
-                    const_global_reads.add( (i,arg) )
-                else:
-                    mutable_global_reads.add( (i,arg) )
-            elif arg.access_mode==AccessMode.INC:
-                global_writes.add( (i,arg) )
-            else:
-                raise RuntimeError("Unexpected access mode for global.")
-        elif isinstance(arg,DirectDatArgument):
-            if arg.access_mode==AccessMode.READ:
-                direct_reads.add( (i,arg) )
-            elif arg.access_mode==AccessMode.WRITE:
-                direct_writes.add( (i,arg) )
-            elif arg.access_mode==AccessMode.RW:
-                direct_reads.add( (i,arg) )
-                direct_writes.add( (i,arg) )
-            elif arg.access_mode==AccessMode.INC:
-                direct_writes.add( (i,arg) )
-            else:
-                raise RuntimeError("Unexpected access mode for direct dat.")
-        else:
-            raise RuntimeError("Unexpected argument type.")
-    logging.info("Invocation %s : const global reads = %s", invocation, const_global_reads)
-    logging.info("Invocation %s : mutable global reads = %s", invocation, mutable_global_reads)
-    logging.info("Invocation %s : global writes = %s", invocation, global_writes)
-    logging.info("Invocation %s : indirect reads = %s", invocation, indirect_reads)
-    logging.info("Invocation %s : indirect writes = %s", invocation, indirect_writes)
-    logging.info("Invocation %s : direct reads = %s", invocation, direct_reads)
-    logging.info("Invocation %s : direct writes = %s", invocation, direct_writes)
+    ctxt=InvocationContext(spec, stat)
     
-    with builder.subst(base=invocation):
+    with builder.subst(base=ctxt.invocation):
         directDevType="set_"+stat.iter_set.id
         
         triggerMsgType=builder.create_message_type(
             "{base}_trigger",
-            { "global_"+mg.global_.id : mg.data_type for (i,mg) in mutable_global_reads }
+            { "global_"+mg.global_.id : mg.data_type for (i,mg) in ctxt.mutable_global_reads }
         )
         
         completeMsgType=builder.create_message_type(
             "{base}_complete",
-            { "global_"+mg.global_.id : mg.data_type for (i,mg) in global_writes }
+            { "global_"+mg.global_.id : mg.data_type for (i,mg) in ctxt.global_writes }
         )
         
-        for (i,arg) in mutable_global_reads | global_writes:
+        for (i,arg) in ctxt.mutable_global_reads | ctxt.global_writes:
             # If it doesn't already exist, we need a buffer
             builder.merge_device_state(directDevType, "global_"+arg.global_.id, arg.data_type)
         
-        for (i,arg) in indirect_reads | indirect_writes:
+        for (i,arg) in ctxt.indirect_reads | ctxt.indirect_writes:
             # We need a working area for the argument in the state of the home set
             builder.add_device_state(directDevType, "{base}_arg"+str(i), arg.data_type)
                     
@@ -339,7 +139,7 @@ def compile_invocation(spec:SystemSpecification, builder:GraphTypeBuilder, stat:
         
         builder.add_device_state(directDevType, "{base}_received", scalar_uint32)
         total_read_args_pending=0
-        for (index,arg) in indirect_reads:
+        for (index,arg) in ctxt.indirect_reads:
             indirectDevType="set_"+arg.to_set.id
             with builder.subst(index=index, dat_name=arg.dat.id):
                 
@@ -391,7 +191,7 @@ def compile_invocation(spec:SystemSpecification, builder:GraphTypeBuilder, stat:
             deviceState->{base}_received++;
             """
         )
-        for (ai,arg) in mutable_global_reads:
+        for (ai,arg) in ctxt.mutable_global_reads:
             builder.extend_input_pin_handler(directDevType, "{base}_trigger",
                 """
                 copy_value(deviceState->{}, message->{});
@@ -402,7 +202,7 @@ def compile_invocation(spec:SystemSpecification, builder:GraphTypeBuilder, stat:
         # output argument, and index==1 represents the final completion message.
         builder.add_device_state(directDevType, "{base}_to_send", scalar_uint32)
                 
-        with builder.subst(exec_thresh=total_read_args_pending, output_count=len(indirect_writes)):
+        with builder.subst(exec_thresh=total_read_args_pending, output_count=len(ctxt.indirect_writes)):
             builder.add_output_pin(directDevType, "{base}_execute", "executeMsgType",
                 """
                 if(deviceState->{base}_received=={exec_thresh}){{
@@ -419,7 +219,7 @@ def compile_invocation(spec:SystemSpecification, builder:GraphTypeBuilder, stat:
         
         ## Send all the output indirect values
         
-        ordered_indirect_writes=list(indirect_writes) # Impose an ordering on the outputs
+        ordered_indirect_writes=list(ctxt.indirect_writes) # Impose an ordering on the outputs
         for (order,(index,arg)) in enumerate(ordered_indirect_writes):
             with builder.subst(trigger_num=1+order, dat_name=arg.dat.id, index=index):
                 indirectDevType="set_"+arg.to_set.id
@@ -497,14 +297,5 @@ if __name__=="__main__":
     (spec,inst,code)=build_system()
     builder=sync_compiler(spec,code)
     
-    type=builder.build()
+    builder.build_and_save(sys.stdout)
     
-    nsmap = { None : "https://poets-project.org/schemas/virtual-graph-schema-v2", "p":"https://poets-project.org/schemas/virtual-graph-schema-v2" }
-    def toNS(t):
-        tt=t.replace("p:","{"+nsmap["p"]+"}")
-        return tt
-    
-    root=etree.Element(toNS("p:Graphs"), nsmap=nsmap)
-    xml=save_graph_type(root, type)
-    
-    etree.ElementTree(root).write(sys.stdout.buffer, pretty_print=True, xml_declaration=True)
