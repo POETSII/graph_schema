@@ -22,6 +22,8 @@ _scalar_type_map={
     numpy.dtype("uint8"):"uint8_t",
     numpy.double:"double",
     numpy.float:"float",
+    int:"int32_t",
+    numpy.int32:"int32_t",
     numpy.uint32:"uint32_t",
     numpy.uint16:"uint16_t",
     numpy.uint8:"uint8_t"
@@ -138,7 +140,7 @@ class GraphTypeBuilder:
         self.properties={} # type:Dict[str,TypedDataSpec]
         self.device_types={} # type:Dict[str,DeviceTypeBuilder]
         self.message_types={} # type:Dict[str,Tuple[str,TypedDataSpec]]
-    
+        self.shared_code=[] # type:List[str]
     
     def create_device_type(self, devType:str) -> str :
         devType=self.s(devType)
@@ -210,15 +212,26 @@ class GraphTypeBuilder:
         assert devType in self.device_types
         self.device_types[devType].add_rts_clause(body)
 
+    def add_shared_code_raw(self, code:str) -> None:
+        self.shared_code.append(code)
+
+    def add_shared_code(self, code:str) -> None:
+        self.shared_code.append(self.s(code))
+
     def add_device_shared_code(self, devType:str, code:str) -> None:
         devType=self.s(devType)
         code=self.s(code)
+        self.device_types[devType].add_shared_code(code)
+        
+    def add_device_shared_code_raw(self, devType:str, code:str) -> None:
         self.device_types[devType].add_shared_code(code)
 
     def build(self) -> GraphType:
         graph_properties=import_data_type_tuple("_", self.properties.values())
         
         graph=GraphType(self.id, graph_properties)
+        for s in self.shared_code:
+            graph.shared_code.append(s)
         
         for (name,type) in self.message_types.values():
             graph.add_message_type(MessageType(graph, name, import_data_type_tuple("_", type)))

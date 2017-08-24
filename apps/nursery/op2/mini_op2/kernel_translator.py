@@ -193,7 +193,12 @@ class TranslatorContext:
             if isinstance(n,ast.FunctionDef):
                 self.functions[n.name]=n
         
-
+def kernel_to_c(module:types.ModuleType, name:str) -> str:
+    ctxt=TranslatorContext(mini_op2.airfoil)
+    n=ctxt.functions[name]
+    tmp=io.StringIO()
+    translate_function(n,tmp)
+    return tmp.getvalue()
 
 if __name__=="__main__":
     logging.basicConfig(level=4)

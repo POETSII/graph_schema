@@ -109,7 +109,7 @@ class Set(object):
             
         
 class Dat(object):
-    def __init__(self, set:Set, id:str, type:DataType = scalar_double) -> None:
+    def __init__(self, set:Set, id:str, type:DataType) -> None:
         self.id=id
         self.set=set
         self.data_type=type
@@ -189,5 +189,5 @@ class IndirectDatArgument(DatArgument):
 
 class LengthArgument(Argument):
     def __init__(self, set:Set) -> None:
-        super().__init__(AccessMode.LENGTH, scalar_uint32)
+        super().__init__(AccessMode.LENGTH, DataType(shape=(),dtype=numpy.uint32))
         self.set=set

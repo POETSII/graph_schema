@@ -18,13 +18,13 @@ seq_int=typing.Sequence[int]
 from numpy import sqrt, fabs
 
 
-def save_soln(qold:seq_float, q:seq_float):
+def save_soln(qold:seq_double, q:seq_double):
     for i in range(4):
         qold[i]=q[i]
     
 def adt_calc(
-    gam:seq_float, gm1:seq_float, cfl:seq_float,
-    x1:seq_float, x2:seq_float, x3:seq_float, x4:seq_float, q:seq_float, adt:seq_float
+    gam:seq_double, gm1:seq_double, cfl:seq_double,
+    x1:seq_double, x2:seq_double, x3:seq_double, x4:seq_double, q:seq_double, adt:seq_double
   ):
   ri = 1.0 / q[0];
   u = ri * q[1];
@@ -50,11 +50,11 @@ def adt_calc(
   adt[0] = adt[0] * (1.0 / cfl[0])
   
 def res_calc(
-    gm1:seq_float, eps:seq_float,
-    x1:seq_float, x2:seq_float,
-    q1:seq_float, q2:seq_float,
-    adt1:seq_float, adt2:seq_float,
-    res1:seq_float, res2:seq_float
+    gm1:seq_double, eps:seq_double,
+    x1:seq_double, x2:seq_double,
+    q1:seq_double, q2:seq_double,
+    adt1:seq_double, adt2:seq_double,
+    res1:seq_double, res2:seq_double
     ):
         # double dx,dy,mu, ri, p1,vol1, p2,vol2, f;
 
@@ -81,13 +81,13 @@ def res_calc(
         res2[3] -= f
 
 def bres_calc(
-    eps:seq_float, qinf:seq_float, gm1:seq_float,
+    eps:seq_double, qinf:seq_double, gm1:seq_double,
     bound:seq_int,
-    x1:seq_float,
-    x2:seq_float,
-    q1:seq_float,
-    adt1:seq_float,
-    res1:seq_float
+    x1:seq_double,
+    x2:seq_double,
+    q1:seq_double,
+    adt1:seq_double,
+    res1:seq_double
 ):
     dx = x1[0] - x2[0]
     dy = x1[1] - x2[1]
@@ -112,11 +112,11 @@ def bres_calc(
         res1[3] += f
 
 def update(
-    qold:seq_float,
-    q:seq_float,
-    res:seq_float,
-    adt:seq_float,
-    rms:seq_float
+    qold:seq_double,
+    q:seq_double,
+    res:seq_double,
+    adt:seq_double,
+    rms:seq_double
 ):
     adti = 1.0/(adt[0])
     for n in range(4):
@@ -126,14 +126,14 @@ def update(
         rms[0]  += ddel*ddel
 
 def reset_rms_to_zero(
-    rms:seq_float
+    rms:seq_double
 ):
     rms[0]=0
 
 def print_rms(
-    len_cells:seq_float,
-    iter:seq_float,
-    rms:seq_float
+    len_cells:seq_double,
+    iter:seq_double,
+    rms:seq_double
 ):
     print(" {:d}  {:10.5e} ".format(iter[0]+1, numpy.sqrt(rms[0] / len_cells[0] )))
     if (iter%100)==0:
@@ -151,15 +151,15 @@ def build_system(srcFile:str="../airfoil/new_grid.h5") -> (SystemInstance,Statem
 
     sys=SystemSpecification()
 
-    gam=sys.create_const_global("gam")
-    gm1=sys.create_const_global("gm1")
-    eps=sys.create_const_global("eps")
-    cfl=sys.create_const_global("cfl")
+    gam=sys.create_const_global("gam", DataType(shape=(1,)))
+    gm1=sys.create_const_global("gm1", DataType(shape=(1,)))
+    eps=sys.create_const_global("eps", DataType(shape=(1,)))
+    cfl=sys.create_const_global("cfl", DataType(shape=(1,)))
     qinf=sys.create_const_global("qinf",DataType(shape=(4,)))
 
-    rms=sys.create_mutable_global("rms")
-    iter=sys.create_mutable_global("iter",DataType(dtype=numpy.uint32))
-    pred_corr=sys.create_mutable_global("pred_corr",DataType(dtype=numpy.uint32))
+    rms=sys.create_mutable_global("rms", DataType(shape=(1,)))
+    iter=sys.create_mutable_global("iter",DataType(shape=(1,),dtype=numpy.uint32))
+    pred_corr=sys.create_mutable_global("pred_corr",DataType(shape=(1,),dtype=numpy.uint32))
 
     cells=sys.create_set("cells")
     edges=sys.create_set("edges")
@@ -169,9 +169,9 @@ def build_system(srcFile:str="../airfoil/new_grid.h5") -> (SystemInstance,Statem
     p_x=sys.create_dat(nodes, "p_x", DataType(shape=(2,)))
     p_q=sys.create_dat(cells, "p_q", DataType(shape=(4,)))
     p_qold=sys.create_dat(cells, "p_qold", DataType(shape=(4,)))
-    p_adt=sys.create_dat(cells, "p_adt")
+    p_adt=sys.create_dat(cells, "p_adt", DataType(shape=(1,)))
     p_res=sys.create_dat(cells, "p_res", DataType(shape=(4,)))
-    p_bound=sys.create_dat(bedges, "p_bound", DataType(dtype=numpy.uint8,shape=(1,)))
+    p_bound=sys.create_dat(bedges, "p_bound", DataType(dtype=numpy.int,shape=(1,)))
 
     pcell=sys.create_map("pcell", cells, nodes, 4)
     pedge=sys.create_map("pedge", edges, nodes, 2)
@@ -285,6 +285,6 @@ def build_system(srcFile:str="../airfoil/new_grid.h5") -> (SystemInstance,Statem
 if __name__=="__main__":
     logging.basicConfig(level=4,style="{")
     
-    (inst,code)=build_system()
+    (spec,inst,code)=build_system()
 
     code.execute(inst)
