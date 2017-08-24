@@ -95,7 +95,7 @@ def translate_expression(e:ast.expr) -> str:
     else:
         raise RuntimeError("Unsupported expression {}".format(type(e)))
 
-def translate_statement(f:ast.stmt, dst:io.TextIOBase, vars:set(), indent="") -> None:
+def translate_statement(f:ast.stmt, dst:io.TextIOBase, vars:set, indent="") -> None:
     unq=random.randint(0,2**32)
     if isinstance(f, ast.Assign):
         assert len(f.targets)==1, "Can't do tuple assignment."
@@ -152,14 +152,29 @@ def translate_function(f:ast.FunctionDef, dst:io.TextIOBase):
     dst.write("void kernel_{}(\n".format(f.name))
     args=get_positional_arguments(f)
     for (index,arg) in enumerate(args):
-        dst.write("  double *{}".format(arg.arg))
+        assert arg.annotation!=None, "Expecting type annotation"
+        type=arg.annotation
+        assert isinstance(type,ast.Name), "Expecting type annotation to be a name"
+        datatype=None
+        # HACK! : Relying on named alias, as otherwise we have to parse out the types
+        if type.id=="seq_float":
+            datatype="float"
+        elif type.id=="seq_double":
+            datatype="double"
+        elif type.id=="seq_int":
+            datatype="int"
+        else:
+            raise RuntimeError("Can't interpret type")
+        
+        dst.write("  {} *{}".format(datatype, arg.arg))
         if index+1 < len(args):
             dst.write(",")
         dst.write("\n")
     dst.write("){\n")
     
+    vars=set()
     for statement in f.body:
-        translate_statement(statement, dst, set(), indent="  ")
+        translate_statement(statement, dst, vars, indent="  ")
     
     dst.write("}\n\n")
 

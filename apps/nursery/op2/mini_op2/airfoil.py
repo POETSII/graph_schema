@@ -10,16 +10,21 @@ from mini_op2.control_flow import *
 
 from numpy import ndarray as nda
 
+seq_double=typing.Sequence[float]
+seq_float=typing.Sequence[float]
+seq_int=typing.Sequence[int]
+
+
 from numpy import sqrt, fabs
 
 
-def save_soln(qold:numpy.ndarray, q:numpy.ndarray):
+def save_soln(qold:seq_float, q:seq_float):
     for i in range(4):
         qold[i]=q[i]
     
 def adt_calc(
-    gam:nda, gm1:nda, cfl:nda,
-    x1:nda, x2:nda, x3:nda, x4:nda, q:nda, adt:nda
+    gam:seq_float, gm1:seq_float, cfl:seq_float,
+    x1:seq_float, x2:seq_float, x3:seq_float, x4:seq_float, q:seq_float, adt:seq_float
   ):
   ri = 1.0 / q[0];
   u = ri * q[1];
@@ -45,11 +50,11 @@ def adt_calc(
   adt[0] = adt[0] * (1.0 / cfl[0])
   
 def res_calc(
-    gm1:nda, eps:nda,
-    x1:nda, x2:nda,
-    q1:nda, q2:nda,
-    adt1:nda, adt2:nda,
-    res1:nda, res2:nda
+    gm1:seq_float, eps:seq_float,
+    x1:seq_float, x2:seq_float,
+    q1:seq_float, q2:seq_float,
+    adt1:seq_float, adt2:seq_float,
+    res1:seq_float, res2:seq_float
     ):
         # double dx,dy,mu, ri, p1,vol1, p2,vol2, f;
 
@@ -61,7 +66,7 @@ def res_calc(
         ri   = 1.0/q2[0]
         p2   = gm1[0]*(q2[3]-0.5*ri*(q2[1]*q2[1]+q2[2]*q2[2]))
         vol2 =  ri*(q2[1]*dy - q2[2]*dx)
-        mu = 0.5*((adt1)+(adt2))*eps
+        mu = 0.5*((adt1[0])+(adt2[0]))*eps[0]
         f = 0.5*(vol1* q1[0]         + vol2* q2[0]        ) + mu*(q1[0]-q2[0])
         res1[0] += f
         res2[0] -= f
@@ -76,27 +81,27 @@ def res_calc(
         res2[3] -= f
 
 def bres_calc(
-    eps:nda, qinf:nda, gm1:nda,
-    bound:nda,
-    x1:nda,
-    x2:nda,
-    q1:nda,
-    adt1:nda,
-    res1:nda
+    eps:seq_float, qinf:seq_float, gm1:seq_float,
+    bound:seq_int,
+    x1:seq_float,
+    x2:seq_float,
+    q1:seq_float,
+    adt1:seq_float,
+    res1:seq_float
 ):
     dx = x1[0] - x2[0]
     dy = x1[1] - x2[1]
     ri = 1.0/q1[0]
     p1 = gm1[0]*(q1[3]-0.5*ri*(q1[1]*q1[1]+q1[2]*q1[2]))
-    if (bound==1):
+    if (bound[0]==1):
         res1[1] += + p1*dy
         res1[2] += - p1*dx
     else:
         vol1 =  ri*(q1[1]*dy - q1[2]*dx)
         ri   = 1.0/qinf[0]
-        p2   = gm1*(qinf[3]-0.5*ri*(qinf[1]*qinf[1]+qinf[2]*qinf[2]))
+        p2   = gm1[0]*(qinf[3]-0.5*ri*(qinf[1]*qinf[1]+qinf[2]*qinf[2]))
         vol2 =  ri*(qinf[1]*dy - qinf[2]*dx)
-        mu = (adt1)*eps[0]
+        mu = (adt1[0])*eps[0]
         f = 0.5*(vol1* q1[0]         + vol2* qinf[0]        ) + mu*(q1[0]-qinf[0])
         res1[0] += f
         f = 0.5*(vol1* q1[1] + p1*dy + vol2* qinf[1] + p2*dy) + mu*(q1[1]-qinf[1])
@@ -107,28 +112,28 @@ def bres_calc(
         res1[3] += f
 
 def update(
-    qold:nda,
-    q:nda,
-    res:nda,
-    adt:nda,
-    rms:nda
+    qold:seq_float,
+    q:seq_float,
+    res:seq_float,
+    adt:seq_float,
+    rms:seq_float
 ):
-    adti = 1.0/(adt)
+    adti = 1.0/(adt[0])
     for n in range(4):
         ddel    = adti*res[n]
         q[n]   = qold[n] - ddel
         res[n] = 0.0
-        rms  += ddel*ddel
+        rms[0]  += ddel*ddel
 
 def reset_rms_to_zero(
-    rms:nda
+    rms:seq_float
 ):
     rms[0]=0
 
 def print_rms(
-    len_cells:nda,
-    iter:nda,
-    rms:nda
+    len_cells:seq_float,
+    iter:seq_float,
+    rms:seq_float
 ):
     print(" {:d}  {:10.5e} ".format(iter[0]+1, numpy.sqrt(rms[0] / len_cells[0] )))
     if (iter%100)==0:
