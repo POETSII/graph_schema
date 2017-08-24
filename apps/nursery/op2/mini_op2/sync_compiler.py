@@ -29,10 +29,10 @@ def get_unique_id(obj:Any) -> str:
 
 class InvocationContext(object):
     def get_indirect_read_dats(self) -> typing.Set[ Dat ]:
-        """Find all the dats that are read from."""
-        res={}
+        """Find all the dats that are read from indirectly."""
+        res=set()
         for (i,arg) in self.indirect_reads:
-            res.setdefault(arg.iter_set,[]).append( (i,arg) )
+            res.add( arg.dat )
         return res
     
     def get_indirect_writes(self) -> Dict[ Set, List[ Tuple[int,Argument] ] ]:
@@ -105,6 +105,27 @@ class InvocationContext(object):
         logging.info("Invocation %s : direct reads = %s", self.invocation, self.direct_reads)
         logging.info("Invocation %s : direct writes = %s", self.invocation, self.direct_writes)    
 
+
+def create_all_messages(ctxt:InvocationContext, builder:GraphTypeBuilder):
+    read_globals={}
+    for (ai,arg) in ctxt.mutable_global_reads:
+        # If global appears twice, then some keys may get overwritten with same type
+        read_globals["global_{}".format(arg.global_.id)]=arg.data_type
+    builder.create_message_type("{invocation}_begin", read_globals)
+    
+    write_globals={}
+    for (ai,arg) in ctxt.global_writes:
+        # If global appears twice, then some keys may get overwritten with same type
+        write_globals["global_{}".format(arg.global_.id)]=arg.data_type
+    builder.create_message_type("{invocation}_end", write_globals)
+    
+    indirect_dats=set()
+    for (ai,arg) in ctxt.indirect_reads | ctxt.indirect_writes:
+        indirect_dats.add(arg.dat)
+    for dat in indirect_dats:
+        with builder.subst(dat=dat.id):
+            builder.merge_message_type("dat_{dat}", { "value":dat.data_type } )
+
 def create_state_tracking_variables(ctxt:InvocationContext, builder:GraphTypeBuilder):
     for set in ctxt.get_all_involved_sets():
         with builder.subst(set=set.id):
@@ -166,31 +187,32 @@ def create_write_send_masks(ctxt:InvocationContext, builder:GraphTypeBuilder):
                 )
 
 def create_invocation_execute(ctxt:InvocationContext, builder:GraphTypeBuilder):
-    for set in ctxt.get_all_relevent_sets():
-        write_send_set=["0"] + [ builder.s("{invocation}_arg{index}_write_send", index=ai) for (ai,arg) in ctxt.indirect_write_set ]
+    for set in ctxt.get_all_involved_sets():
+        write_send_set=["0"] + [ builder.s("{invocation}_arg{index}_write_send", index=ai) for (ai,arg) in ctxt.indirect_writes ]
         write_send_set="(" + ("|".join(write_send_set)) + ")"
         
-        with ctxt.subst(set=set.id):
+        with builder.subst(set=set.id, kernel=ctxt.stat.name):
             handler="""
             assert( deviceState->{invocation}_in_progress );
             assert( {invocation}_read_recv_count == deviceProperties->{invocation}_read_recv_total );
             
-            deviceState->{invocation}_read_recv_count=0;
+            deviceState->{invocation}_read_recv_count=0; // Allows us to tell that execute has happened
             deviceState->{invocation}_write_recv_count++; // The increment for this "virtual" receive
             deviceState->{invocation}_write_send_mask = {invocation}_{set}_write_send_mask_all; // In device-local shared code
             """
             
             if set==ctxt.stat.iter_set:
-                handler+="kernel(\n"
-                for (ai,arg) in ctxt.stat.arguments:
-                    if isinstance(arg,ConstGlobal):
-                        handler+=builder.s("  graphProperties->global_{id}", id=arg.global_.id)
-                    elif isinstance(arg,MutableGlobal):
-                        handler+=builder.s("  deviceState->global_{id}",id=arg.global_.id)
-                    elif isinstance(arg,DirectGlobal):
+                handler+="kernel_{kernel}(\n"
+                for (ai,arg) in enumerate(ctxt.stat.arguments):
+                    if isinstance(arg,GlobalArgument):
+                        if (ai,arg) in ctxt.mutable_global_reads | ctxt.global_writes:
+                            handler+=builder.s("  deviceState->global_{id}",id=arg.global_.id)
+                        else:
+                            handler+=builder.s("  graphProperties->global_{id}", id=arg.global_.id)
+                    elif isinstance(arg,DirectDatArgument):
                         handler+=builder.s("  deviceState->dat_{dat}",dat=arg.dat.id)
-                    elif isinstance(arg,IndirectGlobal):
-                        handler+=builder.s("  deviceState->{invocation}_arg{index}_buffer".format(index=ai))
+                    elif isinstance(arg,IndirectDatArgument):
+                        handler+=builder.s("  deviceState->{invocation}_arg{index}_buffer", index=ai)
                     else:
                         raise RuntimeError("Unexpected arg type.")
                     if ai+1<len(ctxt.stat.arguments):
@@ -206,34 +228,153 @@ def create_invocation_execute(ctxt:InvocationContext, builder:GraphTypeBuilder):
 
 def create_invocation_begin(ctxt:InvocationContext, builder:GraphTypeBuilder):
     for set in ctxt.get_all_involved_sets():
-        handler="""
-        deviceState->{invocation}_recvs_got |= RTS_FLAG_{invocation}_begin;
-        """
-        if set==ctxt.stat.iter_set:
-            pass
-        for dat in ctxt.get_indirect_read_dats_of_set(set):
-            handler+="deviceState->{invocation}_sends_pending |= RTS_FLAG_{invocation}_dat"+dat.id+"_read_send;"
-        HERE
+        with builder.subst(set=set.id):
+            handler="""
+            // Standard edge trigger for start of invocation
+            if(!deviceState->{invocation}_in_progress){{
+                deviceState->{invocation}_in_progress=1;
+                deviceState->{invocation}_read_send_mask = {invocation}_{set}_read_send_mask_all;
+            }}
+            deviceState->{invocation}_read_recv_count++;
+            """
+            if set==ctxt.stat.iter_set:
+                for (ai,arg) in ctxt.mutable_global_reads:
+                    handler+="""
+                    copy_value(deviceState->global_{}, message->global_{});"
+                    """.format(arg.global_.id)
+            builder.add_input_pin("set_{set}", "{invocation}_begin", "{invocation}_begin", None, None, handler)
+
+def create_invocation_end(ctxt:InvocationContext, builder:GraphTypeBuilder):
+    for set in ctxt.get_all_involved_sets():
+        with builder.subst(set=set.id):
+            handler="""
+            assert(deviceState->{invocation}_in_progress);
+            assert( deviceState->{invocation}_read_send_mask == 0 );
+            assert( deviceState->{invocation}_write_send_mask == 0 );
+            assert( deviceState->{invocation}_read_recv_count == deviceProperties->{invocation}_read_recv_total );
+            assert( deviceState->{invocation}_write_recv_count == deviceProperties->{invocation}_write_recv_total );
+            
+            deviceState->{invocation}_in_progress=0;
+            deviceState->{invocation}_read_recv_count=0;
+            deviceState->{invocation}_write_send_count=0;
+            """
+            if set==ctxt.stat.iter_set:
+                for (ai,arg) in ctxt.global_writes:
+                    handler+="""
+                    copy_value(message->global_{}, deviceState->global_{});
+                    """.format(arg.global_.id,arg.global_.id)
+            else:
+                for (ai,arg) in ctxt.global_writes:
+                    handler+="""
+                    zero_value(message->global_{});
+                    """.format(arg.global_.id)
+            builder.add_output_pin("set_{set}", "{invocation}_end", "{invocation}_end", handler)
         
 
 def create_indirect_read_sends(ctxt:InvocationContext, builder:GraphTypeBuilder):
     for dat in ctxt.get_indirect_read_dats():
-        with builder.subst(dat=dat.id, set=dat.iter_set.id):
-            builder.add_output_pin("set_{set}", "{invocation}_dat{dat}_read_send", "msg_{dat}",
+        with builder.subst(dat=dat.id, set=dat.set.id):
+            builder.add_output_pin("set_{set}", "{invocation}_dat{dat}_read_send", "dat_{dat}",
                 """
-                assert(deviceState->send_pending & RTS_FLAG_{invocation}_dat{data}_read_send);
-                copy_value(message->value, deviceState->{
-                deviceState->send_pending &= RTS_FLAG_{invocation}_dat{data}_read_send;
+                assert(deviceState->{invocation}_read_send_mask & RTS_FLAG_{invocation}_dat{dat}_read_send);
+                copy_value(message->value, deviceState->dat_{dat});
+                deviceState->{invocation}_read_send_mask &= ~RTS_FLAG_{invocation}_dat{dat}_read_send;
                 """
             )
+
+def create_indirect_read_recvs(ctxt:InvocationContext, builder:GraphTypeBuilder):
+    for (ai,arg) in ctxt.indirect_reads:
+        with builder.subst(set=ctxt.stat.iter_set.id, index=ai, dat=arg.dat.id):
+            builder.add_input_pin("set_{set}", "{invocation}_arg{index}_read_recv", "dat_{dat}", None, None,
+                """
+                assert(deviceState->{invocation}_read_recv_count < deviceProperties->{invocation}_read_recv_total);
+                // Standard edge trigger for start of invocation
+                if(!deviceState->{invocation}_in_progress){{
+                    deviceState->{invocation}_in_progress=1;
+                    deviceState->{invocation}_read_send_mask = {invocation}_{set}_read_send_mask_all;
+                }}
+                deviceState->{invocation}_read_recv_count++;
+                copy_value(deviceState->{invocation}_arg{index}_buffer, message->value);                
+                """
+            )
+
+
+            
+def create_indirect_write_sends(ctxt:InvocationContext, builder:GraphTypeBuilder):
+    for (ai,arg) in ctxt.indirect_writes:
+        with builder.subst(index=ai, set=arg.iter_set.id, dat=arg.dat.id):
+            builder.add_output_pin("set_{set}", "{invocation}_arg{index}_write_send", "dat_{dat}",
+                """
+                assert(deviceState->{invocation}_write_send_mask & RTS_FLAG_{invocation}_arg{index}_write_send);
+                copy_value(message->value, deviceState->{invocation}_arg{index}_buffer);
+                deviceState->{invocation}_write_send_mask &= ~RTS_FLAG_{invocation}_arg{index}_write_send;
+                """
+            )
+
+def create_indirect_write_recvs(ctxt:InvocationContext, builder:GraphTypeBuilder):
+    for (ai,arg) in ctxt.indirect_writes:
+        with builder.subst(set=ctxt.stat.iter_set.id, index=ai, dat=arg.dat.id):
+            handler="""
+                assert(deviceState->{invocation}_read_recv_count < deviceProperties->{invocation}_read_recv_total);
+                // Standard edge trigger for start of invocation
+                if(!deviceState->{invocation}_in_progress){{
+                    deviceState->{invocation}_in_progress=1;
+                    deviceState->{invocation}_read_send_mask = {invocation}_{set}_read_send_mask_all;
+                }}
+                deviceState->{invocation}_write_recv_count++;
+            """
+            if arg.access_mode==AccessMode.WRITE or arg.access_mode==AccessMode.RW:
+                handler+="""
+                copy_value(deviceState->{invocation}_arg{index}_buffer, message->value);                
+                """
+            elif arg.access_mode==AccessMode.INC:
+                handler+="""
+                inc_value(deviceState->{invocation}_arg{index}_buffer, message->value);                
+                """
+            else:
+                raise RuntimeError("Unexpected access mode {}".format(arg.access_mode))
+            builder.add_input_pin("set_{set}", "{invocation}_arg{index}_read_recv", "dat_{dat}", None, None, handler)
+
+def create_rts(ctxt:InvocationContext, builder:GraphTypeBuilder):
+    for set in ctxt.get_all_involved_sets():
+        with builder.subst(set=set.id):
+            rts="""
+            if(deviceState->{invocation}_in_progress) {{
+              *readyToSend |= deviceState->{invocation}_read_send_mask;
+              *readyToSend |= deviceState->{invocation}_write_send_mask;
+              if(deviceState->{invocation}_read_recv_count == deviceProperties->{invocation}_read_recv_total){{
+                *readyToSend |= RTS_FLAG_{invocation}_execute;
+              }}
+              if(deviceState->{invocation}_read_recv_count==0
+                  && deviceState->{invocation}_write_recv_count==deviceProperties->{invocation}_write_recv_total
+                  && deviceState->{invocation}_read_send_mask==0
+                  && deviceState->{invocation}_write_send_mask==0
+              ){{
+                *readyToSend |= RTS_FLAG_{invocation}_end;
+              }}
+            }} // if(deviceState->{invocation}_in_progress)
+            """
+            builder.add_rts_clause("set_{set}", rts)
+
 
 def compile_invocation(spec:SystemSpecification, builder:GraphTypeBuilder, stat:ParFor):
     ctxt=InvocationContext(spec, stat)
     
     with builder.subst(invocation=ctxt.invocation):
+        create_all_messages(ctxt,builder)
+        
         create_all_state_and_properties(ctxt, builder)
         create_read_send_masks(ctxt, builder)
         create_write_send_masks(ctxt, builder)
+
+        create_invocation_begin(ctxt,builder)
+        create_indirect_read_sends(ctxt,builder)
+        create_indirect_read_recvs(ctxt,builder)
+        create_invocation_execute(ctxt,builder)
+        create_indirect_write_sends(ctxt,builder)
+        create_indirect_write_recvs(ctxt,builder)
+        create_invocation_end(ctxt,builder)
+        create_rts(ctxt,builder)
         
 
 #~ def compile_invocation(spec:SystemSpecification, builder:GraphTypeBuilder, stat:ParFor):
@@ -406,7 +547,6 @@ def sync_compiler(spec:SystemSpecification, code:Statement):
     for stat in code.all_statements():
         if isinstance(stat,ParFor):
             id=make_unique_id(stat, stat.name)
-            print(id)
             kernels.append(stat)
     for stat in kernels:
         compile_invocation(spec,builder,stat)

@@ -100,7 +100,7 @@ class DeviceTypeBuilder(object):
             input_properties=None
             input_state=None
             d.add_input(name,message_type,input_properties,input_state,None,handler)
-        for (name,msgType,handler,rts) in self.outputs.values():
+        for (name,msgType,handler) in self.outputs.values():
             message_type=graph.message_types[msgType]
             output_properties=None
             output_state=None
@@ -203,6 +203,12 @@ class GraphTypeBuilder:
         assert devType in self.device_types
         assert msgType in self.message_types
         self.device_types[devType].add_output_pin(name, msgType, body)
+
+    def add_rts_clause(self, devType:str, body:str) -> None:
+        devType=self.s(devType)
+        body=self.s(body)
+        assert devType in self.device_types
+        self.device_types[devType].add_rts_clause(body)
 
     def add_device_shared_code(self, devType:str, code:str) -> None:
         devType=self.s(devType)

@@ -354,7 +354,7 @@ So the life-cycle of the device is:
 - Wait until:
     -{invocation}_read_recv_count == deviceProperties->{invocation}_read_recv_total
   then do {invocation}_execute:
-  - {invocation}_read_recv_count=0
+  - {invocation}_read_recv_count=0 // If in_progress==1 && read_recv_count==0 then execute has happened
   - {invocation}_write_recv_count++  // execute counts as an "indirect" write
   - {invocation}_write_send_mask = {invocation}_{set}_write_send_mask_all
 - Wait until:
