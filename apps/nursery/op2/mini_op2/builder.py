@@ -44,10 +44,12 @@ def import_data_type_tuple(name:str, members:Sequence[DataType]):
 class DeviceTypeBuilder(object):
     def __init__(self, id:str):
         self.id=id
+        self.rts=""
         self.properties={} # type:Dict[str,TypedDataSpec]
         self.state={} # type:Dict[str,TypedDataSpec]
         self.inputs={} # type:Dict[str,Tuple[str,str,str]]
-        self.outputs={} # type:Dict[str,Tuple[str,str,str,str]]
+        self.outputs={} # type:Dict[str,Tuple[str,str,str]]
+        self.shared_code=[]
 
     def add_property(self, name:str, type:DataType):
         assert name not in self.properties
@@ -56,6 +58,9 @@ class DeviceTypeBuilder(object):
     def add_state(self, name:str, type:DataType):
         assert name not in self.state
         self.state[name]=import_data_type(name,type)
+    
+    def add_shared_code(self, code:str):
+        self.shared_code.append(code)
         
     def merge_state(self, name:str, type:DataType):
         type=import_data_type(name,type)
@@ -75,16 +80,21 @@ class DeviceTypeBuilder(object):
         (name,msgType,body)=self.inputs[name]
         self.inputs[name]=(name,msgType,body+code)
         
-    def add_output_pin(self, name:str, msgType:str, rts:str, body:str):
+    def add_output_pin(self, name:str, msgType:str, body:str):
         assert name not in self.outputs
-        self.outputs[name]=(name, msgType, body, rts)
-        
+        self.outputs[name]=(name, msgType, body)
+    
+    def add_rts_clause(self, body:str):
+        self.rts += body
+    
     def build(self, graph:GraphType) -> DeviceType:
         device_properties=import_data_type_tuple("_", self.properties.values())
         assert isinstance(device_properties,TypedDataSpec)
         device_state=import_data_type_tuple("_", self.state.values())
         assert isinstance(device_state,TypedDataSpec)
         d=DeviceType(graph, self.id, device_properties, device_state)
+        d.ready_to_send_handler=self.rts
+        d.shared_code=self.shared_code
         for (name,msgType,handler) in self.inputs.values():
             message_type=graph.message_types[msgType]
             input_properties=None
@@ -95,7 +105,6 @@ class DeviceTypeBuilder(object):
             output_properties=None
             output_state=None
             d.add_output(name,message_type,None,handler)
-            d.ready_to_send_handler+=rts
         return d
 
 class GraphTypeBuilder:
@@ -117,9 +126,10 @@ class GraphTypeBuilder:
             else:
                 del self._subst[k]
             
-    def s(self, x:str) -> str:
-        if len(self._subst)==0:
-            return x
+    def s(self, x:str, **kwargs) -> str:
+        if len(kwargs)>0:
+            with self.subst(**kwargs):
+                return self.s(x)
         else:
             return x.format(**self._subst)
     
@@ -185,17 +195,19 @@ class GraphTypeBuilder:
         code=self.s(code)
         self.device_types[devType].extend_input_pin_handler(pinName, code)
 
-    def add_output_pin(self, devType:str, name:str, msgType:str, rts:str, body:str) -> None:
+    def add_output_pin(self, devType:str, name:str, msgType:str, body:str) -> None:
         devType=self.s(devType)
         msgType=self.s(msgType)
         name=self.s(name)
         body=self.s(body)
-        rts=self.s(rts)
         assert devType in self.device_types
         assert msgType in self.message_types
-        self.device_types[devType].add_output_pin(name, msgType, rts, body)
+        self.device_types[devType].add_output_pin(name, msgType, body)
 
-
+    def add_device_shared_code(self, devType:str, code:str) -> None:
+        devType=self.s(devType)
+        code=self.s(code)
+        self.device_types[devType].add_shared_code(code)
 
     def build(self) -> GraphType:
         graph_properties=import_data_type_tuple("_", self.properties.values())

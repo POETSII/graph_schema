@@ -27,27 +27,25 @@ def make_unique_id(obj:Any,base:str) -> str:
 def get_unique_id(obj:Any) -> str:
     return _unq_obj_to_id[obj]
 
-    
-    
-
-
-
 class InvocationContext(object):
-    def get_indirect_reads(self) -> Dict[ Set, List[ Tuple[int,Args] ] ]:
-        """Find all the sets that are involve as indirect reads, and all the arguments (i.e. dats) that
-        then are read from that set."""
+    def get_indirect_read_dats(self) -> typing.Set[ Dat ]:
+        """Find all the dats that are read from."""
         res={}
         for (i,arg) in self.indirect_reads:
             res.setdefault(arg.iter_set,[]).append( (i,arg) )
         return res
     
-    def get_indirect_writes(self) -> Dict[ Set, List[ Tuple[int,Args] ] ]:
+    def get_indirect_writes(self) -> Dict[ Set, List[ Tuple[int,Argument] ] ]:
         """Find all the sets that are involve as indirect writes, and all the arguments (i.e. dats) that
         then are read from that set."""
         res={}
         for (i,arg) in self.indirect_reads:
             res.setdefault(arg.iter_set,[]).append( (i,arg) )
         return res
+        
+    def get_all_involved_sets(self) -> typing.Set[ Set ] :
+        """Return a list of all sets involved as direct, indirect read, or indirect write"""
+        return set([self.stat.iter_set] + [ arg.to_set for (ai,arg) in (self.indirect_reads | self.indirect_writes) ])
     
     def __init__(self, spec:SystemSpecification, stat:ParFor) -> None:
         super().__init__()
@@ -107,155 +105,280 @@ class InvocationContext(object):
         logging.info("Invocation %s : direct reads = %s", self.invocation, self.direct_reads)
         logging.info("Invocation %s : direct writes = %s", self.invocation, self.direct_writes)    
 
+def create_state_tracking_variables(ctxt:InvocationContext, builder:GraphTypeBuilder):
+    for set in ctxt.get_all_involved_sets():
+        with builder.subst(set=set.id):
+            builder.add_device_state("set_{set}", "{invocation}_in_progress", scalar_uint32)
+            builder.add_device_state("set_{set}", "{invocation}_read_send_mask", scalar_uint32)
+            builder.add_device_state("set_{set}", "{invocation}_read_recv_count", scalar_uint32)
+            builder.add_device_state("set_{set}", "{invocation}_write_send_mask", scalar_uint32)
+            builder.add_device_state("set_{set}", "{invocation}_write_recv_count", scalar_uint32)
+            
+            builder.add_device_property("set_{set}", "{invocation}_read_recv_total", scalar_uint32)
+            builder.add_device_property("set_{set}", "{invocation}_write_recv_total", scalar_uint32)
+
+def create_indirect_landing_pads(ctxt:InvocationContext, builder:GraphTypeBuilder):
+    for (ai,arg) in ( ctxt.indirect_reads | ctxt.indirect_writes ):
+        with builder.subst(index=ai, set=ctxt.stat.iter_set.id):
+            builder.add_device_state("set_{set}", "{invocation}_arg{index}_buffer", arg.dat.data_type)
+
+def create_global_landing_pads(ctxt:InvocationContext, builder:GraphTypeBuilder):
+    for (ai,arg) in ( ctxt.mutable_global_reads | ctxt.global_writes ):
+        with builder.subst(name=arg.global_.id, set=ctxt.stat.iter_set.id):
+            builder.merge_device_state("set_{set}", "global_{name}", arg.data_type)
+            
+def create_all_state_and_properties(ctxt:InvocationContext, builder:GraphTypeBuilder):
+    create_state_tracking_variables(ctxt, builder)
+    create_indirect_landing_pads(ctxt, builder)
+    create_global_landing_pads(ctxt, builder)
+    
+def create_read_send_masks(ctxt:InvocationContext, builder:GraphTypeBuilder):
+    read_sends={}
+    for (ai,arg) in ctxt.indirect_reads:
+        read_sends.setdefault(arg.to_set,set()).add( arg.dat )
+    
+    for (set_,dats) in read_sends.items():
+        read_send_set=["0"] + [ builder.s("{invocation}_dat{dat}_read_send",dat=dat.id) for dat in dats ]
+        read_send_set="(" + "|".join(read_send_set) + ")"
+        
+        with builder.subst(set=set_.id, read_send_set=read_send_set):
+            builder.add_device_shared_code("set_{set}", 
+                """
+                const uint32_t {invocation}_{set}_read_send_mask_all = {read_send_set};
+                """
+                )
+
+def create_write_send_masks(ctxt:InvocationContext, builder:GraphTypeBuilder):
+    """ Creates a mask called {invocation}_{set}_write_send_mask_all for each involved set."""
+    write_sends={}
+    for (ai,arg) in ctxt.indirect_writes:
+        write_sends.setdefault(arg.to_set,[]).append( (ai,arg) )
+    
+    for (set,args) in write_sends.items():
+        write_send_set=["0"] + [ builder.s("{invocation}_arg{index}_write_send",index=ai) for (ai,arg) in args ]
+        write_send_set="(" + "|".join(write_send_set) + ")"
+        
+        with builder.subst(set=set.id, write_send_set=write_send_set):
+            builder.add_device_shared_code("set_{set}", 
+                """
+                const uint32_t {invocation}_{set}_write_send_mask_all = {write_send_set};
+                """
+                )
+
+def create_invocation_execute(ctxt:InvocationContext, builder:GraphTypeBuilder):
+    for set in ctxt.get_all_relevent_sets():
+        write_send_set=["0"] + [ builder.s("{invocation}_arg{index}_write_send", index=ai) for (ai,arg) in ctxt.indirect_write_set ]
+        write_send_set="(" + ("|".join(write_send_set)) + ")"
+        
+        with ctxt.subst(set=set.id):
+            handler="""
+            assert( deviceState->{invocation}_in_progress );
+            assert( {invocation}_read_recv_count == deviceProperties->{invocation}_read_recv_total );
+            
+            deviceState->{invocation}_read_recv_count=0;
+            deviceState->{invocation}_write_recv_count++; // The increment for this "virtual" receive
+            deviceState->{invocation}_write_send_mask = {invocation}_{set}_write_send_mask_all; // In device-local shared code
+            """
+            
+            if set==ctxt.stat.iter_set:
+                handler+="kernel(\n"
+                for (ai,arg) in ctxt.stat.arguments:
+                    if isinstance(arg,ConstGlobal):
+                        handler+=builder.s("  graphProperties->global_{id}", id=arg.global_.id)
+                    elif isinstance(arg,MutableGlobal):
+                        handler+=builder.s("  deviceState->global_{id}",id=arg.global_.id)
+                    elif isinstance(arg,DirectGlobal):
+                        handler+=builder.s("  deviceState->dat_{dat}",dat=arg.dat.id)
+                    elif isinstance(arg,IndirectGlobal):
+                        handler+=builder.s("  deviceState->{invocation}_arg{index}_buffer".format(index=ai))
+                    else:
+                        raise RuntimeError("Unexpected arg type.")
+                    if ai+1<len(ctxt.stat.arguments):
+                        handler+=","
+                    handler+="\n"
+                handler+=");\n"
+            
+            builder.add_output_pin("set_{set}", "{invocation}_execute", "executeMsgType",
+                handler
+            )
+
+
+
+def create_invocation_begin(ctxt:InvocationContext, builder:GraphTypeBuilder):
+    for set in ctxt.get_all_involved_sets():
+        handler="""
+        deviceState->{invocation}_recvs_got |= RTS_FLAG_{invocation}_begin;
+        """
+        if set==ctxt.stat.iter_set:
+            pass
+        for dat in ctxt.get_indirect_read_dats_of_set(set):
+            handler+="deviceState->{invocation}_sends_pending |= RTS_FLAG_{invocation}_dat"+dat.id+"_read_send;"
+        HERE
+        
+
+def create_indirect_read_sends(ctxt:InvocationContext, builder:GraphTypeBuilder):
+    for dat in ctxt.get_indirect_read_dats():
+        with builder.subst(dat=dat.id, set=dat.iter_set.id):
+            builder.add_output_pin("set_{set}", "{invocation}_dat{dat}_read_send", "msg_{dat}",
+                """
+                assert(deviceState->send_pending & RTS_FLAG_{invocation}_dat{data}_read_send);
+                copy_value(message->value, deviceState->{
+                deviceState->send_pending &= RTS_FLAG_{invocation}_dat{data}_read_send;
+                """
+            )
 
 def compile_invocation(spec:SystemSpecification, builder:GraphTypeBuilder, stat:ParFor):
     ctxt=InvocationContext(spec, stat)
     
-    with builder.subst(base=ctxt.invocation):
-        directDevType="set_"+stat.iter_set.id
+    with builder.subst(invocation=ctxt.invocation):
+        create_all_state_and_properties(ctxt, builder)
+        create_read_send_masks(ctxt, builder)
+        create_write_send_masks(ctxt, builder)
         
-        triggerMsgType=builder.create_message_type(
-            "{base}_trigger",
-            { "global_"+mg.global_.id : mg.data_type for (i,mg) in ctxt.mutable_global_reads }
-        )
-        
-        completeMsgType=builder.create_message_type(
-            "{base}_complete",
-            { "global_"+mg.global_.id : mg.data_type for (i,mg) in ctxt.global_writes }
-        )
-        
-        for (i,arg) in ctxt.mutable_global_reads | ctxt.global_writes:
-            # If it doesn't already exist, we need a buffer
-            builder.merge_device_state(directDevType, "global_"+arg.global_.id, arg.data_type)
-        
-        for (i,arg) in ctxt.indirect_reads | ctxt.indirect_writes:
-            # We need a working area for the argument in the state of the home set
-            builder.add_device_state(directDevType, "{base}_arg"+str(i), arg.data_type)
-                    
-        ###########################################
-        ## Deal with indirect reads.
-        ## - Message broadcast from global to all indirect sets
-        ## - Indirect sets then broadcast each dat involved
-        
-        builder.add_device_state(directDevType, "{base}_received", scalar_uint32)
-        total_read_args_pending=0
-        for (index,arg) in ctxt.indirect_reads:
-            indirectDevType="set_"+arg.to_set.id
-            with builder.subst(index=index, dat_name=arg.dat.id):
-                
-                dataMsgType=builder.create_message_type("{base}_indirect_arg{index}", { "value":arg.data_type })
-                
-                # On the indirect device we need to flag whether the dat send is pending
-                builder.add_device_state(directDevType, "{base}_send_pending_arg{index}", scalar_uint32)
-                builder.add_input_pin(indirectDevType, "{base}_trigger_arg{index}", triggerMsgType, None, None,
-                    # Receive handler
-                    """
-                    assert(deviceState->{base}_trigger_arg{index}==0);
-                    deviceState->{base}_trigger_arg{index}=1;
-                    """
-                )
-                builder.add_output_pin(indirectDevType, "{base}_send_arg{index}", dataMsgType,
-                    # Ready to send
-                    """
-                    if(deviceState->{base}_trigger_arg{index}){{
-                        *readyToSend |= RTS_FLAG_{base}_trigger_arg{index};
-                    }}
-                    """,
-                    # Send handler
-                    """
-                    assert(deviceState->{base}_trigger_arg{index});
-                    copy_value(message->value, deviceState->{dat_name});
-                    deviceState->{base}_trigger_arg{index}=0;
-                    """
-                )
 
-                # And when the message arrives, just copy it into the landing pad
-                builder.add_input_pin(directDevType,"{base}_recv_arg{index}", dataMsgType, None, None,
-                    """
-                    copy_value(deviceState->{base}_arg{index}, message->value);
-                    deviceState->{base}_received++;
-                    """
-                )
-                
-                total_read_args_pending+=1
+#~ def compile_invocation(spec:SystemSpecification, builder:GraphTypeBuilder, stat:ParFor):
+    #~ ctxt=InvocationContext(spec, stat)
+    
+    #~ with builder.subst(base=ctxt.invocation):
+        #~ directDevType="set_"+stat.iter_set.id
         
-        ############################################
-        ## Deal with parallel iteration over set
-        ## - Receive message from globals with any constants, and to indicate kernel should start
-        ## - Also wait for any indirect reads
+        #~ triggerMsgType=builder.create_message_type(
+            #~ "{base}_trigger",
+            #~ { "global_"+mg.global_.id : mg.data_type for (i,mg) in ctxt.mutable_global_reads }
+        #~ )
         
-        builder.add_device_state(directDevType, "{base}_ready", scalar_uint32)
-        builder.add_input_pin(directDevType,"{base}_trigger", triggerMsgType, None, None,
-            """"
-            assert(!*deviceState->{base}_ready);
-            deviceState->{base}_received++;
-            """
-        )
-        for (ai,arg) in ctxt.mutable_global_reads:
-            builder.extend_input_pin_handler(directDevType, "{base}_trigger",
-                """
-                copy_value(deviceState->{}, message->{});
-                """.format(arg.global_.id,arg.global_.id)
-            )
+        #~ completeMsgType=builder.create_message_type(
+            #~ "{base}_complete",
+            #~ { "global_"+mg.global_.id : mg.data_type for (i,mg) in ctxt.global_writes }
+        #~ )
         
-        # This tracks how many outputs have been sent. Each index >1 represents an indirect
-        # output argument, and index==1 represents the final completion message.
-        builder.add_device_state(directDevType, "{base}_to_send", scalar_uint32)
-                
-        with builder.subst(exec_thresh=total_read_args_pending, output_count=len(ctxt.indirect_writes)):
-            builder.add_output_pin(directDevType, "{base}_execute", "executeMsgType",
-                """
-                if(deviceState->{base}_received=={exec_thresh}){{
-                  *readyToSend |= RTS_FLAG_{base}_execute;
-                }}
-                """,
-                """
-                
-                    TODO
+        #~ for (i,arg) in ctxt.mutable_global_reads | ctxt.global_writes:
+            #~ # If it doesn't already exist, we need a buffer
+            #~ builder.merge_device_state(directDevType, "global_"+arg.global_.id, arg.data_type)
+        
+        #~ for (i,arg) in ctxt.indirect_reads | ctxt.indirect_writes:
+            #~ # We need a working area for the argument in the state of the home set
+            #~ builder.add_device_state(directDevType, "{base}_arg"+str(i), arg.data_type)
                     
-                deviceState->{base}_to_send = 1+{output_count};    
-                """
-            )
+        #~ ###########################################
+        #~ ## Deal with indirect reads.
+        #~ ## - Message broadcast from global to all indirect sets
+        #~ ## - Indirect sets then broadcast each dat involved
         
-        ## Send all the output indirect values
-        
-        ordered_indirect_writes=list(ctxt.indirect_writes) # Impose an ordering on the outputs
-        for (order,(index,arg)) in enumerate(ordered_indirect_writes):
-            with builder.subst(trigger_num=1+order, dat_name=arg.dat.id, index=index):
-                indirectDevType="set_"+arg.to_set.id
+        #~ builder.add_device_state(directDevType, "{base}_received", scalar_uint32)
+        #~ total_read_args_pending=0
+        #~ for (index,arg) in ctxt.indirect_reads:
+            #~ indirectDevType="set_"+arg.to_set.id
+            #~ with builder.subst(index=index, dat_name=arg.dat.id):
                 
-                # Might already exist if it is a RW type, so merge
-                dataMsgType=builder.merge_message_type("{base}_indirect_arg{index}", { "value":arg.data_type })
+                #~ dataMsgType=builder.create_message_type("{base}_indirect_arg{index}", { "value":arg.data_type })
+                
+                #~ # On the indirect device we need to flag whether the dat send is pending
+                #~ builder.add_device_state(directDevType, "{base}_send_pending_arg{index}", scalar_uint32)
+                #~ builder.add_input_pin(indirectDevType, "{base}_trigger_arg{index}", triggerMsgType, None, None,
+                    #~ # Receive handler
+                    #~ """
+                    #~ assert(deviceState->{base}_trigger_arg{index}==0);
+                    #~ deviceState->{base}_trigger_arg{index}=1;
+                    #~ """
+                #~ )
+                #~ builder.add_output_pin(indirectDevType, "{base}_send_arg{index}", dataMsgType,
+                    #~ # Ready to send
+                    #~ """
+                    #~ if(deviceState->{base}_trigger_arg{index}){{
+                        #~ *readyToSend |= RTS_FLAG_{base}_trigger_arg{index};
+                    #~ }}
+                    #~ """,
+                    #~ # Send handler
+                    #~ """
+                    #~ assert(deviceState->{base}_trigger_arg{index});
+                    #~ copy_value(message->value, deviceState->{dat_name});
+                    #~ deviceState->{base}_trigger_arg{index}=0;
+                    #~ """
+                #~ )
+
+                #~ # And when the message arrives, just copy it into the landing pad
+                #~ builder.add_input_pin(directDevType,"{base}_recv_arg{index}", dataMsgType, None, None,
+                    #~ """
+                    #~ copy_value(deviceState->{base}_arg{index}, message->value);
+                    #~ deviceState->{base}_received++;
+                    #~ """
+                #~ )
+                
+                #~ total_read_args_pending+=1
+        
+        #~ ############################################
+        #~ ## Deal with parallel iteration over set
+        #~ ## - Receive message from globals with any constants, and to indicate kernel should start
+        #~ ## - Also wait for any indirect reads
+        
+        #~ builder.add_device_state(directDevType, "{base}_ready", scalar_uint32)
+        #~ builder.add_input_pin(directDevType,"{base}_trigger", triggerMsgType, None, None,
+            #~ """"
+            #~ assert(!*deviceState->{base}_ready);
+            #~ deviceState->{base}_received++;
+            #~ """
+        #~ )
+        #~ for (ai,arg) in ctxt.mutable_global_reads:
+            #~ builder.extend_input_pin_handler(directDevType, "{base}_trigger",
+                #~ """
+                #~ copy_value(deviceState->{}, message->{});
+                #~ """.format(arg.global_.id,arg.global_.id)
+            #~ )
+        
+        #~ # This tracks how many outputs have been sent. Each index >1 represents an indirect
+        #~ # output argument, and index==1 represents the final completion message.
+        #~ builder.add_device_state(directDevType, "{base}_to_send", scalar_uint32)
+                
+        #~ with builder.subst(exec_thresh=total_read_args_pending, output_count=len(ctxt.indirect_writes)):
+            #~ builder.add_output_pin(directDevType, "{base}_execute", "executeMsgType",
+                #~ """
+                #~ if(deviceState->{base}_received=={exec_thresh}){{
+                  #~ *readyToSend |= RTS_FLAG_{base}_execute;
+                #~ }}
+                #~ """,
+                #~ """
+                
+                    #~ TODO
+                    
+                #~ deviceState->{base}_to_send = 1+{output_count};    
+                #~ """
+            #~ )
+        
+        #~ ## Send all the output indirect values
+        
+        #~ ordered_indirect_writes=list(ctxt.indirect_writes) # Impose an ordering on the outputs
+        #~ for (order,(index,arg)) in enumerate(ordered_indirect_writes):
+            #~ with builder.subst(trigger_num=1+order, dat_name=arg.dat.id, index=index):
+                #~ indirectDevType="set_"+arg.to_set.id
+                
+                #~ # Might already exist if it is a RW type, so merge
+                #~ dataMsgType=builder.merge_message_type("{base}_indirect_arg{index}", { "value":arg.data_type })
             
                 
-                builder.add_output_pin(directDevType, "{base}_send_arg{index}", dataMsgType,
-                    """
-                    if(deviceState->{base}_to_send=={trigger_num}){{
-                        *readyToSend|=RTS_FLAG_{base}_send_arg{index};
-                    }}
-                    """,
-                    """
-                    copy_value(message->value, deviceState->{base}_arg{index});
-                    deviceState->{base}_to_send--;
-                    """
-                )
+                #~ builder.add_output_pin(directDevType, "{base}_send_arg{index}", dataMsgType,
+                    #~ """
+                    #~ if(deviceState->{base}_to_send=={trigger_num}){{
+                        #~ *readyToSend|=RTS_FLAG_{base}_send_arg{index};
+                    #~ }}
+                    #~ """,
+                    #~ """
+                    #~ copy_value(message->value, deviceState->{base}_arg{index});
+                    #~ deviceState->{base}_to_send--;
+                    #~ """
+                #~ )
                 
-                builder.add_input_pin(indirectDevType, "{base}_recv_arg{index}", dataMsgType, None, None,
-                    """
-                    copy_value(deviceState->{dat_name}, message->value);
-                    deviceState->{base}_received++;
-                    """
-                )
+                #~ builder.add_input_pin(indirectDevType, "{base}_recv_arg{index}", dataMsgType, None, None,
+                    #~ """
+                    #~ copy_value(deviceState->{dat_name}, message->value);
+                    #~ deviceState->{base}_received++;
+                    #~ """
+                #~ )
         
-        ## TODO : for all devices in indirect receive set, send completion when all indirects received
+        #~ ## TODO : for all devices in indirect receive set, send completion when all indirects received
                 
         
-        ## Send back the complete message from the home set
-        
-            
-    
-   
-    
+        #~ ## Send back the complete message from the home set
         
         
 
