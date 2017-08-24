@@ -10,6 +10,132 @@ from mini_op2.control_flow import *
 
 from numpy import ndarray as nda
 
+from numpy import sqrt, fabs
+
+
+def save_soln(qold:numpy.ndarray, q:numpy.ndarray):
+    for i in range(4):
+        qold[i]=q[i]
+    
+def adt_calc(
+    gam:nda, gm1:nda, cfl:nda,
+    x1:nda, x2:nda, x3:nda, x4:nda, q:nda, adt:nda
+  ):
+  ri = 1.0 / q[0];
+  u = ri * q[1];
+  v = ri * q[2];
+  c = sqrt(gam[0] * gm1[0] * (ri * q[3] - 0.5 * (u * u + v * v)));
+
+  dx = x2[0] - x1[0];
+  dy = x2[1] - x1[1];
+  adt[0] = fabs(u * dy - v * dx) + c * sqrt(dx * dx + dy * dy);
+
+  dx = x3[0] - x2[0];
+  dy = x3[1] - x2[1];
+  adt[0] += fabs(u * dy - v * dx) + c * sqrt(dx * dx + dy * dy);
+
+  dx = x4[0] - x3[0];
+  dy = x4[1] - x3[1];
+  adt[0] += fabs(u * dy - v * dx) + c * sqrt(dx * dx + dy * dy);
+
+  dx = x1[0] - x4[0];
+  dy = x1[1] - x4[1];
+  adt[0] += fabs(u * dy - v * dx) + c * sqrt(dx * dx + dy * dy);
+
+  adt[0] = adt[0] * (1.0 / cfl[0])
+  
+def res_calc(
+    gm1:nda, eps:nda,
+    x1:nda, x2:nda,
+    q1:nda, q2:nda,
+    adt1:nda, adt2:nda,
+    res1:nda, res2:nda
+    ):
+        # double dx,dy,mu, ri, p1,vol1, p2,vol2, f;
+
+        dx = x1[0] - x2[0]
+        dy = x1[1] - x2[1]
+        ri   = 1.0/q1[0]
+        p1   = gm1[0]*(q1[3]-0.5*ri*(q1[1]*q1[1]+q1[2]*q1[2]))
+        vol1 =  ri*(q1[1]*dy - q1[2]*dx)
+        ri   = 1.0/q2[0]
+        p2   = gm1[0]*(q2[3]-0.5*ri*(q2[1]*q2[1]+q2[2]*q2[2]))
+        vol2 =  ri*(q2[1]*dy - q2[2]*dx)
+        mu = 0.5*((adt1)+(adt2))*eps
+        f = 0.5*(vol1* q1[0]         + vol2* q2[0]        ) + mu*(q1[0]-q2[0])
+        res1[0] += f
+        res2[0] -= f
+        f = 0.5*(vol1* q1[1] + p1*dy + vol2* q2[1] + p2*dy) + mu*(q1[1]-q2[1])
+        res1[1] += f
+        res2[1] -= f
+        f = 0.5*(vol1* q1[2] - p1*dx + vol2* q2[2] - p2*dx) + mu*(q1[2]-q2[2])
+        res1[2] += f
+        res2[2] -= f
+        f = 0.5*(vol1*(q1[3]+p1)     + vol2*(q2[3]+p2)    ) + mu*(q1[3]-q2[3])
+        res1[3] += f
+        res2[3] -= f
+
+def bres_calc(
+    eps:nda, qinf:nda, gm1:nda,
+    bound:nda,
+    x1:nda,
+    x2:nda,
+    q1:nda,
+    adt1:nda,
+    res1:nda
+):
+    dx = x1[0] - x2[0]
+    dy = x1[1] - x2[1]
+    ri = 1.0/q1[0]
+    p1 = gm1[0]*(q1[3]-0.5*ri*(q1[1]*q1[1]+q1[2]*q1[2]))
+    if (bound==1):
+        res1[1] += + p1*dy
+        res1[2] += - p1*dx
+    else:
+        vol1 =  ri*(q1[1]*dy - q1[2]*dx)
+        ri   = 1.0/qinf[0]
+        p2   = gm1*(qinf[3]-0.5*ri*(qinf[1]*qinf[1]+qinf[2]*qinf[2]))
+        vol2 =  ri*(qinf[1]*dy - qinf[2]*dx)
+        mu = (adt1)*eps[0]
+        f = 0.5*(vol1* q1[0]         + vol2* qinf[0]        ) + mu*(q1[0]-qinf[0])
+        res1[0] += f
+        f = 0.5*(vol1* q1[1] + p1*dy + vol2* qinf[1] + p2*dy) + mu*(q1[1]-qinf[1])
+        res1[1] += f
+        f = 0.5*(vol1* q1[2] - p1*dx + vol2* qinf[2] - p2*dx) + mu*(q1[2]-qinf[2])
+        res1[2] += f
+        f = 0.5*(vol1*(q1[3]+p1)     + vol2*(qinf[3]+p2)    ) + mu*(q1[3]-qinf[3])
+        res1[3] += f
+
+def update(
+    qold:nda,
+    q:nda,
+    res:nda,
+    adt:nda,
+    rms:nda
+):
+    adti = 1.0/(adt)
+    for n in range(4):
+        ddel    = adti*res[n]
+        q[n]   = qold[n] - ddel
+        res[n] = 0.0
+        rms  += ddel*ddel
+
+def reset_rms_to_zero(
+    rms:nda
+):
+    rms[0]=0
+
+def print_rms(
+    len_cells:nda,
+    iter:nda,
+    rms:nda
+):
+    print(" {:d}  {:10.5e} ".format(iter[0]+1, numpy.sqrt(rms[0] / len_cells[0] )))
+    if (iter%100)==0:
+        print(" {:d}  {:10.5e} ".format(iter[0]+1, numpy.sqrt(rms[0] / len_cells[0] )))
+
+
+
 def build_system(srcFile:str="../airfoil/new_grid.h5") -> (SystemInstance,Statement):
 
     WRITE=AccessMode.WRITE
@@ -50,125 +176,7 @@ def build_system(srcFile:str="../airfoil/new_grid.h5") -> (SystemInstance,Statem
 
     inst=load_hdf5_instance(sys,srcFile)
 
-    def save_soln(qold:numpy.ndarray, q:numpy.ndarray):
-        qold[:]=q[:]
-        
-    def adt_calc(
-        gam:nda, gm1:nda, cfl:nda,
-        x1:nda, x2:nda, x3:nda, x4:nda, q:nda, adt:nda
-      ):
-      ri = 1.0 / q[0];
-      u = ri * q[1];
-      v = ri * q[2];
-      c = numpy.sqrt(gam * gm1 * (ri * q[3] - 0.5 * (u * u + v * v)));
-
-      dx = x2[0] - x1[0];
-      dy = x2[1] - x1[1];
-      adt[:] = numpy.fabs(u * dy - v * dx) + c * numpy.sqrt(dx * dx + dy * dy);
-
-      dx = x3[0] - x2[0];
-      dy = x3[1] - x2[1];
-      adt[:] += numpy.fabs(u * dy - v * dx) + c * numpy.sqrt(dx * dx + dy * dy);
-
-      dx = x4[0] - x3[0];
-      dy = x4[1] - x3[1];
-      adt[:] += numpy.fabs(u * dy - v * dx) + c * numpy.sqrt(dx * dx + dy * dy);
-
-      dx = x1[0] - x4[0];
-      dy = x1[1] - x4[1];
-      adt[:] += numpy.fabs(u * dy - v * dx) + c * numpy.sqrt(dx * dx + dy * dy);
-
-      adt[:] = adt[:] * (1.0 / cfl)
-      
-    def res_calc(
-        gm1:nda, eps:nda,
-        x1:nda, x2:nda,
-        q1:nda, q2:nda,
-        adt1:nda, adt2:nda,
-        res1:nda, res2:nda
-        ):
-            # double dx,dy,mu, ri, p1,vol1, p2,vol2, f;
-
-            dx = x1[0] - x2[0]
-            dy = x1[1] - x2[1]
-            ri   = 1.0/q1[0]
-            p1   = gm1*(q1[3]-0.5*ri*(q1[1]*q1[1]+q1[2]*q1[2]))
-            vol1 =  ri*(q1[1]*dy - q1[2]*dx)
-            ri   = 1.0/q2[0]
-            p2   = gm1*(q2[3]-0.5*ri*(q2[1]*q2[1]+q2[2]*q2[2]))
-            vol2 =  ri*(q2[1]*dy - q2[2]*dx)
-            mu = 0.5*((adt1)+(adt2))*eps
-            f = 0.5*(vol1* q1[0]         + vol2* q2[0]        ) + mu*(q1[0]-q2[0])
-            res1[0] += f
-            res2[0] -= f
-            f = 0.5*(vol1* q1[1] + p1*dy + vol2* q2[1] + p2*dy) + mu*(q1[1]-q2[1])
-            res1[1] += f
-            res2[1] -= f
-            f = 0.5*(vol1* q1[2] - p1*dx + vol2* q2[2] - p2*dx) + mu*(q1[2]-q2[2])
-            res1[2] += f
-            res2[2] -= f
-            f = 0.5*(vol1*(q1[3]+p1)     + vol2*(q2[3]+p2)    ) + mu*(q1[3]-q2[3])
-            res1[3] += f
-            res2[3] -= f
-
-    def bres_calc(
-        eps:nda, qinf:nda, gm1:nda,
-        bound:nda,
-        x1:nda,
-        x2:nda,
-        q1:nda,
-        adt1:nda,
-        res1:nda
-    ):
-        dx = x1[0] - x2[0]
-        dy = x1[1] - x2[1]
-        ri = 1.0/q1[0]
-        p1 = gm1*(q1[3]-0.5*ri*(q1[1]*q1[1]+q1[2]*q1[2]))
-        if (bound==1):
-            res1[1] += + p1*dy
-            res1[2] += - p1*dx
-        else:
-            vol1 =  ri*(q1[1]*dy - q1[2]*dx)
-            ri   = 1.0/qinf[0]
-            p2   = gm1*(qinf[3]-0.5*ri*(qinf[1]*qinf[1]+qinf[2]*qinf[2]))
-            vol2 =  ri*(qinf[1]*dy - qinf[2]*dx)
-            mu = (adt1)*eps
-            f = 0.5*(vol1* q1[0]         + vol2* qinf[0]        ) + mu*(q1[0]-qinf[0])
-            res1[0] += f
-            f = 0.5*(vol1* q1[1] + p1*dy + vol2* qinf[1] + p2*dy) + mu*(q1[1]-qinf[1])
-            res1[1] += f
-            f = 0.5*(vol1* q1[2] - p1*dx + vol2* qinf[2] - p2*dx) + mu*(q1[2]-qinf[2])
-            res1[2] += f
-            f = 0.5*(vol1*(q1[3]+p1)     + vol2*(qinf[3]+p2)    ) + mu*(q1[3]-qinf[3])
-            res1[3] += f
-
-    def update(
-        qold:nda,
-        q:nda,
-        res:nda,
-        adt:nda,
-        rms:nda
-    ):
-        adti = 1.0/(adt)
-        for n in range(4):
-            ddel    = adti*res[n]
-            q[n]   = qold[n] - ddel
-            res[n] = 0.0
-            rms  += ddel*ddel
-
-    def reset_rms_to_zero(
-        rms:nda
-    ):
-        rms[:]=0
-
-    def print_rms(
-        len_cells:nda,
-        iter:nda,
-        rms:nda
-    ):
-        print(" {:d}  {:10.5e} ".format(iter[0]+1, numpy.sqrt(rms[0] / len_cells[0] )))
-        if (iter%100)==0:
-            print(" {:d}  {:10.5e} ".format(iter[0]+1, numpy.sqrt(rms[0] / len_cells[0] )))
+    
         
 
     print_iter=0
