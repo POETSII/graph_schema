@@ -300,21 +300,29 @@ def emit_device_global_constants(dt,subs,indent):
 {indent}const unsigned OUTPUT_FLAG_{deviceTypeId}_{currPinName}=1ul<<{currPinIndex};
 {indent}const unsigned RTS_INDEX_{deviceTypeId}_{currPinName}={currPinIndex};
 {indent}const unsigned RTS_FLAG_{deviceTypeId}_{currPinName}=1ul<<{currPinIndex};
-{indent}const unsigned OUTPUT_INDEX_{currPinName}={currPinIndex};
-{indent}const unsigned OUTPUT_FLAG_{currPinName}=1ul<<{currPinIndex};
-{indent}const unsigned RTS_INDEX_{currPinName}={currPinIndex};
-{indent}const unsigned RTS_FLAG_{currPinName}=1ul<<{currPinIndex};
 """.format(currPinName=ip.name,currPinIndex=currPinIndex,**subs)
         currPinIndex+=1
 
     return res
 
 def emit_device_local_constants(dt,subs,indent=""):
-    return """
+    res="""
 {indent}typedef {graphPropertiesStructName} GRAPH_PROPERTIES_T;
 {indent}typedef {devicePropertiesStructName} DEVICE_PROPERTIES_T;
 {indent}typedef {deviceStateStructName} DEVICE_STATE_T;
 """.format(**subs)
+
+    currPinIndex=0
+    for ip in dt.outputs_by_index:
+        res=res+"""
+{indent}const unsigned OUTPUT_INDEX_{currPinName}={currPinIndex};
+{indent}const unsigned OUTPUT_FLAG_{currPinName}=1ul<<{currPinIndex};
+{indent}const unsigned RTS_INDEX_{currPinName}={currPinIndex};
+{indent}const unsigned RTS_FLAG_{currPinName}=1ul<<{currPinIndex};
+""".format(currPinName=ip.name,currPinIndex=currPinIndex,**subs)
+        currPinIndex+=1
+        
+    return res
 
 def emit_input_pin_local_constants(dt,subs,indent=""):
     return """
@@ -356,8 +364,6 @@ def render_input_pin_as_cpp(ip,dst):
         "indent"                        : "  "
     }
 
-    subs["deviceGlobalConstants"]=emit_device_global_constants(dt,subs,"    ")
-    subs["deviceLocalConstants"]=emit_device_local_constants(dt,subs, "    ")
     subs["pinLocalConstants"]=emit_input_pin_local_constants(dt,subs, "    ")
 
 
@@ -396,8 +402,6 @@ public:
         const typed_data_t *gMessage
     ) const override {{
 
-    {deviceGlobalConstants}
-    {deviceLocalConstants}
     {pinLocalConstants}
 
     auto graphProperties=cast_typed_properties<{graphPropertiesStructName}>(gGraphProperties);
@@ -461,8 +465,6 @@ def render_output_pin_as_cpp(op,dst):
         "indent"                        : "  "
     }
 
-    subs["deviceGlobalConstants"]=emit_device_global_constants(dt,subs,"    ")
-    subs["deviceLocalConstants"]=emit_device_local_constants(dt,subs, "    ")
     subs["pinLocalConstants"]=emit_output_pin_local_constants(dt,subs, "    ")
 
 
@@ -486,8 +488,6 @@ def render_output_pin_as_cpp(op,dst):
 		      typed_data_t *gMessage,
 		      bool *doSend
 		      ) const override {""")
-    dst.write('    {deviceGlobalConstants}\n'.format(**subs));
-    dst.write('    {deviceLocalConstants}\n'.format(**subs));
     dst.write('    {pinLocalConstants}\n'.format(**subs));
 
     dst.write('    auto graphProperties=cast_typed_properties<{}_properties_t>(gGraphProperties);\n'.format( graph.id ))
@@ -543,7 +543,29 @@ def render_device_type_as_cpp_fwd(dt,dst, asHeader):
         render_typed_data_as_spec(ip.state, "{}_{}_state_t".format(dt.id,ip.name), "pp:State", dst)
 
 def render_device_type_as_cpp(dt,dst):
+    subs={
+        "indent"                        : "    ",
+        "graphPropertiesStructName"     : "{}_properties_t".format(dt.parent.id),
+        "deviceTypeId"                  : dt.id,
+        "devicePropertiesStructName"    : "{}_properties_t".format(dt.id),
+        "deviceStateStructName"         : "{}_state_t".format(dt.id),
+        "handlerCode"                   : dt.ready_to_send_handler,
+        "inputCount"                    : len(dt.inputs),
+        "outputCount"                   : len(dt.outputs)
+    }
+    if dt.ready_to_send_source_line and dt.ready_to_send_source_file:
+        subs["preProcLinePragma"]= '#line {} "{}"\n'.format(dt.ready_to_send_source_line-1,dt.ready_to_send_source_file)
+    else:
+        subst["preProcLinePragma"]="// No line/file information for handler"
+
+    subs["deviceGlobalConstants"]=emit_device_global_constants(dt,subs,"    ")
+    subs["deviceLocalConstants"]=emit_device_local_constants(dt,subs, "    ")
+    
+    
     dst.write("namespace ns_{}{{\n".format(dt.id));
+    
+    dst.write(subs["deviceGlobalConstants"])
+    dst.write(subs["deviceLocalConstants"])
 
     if dt.shared_code:
         for i in dt.shared_code:
@@ -581,24 +603,6 @@ def render_device_type_as_cpp(dt,dst):
     dst.write('}))\n')
     dst.write("  {}\n")
 
-    subs={
-        "indent"                        : "    ",
-        "graphPropertiesStructName"     : "{}_properties_t".format(dt.parent.id),
-        "deviceTypeId"                  : dt.id,
-        "devicePropertiesStructName"    : "{}_properties_t".format(dt.id),
-        "deviceStateStructName"         : "{}_state_t".format(dt.id),
-        "handlerCode"                   : dt.ready_to_send_handler,
-        "inputCount"                    : len(dt.inputs),
-        "outputCount"                   : len(dt.outputs)
-    }
-    if dt.ready_to_send_source_line and dt.ready_to_send_source_file:
-        subs["preProcLinePragma"]= '#line {} "{}"\n'.format(dt.ready_to_send_source_line-1,dt.ready_to_send_source_file)
-    else:
-        subst["preProcLinePragma"]="// No line/file information for handler"
-
-    subs["deviceGlobalConstants"]=emit_device_global_constants(dt,subs,"    ")
-    subs["deviceLocalConstants"]=emit_device_local_constants(dt,subs, "    ")
-
     dst.write(
 """
   virtual uint32_t calcReadyToSend(
@@ -612,9 +616,6 @@ def render_device_type_as_cpp(dt,dst):
     auto deviceState=cast_typed_properties<{deviceStateStructName}>(gDeviceState);
     HandlerLogImpl handler_log(orchestrator);
     // Note: no handler_exit or handler_export_key_value in rts, as it should be side effect free
-
-    {deviceGlobalConstants}
-    {deviceLocalConstants}
 
     uint32_t fReadyToSend=0;
     uint32_t *readyToSend=&fReadyToSend;
