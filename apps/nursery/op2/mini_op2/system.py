@@ -123,7 +123,7 @@ class SystemInstance(object):
             if not (aval < to_size).all():
                 raise RuntimeError("Mapping points out of bounds in to_set.")
             self.maps[m]=aval
-        
+            
 
 def load_hdf5_instance(spec:SystemSpecification, src:str) -> SystemInstance:
     with h5py.File(src) as f:

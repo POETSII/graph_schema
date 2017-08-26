@@ -360,7 +360,8 @@ def create_rts(ctxt:InvocationContext, builder:GraphTypeBuilder):
             """
             builder.add_rts_clause("set_{set}", rts)
 
-def create_kernel_function(spec:SystemSpecification, builder:GraphTypeBuilder):
+
+def create_kernel_function(ctxt:InvocationContext, builder:GraphTypeBuilder):
     import importlib
     
     func=spec.stat.kernel
@@ -370,6 +371,53 @@ def create_kernel_function(spec:SystemSpecification, builder:GraphTypeBuilder):
     code=mini_op2.kernel_translator.kernel_to_c(module, name)
     
     builder.add_device_shared_code_raw("set_{}".format(spec.stat.iter_set.id), code)
+
+def create_tester(order:Sequence[ParFor], ctxt:InvocationContext, builder:GraphTypeBuilder):
+    index=order.index(ctxt.stat)
+    
+    handler="""
+        assert(deviceState->end_received==0);
+        assert(deviceState->test_state==2*{index});
+        deviceState->test_state++; // Odd value means we are waiting for the return
+        deviceState->end_received=0;
+        """
+    for (ai,arg) in ctxt.mutable_global_reads:
+        handler+=builder.s("""
+        copy_value(message->global_{name}, graphProperties->test_{invocation}_{name}_in);
+        """,name=arg.global_.id)
+    
+    builder.add_output_port("global", "{invocation}_begin", handler)
+    
+    handler="""
+        assert(deviceState->test_state==2*{index}+1);
+        assert(deviceState->end_received < graphProperties->{invocation}_total_relevant_devices);
+        deviceState->end_received++;
+    """
+    # Collect any inc's to global values
+    for (ai,arg) in ctxt.global_writes:
+        assert arg.access_mode==AccessMode.INC
+        handler+="""
+        inc_value(deviceState->global_{name}, message->value);
+        """
+    # Check whether we have finished
+    handler+="""
+        if(deviceState->end_received == graphProperties->{invocation}_total_relevant_devices){{
+    """
+    # ... and if so, try to check the results are "right"
+    for (ai,arg) in ctxt.global_writes:
+        handler+=builder.s("""
+            check_value(deviceState->global_{name}, graphProperties->test_{invocation}_{name}_out);
+        """,name=arg.global_.id)
+        
+    handler+="""
+            if( {is_last} ){{
+                handler_exit(0);
+            }else{{
+                deviceState->test_state++; // start the next invocation
+            }}
+        }}
+    """
+    builder.add_input_port("set_{set}", 
 
 
 def compile_invocation(spec:SystemSpecification, builder:GraphTypeBuilder, stat:ParFor):
@@ -393,7 +441,29 @@ def compile_invocation(spec:SystemSpecification, builder:GraphTypeBuilder, stat:
         create_invocation_end(ctxt,builder)
         create_rts(ctxt,builder)
         
-        
+        create_global(ctxt,builder)
+
+
+"""
+
+/* The state machine is a single function, which takes as input
+   a pointer to a state number, and returns the parallel_for loop
+   to execute.
+
+int state_machine(
+    int current
+);
+
+int state=0;
+while(1){
+    int invocation=state_machine();
+    begin_invocation(invocation);
+    wait end_invocation(invocation);
+}
+
+
+"""
+
 
 def sync_compiler(spec:SystemSpecification, code:Statement):
     builder=GraphTypeBuilder("op2_inst")
@@ -420,6 +490,16 @@ def sync_compiler(spec:SystemSpecification, code:Statement):
     void zero_value(T (&x)[N]){
         for(unsigned i=0; i<N; i++){
             x[i]=0;
+        }
+    }
+    
+    /* Mainly for debug. Used to roughly check that a calculated value is correct, based
+        on "known-good" pre-calculated values. Leaves a lot to be desired... */
+    template<class T,unsigned N>
+    void check_value(T (&got)[N], T (&ref)[N] ){
+        for(unsigned i=0; i<N; i++){
+            auto diff=std::abs( got[i] - ref[i] );
+            assert( diff < 1e-6 ); // Bleh...
         }
     }
     """)

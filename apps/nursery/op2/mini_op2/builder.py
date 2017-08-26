@@ -42,6 +42,10 @@ def import_data_type(name:str,ot:DataType) -> TypedDataSpec:
 def import_data_type_tuple(name:str, members:Sequence[DataType]):
     return TupleTypedDataSpec(name, members)
 
+class raw(object):
+    def __init__(value):
+        self.value=value
+
 
 class DeviceTypeBuilder(object):
     def __init__(self, id:str):
@@ -128,12 +132,15 @@ class GraphTypeBuilder:
             else:
                 del self._subst[k]
             
-    def s(self, x:str, **kwargs) -> str:
-        if len(kwargs)>0:
-            with self.subst(**kwargs):
-                return self.s(x)
+    def s(self, x:Union[str,raw], **kwargs) -> str:
+        if isinstance(x,raw):
+            return raw.str
         else:
-            return x.format(**self._subst)
+            if len(kwargs)>0:
+                with self.subst(**kwargs):
+                    return self.s(x)
+            else:
+                return x.format(**self._subst)
     
     def __init__(self, id:str) -> None:
         self.id=id

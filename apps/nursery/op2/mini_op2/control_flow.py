@@ -18,6 +18,13 @@ class Statement(ABC):
         raise NotImplementedError()
         
 class CompositeStatement(Statement):
+    def _eval_statements(self, instance:SystemInstance, stats:Sequence[Statement]):
+        for s in stats:
+            if isinstance(s,str):
+                instance.eval_stat(s)
+            else:
+                s.execute(instance)
+    
     def __init__(self):
         pass
         
@@ -38,8 +45,7 @@ class Seq(CompositeStatement):
         yield from self.statements
         
     def execute(self, instance:SystemInstance) -> None:
-        for s in self.statements:
-            s.execute(instance)
+        self._eval_statements(self.statements)
     
         
 class Par(CompositeStatement):
@@ -51,8 +57,7 @@ class Par(CompositeStatement):
     
         
     def execute(self, instance:SystemInstance) -> None:
-        for s in self.statements:
-            s.execute(instance)
+        self._eval_statements(instance, self.statements)
         
 class RepeatForCount(CompositeStatement):
     def __init__(self, count:int, variable:MutableGlobal, *statements:Statement) -> None:
@@ -67,9 +72,20 @@ class RepeatForCount(CompositeStatement):
     def execute(self, instance:SystemInstance) -> None:
         for i in range(self.count):
             instance.globals[self.variable][0]=i # Update global
-            for s in self.statements:
-                s.execute(instance)
+            self._eval_statements(instance, self.statements)
                 
+                
+class While(CompositeStatement):
+    def __init__(self, expression:str, *statements:Statement) -> None:
+        self.expression=expression
+        self.statements=list(statements)
+    
+    def children(self) -> Iterator[Statement]:
+        yield from self.statements
+    
+    def execute(self, instance:SystemInstance) -> None:
+        while instance.eval_expr(self.expression):
+            self._eval_statements(instance, self.statements)
 
 class Execute(Statement):
     def __init__(self):
@@ -88,8 +104,13 @@ class Execute(Statement):
         elif isinstance(arg,IndirectDatArgument):
             assert iter_index is not None
             map=instance.maps[arg.map]
-            indirect_index=map[iter_index][arg.index]
-            current=instance.dats[arg.dat][indirect_index]
+            if arg.index>=0:
+                indirect_index=map[iter_index][arg.index]
+                current=instance.dats[arg.dat][indirect_index]
+            else:
+                assert arg.index == -arg.map.arity
+                current=[ instance.dats[arg.dat][i] for i in range(arg.map.arity) ]
+                #print("indirect {} = {}".format(arg.dat.id,current))
         elif isinstance(arg,LengthArgument):
             current=numpy.array( [instance.sets[arg.set]], dtype=numpy.uint32 )
         else:
@@ -103,13 +124,23 @@ class Execute(Statement):
         """For a given argument and value, prepare the input to the kernel.
         """
         if arg.access_mode==AccessMode.INC:
-            return arg.data_type.create_default_value() # Create zeros
+            if isinstance(arg,IndirectDatArgument) and arg.index < 0:
+                return [arg.data_type.create_default_value() for x in current]
+            else:
+                return arg.data_type.create_default_value() # Create zeros
         elif arg.access_mode==AccessMode.WRITE:
             # Scramble current value
-            numpy.copyto(current, arg.data_type.create_random_value()) # type:ignore
+            if isinstance(arg,IndirectDatArgument) and arg.index < 0:
+                for i in range(-arg.index):
+                    numpy.copyto(current[i], arg.data_type.create_random_value()) # type:ignore
+            else:
+                numpy.copyto(current, arg.data_type.create_random_value()) # type:ignore
             return current
         elif arg.access_mode==AccessMode.READ or arg.access_mode==AccessMode.LENGTH:
-            return current.copy()
+            if isinstance(arg,IndirectDatArgument) and  arg.index < 0:
+                return [current[i].copy() for i in range(len(current))]
+            else:
+                return current.copy()
         elif arg.access_mode==AccessMode.RW:
             return current
         else:
@@ -127,11 +158,19 @@ class Execute(Statement):
     def _arg_post(self, instance:SystemInstance, arg:Argument, current:numpy.ndarray, new:numpy.ndarray) -> None:
         """For a given argument and previous value, apply the result from the kernel."""
         if arg.access_mode==AccessMode.INC:
-            arg.data_type.inc_value(current, new)
+            if isinstance(arg,IndirectDatArgument) and arg.index < 0:
+                for i in range(len(current)):
+                    arg.data_type.inc_value(current[i], new[i])
+            else:
+                arg.data_type.inc_value(current, new)
         elif arg.access_mode==AccessMode.WRITE:
             pass # Should have been modified in place, otherwise left random
         elif arg.access_mode==AccessMode.READ or arg.access_mode==AccessMode.LENGTH:
-            assert (current==new).all()
+            if isinstance(arg,IndirectDatArgument) and arg.index < 0:
+                for i in range(len(current)):
+                    assert (current[i]==new[i]).all()
+            else:
+                assert (current==new).all()
         elif arg.access_mode==AccessMode.RW:
             pass # Will have modified in place if it wanted to
         else:

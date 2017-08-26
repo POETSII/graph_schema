@@ -178,7 +178,7 @@ class DirectDatArgument(DatArgument):
 class IndirectDatArgument(DatArgument):
     def __init__(self, access_mode:AccessMode, dat:Dat, map:Map, index:int=0) -> None :        
         assert dat.set==map.to_set
-        assert 0 <= index < map.arity
+        assert (0 <= index < map.arity) or (index == -map.arity)
         super().__init__(access_mode, dat, map.iter_set)
         self.map=map
         self.to_set=map.to_set # == dat.set
