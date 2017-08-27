@@ -25,13 +25,21 @@ class SystemSpecification(object):
 
     def add_set(self, set:Set):
         assert set.id not in self._ids
+        sizeof="sizeof_"+set.id
+        assert sizeof not in self._ids
         self._ids.add(set.id)
         self.sets[set.id]=set
+        self.create_const_global(sizeof, DataType(shape=(1,),dtype=numpy.uint32))
     
     def create_set(self, *args, **kwargs) -> Set:
         g=Set(*args,**kwargs)
         self.add_set(g)
         return g
+        
+    def get_sizeof_set(self, set:Set) -> ConstGlobal :
+        assert set.id in self.sets
+        assert self.sets[set.id] is set
+        return self.globals["sizeof_"+set.id]
         
     def add_dat(self, dat:Dat):
         assert dat.set.id in self.sets
@@ -75,7 +83,10 @@ class SystemInstance(object):
         self.maps={}    # type:Dict[Map,numpy.ndarray]
         
         for g in spec.globals.values():
-            if g.id in src:
+            if g.id.startswith("sizeof_"):
+                logging.debug("Skipping implied constant %s", g.id)
+                continue
+            elif g.id in src:
                 logging.info("Loading global %s", g.id)
                 value=g.data_type.import_value(src[g.id])
             else:
@@ -97,6 +108,9 @@ class SystemInstance(object):
             assert ival>=0
             logging.info("Loaded set size of %s = %d", s.id, ival)
             self.sets[s]=ival
+            logging.info("Adding implicit sizeof 'sizeof_%s' = %u", s.id, ival)
+            sg=spec.globals["sizeof_{}".format(s.id)]
+            self.globals[sg]=sg.data_type.import_value(numpy.array( [ival] ))
         
         for d in spec.dats.values():
             set_size=self.sets[d.set]

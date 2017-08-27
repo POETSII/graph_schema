@@ -14,7 +14,6 @@ class AccessMode(enum.IntEnum):
     WRITE = 2
     RW = 3
     INC = 4
-    LENGTH = 5
 
 class DataType(object):
     def __init__(self, dtype:Union[str,numpy.dtype]='double', shape:Tuple[int,...]=(1,)) -> None:
@@ -187,7 +186,3 @@ class IndirectDatArgument(DatArgument):
     def __repr__(self) -> str:
         return "{}({}[{}][{}])".format(self.access_mode.name, self.to_set.id, self.map.id, self.index)
 
-class LengthArgument(Argument):
-    def __init__(self, set:Set) -> None:
-        super().__init__(AccessMode.LENGTH, DataType(shape=(),dtype=numpy.uint32))
-        self.set=set

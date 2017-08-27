@@ -131,13 +131,13 @@ def reset_rms_to_zero(
     rms[0]=0
 
 def print_rms(
-    len_cells:seq_double,
+    sizeof_cells:seq_double,
     iter:seq_double,
     rms:seq_double
 ):
-    print(" {:d}  {:10.5e} ".format(iter[0]+1, numpy.sqrt(rms[0] / len_cells[0] )))
+    print(" {:d}  {:10.5e} ".format(iter[0]+1, numpy.sqrt(rms[0] / sizeof_cells[0] )))
     if (iter%100)==0:
-        print(" {:d}  {:10.5e} ".format(iter[0]+1, numpy.sqrt(rms[0] / len_cells[0] )))
+        print(" {:d}  {:10.5e} ".format(iter[0]+1, numpy.sqrt(rms[0] / sizeof_cells[0] )))
 
 
 
@@ -147,8 +147,7 @@ def build_system(srcFile:str="../airfoil/new_grid.h5") -> (SystemInstance,Statem
     READ=AccessMode.READ
     INC=AccessMode.INC
     RW=AccessMode.RW
-    LENGTH=AccessMode.LENGTH
-
+    
     sys=SystemSpecification()
 
     gam=sys.create_const_global("gam", DataType(shape=(1,)))
@@ -165,6 +164,8 @@ def build_system(srcFile:str="../airfoil/new_grid.h5") -> (SystemInstance,Statem
     edges=sys.create_set("edges")
     bedges=sys.create_set("bedges")
     nodes=sys.create_set("nodes")
+    
+    sizeof_cells=sys.get_sizeof_set(cells)
 
     p_x=sys.create_dat(nodes, "p_x", DataType(shape=(2,)))
     p_q=sys.create_dat(cells, "p_q", DataType(shape=(4,)))
@@ -275,7 +276,7 @@ def build_system(srcFile:str="../airfoil/new_grid.h5") -> (SystemInstance,Statem
         ),
         UserCode(
             print_rms,
-            cells(LENGTH),
+            sizeof_cells(READ),
             iter(READ),
             rms(READ)
         )

@@ -111,8 +111,6 @@ class Execute(Statement):
                 assert arg.index == -arg.map.arity
                 current=[ instance.dats[arg.dat][i] for i in range(arg.map.arity) ]
                 #print("indirect {} = {}".format(arg.dat.id,current))
-        elif isinstance(arg,LengthArgument):
-            current=numpy.array( [instance.sets[arg.set]], dtype=numpy.uint32 )
         else:
             raise RuntimeError("Unknown arg type.")
         return current
@@ -136,7 +134,7 @@ class Execute(Statement):
             else:
                 numpy.copyto(current, arg.data_type.create_random_value()) # type:ignore
             return current
-        elif arg.access_mode==AccessMode.READ or arg.access_mode==AccessMode.LENGTH:
+        elif arg.access_mode==AccessMode.READ:
             if isinstance(arg,IndirectDatArgument) and  arg.index < 0:
                 return [current[i].copy() for i in range(len(current))]
             else:
@@ -165,7 +163,7 @@ class Execute(Statement):
                 arg.data_type.inc_value(current, new)
         elif arg.access_mode==AccessMode.WRITE:
             pass # Should have been modified in place, otherwise left random
-        elif arg.access_mode==AccessMode.READ or arg.access_mode==AccessMode.LENGTH:
+        elif arg.access_mode==AccessMode.READ:
             if isinstance(arg,IndirectDatArgument) and arg.index < 0:
                 for i in range(len(current)):
                     assert (current[i]==new[i]).all()
@@ -214,7 +212,7 @@ class UserCode(Execute):
         *arguments:Argument
     ) -> None :
         for (i,a) in enumerate(arguments):
-            assert isinstance(a,GlobalArgument) or isinstance(a,LengthArgument)
+            assert isinstance(a,GlobalArgument)
         self.code=code
         self.arguments=list(arguments)
         

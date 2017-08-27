@@ -289,11 +289,11 @@ def build_system(srcFile:str="./meshes/FE_mesh.hdf5") -> (SystemInstance,Stateme
             p_resm(WRITE,pbedge,0)
         ),
         """
-        c1=0
-        c2=0
-        c3=0
-        alpha=0
-        beta=0
+        c1[0]=0
+        c2[0]=0
+        c3[0]=0
+        alpha[0]=0
+        beta[0]=0
         """,
         ParFor(
             init_cg,
@@ -305,12 +305,12 @@ def build_system(srcFile:str="./meshes/FE_mesh.hdf5") -> (SystemInstance,Stateme
             p_P(WRITE)
         ),
         """
-        res0=sqrt(c1)
-        res=res0
-        inner_iter=0
-        maxiter=0
+        res0[0]=sqrt(c1[0])
+        res[0]=res0[0]
+        inner_iter[0]=0
+        maxiter[0]=0
         """,
-        While( """ (res>0.1*res0) && inner_iter < maxiter """,
+        While( """ (res[0]>0.1*res0[0]) && inner_iter[0] < maxiter[0] """,
             ParFor(
                 spMV,
                 cells,
@@ -324,7 +324,7 @@ def build_system(srcFile:str="./meshes/FE_mesh.hdf5") -> (SystemInstance,Stateme
                 p_V(WRITE, pbedge,0)
             ),
             """
-            c2=0
+            c2[0]=0
             """,
             ParFor(
                 dotPV,
@@ -334,7 +334,7 @@ def build_system(srcFile:str="./meshes/FE_mesh.hdf5") -> (SystemInstance,Stateme
                 c2(INC)
             ),
             """
-            alpha=c1/c2
+            alpha[0]=c1[0]/c2[0]
             """,
             ParFor(
                 dotR,
@@ -343,7 +343,7 @@ def build_system(srcFile:str="./meshes/FE_mesh.hdf5") -> (SystemInstance,Stateme
                 c3(INC)
             ),
             """
-            beta=c3/c1
+            beta[0]=c3[0]/c1[0]
             """,
             ParFor(
                 updateP,
@@ -353,13 +353,13 @@ def build_system(srcFile:str="./meshes/FE_mesh.hdf5") -> (SystemInstance,Stateme
                 beta(READ)
             ),
             """
-            c1 = c3
-            res = sqrt(c1)
-            inner_iter+=1
+            c1[0] = c3[0]
+            res[0] = sqrt(c1[0])
+            inner_iter[0]+=1
             """
         ),
         """
-        rms=0
+        rms[0]=0
         """,
         ParFor(
             update,
@@ -370,7 +370,7 @@ def build_system(srcFile:str="./meshes/FE_mesh.hdf5") -> (SystemInstance,Stateme
             rms(INC)
         ),
         """
-        print("rms = %10.5e iter: %d\n" %(sqrt(rms)/sqrt(len(nodes)), iter)
+        print("rms = %10.5e iter: %d\n" %(sqrt(rms[0])/sqrt(nnodes[0]), iter[0])
         """
     )
     return (sys,inst,code)
