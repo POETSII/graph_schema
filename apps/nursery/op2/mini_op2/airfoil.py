@@ -125,21 +125,6 @@ def update(
         res[n] = 0.0
         rms[0]  += ddel*ddel
 
-def reset_rms_to_zero(
-    rms:seq_double
-):
-    rms[0]=0
-
-def print_rms(
-    sizeof_cells:seq_double,
-    iter:seq_double,
-    rms:seq_double
-):
-    print(" {:d}  {:10.5e} ".format(iter[0]+1, numpy.sqrt(rms[0] / sizeof_cells[0] )))
-    if (iter%100)==0:
-        print(" {:d}  {:10.5e} ".format(iter[0]+1, numpy.sqrt(rms[0] / sizeof_cells[0] )))
-
-
 
 def build_system(srcFile:str="../airfoil/new_grid.h5") -> (SystemInstance,Statement):
 
@@ -257,10 +242,13 @@ def build_system(srcFile:str="../airfoil/new_grid.h5") -> (SystemInstance,Statem
             #Debug(
             #    debug_pre_update
             #),
-            UserCode(
-                reset_rms_to_zero,
-                rms(RW)
-            ),
+            #UserCode(
+            #    reset_rms_to_zero,
+            #    rms(RW)
+            #),
+            """
+            rms[0]=0
+            """,
             ParFor(
                 update,
                 cells,
@@ -274,12 +262,11 @@ def build_system(srcFile:str="../airfoil/new_grid.h5") -> (SystemInstance,Statem
             #    debug_post_update
             #)
         ),
-        UserCode(
-            print_rms,
-            sizeof_cells(READ),
-            iter(READ),
-            rms(READ)
-        )
+        """
+        print(" %d  %10.5e " % (iter[0]+1, sqrt(rms[0] / sizeof_cells[0] )))
+        if (iter%100)==0:
+            print(" %d  %10.5e " % (iter[0]+1, sqrt(rms[0] / sizeof_cells[0] )))
+        """
     )
     return (sys,inst,code)
 

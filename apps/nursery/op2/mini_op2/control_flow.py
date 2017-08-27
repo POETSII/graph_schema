@@ -2,9 +2,12 @@ from typing import Union, Sequence, List, Tuple, Optional, Dict, Any, Iterator
 from abc import ABC, abstractmethod
 
 import numpy
+import sys
 
 from mini_op2.core import *
 from mini_op2.system import SystemInstance
+
+from mini_op2.user_code_parser import scan_code, VarUses
 
 class Statement(ABC):
     def __init__(self):
@@ -21,7 +24,9 @@ class CompositeStatement(Statement):
     def _eval_statements(self, instance:SystemInstance, stats:Sequence[Statement]):
         for s in stats:
             if isinstance(s,str):
-                instance.eval_stat(s)
+                # TODO : Cache this
+                uses=scan_code(instance.spec, s)
+                uses.execute(instance)
             else:
                 s.execute(instance)
     
@@ -84,7 +89,13 @@ class While(CompositeStatement):
         yield from self.statements
     
     def execute(self, instance:SystemInstance) -> None:
-        while instance.eval_expr(self.expression):
+        # TODO : Cache this
+        uses=scan_code(instance.spec, "return "+self.expression )
+        while True:
+            val=uses.execute(instance)
+            sys.stderr.write("While cond = {}".format(val))
+            if not val:
+                break
             self._eval_statements(instance, self.statements)
 
 class Execute(Statement):

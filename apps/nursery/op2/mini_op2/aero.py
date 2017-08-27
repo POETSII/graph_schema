@@ -195,8 +195,7 @@ def build_system(srcFile:str="./meshes/FE_mesh.hdf5") -> (SystemInstance,Stateme
     READ=AccessMode.READ
     INC=AccessMode.INC
     RW=AccessMode.RW
-    LENGTH=AccessMode.LENGTH
-
+    
     sys=SystemSpecification()
     
     gam=sys.create_const_global("gam", DataType(shape=(1,)))
@@ -223,7 +222,7 @@ def build_system(srcFile:str="./meshes/FE_mesh.hdf5") -> (SystemInstance,Stateme
     beta=sys.create_mutable_global("beta", DataType(shape=(1,)))
     rms=sys.create_mutable_global("rms", DataType(shape=(1,)))    
     
-    niter=sys.create_mutable_global("niter", DataType(dtype=numpy.uint32, shape=(1,)))    
+    iter=sys.create_mutable_global("iter", DataType(dtype=numpy.uint32, shape=(1,)))    
     res0=sys.create_mutable_global("res0")
     res=sys.create_mutable_global("res")
     inner_iter=sys.create_mutable_global("inner_iter", DataType(dtype=numpy.uint32))
@@ -267,9 +266,7 @@ def build_system(srcFile:str="./meshes/FE_mesh.hdf5") -> (SystemInstance,Stateme
             #~ print('<CP dev="c{}" key="post-update-{}">"q": {}</CP>'.format(i,print_iter,vals[i]))
         #~ print_iter+=1
 
-        
-
-    code=RepeatForCount(20,niter,
+    code=RepeatForCount(20,iter,
         ParFor(
             res_calc,
             cells,
@@ -305,12 +302,15 @@ def build_system(srcFile:str="./meshes/FE_mesh.hdf5") -> (SystemInstance,Stateme
             p_P(WRITE)
         ),
         """
+        print("  c1 = %g" % (c1[0]) )
         res0[0]=sqrt(c1[0])
         res[0]=res0[0]
         inner_iter[0]=0
-        maxiter[0]=0
+        maxiter[0]=200
+        print("res=%g, 0.1*res0=%g,  inner_iter=%u, maxiter=%u" % (res[0],0.1*res0[0], inner_iter[0], maxiter[0]) )
         """,
-        While( """ (res[0]>0.1*res0[0]) && inner_iter[0] < maxiter[0] """,
+        While( """ (res[0]>0.1*res0[0]) and inner_iter[0] < maxiter[0] """,
+            """print("  res=%g, 0.1*res0=%g,  inner_iter=%u, maxiter=%u" % (res[0],0.1*res0[0], inner_iter[0], maxiter[0]) )""",
             ParFor(
                 spMV,
                 cells,
@@ -370,7 +370,9 @@ def build_system(srcFile:str="./meshes/FE_mesh.hdf5") -> (SystemInstance,Stateme
             rms(INC)
         ),
         """
-        print("rms = %10.5e iter: %d\n" %(sqrt(rms[0])/sqrt(nnodes[0]), iter[0])
+        rmsV=sqrt(rms[0])/sqrt(sizeof_nodes[0])
+        iterV=iter[0]
+        print("rms = %10.5g iter: %d" % ( rmsV, iterV) )
         """
     )
     return (sys,inst,code)
