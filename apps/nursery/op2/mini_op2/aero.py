@@ -383,6 +383,7 @@ def build_system(srcFile:str="./meshes/FE_mesh.hdf5") -> (SystemInstance,Stateme
         """,
         CheckState(refFile, "/output/iter{iter}")
     )
+    code.on_bind_spec(sys)
     return (sys,inst,code)
 
 if __name__=="__main__":

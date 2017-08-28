@@ -52,6 +52,7 @@ def translate_operator(e:ast.operator) -> str:
 _translate_function_call={
     "sqrt" : "std::sqrt",
     "fabs" : "std::fabs",
+    "pow" : "std::pow"
 }
 
 def translate_function_call_expr(e:ast.expr) -> str:
@@ -92,6 +93,10 @@ def translate_expression(e:ast.expr) -> str:
         assert len(e.keywords)==0
         args=[translate_expression(arg) for arg in e.args]
         return "( {}({}) )".format(func, ",".join(args))
+    elif isinstance(e, ast.List):
+        n=len(e.elts)
+        init=[ translate_expression(ei) for ei in e.elts ]
+        return "std::array<double,{}>{{ {} }}".format(n, " , ".join(init))
     else:
         raise RuntimeError("Unsupported expression {}".format(type(e)))
 
@@ -161,10 +166,12 @@ def translate_function(f:ast.FunctionDef, dst:io.TextIOBase):
             datatype="float"
         elif type.id=="seq_double":
             datatype="double"
+        elif type.id=="seq_seq_double":
+            datatype="double *"
         elif type.id=="seq_int":
             datatype="int"
         else:
-            raise RuntimeError("Can't interpret type")
+            raise RuntimeError("Can't interpret type '{}' on arg in index {} of kernel {}".format(datatype,index,f.name))
         
         dst.write("  {} *{}".format(datatype, arg.arg))
         if index+1 < len(args):
@@ -182,6 +189,7 @@ class TranslatorContext:
     def __init__(self, module:types.ModuleType) -> None:
         self.module=module
         self.source_file=module.__file__
+        logging.debug("using source_file = %s"%(self.source_file))
         with open(self.source_file,"rt") as src:
             self.source_code=src.read()
         self.ast=ast.parse(self.source_code, filename=self.source_file)
@@ -194,7 +202,10 @@ class TranslatorContext:
                 self.functions[n.name]=n
         
 def kernel_to_c(module:types.ModuleType, name:str) -> str:
-    ctxt=TranslatorContext(mini_op2.airfoil)
+    ctxt=TranslatorContext(module)
+    if name not in ctxt.functions:
+        for n in ctxt.functions:
+            sys.stderr.write("{}\n".format(n))
     n=ctxt.functions[name]
     tmp=io.StringIO()
     translate_function(n,tmp)

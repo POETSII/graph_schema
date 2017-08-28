@@ -8,8 +8,8 @@ from contextlib import contextmanager
 from mini_op2.core import *
 from mini_op2.control_flow import Statement, ParFor
 from mini_op2.system import SystemSpecification
-from mini_op2.airfoil import build_system
 from mini_op2.builder import GraphTypeBuilder
+
 
 import mini_op2.kernel_translator
 
@@ -22,7 +22,7 @@ _unq_obj_to_id={} # type:Dict[str,Any]
 def make_unique_id(obj:Any,base:str) -> str:
     name=base
     while name in _unq_id_to_obj:
-        name="{}_{}".format(name,len(_unq_ids))
+        name="{}_{}".format(name,len(_unq_id_to_obj))
     _unq_id_to_obj[name]=obj
     _unq_obj_to_id[obj]=name
     return name
@@ -245,7 +245,7 @@ def create_invocation_begin(ctxt:InvocationContext, builder:GraphTypeBuilder):
                 for (ai,arg) in ctxt.mutable_global_reads:
                     handler+="""
                     copy_value(deviceState->global_{}, message->global_{});"
-                    """.format(arg.global_.id)
+                    """.format(arg.global_.id,arg.global_.id)
             builder.add_input_pin("set_{set}", "{invocation}_begin", "{invocation}_begin", None, None, handler)
 
 def create_invocation_end(ctxt:InvocationContext, builder:GraphTypeBuilder):
@@ -364,60 +364,62 @@ def create_rts(ctxt:InvocationContext, builder:GraphTypeBuilder):
 def create_kernel_function(ctxt:InvocationContext, builder:GraphTypeBuilder):
     import importlib
     
-    func=spec.stat.kernel
+    func=ctxt.stat.kernel
     name=func.__name__
     module=importlib.import_module(func.__module__)
     
     code=mini_op2.kernel_translator.kernel_to_c(module, name)
     
-    builder.add_device_shared_code_raw("set_{}".format(spec.stat.iter_set.id), code)
+    builder.add_device_shared_code_raw("set_{}".format(ctxt.stat.iter_set.id), code)
 
-def create_tester(order:Sequence[ParFor], ctxt:InvocationContext, builder:GraphTypeBuilder):
-    index=order.index(ctxt.stat)
-    
-    handler="""
-        assert(deviceState->end_received==0);
-        assert(deviceState->test_state==2*{index});
-        deviceState->test_state++; // Odd value means we are waiting for the return
-        deviceState->end_received=0;
-        """
-    for (ai,arg) in ctxt.mutable_global_reads:
-        handler+=builder.s("""
-        copy_value(message->global_{name}, graphProperties->test_{invocation}_{name}_in);
-        """,name=arg.global_.id)
-    
-    builder.add_output_port("global", "{invocation}_begin", handler)
-    
-    handler="""
-        assert(deviceState->test_state==2*{index}+1);
-        assert(deviceState->end_received < graphProperties->{invocation}_total_relevant_devices);
-        deviceState->end_received++;
-    """
-    # Collect any inc's to global values
-    for (ai,arg) in ctxt.global_writes:
-        assert arg.access_mode==AccessMode.INC
-        handler+="""
-        inc_value(deviceState->global_{name}, message->value);
-        """
-    # Check whether we have finished
-    handler+="""
-        if(deviceState->end_received == graphProperties->{invocation}_total_relevant_devices){{
-    """
-    # ... and if so, try to check the results are "right"
-    for (ai,arg) in ctxt.global_writes:
-        handler+=builder.s("""
-            check_value(deviceState->global_{name}, graphProperties->test_{invocation}_{name}_out);
-        """,name=arg.global_.id)
+
+if False:
+    def create_tester(order:Sequence[ParFor], ctxt:InvocationContext, builder:GraphTypeBuilder):
+        index=order.index(ctxt.stat)
         
-    handler+="""
-            if( {is_last} ){{
-                handler_exit(0);
-            }else{{
-                deviceState->test_state++; // start the next invocation
+        handler="""
+            assert(deviceState->end_received==0);
+            assert(deviceState->test_state==2*{index});
+            deviceState->test_state++; // Odd value means we are waiting for the return
+            deviceState->end_received=0;
+            """
+        for (ai,arg) in ctxt.mutable_global_reads:
+            handler+=builder.s("""
+            copy_value(message->global_{name}, graphProperties->test_{invocation}_{name}_in);
+            """,name=arg.global_.id)
+        
+        builder.add_output_port("global", "{invocation}_begin", handler)
+        
+        handler="""
+            assert(deviceState->test_state==2*{index}+1);
+            assert(deviceState->end_received < graphProperties->{invocation}_total_relevant_devices);
+            deviceState->end_received++;
+        """
+        # Collect any inc's to global values
+        for (ai,arg) in ctxt.global_writes:
+            assert arg.access_mode==AccessMode.INC
+            handler+="""
+            inc_value(deviceState->global_{name}, message->value);
+            """
+        # Check whether we have finished
+        handler+="""
+            if(deviceState->end_received == graphProperties->{invocation}_total_relevant_devices){{
+        """
+        # ... and if so, try to check the results are "right"
+        for (ai,arg) in ctxt.global_writes:
+            handler+=builder.s("""
+                check_value(deviceState->global_{name}, graphProperties->test_{invocation}_{name}_out);
+            """,name=arg.global_.id)
+            
+        handler+="""
+                if( {is_last} ){{
+                    handler_exit(0);
+                }else{{
+                    deviceState->test_state++; // start the next invocation
+                }}
             }}
-        }}
-    """
-    builder.add_input_port("set_{set}", 
+        """
+        #builder.add_input_port("set_{set}", 
 
 
 def compile_invocation(spec:SystemSpecification, builder:GraphTypeBuilder, stat:ParFor):
@@ -441,7 +443,7 @@ def compile_invocation(spec:SystemSpecification, builder:GraphTypeBuilder, stat:
         create_invocation_end(ctxt,builder)
         create_rts(ctxt,builder)
         
-        create_global(ctxt,builder)
+        #create_global(ctxt,builder)
 
 
 """
@@ -535,7 +537,30 @@ def sync_compiler(spec:SystemSpecification, code:Statement):
 if __name__=="__main__":
     logging.basicConfig(level=4)
     
-    (spec,inst,code)=build_system()
+    import mini_op2.airfoil
+    import mini_op2.aero
+    
+    model="airfoil"
+    if len(sys.argv)>1:
+        model=sys.argv[1]
+    
+    if len(sys.argv)>2:
+        srcFile=sys.argv[2]
+    elif model=="airfoil":
+        srcFile="meshes/airfoil_1.5625%.hdf5"
+    elif model=="aero":
+        srcFile="meshes/aero_1.5625%.hdf5"
+    else:
+        raise RuntimeError("Don't know a default file.")
+    
+    if model=="airfoil":
+        build_system=mini_op2.airfoil.build_system
+    elif model=="aero":
+        build_system=mini_op2.aero.build_system
+    else:
+        raise RuntimeError("Don't know this model.")
+    
+    (spec,inst,code)=build_system(srcFile)
     builder=sync_compiler(spec,code)
     
     builder.build_and_save(sys.stdout)

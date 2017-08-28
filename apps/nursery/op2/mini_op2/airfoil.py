@@ -277,6 +277,7 @@ def build_system(srcFile:str="../airfoil/new_grid.h5") -> (SystemInstance,Statem
             print(" %d  %10.5e " % (iter[0], sqrt(rms[0] / sizeof_cells[0] )))
         """
     )
+    code.on_bind_spec(sys)
     return (sys,inst,code)
 
 if __name__=="__main__":

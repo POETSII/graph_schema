@@ -5,7 +5,7 @@ import numpy
 import sys
 
 from mini_op2.core import *
-from mini_op2.system import SystemInstance
+from mini_op2.system import SystemInstance, SystemSpecification
 
 from mini_op2.user_code_parser import scan_code, VarUses
 
@@ -13,28 +13,53 @@ class Statement(ABC):
     def __init__(self):
         pass
         
+    def on_bind_spec(self, spec:SystemSpecification) -> "Statement":
+        return self
+        
     def all_statements(self) -> Iterator['Statement']:
         yield self
         
     @abstractmethod
     def execute(self, instance:SystemInstance) -> None:
         raise NotImplementedError()
+    
+class UsesStatement(Statement):
+    """This is a stupid name. It is code that was turned from a string into a function for scalar code."""
+    def __init__(self, uses) -> None:
+        self.uses=uses
+    
+    def children(self) -> Iterator[Statement]:
+        pass
+        
+    def execute(self, instance:SystemInstance) -> None:
+        self.uses.execute(instance)
         
 class CompositeStatement(Statement):
-    def _eval_statements(self, instance:SystemInstance, stats:Sequence[Statement]):
+    def _import_statements(self, spec:SystemSpecification, stats:Sequence[Statement]) -> Sequence[Statement]:
+        res=[]
         for s in stats:
             if isinstance(s,str):
-                if s not in self.cached_uses:
-                    uses=scan_code(instance.spec, s)
-                    self.cached_uses[s]=uses
-                else:
-                    uses=self.cached_uses[s]
-                uses.execute(instance)
+                res.append( UsesStatement(scan_code(spec, s) ) )
             else:
-                s.execute(instance)
+                res.append(s)
+        return res
+    
+    def _eval_statements(self, instance:SystemInstance, stats:Sequence[Statement]):
+        for s in stats:
+            s.execute(instance)
+            
+    def _on_bind_spec_local(self, spec:SystemSpecification) -> None:
+        raise NotImplementedError("type = {}".format(type(self)))
     
     def __init__(self):
-        self.cached_uses={}
+        pass
+    
+    def on_bind_spec(self, spec:SystemSpecification) -> Statement:
+        self._on_bind_spec_local(spec)
+        for s in self.children():
+            s.on_bind_spec(spec)
+        return self
+        
         
     @abstractmethod
     def children(self) -> Iterator[Statement]:
@@ -48,7 +73,10 @@ class CompositeStatement(Statement):
 class Seq(CompositeStatement):
     def __init__(self, *statements:Statement ) -> None:
         super().__init__()
-        self.statements=list(statements) # type:Sequence[Statement]
+        self.statements=self._import_statements(statements) # type:Sequence[Statement]
+        
+    def _on_bind_spec_local(self, spec:SystemSpecification) -> None:
+        self.statements=self._import_statements(spec, self.statements)
         
     def children(self) -> Iterator[Statement]:
         yield from self.statements
@@ -61,6 +89,9 @@ class Par(CompositeStatement):
     def __init__(self, *statements:Statement) -> None:
         super().__init__()
         self.statements=list(statements)
+    
+    def _on_bind_spec_local(self, spec:SystemSpecification) -> None:
+        self.statements=self._import_statements(spec, self.statements)
         
     def children(self) -> Iterator[Statement]:
         yield from self.statements
@@ -75,6 +106,9 @@ class RepeatForCount(CompositeStatement):
         self.count=count
         self.variable=variable
         self.statements=list(statements)
+        
+    def _on_bind_spec_local(self, spec:SystemSpecification) -> None:
+        self.statements=self._import_statements(spec, self.statements)
     
     def children(self) -> Iterator[Statement]:
         yield from self.statements
@@ -94,6 +128,10 @@ class While(CompositeStatement):
     
     def children(self) -> Iterator[Statement]:
         yield from self.statements
+        
+    def _on_bind_spec_local(self, spec:SystemSpecification) -> None:
+        self.statements=self._import_statements(spec, self.statements)
+    
     
     def execute(self, instance:SystemInstance) -> None:
         # TODO : Cache this
