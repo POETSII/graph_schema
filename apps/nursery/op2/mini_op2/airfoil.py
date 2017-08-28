@@ -31,22 +31,26 @@ def adt_calc(
   v = ri * q[2];
   c = sqrt(gam[0] * gm1[0] * (ri * q[3] - 0.5 * (u * u + v * v)));
 
+    # Note: These are re-ordered to introduce some amount of floating-point
+    # difference against original
+
   dx = x2[0] - x1[0];
   dy = x2[1] - x1[1];
   adt[0] = fabs(u * dy - v * dx) + c * sqrt(dx * dx + dy * dy);
+  
+  dx = x1[0] - x4[0];
+  dy = x1[1] - x4[1];
+  adt[0] += fabs(u * dy - v * dx) + c * sqrt(dx * dx + dy * dy);
+  
+  dx = x4[0] - x3[0];
+  dy = x4[1] - x3[1];
+  adt[0] += fabs(u * dy - v * dx) + c * sqrt(dx * dx + dy * dy);
 
   dx = x3[0] - x2[0];
   dy = x3[1] - x2[1];
   adt[0] += fabs(u * dy - v * dx) + c * sqrt(dx * dx + dy * dy);
 
-  dx = x4[0] - x3[0];
-  dy = x4[1] - x3[1];
-  adt[0] += fabs(u * dy - v * dx) + c * sqrt(dx * dx + dy * dy);
-
-  dx = x1[0] - x4[0];
-  dy = x1[1] - x4[1];
-  adt[0] += fabs(u * dy - v * dx) + c * sqrt(dx * dx + dy * dy);
-
+  
   adt[0] = adt[0] * (1.0 / cfl[0])
   
 def res_calc(
@@ -142,9 +146,10 @@ def build_system(srcFile:str="../airfoil/new_grid.h5") -> (SystemInstance,Statem
     qinf=sys.create_const_global("qinf",DataType(shape=(4,)))
 
     rms=sys.create_mutable_global("rms", DataType(shape=(1,)))
+    iterm1=sys.create_mutable_global("iterm1",DataType(shape=(1,),dtype=numpy.uint32))
     iter=sys.create_mutable_global("iter",DataType(shape=(1,),dtype=numpy.uint32))
-    pred_corr=sys.create_mutable_global("pred_corr",DataType(shape=(1,),dtype=numpy.uint32))
-
+    k=sys.create_mutable_global("k",DataType(shape=(1,),dtype=numpy.uint32))
+    
     cells=sys.create_set("cells")
     edges=sys.create_set("edges")
     bedges=sys.create_set("bedges")
@@ -167,7 +172,7 @@ def build_system(srcFile:str="../airfoil/new_grid.h5") -> (SystemInstance,Statem
 
     inst=load_hdf5_instance(sys,srcFile)
 
-    
+    refFile=h5py.File(srcFile)
         
 
     print_iter=0
@@ -193,14 +198,17 @@ def build_system(srcFile:str="../airfoil/new_grid.h5") -> (SystemInstance,Statem
 
         
 
-    code=RepeatForCount(1000,iter,
+    code=RepeatForCount(1000,iterm1,
+        """
+        iter[0]=iterm1[0]+1 # Original code uses 1-based for loops
+        """,
         ParFor(
             save_soln,
             cells,
             p_qold(WRITE),
             p_q(READ)
         ),
-        RepeatForCount(2, pred_corr,        
+        RepeatForCount(2, k,        
             ParFor(
                 adt_calc,
                 cells,
@@ -261,11 +269,12 @@ def build_system(srcFile:str="../airfoil/new_grid.h5") -> (SystemInstance,Statem
             #Debug(
             #    debug_post_update
             #)
+            CheckState(refFile, "/output/iter{iter}_k{k}")
         ),
         """
-        print(" %d  %10.5e " % (iter[0]+1, sqrt(rms[0] / sizeof_cells[0] )))
+        print(" %d  %10.5e " % (iter[0], sqrt(rms[0] / sizeof_cells[0] )))
         if (iter%100)==0:
-            print(" %d  %10.5e " % (iter[0]+1, sqrt(rms[0] / sizeof_cells[0] )))
+            print(" %d  %10.5e " % (iter[0], sqrt(rms[0] / sizeof_cells[0] )))
         """
     )
     return (sys,inst,code)

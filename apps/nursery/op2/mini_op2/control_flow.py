@@ -24,14 +24,17 @@ class CompositeStatement(Statement):
     def _eval_statements(self, instance:SystemInstance, stats:Sequence[Statement]):
         for s in stats:
             if isinstance(s,str):
-                # TODO : Cache this
-                uses=scan_code(instance.spec, s)
+                if s not in self.cached_uses:
+                    uses=scan_code(instance.spec, s)
+                    self.cached_uses[s]=uses
+                else:
+                    uses=self.cached_uses[s]
                 uses.execute(instance)
             else:
                 s.execute(instance)
     
     def __init__(self):
-        pass
+        self.cached_uses={}
         
     @abstractmethod
     def children(self) -> Iterator[Statement]:
@@ -44,6 +47,7 @@ class CompositeStatement(Statement):
         
 class Seq(CompositeStatement):
     def __init__(self, *statements:Statement ) -> None:
+        super().__init__()
         self.statements=list(statements) # type:Sequence[Statement]
         
     def children(self) -> Iterator[Statement]:
@@ -55,6 +59,7 @@ class Seq(CompositeStatement):
         
 class Par(CompositeStatement):
     def __init__(self, *statements:Statement) -> None:
+        super().__init__()
         self.statements=list(statements)
         
     def children(self) -> Iterator[Statement]:
@@ -66,6 +71,7 @@ class Par(CompositeStatement):
         
 class RepeatForCount(CompositeStatement):
     def __init__(self, count:int, variable:MutableGlobal, *statements:Statement) -> None:
+        super().__init__()
         self.count=count
         self.variable=variable
         self.statements=list(statements)
@@ -82,6 +88,7 @@ class RepeatForCount(CompositeStatement):
                 
 class While(CompositeStatement):
     def __init__(self, expression:str, *statements:Statement) -> None:
+        super().__init__()
         self.expression=expression
         self.statements=list(statements)
     
@@ -93,14 +100,13 @@ class While(CompositeStatement):
         uses=scan_code(instance.spec, "return "+self.expression )
         while True:
             val=uses.execute(instance)
-            sys.stderr.write("While cond = {}".format(val))
             if not val:
                 break
             self._eval_statements(instance, self.statements)
 
 class Execute(Statement):
     def __init__(self):
-        pass
+        super().__init__()
         
     def _get_current(self, instance:SystemInstance, iter_index:Union[int,None], arg:Argument):
         """Get the current value of the argument.
@@ -120,7 +126,8 @@ class Execute(Statement):
                 current=instance.dats[arg.dat][indirect_index]
             else:
                 assert arg.index == -arg.map.arity
-                current=[ instance.dats[arg.dat][i] for i in range(arg.map.arity) ]
+                dat=instance.dats[arg.dat]
+                current=[ dat[map[iter_index][i]] for i in range(arg.map.arity) ]
                 #print("indirect {} = {}".format(arg.dat.id,current))
         else:
             raise RuntimeError("Unknown arg type.")
@@ -195,6 +202,8 @@ class ParFor(Execute):
         iter_set:Set,
         *arguments:Argument
     ) -> None :
+        super().__init__()
+        
         for (i,a) in enumerate(arguments):
             if isinstance(a,DatArgument):
                 assert a.iter_set==iter_set
@@ -222,6 +231,8 @@ class UserCode(Execute):
         code:Callable[...,None],
         *arguments:Argument
     ) -> None :
+        super().__init__()
+        
         for (i,a) in enumerate(arguments):
             assert isinstance(a,GlobalArgument)
         self.code=code
@@ -237,8 +248,23 @@ class Debug(Statement):
     def __init__(self,
         callback:Callable[[SystemInstance],None]
     ) -> None :
+        super().__init__()
         self.callback=callback
         
     def execute(self, instance:'SystemInstance') -> None:    
         self.callback(instance)
 
+class CheckState(Statement):
+    def __init__(self,
+        src:Any,
+        pattern:str
+    ) -> None:
+        super().__init__()
+        self.src=src
+        self.pattern=pattern
+    
+    def execute(self, instance:'SystemInstance') -> None:
+        globals={ g.id:instance.globals[g][0] for g in instance.spec.globals.values() }
+        pattern=self.pattern.format(**globals)
+        logging.debug("Checking for reference pattern {}".format(pattern))
+        instance.check_snapshot_if_present(instance.spec, self.src, pattern)

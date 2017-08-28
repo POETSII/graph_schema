@@ -65,6 +65,45 @@ class SystemSpecification(object):
         return g
 
 class SystemInstance(object):
+    def check_snapshot_if_present(self, spec:SystemSpecification, src:Dict[str,Any], snapshot:str) -> None:
+        """If a group called {snapshot} exists in the dictionary, then check the current dat
+        values against the group"""
+        parts=snapshot.split("/")
+        while len(parts)>0:
+            if len(parts[0])!=0:
+                if not parts[0] in src:
+                    return # Couldn't find it
+                src=src[parts[0]]
+            parts=parts[1:]
+            
+        logging.info("Found reference pattern {}".format(snapshot))
+        
+        for d in self.spec.dats.values():
+            assert d.id in src
+            ref=src[d.id]
+            got=self.dats[d]
+            assert ref.shape==got.shape
+            diff=ref-got
+            maxErr=numpy.max(numpy.abs(diff))
+            if maxErr <=1e-6:
+                logging.info("%s : %s, maxErr=%g", snapshot, d.id, maxErr)
+            else:
+                logging.error("%s : %s, maxErr=%g (Too high)", snapshot, d.id, maxErr)
+        
+        for g in self.spec.globals.values():
+            if not g.id in src:
+                continue # Not all globals will exist in reference
+            ref=src[g.id]
+            got=self.globals[g]
+            assert ref.shape==got.shape
+            diff=ref-got
+            maxErr=numpy.max(numpy.abs(diff))
+            if maxErr <= 1e-6 :
+                logging.info("%s : %s, maxErr=%g", snapshot, g.id, maxErr)
+            else:
+                logging.error("%s : %s, maxErr=%g (Too high)", snapshot, g.id, maxErr)
+        
+    
     def __init__(self, spec:SystemSpecification, src:Dict[str,Any]) -> None:
         """Given a system instance, load the state from hdf5 (well, a dictionary)
         

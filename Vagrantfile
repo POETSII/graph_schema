@@ -106,7 +106,7 @@ Vagrant.configure(2) do |config|
      sudo pip3 install pyamg
 
      # Creating meshes
-     sudo apt-get install -y octave octave-msh octave-geometry
+     sudo apt-get install -y octave octave-msh octave-geometry hdf5-tools
      # Fix a bug in geometry package for svg.
      # Note that sed is _not_ using extended regular expressions (no "-r")
      sudo sed -i -e 's/,{0},/,"{0}",/g' -e 's/,{1},/,"{1}",/g'  /usr/share/octave/packages/geometry-2.1.0/io/@svg/parseSVGData.py

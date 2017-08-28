@@ -132,7 +132,7 @@ def res_calc(
             ressss[0] += tmp
         
         for j in range(4):
-          for j in range(4):
+          for k in range(4):
             K[j * 4 + k] += \
                 wt1 * rho * (N_x[j] * N_x[k] + N_x[4 + j] * N_x[4 + k]) - \
                 wt1 * rc2 * (u[0] * N_x[j] + u[1] * N_x[4 + j]) * \
@@ -223,6 +223,7 @@ def build_system(srcFile:str="./meshes/FE_mesh.hdf5") -> (SystemInstance,Stateme
     rms=sys.create_mutable_global("rms", DataType(shape=(1,)))    
     
     iter=sys.create_mutable_global("iter", DataType(dtype=numpy.uint32, shape=(1,)))    
+    iterm1=sys.create_mutable_global("iterm1", DataType(dtype=numpy.uint32, shape=(1,)))    
     res0=sys.create_mutable_global("res0")
     res=sys.create_mutable_global("res")
     inner_iter=sys.create_mutable_global("inner_iter", DataType(dtype=numpy.uint32))
@@ -243,30 +244,14 @@ def build_system(srcFile:str="./meshes/FE_mesh.hdf5") -> (SystemInstance,Stateme
     pbedge=sys.create_map("pbedge", bedges, nodes, 1)
     pcell=sys.create_map("pcell", cells, nodes, 4)
 
-    inst=load_hdf5_instance(sys,srcFile)        
+    inst=load_hdf5_instance(sys,srcFile)            
+    refFile=h5py.File(srcFile)
 
-    #~ print_iter=0
 
-    #~ def debug_post_adt(instance:SystemInstance):
-        #~ global print_iter
-        #~ vals=instance.dats[p_adt]
-        #~ for i in range(instance.sets[cells]):
-            #~ print('<CP dev="c{}" key="post-adt-{}">"adt": {}</CP>'.format(i,print_iter,vals[i]))
-
-    #~ def debug_pre_update(instance:SystemInstance):
-        #~ global print_iter
-        #~ vals=instance.dats[p_res]
-        #~ for i in range(instance.sets[cells]):
-            #~ print('<CP dev="c{}" key="pre-update-{}">"res": {}</CP>'.format(i,print_iter,vals[i]))
-        
-    #~ def debug_post_update(instance:SystemInstance):
-        #~ global print_iter
-        #~ vals=instance.dats[p_q]
-        #~ for i in range(instance.sets[cells]):
-            #~ print('<CP dev="c{}" key="post-update-{}">"q": {}</CP>'.format(i,print_iter,vals[i]))
-        #~ print_iter+=1
-
-    code=RepeatForCount(20,iter,
+    code=RepeatForCount(20,iterm1,
+        """
+        iter[0]=iterm1[0]+1 # Original code uses 1 base start
+        """,
         ParFor(
             res_calc,
             cells,
@@ -280,11 +265,13 @@ def build_system(srcFile:str="./meshes/FE_mesh.hdf5") -> (SystemInstance,Stateme
             p_K(WRITE),
             p_resm(INC,pcell,-4)
         ),
+        CheckState(refFile, "/output/iter{iter}_post_res_calc"),
         ParFor(
             dirichlet,
             bedges,
             p_resm(WRITE,pbedge,0)
         ),
+        CheckState(refFile, "/output/iter{iter}_post_dirichlet"),
         """
         c1[0]=0
         c2[0]=0
@@ -301,6 +288,7 @@ def build_system(srcFile:str="./meshes/FE_mesh.hdf5") -> (SystemInstance,Stateme
             p_V(WRITE),
             p_P(WRITE)
         ),
+        CheckState(refFile, "/output/iter{iter}_post_init_cg"),
         """
         print("  c1 = %g" % (c1[0]) )
         res0[0]=sqrt(c1[0])
@@ -318,11 +306,13 @@ def build_system(srcFile:str="./meshes/FE_mesh.hdf5") -> (SystemInstance,Stateme
                 p_K(READ),
                 p_P(READ,pcell,-4)
             ),
+            CheckState(refFile, "/output/iter{iter}_inner{inner_iter}_post_spMV"),
             ParFor(
                 dirichlet,
                 bedges,
                 p_V(WRITE, pbedge,0)
             ),
+            CheckState(refFile, "/output/iter{iter}_inner{inner_iter}_post_dirichlet"),
             """
             c2[0]=0
             """,
@@ -333,15 +323,31 @@ def build_system(srcFile:str="./meshes/FE_mesh.hdf5") -> (SystemInstance,Stateme
                 p_V(READ),
                 c2(INC)
             ),
+            CheckState(refFile, "/output/iter{iter}_inner{inner_iter}_post_dotPV"),
             """
             alpha[0]=c1[0]/c2[0]
             """,
+            ParFor(
+                updateUR,
+                nodes,
+                p_U(INC),
+                p_resm(INC),
+                p_P(READ),
+                p_V(RW),
+                alpha(READ)
+            ),
+            CheckState(refFile, "/output/iter{iter}_inner{inner_iter}_post_updateUR"),
+            """
+            c3[0]=0
+            """
+            ,
             ParFor(
                 dotR,
                 nodes,
                 p_resm(READ),
                 c3(INC)
             ),
+            CheckState(refFile, "/output/iter{iter}_inner{inner_iter}_post_dotR"),
             """
             beta[0]=c3[0]/c1[0]
             """,
@@ -356,7 +362,8 @@ def build_system(srcFile:str="./meshes/FE_mesh.hdf5") -> (SystemInstance,Stateme
             c1[0] = c3[0]
             res[0] = sqrt(c1[0])
             inner_iter[0]+=1
-            """
+            """,
+            CheckState(refFile, "/output/iter{iter}_inner{inner_iter}")
         ),
         """
         rms[0]=0
@@ -373,7 +380,8 @@ def build_system(srcFile:str="./meshes/FE_mesh.hdf5") -> (SystemInstance,Stateme
         rmsV=sqrt(rms[0])/sqrt(sizeof_nodes[0])
         iterV=iter[0]
         print("rms = %10.5g iter: %d" % ( rmsV, iterV) )
-        """
+        """,
+        CheckState(refFile, "/output/iter{iter}")
     )
     return (sys,inst,code)
 
