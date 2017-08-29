@@ -4,9 +4,9 @@ import logging
 import numpy
 import math
 
-from mini_op2.core import DataType, Parameter, AccessMode
-from mini_op2.system import SystemSpecification, SystemInstance, load_hdf5_instance
-from mini_op2.control_flow import *
+from mini_op2.framework.core import DataType, Parameter, AccessMode
+from mini_op2.framework.system import SystemSpecification, SystemInstance, load_hdf5_instance
+from mini_op2.framework.control_flow import *
 
 from numpy import ndarray as nda
 
@@ -279,10 +279,16 @@ def build_system(srcFile:str="../airfoil/new_grid.h5") -> (SystemInstance,Statem
     )
     code.on_bind_spec(sys)
     return (sys,inst,code)
+    
+import unittest
+
+class TestAirfoilExecute(unittest.TestCase):
+    
+    def test_execute_system(self):
+        (spec,inst,code)=build_system()
+        code.execute(inst)
 
 if __name__=="__main__":
     logging.basicConfig(level=4,style="{")
     
-    (spec,inst,code)=build_system()
-
-    code.execute(inst)
+    unittest.main()
