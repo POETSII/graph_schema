@@ -4,9 +4,9 @@ import logging
 import numpy
 import math
 
-from mini_op2.core import DataType, Parameter, AccessMode
-from mini_op2.system import SystemSpecification, SystemInstance, load_hdf5_instance
-from mini_op2.control_flow import *
+from mini_op2.framework.core import DataType, Parameter, AccessMode
+from mini_op2.framework.system import SystemSpecification, SystemInstance, load_hdf5_instance
+from mini_op2.framework.control_flow import *
 
 from numpy import ndarray as nda
 
@@ -189,7 +189,7 @@ def updateUR(
   v[0] = 0.0
 
 
-def build_system(srcFile:str="./meshes/FE_mesh.hdf5") -> (SystemInstance,Statement):
+def build_system(srcFile:str="./meshes/FE_mesh.hdf5", total_iter=20) -> (SystemInstance,Statement):
 
     WRITE=AccessMode.WRITE
     READ=AccessMode.READ
@@ -248,7 +248,7 @@ def build_system(srcFile:str="./meshes/FE_mesh.hdf5") -> (SystemInstance,Stateme
     refFile=h5py.File(srcFile)
 
 
-    code=RepeatForCount(20,iterm1,
+    code=RepeatForCount(total_iter,iterm1,
         """
         iter[0]=iterm1[0]+1 # Original code uses 1 base start
         """,

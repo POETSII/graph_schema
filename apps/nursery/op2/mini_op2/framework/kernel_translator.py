@@ -9,8 +9,6 @@ import ast
 import io
 import random
 
-import mini_op2.airfoil
-
 from contextlib import contextmanager
 
 def extract_loop_range(e:ast.expr) -> int:

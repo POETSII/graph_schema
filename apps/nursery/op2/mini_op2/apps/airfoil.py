@@ -130,7 +130,7 @@ def update(
         rms[0]  += ddel*ddel
 
 
-def build_system(srcFile:str="../airfoil/new_grid.h5") -> (SystemInstance,Statement):
+def build_system(srcFile:str="../airfoil/new_grid.h5", maxiter=1000) -> (SystemInstance,Statement):
 
     WRITE=AccessMode.WRITE
     READ=AccessMode.READ
@@ -198,7 +198,7 @@ def build_system(srcFile:str="../airfoil/new_grid.h5") -> (SystemInstance,Statem
 
         
 
-    code=RepeatForCount(1000,iterm1,
+    code=RepeatForCount(maxiter,iterm1,
         """
         iter[0]=iterm1[0]+1 # Original code uses 1-based for loops
         """,
@@ -280,15 +280,3 @@ def build_system(srcFile:str="../airfoil/new_grid.h5") -> (SystemInstance,Statem
     code.on_bind_spec(sys)
     return (sys,inst,code)
     
-import unittest
-
-class TestAirfoilExecute(unittest.TestCase):
-    
-    def test_execute_system(self):
-        (spec,inst,code)=build_system()
-        code.execute(inst)
-
-if __name__=="__main__":
-    logging.basicConfig(level=4,style="{")
-    
-    unittest.main()

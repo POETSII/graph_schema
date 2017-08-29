@@ -4,7 +4,7 @@ from typing import Any, Dict, List
 import io
 import numpy
 
-from mini_op2.core import *
+from mini_op2.framework.core import *
 
 from contextlib import contextmanager
 

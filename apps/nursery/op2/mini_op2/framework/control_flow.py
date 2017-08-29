@@ -4,10 +4,10 @@ from abc import ABC, abstractmethod
 import numpy
 import sys
 
-from mini_op2.core import *
-from mini_op2.system import SystemInstance, SystemSpecification
+from mini_op2.framework.core import *
+from mini_op2.framework.system import SystemInstance, SystemSpecification
 
-from mini_op2.user_code_parser import scan_code, VarUses
+from mini_op2.framework.user_code_parser import scan_code, VarUses
 
 class Statement(ABC):
     def __init__(self):

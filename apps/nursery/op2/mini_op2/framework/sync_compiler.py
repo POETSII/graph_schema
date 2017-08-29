@@ -5,10 +5,10 @@ import sys
 
 from contextlib import contextmanager
 
-from mini_op2.core import *
-from mini_op2.control_flow import Statement, ParFor
-from mini_op2.system import SystemSpecification
-from mini_op2.builder import GraphTypeBuilder
+from mini_op2.framework.core import *
+from mini_op2.framework.control_flow import Statement, ParFor
+from mini_op2.framework.system import SystemSpecification
+from mini_op2.framework.builder import GraphTypeBuilder
 
 
 import mini_op2.kernel_translator

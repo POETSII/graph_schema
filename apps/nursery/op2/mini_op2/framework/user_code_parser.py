@@ -12,8 +12,8 @@ import re
 
 from types import ModuleType
 
-from mini_op2.core import *
-from mini_op2.system import SystemSpecification
+from mini_op2.framework.core import *
+from mini_op2.framework.system import SystemSpecification
 
 from contextlib import contextmanager
 
