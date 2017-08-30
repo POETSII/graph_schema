@@ -179,6 +179,5 @@ class SystemInstance(object):
             
 
 def load_hdf5_instance(spec:SystemSpecification, src:str) -> SystemInstance:
-    print(src)
     with h5py.File(src) as f:
         return SystemInstance(spec, f)

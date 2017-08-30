@@ -5,19 +5,24 @@ import unittest
 import os
 
 from mini_op2.apps.airfoil import *
+import mini_op2.framework.sync_compiler
 
 import unittest
 
-class TestAirfoilExecute(unittest.TestCase):
-    
+class TestAeroExecute(unittest.TestCase):
+    def setUp(self):
+        self.here=os.path.dirname(os.path.realpath(__file__))
+        self.srcFile="{}/../../meshes/airfoil_1.5625%.hdf5".format(self.here)
+        self.srcFile=os.path.abspath(self.srcFile)
+       
     def test_execute_system(self):
-        here=os.path.dirname(os.path.realpath(__file__))
-        print(here)
-        srcFile="{}/../../meshes/airfoil_1.5625%.hdf5".format(here)
-        srcFile=os.path.abspath(srcFile)
-        print(srcFile)
-        (spec,inst,code)=build_system(srcFile, maxiter=4)
+        (spec,inst,code)=build_system(self.srcFile, maxiter=4)
         code.execute(inst)
+        
+    def test_compile_provider(self):
+        (spec,inst,code)=build_system(self.srcFile)
+        builder=mini_op2.framework.sync_compiler.sync_compiler(spec,code)
+        xml=builder.build_and_render()
 
 if __name__=="__main__":
     logging.basicConfig(level=4)

@@ -229,7 +229,6 @@ def _strip_prefix(code:str) -> str :
         
     m=re.match("^([ \t]*)",lines[0])
     prefix=m.group(1)
-    sys.stderr.write("Prefix = '{}'\n".format(prefix))
     for i in range(len(lines)):
         assert lines[i].startswith(prefix)
         lines[i]=lines[i][len(prefix):]
@@ -249,102 +248,98 @@ def scan_code(spec:SystemSpecification, code:str) -> VarUses:
     for s in a.body:
         scan_statement(uses, s)
     return uses
+
+
+########################################################
+
+import unittest
+
+class TestParsing(unittest.TestCase):
+    
+    def test_examples(self):
+        spec=SystemSpecification()
+        c0=spec.create_const_global("c0")
+        c1=spec.create_const_global("c1")
+        c2=spec.create_const_global("c2")
+        c3=spec.create_const_global("c3")
+        
+        
+        u=scan_code(spec, "c0=1")
+        u.check_has_use(c0, WRITE)
+
+        u=scan_code(spec, "c0=c0")
+        u.check_has_use(c0, RW)
+
+        u=scan_code(spec, "c0+=4")
+        u.check_has_use(c0, RW)
+
+        u=scan_code(spec, "c0[0]+=4")
+        u.check_has_use(c0, RW)
+        
+        u=scan_code(spec, "c0[0]+=4")
+        u.check_has_use(c0, RW)
+        
+        u=scan_code(spec, "c0[c1]+=4")
+        u.check_has_use(c0, RW)
+        u.check_has_use(c1, READ)
+        
+        u=scan_code(spec, "c0[c1]+=c3")
+        u.check_has_use(c0, RW)
+        u.check_has_use(c1, READ)
+        u.check_has_use(c3, READ)
+        
+        u=scan_code(spec, "c0[c1]=c3")
+        u.check_has_use(c0, WRITE)
+        u.check_has_use(c1, READ)
+        u.check_has_use(c3, READ)
+        
+        u=scan_code(spec, "c0 = c3 < sqrt(c2)")
+        u.check_has_use(c0, WRITE)
+        u.check_has_use(c2, READ)
+        u.check_has_use(c3, READ)
+        
+        u=scan_code(spec, """
+    if(c0[0]):
+        c1=3
+    else:
+        c2+=4
+        """)
+        u.check_has_use(c0, READ)
+        u.check_has_use(c1, WRITE)
+        u.check_has_use(c2, RW)
+        
+        u=scan_code(spec, """
+    if(sqrt(c0[0])):
+        c1=fabs(c3)
+    else:
+        c2+=4
+        """)
+        u.check_has_use(c0, READ)
+        u.check_has_use(c1, WRITE)
+        u.check_has_use(c2, RW)
+        u.check_has_use(c3, READ)
+
+        u=scan_code(spec, """
+    for x in range(5):
+        c0 += c1
+        """)
+        u.check_has_use(c0, RW)
+        u.check_has_use(c1, READ)
+
+        u=scan_code(spec, """
+        acc=0
+        for i in range(5):
+            acc += c1[i]
+        c2[0]=acc
+        print(acc)
+        """)
+        u.check_has_use(c1, READ)
+        u.check_has_use(c2, WRITE)
+        
+        t=u.create_func("t")
+        t( c1=[0,1,2,3,4], c2=[0] )
+    
+
         
 if __name__=="__main__":
-    logging.basicConfig(level=4)
-    
-    spec=SystemSpecification()
-    c0=spec.create_const_global("c0")
-    c1=spec.create_const_global("c1")
-    c2=spec.create_const_global("c2")
-    c3=spec.create_const_global("c3")
-    
-    
-    u=scan_code(spec, "c0=1")
-    u.dump()
-    u.check_has_use(c0, WRITE)
-
-    u=scan_code(spec, "c0=c0")
-    u.dump()
-    u.check_has_use(c0, RW)
-
-    u=scan_code(spec, "c0+=4")
-    u.dump()
-    u.check_has_use(c0, RW)
-
-    u=scan_code(spec, "c0[0]+=4")
-    u.dump()
-    u.check_has_use(c0, RW)
-    
-    u=scan_code(spec, "c0[0]+=4")
-    u.dump()
-    u.check_has_use(c0, RW)
-    
-    u=scan_code(spec, "c0[c1]+=4")
-    u.dump()
-    u.check_has_use(c0, RW)
-    u.check_has_use(c1, READ)
-    
-    u=scan_code(spec, "c0[c1]+=c3")
-    u.dump()
-    u.check_has_use(c0, RW)
-    u.check_has_use(c1, READ)
-    u.check_has_use(c3, READ)
-    
-    u=scan_code(spec, "c0[c1]=c3")
-    u.dump()
-    u.check_has_use(c0, WRITE)
-    u.check_has_use(c1, READ)
-    u.check_has_use(c3, READ)
-    
-    u=scan_code(spec, "c0 = c3 < sqrt(c2)")
-    u.dump()
-    u.check_has_use(c0, WRITE)
-    u.check_has_use(c2, READ)
-    u.check_has_use(c3, READ)
-    
-    u=scan_code(spec, """
-if(c0[0]):
-    c1=3
-else:
-    c2+=4
-    """)
-    u.dump()
-    u.check_has_use(c0, READ)
-    u.check_has_use(c1, WRITE)
-    u.check_has_use(c2, RW)
-    
-    u=scan_code(spec, """
-if(sqrt(c0[0])):
-    c1=fabs(c3)
-else:
-    c2+=4
-    """)
-    u.dump()
-    u.check_has_use(c0, READ)
-    u.check_has_use(c1, WRITE)
-    u.check_has_use(c2, RW)
-    u.check_has_use(c3, READ)
-
-    u=scan_code(spec, """
-for x in range(5):
-    c0 += c1
-    """)
-    u.dump()
-    u.check_has_use(c0, RW)
-    u.check_has_use(c1, READ)
-
-    u=scan_code(spec, """
-    acc=0
-    for i in range(5):
-        acc += c1[i]
-    c2[0]=acc
-    print(acc)
-    """)
-    u.dump()
-    u.check_has_use(c1, READ)
-    u.check_has_use(c2, WRITE)
-    
-    t=u.create_func("t")
-    t( c1=[0,1,2,3,4], c2=[0] )
-    
+    unittest.main()

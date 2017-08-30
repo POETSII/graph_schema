@@ -10,8 +10,7 @@ from mini_op2.framework.control_flow import Statement, ParFor
 from mini_op2.framework.system import SystemSpecification
 from mini_op2.framework.builder import GraphTypeBuilder
 
-
-import mini_op2.kernel_translator
+import mini_op2.framework.kernel_translator
 
 scalar_uint32=DataType(shape=(),dtype=numpy.uint32)
 
@@ -144,7 +143,11 @@ def create_state_tracking_variables(ctxt:InvocationContext, builder:GraphTypeBui
 def create_indirect_landing_pads(ctxt:InvocationContext, builder:GraphTypeBuilder):
     for (ai,arg) in ( ctxt.indirect_reads | ctxt.indirect_writes ):
         with builder.subst(index=ai, set=ctxt.stat.iter_set.id):
-            builder.add_device_state("set_{set}", "{invocation}_arg{index}_buffer", arg.dat.data_type)
+            if arg.index < 0:
+                vtype=DataType(arg.dat.data_type.dtype, (-arg.index,)+arg.dat.data_type.shape)
+                builder.add_device_state("set_{set}", "{invocation}_arg{index}_buffer", vtype)
+            else:
+                builder.add_device_state("set_{set}", "{invocation}_arg{index}_buffer", arg.dat.data_type)
 
 def create_global_landing_pads(ctxt:InvocationContext, builder:GraphTypeBuilder):
     for (ai,arg) in ( ctxt.mutable_global_reads | ctxt.global_writes ):
@@ -244,7 +247,7 @@ def create_invocation_begin(ctxt:InvocationContext, builder:GraphTypeBuilder):
             if set==ctxt.stat.iter_set:
                 for (ai,arg) in ctxt.mutable_global_reads:
                     handler+="""
-                    copy_value(deviceState->global_{}, message->global_{});"
+                    copy_value(deviceState->global_{}, message->global_{});
                     """.format(arg.global_.id,arg.global_.id)
             builder.add_input_pin("set_{set}", "{invocation}_begin", "{invocation}_begin", None, None, handler)
 
@@ -289,7 +292,8 @@ def create_indirect_read_sends(ctxt:InvocationContext, builder:GraphTypeBuilder)
 def create_indirect_read_recvs(ctxt:InvocationContext, builder:GraphTypeBuilder):
     for (ai,arg) in ctxt.indirect_reads:
         with builder.subst(set=ctxt.stat.iter_set.id, index=ai, dat=arg.dat.id):
-            builder.add_input_pin("set_{set}", "{invocation}_arg{index}_read_recv", "dat_{dat}", None, None,
+            props={"index": DataType(numpy.uint8,shape=())}
+            builder.add_input_pin("set_{set}", "{invocation}_arg{index}_read_recv", "dat_{dat}", props, None,
                 """
                 assert(deviceState->{invocation}_read_recv_count < deviceProperties->{invocation}_read_recv_total);
                 // Standard edge trigger for start of invocation
@@ -298,7 +302,7 @@ def create_indirect_read_recvs(ctxt:InvocationContext, builder:GraphTypeBuilder)
                     deviceState->{invocation}_read_send_mask = {invocation}_{set}_read_send_mask_all;
                 }}
                 deviceState->{invocation}_read_recv_count++;
-                copy_value(deviceState->{invocation}_arg{index}_buffer, message->value);                
+                copy_value(deviceState->{invocation}_arg{index}_buffer[edgeProperties->index], message->value);                
                 """
             )
 
@@ -368,7 +372,7 @@ def create_kernel_function(ctxt:InvocationContext, builder:GraphTypeBuilder):
     name=func.__name__
     module=importlib.import_module(func.__module__)
     
-    code=mini_op2.kernel_translator.kernel_to_c(module, name)
+    code=mini_op2.framework.kernel_translator.kernel_to_c(module, name)
     
     builder.add_device_shared_code_raw("set_{}".format(ctxt.stat.iter_set.id), code)
 
@@ -422,7 +426,7 @@ if False:
         #builder.add_input_port("set_{set}", 
 
 
-def compile_invocation(spec:SystemSpecification, builder:GraphTypeBuilder, stat:ParFor):
+def compile_invocation(spec:SystemSpecification, builder:GraphTypeBuilder, stat:ParFor, emitted_kernels:set):
     ctxt=InvocationContext(spec, stat)
     
     with builder.subst(invocation=ctxt.invocation):
@@ -432,7 +436,9 @@ def compile_invocation(spec:SystemSpecification, builder:GraphTypeBuilder, stat:
         create_read_send_masks(ctxt, builder)
         create_write_send_masks(ctxt, builder)
         
-        create_kernel_function(ctxt,builder)
+        if ctxt.stat.kernel not in emitted_kernels:
+            create_kernel_function(ctxt,builder)
+            emitted_kernels.add(ctxt.stat.kernel)
 
         create_invocation_begin(ctxt,builder)
         create_indirect_read_sends(ctxt,builder)
@@ -481,6 +487,11 @@ def sync_compiler(spec:SystemSpecification, code:Statement):
         }
     }
     
+    template<class T>
+    void copy_value(T &x, const T (&y)[1]){
+        x[0]=y[0];
+    }
+    
     template<class T,unsigned N>
     void inc_value(T (&x)[N], const T (&y)[N]){
         for(unsigned i=0; i<N; i++){
@@ -517,10 +528,10 @@ def sync_compiler(spec:SystemSpecification, code:Statement):
         else:
             raise RuntimeError("Unexpected global type : {}", type(global_))
     
-    for set in spec.sets.values():
-        with builder.subst(set="set_"+set.id):
+    for s in spec.sets.values():
+        with builder.subst(set="set_"+s.id):
             builder.create_device_type("{set}")
-            for dat in set.dats.values():
+            for dat in s.dats.values():
                 builder.add_device_state("{set}", "dat_{}".format(dat.id), dat.data_type)
     
     kernels=[] # type:List[ParFor]
@@ -528,8 +539,10 @@ def sync_compiler(spec:SystemSpecification, code:Statement):
         if isinstance(stat,ParFor):
             id=make_unique_id(stat, stat.name)
             kernels.append(stat)
+            
+    emitted_kernels=set()
     for stat in kernels:
-        compile_invocation(spec,builder,stat)
+        compile_invocation(spec,builder,stat, emitted_kernels)
     
     return builder
             
@@ -537,8 +550,8 @@ def sync_compiler(spec:SystemSpecification, code:Statement):
 if __name__=="__main__":
     logging.basicConfig(level=4)
     
-    import mini_op2.airfoil
-    import mini_op2.aero
+    import mini_op2.apps.airfoil
+    import mini_op2.apps.aero
     
     model="airfoil"
     if len(sys.argv)>1:
@@ -554,14 +567,15 @@ if __name__=="__main__":
         raise RuntimeError("Don't know a default file.")
     
     if model=="airfoil":
-        build_system=mini_op2.airfoil.build_system
+        build_system=mini_op2.apps.airfoil.build_system
     elif model=="aero":
-        build_system=mini_op2.aero.build_system
+        build_system=mini_op2.apps.aero.build_system
     else:
         raise RuntimeError("Don't know this model.")
     
     (spec,inst,code)=build_system(srcFile)
     builder=sync_compiler(spec,code)
     
-    builder.build_and_save(sys.stdout)
+    xml=builder.build_and_render()
+    sys.stdout.write(xml)
     

@@ -49,6 +49,7 @@ def init_cg(
   v[0] = 0
 
 
+
 def res_calc(
     Ng2_xi:seq_double,
     wtg2:seq_double,
@@ -121,8 +122,8 @@ def res_calc(
           u[0] += N_x[j] * phim[j][0]
           u[1] += N_x[4 + j] * phim[j][0]
         
-        Dk = 1.0 + 0.5 * gm1 * (m2 - (u[0] * u[0] + u[1] * u[1]))
-        rho = pow(Dk, gm1i) # wow this might be problematic -> go to log?
+        Dk = 1.0 + 0.5 * gm1[0] * (m2[0] - (u[0] * u[0] + u[1] * u[1]))
+        rho = pow(Dk, gm1i[0]) # wow this might be problematic -> go to log?
         rc2 = rho / Dk
 
         for j in range(4):

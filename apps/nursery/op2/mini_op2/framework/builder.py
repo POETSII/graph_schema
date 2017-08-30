@@ -36,6 +36,13 @@ def import_data_type(name:str,ot:DataType) -> TypedDataSpec:
         return ArrayTypedDataSpec(name,ot.shape[0],ScalarTypedDataSpec("_", _scalar_type_map[ot.dtype]))
     elif len(ot.shape)==2 and ot.shape[1]==1:
         return ArrayTypedDataSpec(name,ot.shape[0],ScalarTypedDataSpec("_", _scalar_type_map[ot.dtype]))
+    elif len(ot.shape)==2 and ot.shape[1]>1:
+        # Actually a 2d array...
+        return ArrayTypedDataSpec(name, ot.shape[0],
+            ArrayTypedDataSpec("_", ot.shape[1],
+                ScalarTypedDataSpec("_", _scalar_type_map[ot.dtype])
+            )
+        )
     else:
         raise RuntimeError("data type not supported yet.")
         
@@ -75,16 +82,17 @@ class DeviceTypeBuilder(object):
         else:
             assert type==self.state[name]
         
-    def add_input_pin(self, name:str, msgType:str, properties:None, state:None, body:str):
+    def add_input_pin(self, name:str, msgType:str, properties:Optional[Any], state:None, body:str):
         assert name not in self.inputs
-        assert properties is None
         assert state is None
-        self.inputs[name]=(name, msgType, body)
+        if properties:
+            properties=[ import_data_type(n,t) for (n,t) in properties.items() ]
+        self.inputs[name]=(name, msgType, properties, body)
     
     def extend_input_pin_handler(self, name:str, code:str):
         assert name in self.inputs
-        (name,msgType,body)=self.inputs[name]
-        self.inputs[name]=(name,msgType,body+code)
+        (name,msgType,properties, body)=self.inputs[name]
+        self.inputs[name]=(name,msgType,properties, body+code)
         
     def add_output_pin(self, name:str, msgType:str, body:str):
         assert name not in self.outputs
@@ -101,9 +109,11 @@ class DeviceTypeBuilder(object):
         d=DeviceType(graph, self.id, device_properties, device_state)
         d.ready_to_send_handler=self.rts
         d.shared_code=self.shared_code
-        for (name,msgType,handler) in self.inputs.values():
+        for (name,msgType,properties,handler) in self.inputs.values():
             message_type=graph.message_types[msgType]
             input_properties=None
+            if properties:
+                input_properties=import_data_type_tuple("_", properties)
             input_state=None
             d.add_input(name,message_type,input_properties,input_state,None,handler)
         for (name,msgType,handler) in self.outputs.values():
@@ -248,7 +258,7 @@ class GraphTypeBuilder:
         
         return graph
 
-    def build_and_save(self, dst:io.TextIOBase) -> GraphType:
+    def build_and_render(self) -> str:
         graph=self.build()
         
         nsmap = { None : "https://poets-project.org/schemas/virtual-graph-schema-v2", "p":"https://poets-project.org/schemas/virtual-graph-schema-v2" }
@@ -259,6 +269,8 @@ class GraphTypeBuilder:
         root=etree.Element(toNS("p:Graphs"), nsmap=nsmap)
         xml=save_graph_type(root, graph)
         
-        etree.ElementTree(root).write(dst.buffer, pretty_print=True, xml_declaration=True)
+        b=etree.tostring(root, encoding="utf-8", pretty_print=True, xml_declaration=True)
+        return b.decode("utf-8")
         
-        return graph
+        
+        
