@@ -121,13 +121,14 @@ def create_all_messages(ctxt:InvocationContext, builder:GraphTypeBuilder):
         write_globals["global_{}".format(arg.global_.id)]=arg.data_type
     builder.create_message_type("{invocation}_end", write_globals)
     
-    indirect_dats=set()
     for (ai,arg) in ctxt.indirect_reads | ctxt.indirect_writes:
-        indirect_dats.add(arg.dat)
-    for dat in indirect_dats:
-        with builder.subst(dat=dat.id):
+        dat=arg.dat
+        with builder.subst(dat=dat.id,arity=-arg.index):
             builder.merge_message_type("dat_{dat}", { "value":dat.data_type } )
-
+            if arg.index<0 and (ai,arg) in ctxt.indirect_writes:
+                dt=DataType(dat.data_type.dtype, (-arg.index,)+dat.data_type.shape)
+                builder.merge_message_type("dat_{dat}_x{arity}", { "value":dt } )
+    
 def create_state_tracking_variables(ctxt:InvocationContext, builder:GraphTypeBuilder):
     for set in ctxt.get_all_involved_sets():
         with builder.subst(set=set.id):
@@ -302,22 +303,39 @@ def create_indirect_read_recvs(ctxt:InvocationContext, builder:GraphTypeBuilder)
                     deviceState->{invocation}_read_send_mask = {invocation}_{set}_read_send_mask_all;
                 }}
                 deviceState->{invocation}_read_recv_count++;
-                copy_value(deviceState->{invocation}_arg{index}_buffer[edgeProperties->index], message->value);                
+                """)
+            if arg.index<0:
+                builder.extend_input_pin_handler("set_{set}", "{invocation}_arg{index}_read_recv",
                 """
-            )
+                copy_value(deviceState->{invocation}_arg{index}_buffer[edgeProperties->index], message->value);                
+                """)
+            else:
+                builder.extend_input_pin_handler("set_{set}", "{invocation}_arg{index}_read_recv",
+                """
+                copy_value(deviceState->{invocation}_arg{index}_buffer, message->value);                
+                """)
 
 
             
 def create_indirect_write_sends(ctxt:InvocationContext, builder:GraphTypeBuilder):
     for (ai,arg) in ctxt.indirect_writes:
-        with builder.subst(index=ai, set=arg.iter_set.id, dat=arg.dat.id):
-            builder.add_output_pin("set_{set}", "{invocation}_arg{index}_write_send", "dat_{dat}",
-                """
-                assert(deviceState->{invocation}_write_send_mask & RTS_FLAG_{invocation}_arg{index}_write_send);
-                copy_value(message->value, deviceState->{invocation}_arg{index}_buffer);
-                deviceState->{invocation}_write_send_mask &= ~RTS_FLAG_{invocation}_arg{index}_write_send;
-                """
-            )
+        with builder.subst(index=ai, set=arg.iter_set.id, dat=arg.dat.id, arity=-arg.index):
+            if arg.index>=0:
+                builder.add_output_pin("set_{set}", "{invocation}_arg{index}_write_send", "dat_{dat}",
+                    """
+                    assert(deviceState->{invocation}_write_send_mask & RTS_FLAG_{invocation}_arg{index}_write_send);
+                    copy_value(message->value, deviceState->{invocation}_arg{index}_buffer);
+                    deviceState->{invocation}_write_send_mask &= ~RTS_FLAG_{invocation}_arg{index}_write_send;
+                    """
+                )
+            else:
+                builder.add_output_pin("set_{set}", "{invocation}_arg{index}_write_send", "dat_{dat}_x{arity}",
+                    """
+                    assert(deviceState->{invocation}_write_send_mask & RTS_FLAG_{invocation}_arg{index}_write_send);
+                    copy_value(message->value, deviceState->{invocation}_arg{index}_buffer);
+                    deviceState->{invocation}_write_send_mask &= ~RTS_FLAG_{invocation}_arg{index}_write_send;
+                    """
+                )
 
 def create_indirect_write_recvs(ctxt:InvocationContext, builder:GraphTypeBuilder):
     for (ai,arg) in ctxt.indirect_writes:
@@ -487,10 +505,19 @@ def sync_compiler(spec:SystemSpecification, code:Statement):
         }
     }
     
-    template<class T>
+    template<class T,unsigned N,unsigned M>
+    void copy_value(T (&x)[N][M], const T (&y)[N][M]){
+        for(unsigned i=0; i<N; i++){
+            for(unsigned j=0; j<M; j++){
+                x[i][j]=y[i][j];
+            }
+        }
+    }
+    
+    /*template<class T>
     void copy_value(T &x, const T (&y)[1]){
         x[0]=y[0];
-    }
+    }*/
     
     template<class T,unsigned N>
     void inc_value(T (&x)[N], const T (&y)[N]){

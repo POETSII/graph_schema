@@ -152,26 +152,34 @@ _to_c_type = {
     
 
 def translate_function(f:ast.FunctionDef, dst:io.TextIOBase):
-    dst.write("void kernel_{}(\n".format(f.name))
+    # HACK : Moving to template types, to allow parameter types to float
+    
     args=get_positional_arguments(f)
+    
+    args_types=["class T{}".format(i) for i in range(len(args))]
+    
+    dst.write("template<{}>\n".format(",".join(args_types)))
+    dst.write("void kernel_{}(\n".format(f.name))
     for (index,arg) in enumerate(args):
         assert arg.annotation!=None, "Expecting type annotation"
         type=arg.annotation
         assert isinstance(type,ast.Name), "Expecting type annotation to be a name"
         datatype=None
-        # HACK! : Relying on named alias, as otherwise we have to parse out the types
-        if type.id=="seq_float":
-            datatype="float"
-        elif type.id=="seq_double":
-            datatype="double"
-        elif type.id=="seq_seq_double":
-            datatype="double *"
-        elif type.id=="seq_int":
-            datatype="int"
-        else:
-            raise RuntimeError("Can't interpret type '{}' on arg in index {} of kernel {}".format(datatype,index,f.name))
+        # Removed: HACK! : Relying on named alias, as otherwise we have to parse out the types
+        #if type.id=="seq_float":
+        #    datatype="float"
+        #elif type.id=="seq_double":
+        #    datatype="double"
+        #elif type.id=="seq_seq_double":
+        #    datatype="double *"
+        #elif type.id=="seq_int":
+        #    datatype="int"
+        #else:
+        #    raise RuntimeError("Can't interpret type '{}' on arg in index {} of kernel {}".format(datatype,index,f.name))
+        #
+        #dst.write("  {} *{}".format(datatype, arg.arg))
         
-        dst.write("  {} *{}".format(datatype, arg.arg))
+        dst.write("  T{} {}".format(index,arg.arg))
         if index+1 < len(args):
             dst.write(",")
         dst.write("\n")

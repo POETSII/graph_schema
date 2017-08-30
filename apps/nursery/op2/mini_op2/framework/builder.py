@@ -34,9 +34,9 @@ def import_data_type(name:str,ot:DataType) -> TypedDataSpec:
         return ScalarTypedDataSpec(name,_scalar_type_map[ot.dtype])
     elif len(ot.shape)==1:
         return ArrayTypedDataSpec(name,ot.shape[0],ScalarTypedDataSpec("_", _scalar_type_map[ot.dtype]))
-    elif len(ot.shape)==2 and ot.shape[1]==1:
-        return ArrayTypedDataSpec(name,ot.shape[0],ScalarTypedDataSpec("_", _scalar_type_map[ot.dtype]))
-    elif len(ot.shape)==2 and ot.shape[1]>1:
+    #elif len(ot.shape)==2 and ot.shape[1]==1:
+    #    return ArrayTypedDataSpec(name,ot.shape[0],ScalarTypedDataSpec("_", _scalar_type_map[ot.dtype]))
+    elif len(ot.shape)==2 and ot.shape[1]>=1:
         # Actually a 2d array...
         return ArrayTypedDataSpec(name, ot.shape[0],
             ArrayTypedDataSpec("_", ot.shape[1],
