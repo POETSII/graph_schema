@@ -45,8 +45,11 @@ def save_typed_data_spec(dt):
         n=etree.Element(toNS("p:Array"))
         n.attrib["name"]=dt.name
         n.attrib["length"]=str(dt.length)
-        assert isinstance(dt.type,ScalarTypedDataSpec)
-        n.attrib["type"]=dt.type.type
+        if isinstance(dt.type,ScalarTypedDataSpec):
+            n.attrib["type"]=dt.type.type
+        else:
+            subn=save_typed_data_spec(dt.type)
+            n.append(subn)
     else:
         raise RuntimeError("Unknown data type.")
 

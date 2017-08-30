@@ -15,8 +15,15 @@ def render_typed_data_as_decl(proto,dst,indent=""):
             render_typed_data_as_decl(elt,dst,indent+"  ")
         dst.write("{}}} {};\n".format(indent,proto.name));
     elif isinstance(proto,ArrayTypedDataSpec):
-        assert isinstance(proto.type,ScalarTypedDataSpec), "Haven't implemented arrays of non-scalars yet."
-        dst.write("{}{} {}[{}];\n".format(indent, proto.type.type, proto.name, proto.length));
+        if isinstance(proto.type,ScalarTypedDataSpec):
+            dst.write("{}{} {}[{}];\n".format(indent, proto.type.type, proto.name, proto.length));
+        elif isinstance(proto.type,ArrayTypedDataSpec):
+            etype=proto.type
+            if not isinstance(etype.type,ScalarTypedDataSpec):
+                raise RuntimeError("Haven't implemented arrays of arrays of non-scalars yet...")
+            dst.write("{}{} {}[{}][{}];\n".format(indent, etype.type.type, proto.name, proto.length, etype.length))
+        else:
+            raise RuntimeError("Haven't implemented arrays of non-scalars yet.")
     else:
         raise RuntimeError("Unknown data type {}.".format(type(proto)))
 
@@ -37,14 +44,23 @@ def render_typed_data_init(proto,dst,prefix):
         for elt in proto.elements_by_index:
             render_typed_data_init(elt,dst,prefix+proto.name+".")
     elif isinstance(proto,ArrayTypedDataSpec):
-        assert isinstance(proto.type,ScalarTypedDataSpec), "Haven't implemented arrays of non-scalars yet."
-        for i in range(0,proto.length):
-
-            if proto.type.default is not None:
-                dst.write('{}{}[{}] = {};\n'.format(prefix,proto.name,i,proto.type.default))
-            else:
-                dst.write('{}{}[{}] = 0;\n'.format(prefix,proto.name,i))
-
+        if isinstance(proto.type,ScalarTypedDataSpec):
+            for i in range(0,proto.length):
+                if proto.type.default is not None:
+                    dst.write('{}{}[{}] = {};\n'.format(prefix,proto.name,i,proto.type.default))
+                else:
+                    dst.write('{}{}[{}] = 0;\n'.format(prefix,proto.name,i))
+        elif isinstance(proto.type,ArrayTypedDataSpec):
+            etype=proto.type
+            if not isinstance(etype.type,ScalarTypedDataSpec):
+                raise RuntimeError("Haven't implemented arrays of arrays of non-scalars yet...")
+                val = proto.type.default or "0"
+                # TODO : embedd a for-loop?
+                for i in range(0,proto.length):
+                    for j in range(0,eproto.length):
+                        dst.write('{}{}[{}][{}] = {};\n'.format(prefix,proto.name,i,j,val))
+        else:
+            raise RuntimeError("Haven't implemented arrays of complicated non-scalars yet.")
     else:
         raise RuntimeError("Unknown data type {}.".format(type(proto)))
 
@@ -57,10 +73,16 @@ def render_typed_data_add_hash(proto,dst,prefix):
         for elt in proto.elements_by_index:
             render_typed_data_add_hash(elt,dst,prefix+proto.name+".")
     elif isinstance(proto,ArrayTypedDataSpec):
-        assert isinstance(proto.type,ScalarTypedDataSpec), "Haven't implemented arrays of non-scalars yet."
-        for i in range(0,proto.length):
-            dst.write('  hash.add({}{}[{}]);\n'.format(prefix,proto.name,i))
-            
+        if isinstance(proto.type,ScalarTypedDataSpec):
+            for i in range(0,proto.length):
+                dst.write('  hash.add({}{}[{}]);\n'.format(prefix,proto.name,i))
+        elif isinstance(proto.type,ArrayTypedDataSpec) and isinstance(proto.type.type,ScalarTypedDataSpec):
+            for i in range(0,proto.length):
+                for j in range(proto.type.length):
+                    dst.write('  hash.add({}{}[{}][{}]);\n'.format(prefix,proto.name,i,j))
+        
+        else:
+            raise RuntimeError("Haven't implemented arrays of non-scalars yet.")
     else:
         raise RuntimeError("Unknown data type {}.".format(type(proto)))
 
@@ -85,23 +107,52 @@ def render_typed_data_load_v4_tuple(proto,dst,prefix,indent):
         elif isinstance(elt,TupleTypedDataSpec):
             render_typed_data_load_v4_tuple(elt,dst,prefix+elt.name+".",indent+"    ")
         elif isinstance(elt,ArrayTypedDataSpec):
-            assert isinstance(elt.type,ScalarTypedDataSpec), "Haven't implemented non-scalar arrays yet."
             dst.write('{}  assert(n.IsArray());\n')
-            for i in range(0,elt.length):
+            if isinstance(elt.type,ScalarTypedDataSpec):
+                for i in range(0,elt.length):
+                    if elt.type.type=="int64_t" or elt.type.type=="int32_t" or elt.type.type=="int16_t" or elt.type.type=="int8_t" or elt.type=="char":
+                        dst.write('{}  assert(n[{}].IsInt());\n'.format(indent,i))
+                        dst.write('{}  {}{}[{}]=n[{}].GetInt();\n'.format(indent, prefix, elt.name,i,i))
 
-                if elt.type.type=="int64_t" or elt.type.type=="int32_t" or elt.type.type=="int16_t" or elt.type.type=="int8_t" or elt.type=="char":
-                    dst.write('{}  assert(n[{}].IsInt());\n'.format(indent,i))
-                    dst.write('{}  {}{}[{}]=n[{}].GetInt();\n'.format(indent, prefix, elt.name,i,i))
+                    elif elt.type.type=="uint64_t" or elt.type.type=="uint32_t" or elt.type.type=="uint16_t" or elt.type.type=="uint8_t":
+                        dst.write('{}  assert(n[{}].IsUint());\n'.format(indent,i))
+                        dst.write('{}  {}{}[{}]=n[{}].GetUint();\n'.format(indent, prefix,elt.name,i,i))
 
-                elif elt.type.type=="uint64_t" or elt.type.type=="uint32_t" or elt.type.type=="uint16_t" or elt.type.type=="uint8_t":
-                    dst.write('{}  assert(n[{}].IsUint());\n'.format(indent,i))
-                    dst.write('{}  {}{}[{}]=n[{}].GetUint();\n'.format(indent, prefix,elt.name,i,i))
+                    elif elt.type.type=="float" or elt.type.type=="double":
+                        dst.write('{}  assert(n[{}].IsDouble());\n'.format(indent,i))
+                        dst.write('{}  {}{}[{}]=n[{}].GetDouble();\n'.format(indent, prefix,elt.name,i,i))
+                    else:
+                        raise RuntimeError("Unknown scalar data type.")
+            elif isinstance(elt.type,ArrayTypedDataSpec):
+                etype=elt.type
+                if not isinstance(etype.type,ScalarTypedDataSpec):
+                    raise RuntimeError("Haven't implemented arrays of arrays of non-scalars yet...")
+                dst.write("""
+{indent}for(unsigned i=0; i<{}; i++){{
+{indent}  auto &x=n[i];
+{indent}  assert(x.IsArray());
+{indent}  for(unsigned j=0; j<{}; j++){{
+{indent}    auto &y=x[j];
+""".format(elt.length, etype.length, indent=indent))
+                if etype.type.type=="int64_t" or etype.type.type=="int32_t" or etype.type.type=="int16_t" or etype.type.type=="int8_t" or elt.type=="char":
+                    dst.write('{indent}    assert(y.IsInt());\n'.format(indent=indent))
+                    dst.write('{indent}    {}{}[i][j]=y.GetInt();\n'.format(prefix, elt.name,indent=indent))
 
-                elif elt.type.type=="float" or elt.type.type=="double":
-                    dst.write('{}  assert(n[{}].IsDouble());\n'.format(indent,i))
-                    dst.write('{}  {}{}[{}]=n[{}].GetDouble();\n'.format(indent, prefix,elt.name,i,i))
+                elif etype.type.type=="uint64_t" or etype.type.type=="uint32_t" or etype.type.type=="uint16_t" or etype.type.type=="uint8_t":
+                    dst.write('{indent}    assert(y.IsUint());\n'.format(indent=indent))
+                    dst.write('{indent}    {}{}[i][j]=y.GetUint();\n'.format(prefix,elt.name,indent=indent))
+
+                elif etype.type.type=="float" or etype.type.type=="double":
+                    dst.write('{indent}    assert(y.IsDouble());\n'.format(indent=indent))
+                    dst.write('{indent}    {}{}[i][j]=y.GetDouble();\n'.format(prefix,elt.name,indent=indent))
                 else:
                     raise RuntimeError("Unknown scalar data type.")
+                dst.write("""
+{indent}  }}
+{indent}}}
+""".format(indent=indent))
+            else:
+                raise RuntimeError("Haven't implemented non-scalar arrays yet.")
         else:
             raise RuntimeError("Unknown data type.")
         dst.write('{}  }}\n'.format(indent))
@@ -145,16 +196,36 @@ def render_typed_data_save(proto, dst, prefix, indent):
 
 
     elif isinstance(proto,ArrayTypedDataSpec):
-        assert isinstance(proto.type,ScalarTypedDataSpec), "Haven't implemented non-scalar arrays yet."
-        dst.write('{}if(sep){{ dst<<","; }}; dst<<"\\"{}\\":[";'.format(indent,proto.name))
-        for i in range(proto.length):
-            if i>0:
-                dst.write('{}  dst<<",";\n'.format(indent))
-            if proto.type.type=="float" or proto.type.type=="double":
-                dst.write('{}  dst<<float_to_string({}{}[{}]);\n'.format(indent, prefix, proto.name, i))
-            else:
-                dst.write('{}  dst<<{}{}[{}];\n'.format(indent, prefix, proto.name, i))
-        dst.write('{}dst<<"]"; sep=true;\n'.format(indent))
+        if isinstance(proto.type,ScalarTypedDataSpec):
+            dst.write('{}if(sep){{ dst<<","; }}; dst<<"\\"{}\\":[";'.format(indent,proto.name))
+            for i in range(proto.length):
+                if i>0:
+                    dst.write('{}  dst<<",";\n'.format(indent))
+                if proto.type.type=="float" or proto.type.type=="double":
+                    dst.write('{}  dst<<float_to_string({}{}[{}]);\n'.format(indent, prefix, proto.name, i))
+                else:
+                    dst.write('{}  dst<<{}{}[{}];\n'.format(indent, prefix, proto.name, i))
+            dst.write('{}dst<<"]"; sep=true;\n'.format(indent))
+        elif isinstance(proto.type,ArrayTypedDataSpec):
+            etype=proto.type
+            if not isinstance(etype.type,ScalarTypedDataSpec):
+                raise RuntimeError("Haven't implemented arrays of arrays of non-scalars yet...")
+            dst.write('{}if(sep){{ dst<<","; }}; dst<<"\\"{}\\":[";'.format(indent,proto.name))
+            for i in range(proto.length):
+                if i>0:
+                    dst.write('{}  dst<<",";\n'.format(indent))
+                dst.write('{}  dst<<"[";\n'.format(indent))
+                for j in range(etype.length):
+                    if j>0:
+                        dst.write('{}  dst<<",";\n'.format(indent))
+                    if proto.type.type=="float" or proto.type.type=="double":
+                        dst.write('{}  dst<<float_to_string({}{}[{}][{}]);\n'.format(indent, prefix, proto.name, i,j))
+                    else:
+                        dst.write('{}  dst<<{}{}[{}][{}];\n'.format(indent, prefix, proto.name, i,j))
+                dst.write('{}  dst<<"]";\n'.format(indent))
+            dst.write('{}dst<<"]"; sep=true;\n'.format(indent))
+        else:
+            raise RuntimeError("Haven't implemented non-scalar arrays yet.")
     elif isinstance(proto,TupleTypedDataSpec):
         dst.write('{}if(sep){ dst<<","; } sep=true;\n'.format(indent))
         dst.write('{}{{ bool sep=false;\n'.format(indent))

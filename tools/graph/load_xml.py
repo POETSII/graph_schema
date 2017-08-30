@@ -72,7 +72,10 @@ def load_typed_data_spec(dt):
         if type:
             type=ScalarTypedDataSpec("_",type)
         else:
-            raise RuntimeError("Haven't implemented arrays of non-scalar types yet.")
+            subs=dt.findall("p:*",ns) # Anything from this namespace must be the sub-type
+            if len(subs)!=1:
+                raise RuntimeError("If there is no type attribute, there should be exactly one sub-type element.")
+            type=load_typed_data_spec(subs[0])
         return ArrayTypedDataSpec(name,length,type)
     elif tag=="p:Scalar":
         type=get_attrib(dt, "type")
