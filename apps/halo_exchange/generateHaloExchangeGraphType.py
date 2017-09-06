@@ -41,6 +41,28 @@ def main(argv):
 	xmlo+= '\n'
 	xmlo+= '\t<DeviceTypes>\n'
 
+	c_timestep = '\n'
+	c_timestep += '	uint32_t hL = gp->haloLength;\n'
+	c_timestep += '	uint32_t nV[hL*hL];\n' 
+	c_timestep += '	//resolve the four corners\n' 
+	c_timestep += '	nV[0] = cN[0] + cW[0] + state->v[1] + state->v[hL]; //NW corner\n' 
+	c_timestep += '	nV[hL-1] = cN[hL-1] + cE[0] + state->v[hL-2] + state->v[hL + (hL-1)]; //NE corner\n' 
+	c_timestep += '	for(int i=0; i<hL; i++) {\n'
+	c_timestep += '		state->v[i] = state->cN[i];\n'
+	c_timestep += '	}\n'
+	c_timestep += '	//resolve the east face\n' 
+	c_timestep += '	for(int i=1; i<hL; i++) {\n'
+	c_timestep += '		state->v[((i+1)*hL)-1] = state->cE[i];\n'
+	c_timestep += '		state->v[(hL * (hL - 1)) + i] = state->cS[i];\n'
+	c_timestep += '		state->v[i*hL] = state->cW[i];\n'
+	c_timestep += '	}\n'
+	c_timestep += '	//Update the new state\n'
+	c_timestep += '	for(int i=0; i<hL*hL; i++) {\n'
+	c_timestep += '		state->v[i] = nV[i];\n'
+	c_timestep += '	}\n'
+	
+	b_timestep = '\n'
+
 	xmlo+= generate_NbyN_Cluster(N, debug)
 	xmlo+= generate_lengthN_boundary(N, debug)
 	xmlo+= generate_exitNode(debug)
@@ -103,7 +125,7 @@ def generate_exitNode(debug):
 	o+='\t</DeviceType>\n'
 	return o
 
-def generate_lengthN_boundary(N,debug):
+def generate_lengthN_boundary(N,debug, computeTimestep):
 	o='\n'
 	o+='\t<DeviceType id=\"boundary_'+str(N)+'\">\n'
 	o+='\t\t<State>\n'
@@ -140,6 +162,15 @@ def generate_lengthN_boundary(N,debug):
 	o+='\t\t\t\t}\n'
 	o+='\t\t\t]]></OnReceive>\n'
 	o+='\t\t</InputPin>\n'
+	o+='\n'
+
+	o+='\t\t<SharedCode><![CDATA[\n'
+	o+='\t\t\tenum orientation_t { north, east, south, west };\n'
+	o+='\t\t\tuint32_t computeTimestep(boundary_9_state_t *state, const halo_exchange_properties_t *gp) {\n'
+	o+='\t\t\t\t//Process the timestep for this device\n'
+	o+= computeTimestep #Inject the input code for how the timestep should be computed
+	o+='\t\t\t}\n'
+	o+='\t\t]]></SharedCode>\n'
 	o+='\n'
 
 	o+='\t\t<OutputPin name=\"out\" messageTypeId=\"update\">\n'	
@@ -194,7 +225,7 @@ def generate_lengthN_boundary(N,debug):
 	o+='\t</DeviceType>\n'
 	return o 
 
-def generate_NbyN_Cluster(N, debug): 
+def generate_NbyN_Cluster(N, debug, computeTimestep): 
 #returns a string containing xml code describing a halo exchange N x N device
 	o='\n'
 	o+='\t<DeviceType id=\"cell_' + str(N) +'by'+str(N)+'\">\n' 	
@@ -265,7 +296,7 @@ def generate_NbyN_Cluster(N, debug):
 	o+='\n'
 	o+='\t\t\tuint32_t computeTimestep(cell_'+str(N)+'by'+str(N)+'_state_t *state, const halo_exchange_properties_t *gp) {\n'
 	o+='\t\t\t\t //Process the timestep for this device\n'
-	o+='\t\t\t\t return 0;\n'
+	o+= computeTimestep #inject the code for computing each timestep
 	o+='\t\t\t}\n'
 	o+='\n'
 	o+='\t\t\tbool allArrived(const cell_'+str(N)+'by'+str(N)+'_state_t *state, const halo_exchange_properties_t *gp) {\n'
