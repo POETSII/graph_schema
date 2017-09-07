@@ -97,43 +97,45 @@
 				 //Process the timestep for this device
 				 HandlerLogImpl handler_log(orchestrator);
 
-				 uint32_t hL = gp->haloLength;
-				 uint32_t tmpV[hL*hL] = { 0 };
-				 for(uint32_t i=0; i<hL*hL; i++) {
-				 	//Accumulate all points surrounding the current point
-				 
-				 	//North of point
-				 	if(i<hL) //We are at the northern face of this node and need to use the halo value	
-				 		tmpV[i] += state->cN[i];
-				 	else
-				 		tmpV[i] += state->v[i-hL];
-				 
-				 	//East of point
-				 	if((i!=0) && (i % hL == (hL-1))) //We are at the eastern face of this node and need to use the halo value
-				 		tmpV[i] += state->cE[i/(hL-1)]; 
-				 	else
-				 		tmpV[i] += state->v[i+1];
-				 
-				 	//South of point
-				 	if(i >= (hL*hL -1) - (hL-1)) //We are at the southern face of this node and need to use the halo value
-				 		tmpV[i] += state->cS[i - ((hL*hL -1) - (hL-1))]; 
-				 	else
-				 		tmpV[i] += state->v[i+hL];
-				 
-				 	//West of point
-				 	if(i % hL == 0) //We are at the western face of this node and need to use the halo value
-				 		tmpV[i] += state->cW[i/hL];
-				 	else
-				 		tmpV[i] += state->v[i-1];
-				 }
-				 
-				 for(uint32_t i=0; i<hL*hL; i++) {
-				 	state->v[i] = tmpV[i];
-				 }
-				 for(uint32_t i=0; i<hL; i++){				     handler_log(2 ,"%u		%u		%u		%u		%u		%u		%u		%u		%u", tmpV[(i*hL)+0],tmpV[(i*hL)+1],tmpV[(i*hL)+2],tmpV[(i*hL)+3],tmpV[(i*hL)+4],tmpV[(i*hL)+5],tmpV[(i*hL)+6],tmpV[(i*hL)+7],tmpV[(i*hL)+8]);
-				 }
-				 return 0;
-			}
+ 
+		uint32_t hL = gp->haloLength;
+	  uint32_t tmpV[hL*hL] = { 0 };
+	 	for(uint32_t i=0; i<hL*hL; i++){ 
+	 	//Accumulate all points surrounding the current point
+
+	 	//North of point
+	 	if(i<hL) //We are at the northern face of this node and need to use the halo value	
+	 		tmpV[i] += state->cN[i];
+	 	else
+	 		tmpV[i] += state->v[i-hL];
+
+	 	//East of point
+	 	if((i!=0) && (i % hL == (hL-1))) //We are at the eastern face of this node and need to use the halo value
+	 		tmpV[i] += state->cE[i/(hL-1)]; 
+	 	else
+	 		tmpV[i] += state->v[i+1];
+
+	 	//South of point
+	 	if(i >= (hL*hL -1) - (hL-1)) //We are at the southern face of this node and need to use the halo value
+	 		tmpV[i] += state->cS[i - ((hL*hL -1) - (hL-1))]; 
+	 	else
+	 		tmpV[i] += state->v[i+hL];
+	 
+	 	//West of point
+	 	if(i % hL == 0) //We are at the western face of this node and need to use the halo value
+	 		tmpV[i] += state->cW[i/hL];
+	 	else
+	 		tmpV[i] += state->v[i-1];
+	 	}
+	 
+	 	for(uint32_t i=0; i<hL*hL; i++) {
+	 		state->v[i] = tmpV[i];
+	 	}
+	 	for(uint32_t i=0; i<hL; i++){ 
+	     handler_log(2 ,"%u		%u		%u		%u		%u		%u		%u		%u		%u", tmpV[(i*hL)+0],tmpV[(i*hL)+1],tmpV[(i*hL)+2],tmpV[(i*hL)+3],tmpV[(i*hL)+4],tmpV[(i*hL)+5],tmpV[(i*hL)+6],tmpV[(i*hL)+7],tmpV[(i*hL)+8]); 
+	 	} 
+	 	return 0; 
+				}
 
 			bool allArrived(const cell_9by9_state_t *state, const halo_exchange_properties_t *gp) {
 				for(uint32_t i=0; i<4; i++) {
@@ -373,28 +375,28 @@
 			uint32_t computeTimestep(boundary_9_state_t *state, const halo_exchange_properties_t *gp, OrchestratorServices *orchestrator) {
 				//Process the timestep for this device
 				HandlerLogImpl handler_log(orchestrator);
-				
-				uint32_t hL = gp->haloLength;
-				uint32_t tmpV[hL];	
-				
-				//c = NorthOf(c) + EastOf(c) + SouthOf(c) 
-				//Northmost element 
-				tmpV[0] = 0 + state->cV[0] + state->v[1]; 
-				
-				//Middle Elements 
-				for(uint32_t i=1; i<hL-1; i++) { 
-					tmpV[i] = state->v[i-1] + state->cV[i] + state->v[i+1]; 
-				} 
-				
-				//Southmost element 
-				tmpV[hL-1] = state->v[hL-2] + state->cV[hL-1] + 0; 
-				
-				//Load tmp value array into the real value array 
-				for(uint32_t i=0; i<hL; i++) { 
-					state->v[i] = tmpV[i]; 
-				} 
-				return 1;
-			}
+ 
+		uint32_t hL = gp->haloLength;
+		uint32_t tmpV[hL];	
+		
+		//c = NorthOf(c) + EastOf(c) + SouthOf(c) 
+		//Northmost element 
+		tmpV[0] = 0 + state->cV[0] + state->v[1];
+		
+		//Middle Elements 
+		for(uint32_t i=1; i<hL-1; i++) { 
+			tmpV[i] = state->v[i-1] + state->cV[i] + state->v[i+1]; 
+		} 
+		
+		//Southmost element 
+		tmpV[hL-1] = state->v[hL-2] + state->cV[hL-1] + 0; 
+		
+		//Load tmp value array into the real value array 
+		for(uint32_t i=0; i<hL; i++) { 
+			state->v[i] = tmpV[i]; 
+		} 
+		return 1;
+				}
 		]]></SharedCode>
 
 		<OutputPin name="out" messageTypeId="update">

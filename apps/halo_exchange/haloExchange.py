@@ -1,194 +1,45 @@
-import sys, getopt
-import re
+from collections import namedtuple
 
+Device = namedtuple('Device', 'name celltype size updateFunc')
 
-def main(argv):
-	outFileName=''
-	inFileName=''
-	try:
-		opts, args = getopt.getopt(argv, "hi:o", ["input=","output="])
-	except getopt.GetoptError:
-		print 'Usage python generateHaloExchangeGraphType.py --input description --output graph_type.xml'
-		sys.exit()
-	for opt, arg in opts:
-		if opt == '-h':
-			print 'Usage python generateHaloExchangeGraphType.py --input description --output graph_type.xml'
-			sys.exit()
-		if opt in ("-i", "--input"):
-			inFileName = arg
-		if opt in ("-o", "--output"):
-			outFileName = arg	
-	assert(outFileName != '')	
-	assert(inFileName != '')
+def generate_graph(graphname, devicelist, haloLength, debug):
+	o = generate_graphHeader(graphname)
+	o+= generate_graphProperties(haloLength)	
+	o+= generate_messages(haloLength)
+	o+= generate_devices(devicelist, debug)
+	o+= '</GraphType>\n'	
+	o+= generate_simpleTestInstance(haloLength, graphname)
+	o+= '</Graphs>\n'	
+	return o
 
-	N = 9;
-	debug = True;
-
-	xmlo = '<?xml version=\"1.0\"?>\n' 
-	xmlo+= '<Graphs xmlns=\"https://poets-project.org/schemas/virtual-graph-schema-v2\">\n'
-	xmlo+= '\t<GraphType id=\"halo_exchange\">\n'
-	
-	xmlo+= '\t<Properties>\n'
-	xmlo+= '\t\t<Scalar type=\"uint32_t\" name=\"maxTime\" default=\"65\" />\n'
-	xmlo+= '\t\t<Scalar type=\"uint32_t\" name=\"nodesPerDevice\" default=\"'+str(N*N)+'\" />\n'
-	xmlo+= '\t\t<Scalar type=\"uint32_t\" name=\"haloLength\" default=\"'+str(N)+'\" />\n'
-	xmlo+= '\t\t<Scalar type=\"uint32_t\" name=\"dt\" default=\"1\" />\n'
-	xmlo+= '\t</Properties>\n'
-	xmlo+= '\n'
-
-	xmlo+=generate_messages(N)
-
-	xmlo+= '\n'
-	xmlo+= '\t<DeviceTypes>\n'
-
-	tabs = '\t\t\t\t'
-
-	# Example of a 4x4 FE agglomerated node
-	#	hL is the length of the halo exchange (i.e. the length of the grid)
-	#
-	# 				N(0)		N(1)		N(2)		N(3) 
-	# W(0)		0				1				2				3		E(0)	
-	# W(1)		4				5				6				7		E(1)
-	# W(2)		8				9				10			11	E(2)
-	# W(3)		12			13			14			15	E(3)
-	#					S(0)		S(1)		S(2)		S(3)
-
-	# if ( i < hL ) we are at a north facing edge 
-  # if ( i % (hL-1) == 0 ) we are at an east facing edge 
-	# if ( i >= (hL*hL -1) - (hL - 1) ) we are at a south facing edge 
-	# if ( i % hL == 0 ) we are at a west facing edge 
-
-	c_timestep =  tabs + ' uint32_t hL = gp->haloLength;\n'
-	c_timestep += tabs + ' uint32_t tmpV[hL*hL] = { 0 };\n'
-	c_timestep += tabs + ' for(uint32_t i=0; i<hL*hL; i++) {\n'
-	c_timestep += tabs + ' 	//Accumulate all points surrounding the current point\n'
-	c_timestep += tabs + ' \n'
-	c_timestep += tabs + ' 	//North of point\n'
-	c_timestep += tabs + ' 	if(i<hL) //We are at the northern face of this node and need to use the halo value	\n'
-	c_timestep += tabs + ' 		tmpV[i] += state->cN[i];\n'
-	c_timestep += tabs + ' 	else\n'
-	c_timestep += tabs + ' 		tmpV[i] += state->v[i-hL];\n'
-	c_timestep += tabs + ' \n'
-	c_timestep += tabs + ' 	//East of point\n'
-	c_timestep += tabs + ' 	if((i!=0) && (i % hL == (hL-1))) //We are at the eastern face of this node and need to use the halo value\n'
-	c_timestep += tabs + ' 		tmpV[i] += state->cE[i/(hL-1)]; \n'
-	c_timestep += tabs + ' 	else\n'
-	c_timestep += tabs + ' 		tmpV[i] += state->v[i+1];\n'
-	c_timestep += tabs + ' \n'
-	c_timestep += tabs + ' 	//South of point\n'
-	c_timestep += tabs + ' 	if(i >= (hL*hL -1) - (hL-1)) //We are at the southern face of this node and need to use the halo value\n'
-	c_timestep += tabs + ' 		tmpV[i] += state->cS[i - ((hL*hL -1) - (hL-1))]; \n'
-	c_timestep += tabs + ' 	else\n'
-	c_timestep += tabs + ' 		tmpV[i] += state->v[i+hL];\n'
-	c_timestep += tabs + ' \n'
-	c_timestep += tabs + ' 	//West of point\n'
-	c_timestep += tabs + ' 	if(i % hL == 0) //We are at the western face of this node and need to use the halo value\n'
-	c_timestep += tabs + ' 		tmpV[i] += state->cW[i/hL];\n'
-	c_timestep += tabs + ' 	else\n'
-	c_timestep += tabs + ' 		tmpV[i] += state->v[i-1];\n'
-	c_timestep += tabs + ' }\n'
-	c_timestep += tabs + ' \n'
-	c_timestep += tabs + ' for(uint32_t i=0; i<hL*hL; i++) {\n'
-	c_timestep += tabs + ' 	state->v[i] = tmpV[i];\n'
-	c_timestep += tabs + ' }\n'
-	c_timestep += tabs + ' for(uint32_t i=0; i<hL; i++){' 
-	c_timestep += tabs + '     handler_log(2 ,"%u\t\t%u\t\t%u\t\t%u\t\t%u\t\t%u\t\t%u\t\t%u\t\t%u", tmpV[(i*hL)+0],tmpV[(i*hL)+1],tmpV[(i*hL)+2],tmpV[(i*hL)+3],tmpV[(i*hL)+4],tmpV[(i*hL)+5],tmpV[(i*hL)+6],tmpV[(i*hL)+7],tmpV[(i*hL)+8]);\n' 
-	c_timestep += tabs + ' }\n' 
-	c_timestep += tabs + ' return 0;\n'
-
-	
-	# Boundary update function body, example boundary_4
-	#
-	# 0	- cV[0]
-	#	1 - cV[1]
-	#	2 - cV[2]
-	#	3 - cV[3]
-	#
-	# Currently it ignores it's own boundary and does nothing special, just accumulates it's neighbours together where it can
-	# Boundary only has N, E, S -- the west edge is assumed to be the boundary. In reality this might be rotated and not truely be the western face..
-
-	b_timestep =  tabs + '\n'
-	b_timestep += tabs + 'uint32_t hL = gp->haloLength;\n'
-	b_timestep += tabs + 'uint32_t tmpV[hL];	\n'
-	b_timestep += tabs + '\n'
-	b_timestep += tabs + '//c = NorthOf(c) + EastOf(c) + SouthOf(c) \n'
-	b_timestep += tabs + '//Northmost element \n'
-	b_timestep += tabs + 'tmpV[0] = 0 + state->cV[0] + state->v[1]; \n'
-	b_timestep += tabs + '\n'
-	b_timestep += tabs + '//Middle Elements \n'
-	b_timestep += tabs + 'for(uint32_t i=1; i<hL-1; i++) { \n'
-	b_timestep += tabs + '\ttmpV[i] = state->v[i-1] + state->cV[i] + state->v[i+1]; \n'
-	b_timestep += tabs + '} \n'
-	b_timestep += tabs + '\n'
-	b_timestep += tabs + '//Southmost element \n'
-	b_timestep += tabs + 'tmpV[hL-1] = state->v[hL-2] + state->cV[hL-1] + 0; \n'
-	b_timestep += tabs + '\n'
-	b_timestep += tabs + '//Load tmp value array into the real value array \n'
-	b_timestep += tabs + 'for(uint32_t i=0; i<hL; i++) { \n'
-	b_timestep += tabs + '\tstate->v[i] = tmpV[i]; \n'
-	b_timestep += tabs + '} \n'
-	b_timestep += tabs + 'return 1;\n'
-
-	xmlo+= generate_NbyN_Cluster(N, debug, c_timestep)
-	xmlo+= generate_lengthN_boundary(N, debug, b_timestep)
-	xmlo+= generate_exitNode(debug)
-
-	xmlo+= '\t</DeviceTypes>\n'
-	xmlo+= '</GraphType>\n'	
-	xmlo+= generate_simpleTestInstance(N)
-	xmlo+= '</Graphs>\n'	
-
-	outfile = open(outFileName,'w')
-	outfile.write(xmlo)
-
-def generate_messages(N):
+def generate_devices(devicelist, debug):
 	o= '\n'
-	o+= '\t<MessageTypes>\n' 
-	o+= '\t\t<MessageType id=\"__init__\">\n'
-	o+= '\t\t</MessageType>\n'
-	o+= '\n'
-	o+= '\t\t<MessageType id=\"finished\">\n'
-	o+= '\t\t</MessageType>\n'
-	o+= '\n'
-	o+= '\t\t<MessageType id=\"update\">\n'
-	o+= '\t\t\t<Message>\n'
-	o+= '\t\t\t\t<Scalar type=\"uint32_t\" name=\"t\" />\n'
-	o+= '\t\t\t\t<Array type=\"uint32_t\" name=\"v\" length=\"'+str(N)+'\" />\n'
-	o+= '\t\t\t</Message>\n'
-	o+= '\t\t</MessageType>\n'
-	o+= '\t</MessageTypes>\n'
-	return o 
-	
-def generate_exitNode(debug):
-	o='\n'
-	o+='\t<DeviceType id=\"exit_node\">\n'
-	o+='\t\t<Properties>\n'
-	o+='\t\t\t<Scalar name=\"fanin\" type=\"uint32_t\" />\n'
-	o+='\t\t</Properties>\n'
-	o+='\n'
+	o+= '\t<DeviceTypes>\n'
+	for d in devicelist:
+		if d.celltype == 'box':		
+			o+= generate_NbyN_Cluster(d.size, debug, d.updateFunc)	
+		elif d.celltype == 'edge':
+			o+= generate_lengthN_boundary(d.size, debug, d.updateFunc)
+		elif d.celltype == 'exit':
+			o+= generate_exitNode(True)
+	o+= '\t</DeviceTypes>\n'
+	return o
+				
 
-	o+='\t\t<State>\n'
-	o+='\t\t\t<Scalar name=\"done\" type=\"uint32_t\" />\n'
-	o+='\t\t</State>\n'
-	o+='\n'
+def generate_graphProperties(N):
+	o=  '\t<Properties>\n'
+	o+= '\t\t<Scalar type=\"uint32_t\" name=\"maxTime\" default=\"65\" />\n'
+	o+= '\t\t<Scalar type=\"uint32_t\" name=\"nodesPerDevice\" default=\"'+str(N*N)+'\" />\n'
+	o+= '\t\t<Scalar type=\"uint32_t\" name=\"haloLength\" default=\"'+str(N)+'\" />\n'
+	o+= '\t\t<Scalar type=\"uint32_t\" name=\"dt\" default=\"1\" />\n'
+	o+= '\t</Properties>\n'
+	o+= '\n'
+	return o
 
-	o+='\t\t<ReadyToSend><![CDATA[\n'
-	o+='\t\t\t*readyToSend=0;\n'
-	o+='\t\t]]></ReadyToSend>\n'	
-	o+='\n'
-	
-	o+='\t\t<InputPin name=\"done\" messageTypeId=\"finished\">\n'
-	o+='\t\t\t<OnReceive><![CDATA[\n'
-	o+='\t\t\t\tdeviceState->done++;\n'
-	if debug:
-		o+='\t\t\t\thandler_log(2, \"done=0x%x, fanin=0x%x\", deviceState->done, deviceProperties->fanin);\n'
-	o+='\t\t\t\tif(deviceState->done == deviceProperties->fanin){\n'
-	o+='\t\t\t\t\thandler_exit(0);\n'
-	o+='\t\t\t\t}\n'
-	o+='\t\t\t]]></OnReceive>\n'
-	o+='\t\t</InputPin>\n'
-		
-	o+='\t</DeviceType>\n'
+def generate_graphHeader(name):
+	o = '<?xml version=\"1.0\"?>\n' 
+	o+= '<Graphs xmlns=\"https://poets-project.org/schemas/virtual-graph-schema-v2\">\n'
+	o+= '\t<GraphType id=\"'+name+'\">\n'
 	return o
 
 def generate_lengthN_boundary(N,debug, computeTimestep):
@@ -493,8 +344,8 @@ def generate_NbyN_Cluster(N, debug, computeTimestep):
 	o+='\t</DeviceType>\n'
 	return o
 
-def generate_simpleTestInstance(N):
-	o='<GraphInstance id=\"test_'+str(N)+'by'+str(N)+'\" graphTypeId=\"halo_exchange\">\n'
+def generate_simpleTestInstance(N, name):
+	o='<GraphInstance id=\"test_'+str(N)+'by'+str(N)+'\" graphTypeId=\"'+name+'\">\n'
 	o+='\t<DeviceInstances sorted=\"1\">\n'
 	o+='\t\t<DevI id=\"center\" type=\"cell_'+str(N)+'by'+str(N)+'\" />\n'
 	o+='\t\t<DevI id=\"nEdge\" type=\"boundary_'+str(N)+'\" />\n'
@@ -523,5 +374,55 @@ def generate_simpleTestInstance(N):
 	o+='</GraphInstance>\n'
 	return o
 
-if __name__== "__main__":
-	main(sys.argv[1:])
+
+
+def generate_messages(N):
+	o= '\n'
+	o+= '\t<MessageTypes>\n' 
+	o+= '\t\t<MessageType id=\"__init__\">\n'
+	o+= '\t\t</MessageType>\n'
+	o+= '\n'
+	o+= '\t\t<MessageType id=\"finished\">\n'
+	o+= '\t\t</MessageType>\n'
+	o+= '\n'
+	o+= '\t\t<MessageType id=\"update\">\n'
+	o+= '\t\t\t<Message>\n'
+	o+= '\t\t\t\t<Scalar type=\"uint32_t\" name=\"t\" />\n'
+	o+= '\t\t\t\t<Array type=\"uint32_t\" name=\"v\" length=\"'+str(N)+'\" />\n'
+	o+= '\t\t\t</Message>\n'
+	o+= '\t\t</MessageType>\n'
+	o+= '\t</MessageTypes>\n'
+	return o 
+	
+
+def generate_exitNode(debug):
+	o='\n'
+	o+='\t<DeviceType id=\"exit_node\">\n'
+	o+='\t\t<Properties>\n'
+	o+='\t\t\t<Scalar name=\"fanin\" type=\"uint32_t\" />\n'
+	o+='\t\t</Properties>\n'
+	o+='\n'
+
+	o+='\t\t<State>\n'
+	o+='\t\t\t<Scalar name=\"done\" type=\"uint32_t\" />\n'
+	o+='\t\t</State>\n'
+	o+='\n'
+
+	o+='\t\t<ReadyToSend><![CDATA[\n'
+	o+='\t\t\t*readyToSend=0;\n'
+	o+='\t\t]]></ReadyToSend>\n'	
+	o+='\n'
+	
+	o+='\t\t<InputPin name=\"done\" messageTypeId=\"finished\">\n'
+	o+='\t\t\t<OnReceive><![CDATA[\n'
+	o+='\t\t\t\tdeviceState->done++;\n'
+	if debug:
+		o+='\t\t\t\thandler_log(2, \"done=0x%x, fanin=0x%x\", deviceState->done, deviceProperties->fanin);\n'
+	o+='\t\t\t\tif(deviceState->done == deviceProperties->fanin){\n'
+	o+='\t\t\t\t\thandler_exit(0);\n'
+	o+='\t\t\t\t}\n'
+	o+='\t\t\t]]></OnReceive>\n'
+	o+='\t\t</InputPin>\n'
+		
+	o+='\t</DeviceType>\n'
+	return o
