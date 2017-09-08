@@ -1,6 +1,6 @@
 from collections import namedtuple
 
-Device = namedtuple('Device', 'name celltype size updateFunc initFunc')
+Device = namedtuple('Device', 'name celltype size properties state updateFunc initFunc')
 
 def generate_graph(graphname, devicelist, haloLength, debug):
 	o = generate_graphHeader(graphname)
@@ -17,9 +17,9 @@ def generate_devices(graphname, devicelist, debug):
 	o+= '\t<DeviceTypes>\n'
 	for d in devicelist:
 		if d.celltype == 'box':		
-			o+= generate_NbyN_Cluster(graphname, d.size, debug, d.updateFunc, d.initFunc)	
+			o+= generate_NbyN_Cluster(graphname, d.size, debug, d.properties, d.state, d.updateFunc, d.initFunc)	
 		elif d.celltype == 'edge':
-			o+= generate_lengthN_boundary(graphname, d.size, debug, d.updateFunc, d.initFunc)
+			o+= generate_lengthN_boundary(graphname, d.size, debug, d.properties, d.state, d.updateFunc, d.initFunc)
 		elif d.celltype == 'exit':
 			o+= generate_exitNode(True)
 	o+= '\t</DeviceTypes>\n'
@@ -41,11 +41,12 @@ def generate_graphHeader(name):
 	o+= '\t<GraphType id=\"'+name+'\">\n'
 	return o
 
-def generate_lengthN_boundary(graphname, N, debug, updateFunc, initFunc):
+def generate_lengthN_boundary(graphname, N, debug, properties, state, updateFunc, initFunc):
 	o='\n'
 	o+='\t<DeviceType id=\"boundary_'+str(N)+'\">\n'
 	o+='\t\t<Properties>\n'
 	o+='\t\t\t<Scalar type=\"uint32_t\" name=\"haloLength\" default=\"'+str(N)+'\" />\n'
+	o+=properties
 	o+='\t\t</Properties>\n'
 	o+='\t\t<State>\n'
 	o+='\t\t\t<Array type=\"uint32_t\" name=\"cV\" length=\"'+str(N)+'\"/>\n'
@@ -54,6 +55,7 @@ def generate_lengthN_boundary(graphname, N, debug, updateFunc, initFunc):
 	o+='\t\t\t<Scalar type=\"uint32_t\" name=\"t\"/>\n'
 	o+='\t\t\t<Scalar type=\"int8_t\" name=\"cAvail\"/>\n'
 	o+='\t\t\t<Scalar type=\"int8_t\" name=\"nAvail\"/>\n'
+	o+=state
 	o+='\t\t</State>\n'
 	o+='\n'
 	
@@ -150,13 +152,14 @@ def generate_lengthN_boundary(graphname, N, debug, updateFunc, initFunc):
 	o+='\t</DeviceType>\n'
 	return o 
 
-def generate_NbyN_Cluster(graphname, N, debug, updateFunc, initFunc): 
+def generate_NbyN_Cluster(graphname, N, debug, properties, state, updateFunc, initFunc): 
 #returns a string containing xml code describing a halo exchange N x N device
 	o='\n'
 	o+='\t<DeviceType id=\"cell_' + str(N) +'by'+str(N)+'\">\n' 	
 	o+='\t\t<Properties>\n'
 	o+='\t\t\t<Scalar type=\"int32_t\" name=\"updateDelta\" />\n' 
 	o+='\t\t\t<Scalar type=\"uint32_t\" name=\"haloLength\" default=\"'+str(N)+'\" />\n' 
+	o+=properties
 	o+='\t\t</Properties>\n'
 	o+='\t\t<State>\n'
 	o+='\t\t\t<Scalar type=\"uint32_t\" name=\"t\"/>\n'
@@ -176,6 +179,7 @@ def generate_NbyN_Cluster(graphname, N, debug, updateFunc, initFunc):
 	o+='\t\t\t<Array type=\"uint8_t\" name=\"n_arrivalFlags\" length=\"4\"/>\n'
 	o+='\t\t\t<Array type=\"uint8_t\" name=\"sentFlags\" length=\"4\"/>\n'
 	o+='\t\t\t<Scalar type=\"uint8_t\" name=\"processed\"/>\n'
+	o+=state
 	o+='\t\t</State>\n'
 	o+='\n'
 	o+='\t\t<ReadyToSend><![CDATA[\n'
