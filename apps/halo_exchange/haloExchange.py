@@ -1,6 +1,6 @@
 from collections import namedtuple
 
-Device = namedtuple('Device', 'name celltype size updateFunc')
+Device = namedtuple('Device', 'name celltype size updateFunc initFunc')
 
 def generate_graph(graphname, devicelist, haloLength, debug):
 	o = generate_graphHeader(graphname)
@@ -17,9 +17,9 @@ def generate_devices(graphname, devicelist, debug):
 	o+= '\t<DeviceTypes>\n'
 	for d in devicelist:
 		if d.celltype == 'box':		
-			o+= generate_NbyN_Cluster(graphname, d.size, debug, d.updateFunc)	
+			o+= generate_NbyN_Cluster(graphname, d.size, debug, d.updateFunc, d.initFunc)	
 		elif d.celltype == 'edge':
-			o+= generate_lengthN_boundary(graphname, d.size, debug, d.updateFunc)
+			o+= generate_lengthN_boundary(graphname, d.size, debug, d.updateFunc, d.initFunc)
 		elif d.celltype == 'exit':
 			o+= generate_exitNode(True)
 	o+= '\t</DeviceTypes>\n'
@@ -28,7 +28,7 @@ def generate_devices(graphname, devicelist, debug):
 
 def generate_graphProperties(N):
 	o=  '\t<Properties>\n'
-	o+= '\t\t<Scalar type=\"uint32_t\" name=\"maxTime\" default=\"65\" />\n'
+	o+= '\t\t<Scalar type=\"uint32_t\" name=\"maxTime\" default=\"5\" />\n'
 	o+= '\t\t<Scalar type=\"uint32_t\" name=\"nodesPerDevice\" default=\"'+str(N*N)+'\" />\n'
 	o+= '\t\t<Scalar type=\"uint32_t\" name=\"dt\" default=\"1\" />\n'
 	o+= '\t</Properties>\n'
@@ -41,7 +41,7 @@ def generate_graphHeader(name):
 	o+= '\t<GraphType id=\"'+name+'\">\n'
 	return o
 
-def generate_lengthN_boundary(graphname, N, debug, updateFunc):
+def generate_lengthN_boundary(graphname, N, debug, updateFunc, initFunc):
 	o='\n'
 	o+='\t<DeviceType id=\"boundary_'+str(N)+'\">\n'
 	o+='\t\t<Properties>\n'
@@ -79,8 +79,8 @@ def generate_lengthN_boundary(graphname, N, debug, updateFunc):
 	o+='\t\t\t\tfor(uint32_t i=0; i<deviceProperties->haloLength; i++){\n'
 	o+='\t\t\t\t\tdeviceState->cV[i] = 0;\n'
 	o+='\t\t\t\t\tdeviceState->nV[i] = 0;\n'
-	o+='\t\t\t\t\tdeviceState->v[i] = 0;\n'
 	o+='\t\t\t\t}\n'
+	o+='\t\t\t\tinitFunc(deviceState, deviceProperties, orchestrator);\n'
 	o+='\t\t\t]]></OnReceive>\n'
 	o+='\t\t</InputPin>\n'
 	o+='\n'
@@ -91,6 +91,11 @@ def generate_lengthN_boundary(graphname, N, debug, updateFunc):
 	o+='\t\t\t\t//Process the timestep for this device\n'
 	o+='\t\t\t\tHandlerLogImpl handler_log(orchestrator);\n'
 	o+= updateFunc #Inject the input code for how the timestep should be computed
+	o+='\t\t\t}\n\n'
+	o+='\t\t\tuint32_t initFunc(boundary_'+str(N)+'_state_t *state, const boundary_'+str(N)+'_properties_t *properties, OrchestratorServices *orchestrator) {\n'
+	o+='\t\t\t\t//used to initialise the state of the device\n'
+	o+='\t\t\t\tHandlerLogImpl handler_log(orchestrator);\n'
+	o+= initFunc #Inject the input code for how the timestep should be computed
 	o+='\t\t\t}\n'
 	o+='\t\t]]></SharedCode>\n'
 	o+='\n'
@@ -145,7 +150,7 @@ def generate_lengthN_boundary(graphname, N, debug, updateFunc):
 	o+='\t</DeviceType>\n'
 	return o 
 
-def generate_NbyN_Cluster(graphname, N, debug, updateFunc): 
+def generate_NbyN_Cluster(graphname, N, debug, updateFunc, initFunc): 
 #returns a string containing xml code describing a halo exchange N x N device
 	o='\n'
 	o+='\t<DeviceType id=\"cell_' + str(N) +'by'+str(N)+'\">\n' 	
@@ -202,16 +207,13 @@ def generate_NbyN_Cluster(graphname, N, debug, updateFunc):
 		o+='\t\t\t\thandler_log(2, \"center device is being initialised\");\n'
 	o+='\t\t\t\tdeviceState->t=0;\n'
 	o+='\t\t\t\tdeviceState->processed=0;\n'
-	o+='\t\t\t\tuint32_t hL = deviceProperties->haloLength;\n'
-	o+='\t\t\t\tfor(uint32_t i=0; i<hL*hL; i++) {\n'
-	o+='\t\t\t\t\tdeviceState->v[i] = 0;\n'
-	o+='\t\t\t\t}\n'
 	o+='\t\t\t\tfor(uint32_t i=0; i<deviceProperties->haloLength; i++) {\n'
 	o+='\t\t\t\t\tdeviceState->cN[i]=0; deviceState->cE[i]=0; deviceState->cS[i]=0; deviceState->cW[i]=0;\n'
 	o+='\t\t\t\t\tdeviceState->nN[i]=0; deviceState->nE[i]=0; deviceState->nS[i]=0; deviceState->nW[i]=0;\n'
 	o+='\t\t\t\t\tdeviceState->n_arrivalFlags[i] = 0;\n'
 	o+='\t\t\t\t\tdeviceState->c_arrivalFlags[i] = 0;\n'
 	o+='\t\t\t\t}\n'
+	o+='\t\t\t\tinitFunc(deviceState, deviceProperties, orchestrator);\n'
 	o+='\t\t\t]]></OnReceive>\n'
 	o+='\t\t</InputPin>\n'
 	o+='\n'
@@ -222,6 +224,12 @@ def generate_NbyN_Cluster(graphname, N, debug, updateFunc):
 	o+='\t\t\t\t //Process the timestep for this device\n'
 	o+='\t\t\t\t HandlerLogImpl handler_log(orchestrator);\n\n'
 	o+= updateFunc #inject the code for computing each timestep
+	o+='\t\t\t}\n'
+	o+='\n'
+	o+='\t\t\tuint32_t initFunc(cell_'+str(N)+'by'+str(N)+'_state_t *state, const cell_'+str(N)+'by'+str(N)+'_properties_t *properties, OrchestratorServices *orchestrator) {\n'
+	o+='\t\t\t\t //the initial state for this device\n'
+	o+='\t\t\t\t HandlerLogImpl handler_log(orchestrator);\n\n'
+	o+= initFunc #inject the code for computing each timestep
 	o+='\t\t\t}\n'
 	o+='\n'
 	o+='\t\t\tbool allArrived(const cell_'+str(N)+'by'+str(N)+'_state_t *state, const cell_'+str(N)+'by'+str(N)+'_properties_t *gp) {\n'

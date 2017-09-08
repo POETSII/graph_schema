@@ -78,16 +78,13 @@
 				handler_log(2, "center device is being initialised");
 				deviceState->t=0;
 				deviceState->processed=0;
-				uint32_t hL = deviceProperties->haloLength;
-				for(uint32_t i=0; i<hL*hL; i++) {
-					deviceState->v[i] = 0;
-				}
 				for(uint32_t i=0; i<deviceProperties->haloLength; i++) {
 					deviceState->cN[i]=0; deviceState->cE[i]=0; deviceState->cS[i]=0; deviceState->cW[i]=0;
 					deviceState->nN[i]=0; deviceState->nE[i]=0; deviceState->nS[i]=0; deviceState->nW[i]=0;
 					deviceState->n_arrivalFlags[i] = 0;
 					deviceState->c_arrivalFlags[i] = 0;
 				}
+				initFunc(deviceState, deviceProperties, orchestrator);
 			]]></OnReceive>
 		</InputPin>
 
@@ -136,6 +133,18 @@
 	     handler_log(2 ,"%u	%u	%u	%u	%u	%u	%u	%u	%u", tmpV[(i*hL)+0],tmpV[(i*hL)+1],tmpV[(i*hL)+2],tmpV[(i*hL)+3],tmpV[(i*hL)+4],tmpV[(i*hL)+5],tmpV[(i*hL)+6],tmpV[(i*hL)+7],tmpV[(i*hL)+8]); 
 	 	} 
 	 	return 0; 
+				}
+
+			uint32_t initFunc(cell_9by9_state_t *state, const cell_9by9_properties_t *properties, OrchestratorServices *orchestrator) {
+				 //the initial state for this device
+				 HandlerLogImpl handler_log(orchestrator);
+
+
+			uint32_t hL = properties->haloLength;
+			for(uint32_t i=0; i<hL*hL; i++) {
+					state->v[i] = 0;
+			}
+			return 1;
 				}
 
 			bool allArrived(const cell_9by9_state_t *state, const cell_9by9_properties_t *gp) {
@@ -369,8 +378,8 @@
 				for(uint32_t i=0; i<deviceProperties->haloLength; i++){
 					deviceState->cV[i] = 0;
 					deviceState->nV[i] = 0;
-					deviceState->v[i] = 1;
 				}
+				initFunc(deviceState, deviceProperties, orchestrator);
 			]]></OnReceive>
 		</InputPin>
 
@@ -399,6 +408,17 @@
 		for(uint32_t i=0; i<hL; i++) { 
 			state->v[i] = tmpV[i]; 
 		} 
+		return 1;
+				}
+
+			uint32_t initFunc(boundary_9_state_t *state, const boundary_9_properties_t *properties, OrchestratorServices *orchestrator) {
+				//used to initialise the state of the device
+				HandlerLogImpl handler_log(orchestrator);
+
+		uint32_t hL = properties->haloLength;
+		for(uint32_t i=0; i<hL; i++) {
+			state->v[i] = 2;
+		}
 		return 1;
 				}
 		]]></SharedCode>

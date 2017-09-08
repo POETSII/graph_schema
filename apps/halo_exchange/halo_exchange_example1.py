@@ -75,6 +75,15 @@ def main(argv):
 	 	return 0; 
 	"""
 
+	#code fragment that initialises the state of the center device
+	center_init = """
+			uint32_t hL = properties->haloLength;
+			for(uint32_t i=0; i<hL*hL; i++) {
+					state->v[i] = 0;
+			}
+			return 1;
+	"""
+
 	
 	# Boundary update function body, example boundary_4
 	#
@@ -109,10 +118,18 @@ def main(argv):
 		return 1;
 	"""
 
+	#code fragment responsible for initialising the boundary device
+	boundary_init = """
+		uint32_t hL = properties->haloLength;
+		for(uint32_t i=0; i<hL; i++) {
+			state->v[i] = 2;
+		}
+		return 1;
+	"""
 
-	center = hE.Device(name='center', celltype='box', size=N, updateFunc=center_update) 
-	boundary = hE.Device(name='boundary', celltype='edge', size=N, updateFunc=boundary_update) 
-	exit_node = hE.Device(name='exit_node', celltype='exit', size=N, updateFunc='') 
+	center = hE.Device(name='center', celltype='box', size=N, updateFunc=center_update, initFunc=center_init) 
+	boundary = hE.Device(name='boundary', celltype='edge', size=N, updateFunc=boundary_update, initFunc=boundary_init) 
+	exit_node = hE.Device(name='exit_node', celltype='exit', size=N, updateFunc='', initFunc='') 
 	dlist = [center, boundary, exit_node]
 
 	xmlo = hE.generate_graph('halo_exchange',dlist,N,True)
