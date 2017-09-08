@@ -36,7 +36,7 @@ def main(argv):
 	# if ( i % hL == 0 ) we are at a west facing edge 
 
 	center_update = """ 
-		uint32_t hL = gp->haloLength;
+		uint32_t hL = properties->haloLength;
 	  uint32_t tmpV[hL*hL] = { 0 };
 	 	for(uint32_t i=0; i<hL*hL; i++){ 
 	 	//Accumulate all points surrounding the current point
@@ -70,7 +70,7 @@ def main(argv):
 	 		state->v[i] = tmpV[i];
 	 	}
 	 	for(uint32_t i=0; i<hL; i++){ 
-	     handler_log(2 ,"%u\t\t%u\t\t%u\t\t%u\t\t%u\t\t%u\t\t%u\t\t%u\t\t%u", tmpV[(i*hL)+0],tmpV[(i*hL)+1],tmpV[(i*hL)+2],tmpV[(i*hL)+3],tmpV[(i*hL)+4],tmpV[(i*hL)+5],tmpV[(i*hL)+6],tmpV[(i*hL)+7],tmpV[(i*hL)+8]); 
+	     handler_log(2 ,"%u\t%u\t%u\t%u\t%u\t%u\t%u\t%u\t%u", tmpV[(i*hL)+0],tmpV[(i*hL)+1],tmpV[(i*hL)+2],tmpV[(i*hL)+3],tmpV[(i*hL)+4],tmpV[(i*hL)+5],tmpV[(i*hL)+6],tmpV[(i*hL)+7],tmpV[(i*hL)+8]); 
 	 	} 
 	 	return 0; 
 	"""
@@ -87,7 +87,7 @@ def main(argv):
 	# Boundary only has N, E, S -- the west edge is assumed to be the boundary. In reality this might be rotated and not truely be the western face..
 
 	boundary_update = """ 
-		uint32_t hL = gp->haloLength;
+		uint32_t hL = properties->haloLength;
 		uint32_t tmpV[hL];	
 		
 		//c = NorthOf(c) + EastOf(c) + SouthOf(c) 
@@ -119,7 +119,7 @@ def main(argv):
 
 	outfile = open(outFileName,'w')
 	outfile.write(xmlo)
-
+	outfile.close()
 
 
 if __name__== "__main__":

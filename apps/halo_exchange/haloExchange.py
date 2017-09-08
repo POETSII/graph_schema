@@ -6,20 +6,20 @@ def generate_graph(graphname, devicelist, haloLength, debug):
 	o = generate_graphHeader(graphname)
 	o+= generate_graphProperties(haloLength)	
 	o+= generate_messages(haloLength)
-	o+= generate_devices(devicelist, debug)
+	o+= generate_devices(graphname, devicelist, debug)
 	o+= '</GraphType>\n'	
 	o+= generate_simpleTestInstance(haloLength, graphname)
 	o+= '</Graphs>\n'	
 	return o
 
-def generate_devices(devicelist, debug):
+def generate_devices(graphname, devicelist, debug):
 	o= '\n'
 	o+= '\t<DeviceTypes>\n'
 	for d in devicelist:
 		if d.celltype == 'box':		
-			o+= generate_NbyN_Cluster(d.size, debug, d.updateFunc)	
+			o+= generate_NbyN_Cluster(graphname, d.size, debug, d.updateFunc)	
 		elif d.celltype == 'edge':
-			o+= generate_lengthN_boundary(d.size, debug, d.updateFunc)
+			o+= generate_lengthN_boundary(graphname, d.size, debug, d.updateFunc)
 		elif d.celltype == 'exit':
 			o+= generate_exitNode(True)
 	o+= '\t</DeviceTypes>\n'
@@ -30,7 +30,6 @@ def generate_graphProperties(N):
 	o=  '\t<Properties>\n'
 	o+= '\t\t<Scalar type=\"uint32_t\" name=\"maxTime\" default=\"65\" />\n'
 	o+= '\t\t<Scalar type=\"uint32_t\" name=\"nodesPerDevice\" default=\"'+str(N*N)+'\" />\n'
-	o+= '\t\t<Scalar type=\"uint32_t\" name=\"haloLength\" default=\"'+str(N)+'\" />\n'
 	o+= '\t\t<Scalar type=\"uint32_t\" name=\"dt\" default=\"1\" />\n'
 	o+= '\t</Properties>\n'
 	o+= '\n'
@@ -42,9 +41,12 @@ def generate_graphHeader(name):
 	o+= '\t<GraphType id=\"'+name+'\">\n'
 	return o
 
-def generate_lengthN_boundary(N,debug, computeTimestep):
+def generate_lengthN_boundary(graphname, N, debug, updateFunc):
 	o='\n'
 	o+='\t<DeviceType id=\"boundary_'+str(N)+'\">\n'
+	o+='\t\t<Properties>\n'
+	o+='\t\t\t<Scalar type=\"uint32_t\" name=\"haloLength\" default=\"'+str(N)+'\" />\n'
+	o+='\t\t</Properties>\n'
 	o+='\t\t<State>\n'
 	o+='\t\t\t<Array type=\"uint32_t\" name=\"cV\" length=\"'+str(N)+'\"/>\n'
 	o+='\t\t\t<Array type=\"uint32_t\" name=\"nV\" length=\"'+str(N)+'\"/>\n'
@@ -74,7 +76,7 @@ def generate_lengthN_boundary(N,debug, computeTimestep):
 	o+='\t\t\t\tdeviceState->t = 0;\n'
 	o+='\t\t\t\tdeviceState->cAvail = 0;\n'
 	o+='\t\t\t\tdeviceState->nAvail = 0;\n'
-	o+='\t\t\t\tfor(uint32_t i=0; i<graphProperties->haloLength; i++){\n'
+	o+='\t\t\t\tfor(uint32_t i=0; i<deviceProperties->haloLength; i++){\n'
 	o+='\t\t\t\t\tdeviceState->cV[i] = 0;\n'
 	o+='\t\t\t\t\tdeviceState->nV[i] = 0;\n'
 	o+='\t\t\t\t\tdeviceState->v[i] = 0;\n'
@@ -85,17 +87,17 @@ def generate_lengthN_boundary(N,debug, computeTimestep):
 
 	o+='\t\t<SharedCode><![CDATA[\n'
 	o+='\t\t\tenum orientation_t { north, east, south, west };\n'
-	o+='\t\t\tuint32_t computeTimestep(boundary_9_state_t *state, const halo_exchange_properties_t *gp, OrchestratorServices *orchestrator) {\n'
+	o+='\t\t\tuint32_t updateFunc(boundary_'+str(N)+'_state_t *state, const boundary_'+str(N)+'_properties_t *properties, OrchestratorServices *orchestrator) {\n'
 	o+='\t\t\t\t//Process the timestep for this device\n'
 	o+='\t\t\t\tHandlerLogImpl handler_log(orchestrator);\n'
-	o+= computeTimestep #Inject the input code for how the timestep should be computed
+	o+= updateFunc #Inject the input code for how the timestep should be computed
 	o+='\t\t\t}\n'
 	o+='\t\t]]></SharedCode>\n'
 	o+='\n'
 
 	o+='\t\t<OutputPin name=\"out\" messageTypeId=\"update\">\n'	
 	o+='\t\t\t<OnSend><![CDATA[\n'
-	o+='\t\t\t\tuint32_t hL = graphProperties->haloLength;\n'
+	o+='\t\t\t\tuint32_t hL = deviceProperties->haloLength;\n'
 	o+='\t\t\t\tfor(uint32_t i=0; i< hL; i++) {\n'
 	o+='\t\t\t\t\tmessage->v[i] = deviceState->v[i];\n'
 	o+='\t\t\t\t}\n'
@@ -127,10 +129,10 @@ def generate_lengthN_boundary(N,debug, computeTimestep):
 	o+='\t\t\t<OnReceive><![CDATA[\n'
 	if debug:
 		o+='\t\t\t\thandler_log(2, \"received message. state->t=%d \t message->t=%d\", deviceState->t, message->t);\n'
-	o+='\t\t\t\tuint32_t hL = graphProperties->haloLength;\n'
+	o+='\t\t\t\tuint32_t hL = deviceProperties->haloLength;\n'
 	o+='\t\t\t\tif(message->t == deviceState->t) {\n'
 	o+='\t\t\t\t\tdeviceState->cAvail = 1;\n'
-	o+='\t\t\t\t\tcomputeTimestep(deviceState, graphProperties, orchestrator);\n'
+	o+='\t\t\t\t\tupdateFunc(deviceState, deviceProperties, orchestrator);\n'
 	o+='\t\t\t\t} else if (message->t == deviceState->t+hL) {\n'
 	o+='\t\t\t\t\tdeviceState->nAvail = 1;\n'
 	o+='\t\t\t\t\tfor(uint32_t i=0; i<hL; i++) {\n'
@@ -143,12 +145,13 @@ def generate_lengthN_boundary(N,debug, computeTimestep):
 	o+='\t</DeviceType>\n'
 	return o 
 
-def generate_NbyN_Cluster(N, debug, computeTimestep): 
+def generate_NbyN_Cluster(graphname, N, debug, updateFunc): 
 #returns a string containing xml code describing a halo exchange N x N device
 	o='\n'
 	o+='\t<DeviceType id=\"cell_' + str(N) +'by'+str(N)+'\">\n' 	
 	o+='\t\t<Properties>\n'
 	o+='\t\t\t<Scalar type=\"int32_t\" name=\"updateDelta\" />\n' 
+	o+='\t\t\t<Scalar type=\"uint32_t\" name=\"haloLength\" default=\"'+str(N)+'\" />\n' 
 	o+='\t\t</Properties>\n'
 	o+='\t\t<State>\n'
 	o+='\t\t\t<Scalar type=\"uint32_t\" name=\"t\"/>\n'
@@ -199,10 +202,11 @@ def generate_NbyN_Cluster(N, debug, computeTimestep):
 		o+='\t\t\t\thandler_log(2, \"center device is being initialised\");\n'
 	o+='\t\t\t\tdeviceState->t=0;\n'
 	o+='\t\t\t\tdeviceState->processed=0;\n'
-	o+='\t\t\t\tfor(uint32_t i=0; i<graphProperties->nodesPerDevice; i++) {\n'
+	o+='\t\t\t\tuint32_t hL = deviceProperties->haloLength;\n'
+	o+='\t\t\t\tfor(uint32_t i=0; i<hL*hL; i++) {\n'
 	o+='\t\t\t\t\tdeviceState->v[i] = 0;\n'
 	o+='\t\t\t\t}\n'
-	o+='\t\t\t\tfor(uint32_t i=0; i<graphProperties->haloLength; i++) {\n'
+	o+='\t\t\t\tfor(uint32_t i=0; i<deviceProperties->haloLength; i++) {\n'
 	o+='\t\t\t\t\tdeviceState->cN[i]=0; deviceState->cE[i]=0; deviceState->cS[i]=0; deviceState->cW[i]=0;\n'
 	o+='\t\t\t\t\tdeviceState->nN[i]=0; deviceState->nE[i]=0; deviceState->nS[i]=0; deviceState->nW[i]=0;\n'
 	o+='\t\t\t\t\tdeviceState->n_arrivalFlags[i] = 0;\n'
@@ -214,13 +218,13 @@ def generate_NbyN_Cluster(N, debug, computeTimestep):
 	o+='\t\t<SharedCode><![CDATA[\n'
 	o+='\t\t\tenum orientation_t { north, east, south, west };\n'
 	o+='\n'
-	o+='\t\t\tuint32_t computeTimestep(cell_'+str(N)+'by'+str(N)+'_state_t *state, const halo_exchange_properties_t *gp, OrchestratorServices *orchestrator) {\n'
+	o+='\t\t\tuint32_t updateFunc(cell_'+str(N)+'by'+str(N)+'_state_t *state, const cell_'+str(N)+'by'+str(N)+'_properties_t *properties, OrchestratorServices *orchestrator) {\n'
 	o+='\t\t\t\t //Process the timestep for this device\n'
 	o+='\t\t\t\t HandlerLogImpl handler_log(orchestrator);\n\n'
-	o+= computeTimestep #inject the code for computing each timestep
+	o+= updateFunc #inject the code for computing each timestep
 	o+='\t\t\t}\n'
 	o+='\n'
-	o+='\t\t\tbool allArrived(const cell_'+str(N)+'by'+str(N)+'_state_t *state, const halo_exchange_properties_t *gp) {\n'
+	o+='\t\t\tbool allArrived(const cell_'+str(N)+'by'+str(N)+'_state_t *state, const cell_'+str(N)+'by'+str(N)+'_properties_t *gp) {\n'
 	o+='\t\t\t\tfor(uint32_t i=0; i<4; i++) {\n'
 	o+='\t\t\t\t\tif (!state->c_arrivalFlags[i])\n'
 	o+='\t\t\t\t\t\treturn false;\n'
@@ -234,7 +238,7 @@ def generate_NbyN_Cluster(N, debug, computeTimestep):
 	o+='\t\t\t\treturn;\n'
 	o+='\t\t\t}\n'
 	o+='\n'
-	o+='\t\t\tbool allSent(const cell_'+str(N)+'by'+str(N)+'_state_t *state, const halo_exchange_properties_t *gp) {\n'
+	o+='\t\t\tbool allSent(const cell_'+str(N)+'by'+str(N)+'_state_t *state, const cell_'+str(N)+'by'+str(N)+'_properties_t *gp) {\n'
 	o+='\t\t\t\tfor(uint32_t i=0; i<4; i++) {\n'
 	o+='\t\t\t\t\tif(!state->sentFlags[i])\n'
 	o+='\t\t\t\t\t\treturn false;\n'
@@ -242,13 +246,13 @@ def generate_NbyN_Cluster(N, debug, computeTimestep):
 	o+='\t\t\t\treturn true;\n'
 	o+='\t\t\t}\n'
 	o+='\n'
-	o+='\t\t\tvoid moveToNextIter(cell_'+str(N)+'by'+str(N)+'_state_t *state, const halo_exchange_properties_t *gp) {\n'
+	o+='\t\t\tvoid moveToNextIter(cell_'+str(N)+'by'+str(N)+'_state_t *state, const cell_'+str(N)+'by'+str(N)+'_properties_t *dp, const '+graphname+'_properties_t *gp) {\n'
 	o+='\t\t\t\tfor(uint32_t i=0; i< 4; i++) {\n'
 	o+='\t\t\t\t\tstate->c_arrivalFlags[i] = state->n_arrivalFlags[i];\n'
 	o+='\t\t\t\t\tstate->n_arrivalFlags[i] = 0;\n'
 	o+='\t\t\t\t\tstate->sentFlags[i] = 0;\n'
 	o+='\t\t\t\t}\n'
-	o+='\t\t\t\tconst uint32_t hL = gp->haloLength;\n'
+	o+='\t\t\t\tconst uint32_t hL = dp->haloLength;\n'
 	o+='\t\t\t\tfor(uint32_t i=0; i< hL; i++) {\n'
 	o+='\t\t\t\t\tstate->cN[i] = state->nN[i];\n'
 	o+='\t\t\t\t\tstate->cE[i] = state->nE[i];\n'
@@ -260,9 +264,9 @@ def generate_NbyN_Cluster(N, debug, computeTimestep):
 	o+='\t\t\treturn;\n'
 	o+='\t\t}\n'
 	o+='\n'
-	o+='\t\t\tvoid loadMessage(const update_message_t *message, cell_'+str(N)+'by'+str(N)+'_state_t *state, const halo_exchange_properties_t *gp, orientation_t dir) {\n'
+	o+='\t\t\tvoid loadMessage(const update_message_t *message, cell_'+str(N)+'by'+str(N)+'_state_t *state, const cell_'+str(N)+'by'+str(N)+'_properties_t *dp, const '+graphname+'_properties_t *gp, orientation_t dir) {\n'
 	o+='\t\t\t\tassert( message->t == state->t || message->t == state->t + gp->dt );\n'
-	o+='\t\t\t\tconst uint32_t hL = gp->haloLength;\n'
+	o+='\t\t\t\tconst uint32_t hL = dp->haloLength;\n'
 	o+='\t\t\t\tif(message->t == state->t) {\n'
 	o+='\t\t\t\t\tfor(uint32_t i=0; i<hL; i++) {\n'
 	o+='\t\t\t\t\t\tif(dir == north)\n'
@@ -298,14 +302,14 @@ def generate_NbyN_Cluster(N, debug, computeTimestep):
 		o+='\n'
 		o+='\t\t<InputPin name=\"'+direction+'_in\" messageTypeId=\"update\">\n'
 		o+='\t\t\t<OnReceive><![CDATA[\n'
-		o+='\t\t\t\tloadMessage(message, deviceState, graphProperties, '+direction+');\n'
+		o+='\t\t\t\tloadMessage(message, deviceState, deviceProperties, graphProperties, '+direction+');\n'
 		if debug:
 			o+='\t\t\t\thandler_log(2, "\tcurrent arrivals: n:%d e:%d s:%d w%d", deviceState->c_arrivalFlags[north], deviceState->c_arrivalFlags[east],deviceState->c_arrivalFlags[south],deviceState->c_arrivalFlags[west]);\n'
 		o+='\t\t\t\tif(message->t == deviceState->t) {\n'
-		o+='\t\t\t\t\tif(allArrived(deviceState, graphProperties)) {\n'
+		o+='\t\t\t\t\tif(allArrived(deviceState, deviceProperties)) {\n'
 		o+='\t\t\t\t\t\tdeviceState->processed=1;;\n'
 		o+='\t\t\t\t\t\tclearArrived(deviceState);\n'
-		o+='\t\t\t\t\t\tcomputeTimestep(deviceState, graphProperties, orchestrator);\n'
+		o+='\t\t\t\t\t\tupdateFunc(deviceState, deviceProperties, orchestrator);\n'
 		if debug:
 			o+='\t\t\t\t\t\thandler_log(2, "data-transfer complete computing timestep.");\n'
 		o+='\t\t\t\t\t}\n'
@@ -321,7 +325,7 @@ def generate_NbyN_Cluster(N, debug, computeTimestep):
 		o+='\t\t\t<OnSend><![CDATA[\n'
 		if debug:
 			o+='\t\t\t\thandler_log(2, "sending message");\n'
-		o+='\t\t\t\tuint32_t hL = graphProperties->haloLength;\n'
+		o+='\t\t\t\tuint32_t hL = deviceProperties->haloLength;\n'
 		o+='\t\t\t\tfor(uint32_t i=0; i < hL; i++) {\n'
 		if direction =='north':
 			o+='\t\t\t\t\tmessage->v[i] = deviceState->v[i];\n'
@@ -334,8 +338,8 @@ def generate_NbyN_Cluster(N, debug, computeTimestep):
 		o+='\t\t\t\t}\n'
 		o+='\t\t\t\tmessage->t = deviceState->t;\n'
 		o+='\t\t\t\tdeviceState->sentFlags['+direction+'] = 1;\n'
-		o+='\t\t\t\tif(allSent(deviceState, graphProperties)) {\n'
-		o+='\t\t\t\t\tmoveToNextIter(deviceState, graphProperties);\n'
+		o+='\t\t\t\tif(allSent(deviceState, deviceProperties)) {\n'
+		o+='\t\t\t\t\tmoveToNextIter(deviceState, deviceProperties, graphProperties);\n'
 		if debug:
 			o+='\t\t\t\t\thandler_log(2, "moved to next timestep device->t=%d", deviceState->t);\n'		
 		o+='\t\t\t\t}\n'
