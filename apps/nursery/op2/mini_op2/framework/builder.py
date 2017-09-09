@@ -186,6 +186,7 @@ class GraphTypeBuilder:
         devType.add_property(self.s(name), type)
         
     def add_graph_property(self, name:str, type:DataType) -> None :
+        name=self.s(name)
         assert name not in self.properties
         self.properties[name]=import_data_type(name,type)
 

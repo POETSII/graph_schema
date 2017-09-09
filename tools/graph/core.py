@@ -405,6 +405,11 @@ class GraphInstance:
         return di
         
     def create_device_instance(self, id,device_type,properties=None,metadata=None):
+        if device_type is str:
+            assert self.graph_type is GraphType
+            if device_type not in self.graph_type.device_types:
+                raise RuntimeError("No such device type called '{}'".format(device_type))
+            device_type=self.graph_type.device_types[device_type]
         di=DeviceInstance(self,id,device_type,properties,metadata)
         return self.add_device_instance(di)
         

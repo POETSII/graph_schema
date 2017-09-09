@@ -156,6 +156,7 @@ def create_global_landing_pads(ctxt:InvocationContext, builder:GraphTypeBuilder)
             builder.merge_device_state("set_{set}", "global_{name}", arg.data_type)
             
 def create_all_state_and_properties(ctxt:InvocationContext, builder:GraphTypeBuilder):
+    builder.add_graph_property("{invocation}_total_responding_devices", scalar_uint32)
     create_state_tracking_variables(ctxt, builder)
     create_indirect_landing_pads(ctxt, builder)
     create_global_landing_pads(ctxt, builder)
@@ -395,13 +396,12 @@ def create_kernel_function(ctxt:InvocationContext, builder:GraphTypeBuilder):
     builder.add_device_shared_code_raw("set_{}".format(ctxt.stat.iter_set.id), code)
 
 
-if False:
-    def create_tester(order:Sequence[ParFor], ctxt:InvocationContext, builder:GraphTypeBuilder):
-        index=order.index(ctxt.stat)
-        
+
+def create_invocation_tester(testIndex:int, isLast:bool, ctxt:InvocationContext, builder:GraphTypeBuilder):
+    with builder.subst(testIndex=testIndex,isLast=int(isLast)):
         handler="""
             assert(deviceState->end_received==0);
-            assert(deviceState->test_state==2*{index});
+            assert(deviceState->test_state==2*{testIndex});
             deviceState->test_state++; // Odd value means we are waiting for the return
             deviceState->end_received=0;
             """
@@ -410,65 +410,70 @@ if False:
             copy_value(message->global_{name}, graphProperties->test_{invocation}_{name}_in);
             """,name=arg.global_.id)
         
-        builder.add_output_port("global", "{invocation}_begin", handler)
+        builder.add_output_pin("tester", "{invocation}_begin", "{invocation}_begin", handler)
         
         handler="""
-            assert(deviceState->test_state==2*{index}+1);
-            assert(deviceState->end_received < graphProperties->{invocation}_total_relevant_devices);
+            assert(deviceState->test_state==2*{testIndex}+1);
+            assert(deviceState->end_received < graphProperties->{invocation}_total_responding_devices);
             deviceState->end_received++;
         """
         # Collect any inc's to global values
         for (ai,arg) in ctxt.global_writes:
             assert arg.access_mode==AccessMode.INC
-            handler+="""
-            inc_value(deviceState->global_{name}, message->value);
-            """
+            handler+=builder.s("""
+            inc_value(deviceState->global_{name}, message->global_{name});
+            """,name=arg.global_.id)
         # Check whether we have finished
         handler+="""
-            if(deviceState->end_received == graphProperties->{invocation}_total_relevant_devices){{
+            if(deviceState->end_received == graphProperties->{invocation}_total_responding_devices){{
         """
-        # ... and if so, try to check the results are "right"
-        for (ai,arg) in ctxt.global_writes:
-            handler+=builder.s("""
-                check_value(deviceState->global_{name}, graphProperties->test_{invocation}_{name}_out);
-            """,name=arg.global_.id)
+        # Remove for now - not clear how to do this.
+        if False:
+            # ... and if so, try to check the results are "right"
+            for (ai,arg) in ctxt.global_writes:
+                handler+=builder.s("""
+                    check_value(deviceState->global_{name}, graphProperties->test_{invocation}_{name}_out);
+                """,name=arg.global_.id)
             
         handler+="""
-                if( {is_last} ){{
+                if( {isLast} ){{
                     handler_exit(0);
-                }else{{
+                }}else{{
                     deviceState->test_state++; // start the next invocation
                 }}
             }}
         """
-        #builder.add_input_port("set_{set}", 
+        builder.add_input_pin("tester", "{invocation}_end", "{invocation}_end", None, None, handler)
+        
+        builder.add_rts_clause("tester",
+        """
+        if(deviceState->test_state==2*{testIndex}){{
+            *readyToSend = RTS_FLAG_{invocation}_begin;
+        }}
+        """
+        )
 
 
-def compile_invocation(spec:SystemSpecification, builder:GraphTypeBuilder, stat:ParFor, emitted_kernels:set):
-    ctxt=InvocationContext(spec, stat)
+def compile_invocation(spec:SystemSpecification, builder:GraphTypeBuilder, ctxt:InvocationContext, emitted_kernels:set):    
+    create_all_messages(ctxt,builder)
     
-    with builder.subst(invocation=ctxt.invocation):
-        create_all_messages(ctxt,builder)
-        
-        create_all_state_and_properties(ctxt, builder)
-        create_read_send_masks(ctxt, builder)
-        create_write_send_masks(ctxt, builder)
-        
-        if ctxt.stat.kernel not in emitted_kernels:
-            create_kernel_function(ctxt,builder)
-            emitted_kernels.add(ctxt.stat.kernel)
+    create_all_state_and_properties(ctxt, builder)
+    create_read_send_masks(ctxt, builder)
+    create_write_send_masks(ctxt, builder)
+    
+    if ctxt.stat.kernel not in emitted_kernels:
+        create_kernel_function(ctxt,builder)
+        emitted_kernels.add(ctxt.stat.kernel)
 
-        create_invocation_begin(ctxt,builder)
-        create_indirect_read_sends(ctxt,builder)
-        create_indirect_read_recvs(ctxt,builder)
-        create_invocation_execute(ctxt,builder)
-        create_indirect_write_sends(ctxt,builder)
-        create_indirect_write_recvs(ctxt,builder)
-        create_invocation_end(ctxt,builder)
-        create_rts(ctxt,builder)
-        
-        #create_global(ctxt,builder)
-
+    create_invocation_begin(ctxt,builder)
+    create_indirect_read_sends(ctxt,builder)
+    create_indirect_read_recvs(ctxt,builder)
+    create_invocation_execute(ctxt,builder)
+    create_indirect_write_sends(ctxt,builder)
+    create_indirect_write_recvs(ctxt,builder)
+    create_invocation_end(ctxt,builder)
+    create_rts(ctxt,builder)
+    
 
 """
 
@@ -489,6 +494,14 @@ while(1){
 
 
 """
+
+def find_kernels_in_code(code:Statement) -> List[ParFor]:
+    kernels=[] # type:List[ParFor]
+    for stat in code.all_statements():
+        if isinstance(stat,ParFor):
+            id=make_unique_id(stat, stat.name)
+            kernels.append(stat)
+    return kernels
 
 
 def sync_compiler(spec:SystemSpecification, code:Statement):
@@ -546,10 +559,15 @@ def sync_compiler(spec:SystemSpecification, code:Statement):
     
     builder.create_message_type("executeMsgType", {})
     
-    builder.create_device_type("global")
+    # Support two kinds of global. Only one can be wired into an instance.
+    builder.create_device_type("global") # This runs the actual program logic
+    builder.create_device_type("tester") # This solely tests each invocation in turn
+    builder.add_device_state("tester", "test_state", DataType(shape=(), dtype=numpy.uint32))
+    builder.add_device_state("tester", "end_received", DataType(shape=(), dtype=numpy.uint32))
     for global_ in spec.globals.values():
         if isinstance(global_,MutableGlobal):
             builder.add_device_state("global", "global_{}".format(global_.id), global_.data_type)
+            builder.add_device_state("tester", "global_{}".format(global_.id), global_.data_type)
         elif isinstance(global_,ConstGlobal):
             builder.add_graph_property("global_{}".format(global_.id), global_.data_type)
         else:
@@ -561,31 +579,27 @@ def sync_compiler(spec:SystemSpecification, code:Statement):
             for dat in s.dats.values():
                 builder.add_device_state("{set}", "dat_{}".format(dat.id), dat.data_type)
     
-    kernels=[] # type:List[ParFor]
-    for stat in code.all_statements():
-        if isinstance(stat,ParFor):
-            id=make_unique_id(stat, stat.name)
-            kernels.append(stat)
+    kernels=find_kernels_in_code(stat)
             
     emitted_kernels=set()
-    for stat in kernels:
-        compile_invocation(spec,builder,stat, emitted_kernels)
+    for (i,stat) in enumerate(kernels):
+        ctxt=InvocationContext(spec, stat)
+        with builder.subst(invocation=ctxt.invocation):
+            compile_invocation(spec,builder,ctxt, emitted_kernels)
+            create_invocation_tester(i, i+1==len(kernels), ctxt, builder) 
     
     return builder
-            
-
-if __name__=="__main__":
-    logging.basicConfig(level=4)
-    
+          
+def load_model(args:List[str]):
     import mini_op2.apps.airfoil
     import mini_op2.apps.aero
     
     model="airfoil"
-    if len(sys.argv)>1:
-        model=sys.argv[1]
+    if len(args)>1:
+        model=args[1]
     
-    if len(sys.argv)>2:
-        srcFile=sys.argv[2]
+    if len(args)>2:
+        srcFile=args[2]
     elif model=="airfoil":
         srcFile="meshes/airfoil_1.5625%.hdf5"
     elif model=="aero":
@@ -599,8 +613,13 @@ if __name__=="__main__":
         build_system=mini_op2.apps.aero.build_system
     else:
         raise RuntimeError("Don't know this model.")
+
+    return build_system(srcFile)
+
+if __name__=="__main__":
+    logging.basicConfig(level=4)
     
-    (spec,inst,code)=build_system(srcFile)
+    (spec,inst,code)=load_model(sys.argv)
     builder=sync_compiler(spec,code)
     
     xml=builder.build_and_render()

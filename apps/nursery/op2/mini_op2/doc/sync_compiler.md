@@ -380,6 +380,10 @@ Device Type         | Direction | Pin Name
 {iter_set}          | output    | {invocation}_arg{index}_write_send
 {indirect_write_set}| input     | {invocation}_dat_{dat}_write_recv
 
+Properties                            | Location | Meaning
+----------------------------------------------------------------------------------------------------
+{invocation}_total_responding_devices | Graph    | Number of devices which will send {invocation}_end
+
 State                             | Meaning
 ------------------------------------------------------------------------------------------------
 {invocation}_in_progress          | Tracks whether we are currently in an invocation
