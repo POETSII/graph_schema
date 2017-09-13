@@ -11,7 +11,8 @@ from mini_op2.framework.user_code_parser import scan_code, VarUses
 
 class Statement(ABC):
     def __init__(self):
-        pass
+        # Used to assign globally unique ids later one
+        self.id=None # type: Optional[str]
         
     def on_bind_spec(self, spec:SystemSpecification) -> "Statement":
         return self

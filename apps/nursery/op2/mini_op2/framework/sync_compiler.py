@@ -2,6 +2,7 @@ import typing
 from typing import Any, Dict, List
 
 import sys
+import logging
 
 from contextlib import contextmanager
 
@@ -54,7 +55,14 @@ class InvocationContext(object):
         self.spec=spec
         self.stat=stat
         
-        self.invocation=get_unique_id(stat)
+        if stat.id:
+            self.invocation=stat.id
+        else:
+            # Bind the invocation id at this point, as we can't make it unique earlier on
+            self.invocation=get_unique_id(stat)
+            stat.id=self.invocation
+            logging.info("Binding %s to %s", stat, self.invocation)
+        
         self.const_global_reads=set() # type:List[(int,GlobalArgument)]
         self.mutable_global_reads=set() # type:List[(int,GlobalArgument)]
         self.global_writes=set() # type:List[(int,GlobalArgument)]
@@ -138,7 +146,6 @@ def create_state_tracking_variables(ctxt:InvocationContext, builder:GraphTypeBui
             builder.add_device_state("set_{set}", "{invocation}_write_send_mask", scalar_uint32)
             builder.add_device_state("set_{set}", "{invocation}_write_recv_count", scalar_uint32)
             
-            builder.add_device_property("set_{set}", "{invocation}_read_recv_total", scalar_uint32)
             builder.add_device_property("set_{set}", "{invocation}_write_recv_total", scalar_uint32)
 
 def create_indirect_landing_pads(ctxt:InvocationContext, builder:GraphTypeBuilder):
@@ -167,13 +174,29 @@ def create_read_send_masks(ctxt:InvocationContext, builder:GraphTypeBuilder):
         read_sends[arg.to_set].add( arg.dat )
     
     for (set_,dats) in read_sends.items():
-        read_send_set=["0"] + [ builder.s("RTS_FLAG_{invocation}_dat{dat}_read_send",dat=dat.id) for dat in dats ]
+        read_send_set=["0"] + [ builder.s("RTS_FLAG_{invocation}_dat_{dat}_read_send",dat=dat.id) for dat in dats ]
         read_send_set="(" + "|".join(read_send_set) + ")"
         
         with builder.subst(set=set_.id, read_send_set=read_send_set):
             builder.add_device_shared_code("set_{set}", 
                 """
                 const uint32_t {invocation}_{set}_read_send_mask_all = {read_send_set};
+                """
+                )
+
+def create_read_recv_counts(ctxt:InvocationContext, builder:GraphTypeBuilder):
+    read_recvs={ s:0 for s in ctxt.get_all_involved_sets() }
+    for (ai,arg) in ctxt.indirect_reads:
+        if arg.index<0:
+            read_recvs[arg.iter_set] += -arg.index # We'll receive multiple values on this pin
+        else:
+            read_recvs[arg.iter_set] += 1 # Only get a single value
+    
+    for (set_,dats) in read_recvs.items():
+        with builder.subst(set=set_.id, read_recv_count=read_recvs[set_]):
+            builder.add_device_shared_code("set_{set}", 
+                """
+                const uint32_t {invocation}_{set}_read_recv_total = {read_recv_count};
                 """
                 )
 
@@ -203,7 +226,7 @@ def create_invocation_execute(ctxt:InvocationContext, builder:GraphTypeBuilder):
         with builder.subst(set=set.id, kernel=ctxt.stat.name):
             handler="""
             assert( deviceState->{invocation}_in_progress );
-            assert( deviceState->{invocation}_read_recv_count == deviceProperties->{invocation}_read_recv_total );
+            assert( deviceState->{invocation}_read_recv_count == {invocation}_{set}_read_recv_total );
             
             deviceState->{invocation}_read_recv_count=0; // Allows us to tell that execute has happened
             deviceState->{invocation}_write_recv_count++; // The increment for this "virtual" receive
@@ -260,7 +283,7 @@ def create_invocation_end(ctxt:InvocationContext, builder:GraphTypeBuilder):
             assert(deviceState->{invocation}_in_progress);
             assert( deviceState->{invocation}_read_send_mask == 0 );
             assert( deviceState->{invocation}_write_send_mask == 0 );
-            assert( deviceState->{invocation}_read_recv_count == deviceProperties->{invocation}_read_recv_total );
+            assert( deviceState->{invocation}_read_recv_count == {invocation}_{set}_read_recv_total );
             assert( deviceState->{invocation}_write_recv_count == deviceProperties->{invocation}_write_recv_total );
             
             deviceState->{invocation}_in_progress=0;
@@ -283,11 +306,11 @@ def create_invocation_end(ctxt:InvocationContext, builder:GraphTypeBuilder):
 def create_indirect_read_sends(ctxt:InvocationContext, builder:GraphTypeBuilder):
     for dat in ctxt.get_indirect_read_dats():
         with builder.subst(dat=dat.id, set=dat.set.id):
-            builder.add_output_pin("set_{set}", "{invocation}_dat{dat}_read_send", "dat_{dat}",
+            builder.add_output_pin("set_{set}", "{invocation}_dat_{dat}_read_send", "dat_{dat}",
                 """
-                assert(deviceState->{invocation}_read_send_mask & RTS_FLAG_{invocation}_dat{dat}_read_send);
+                assert(deviceState->{invocation}_read_send_mask & RTS_FLAG_{invocation}_dat_{dat}_read_send);
                 copy_value(message->value, deviceState->dat_{dat});
-                deviceState->{invocation}_read_send_mask &= ~RTS_FLAG_{invocation}_dat{dat}_read_send;
+                deviceState->{invocation}_read_send_mask &= ~RTS_FLAG_{invocation}_dat_{dat}_read_send;
                 """
             )
 
@@ -297,7 +320,7 @@ def create_indirect_read_recvs(ctxt:InvocationContext, builder:GraphTypeBuilder)
             props={"index": DataType(numpy.uint8,shape=())}
             builder.add_input_pin("set_{set}", "{invocation}_arg{index}_read_recv", "dat_{dat}", props, None,
                 """
-                assert(deviceState->{invocation}_read_recv_count < deviceProperties->{invocation}_read_recv_total);
+                assert(deviceState->{invocation}_read_recv_count < {invocation}_{set}_read_recv_total);
                 // Standard edge trigger for start of invocation
                 if(!deviceState->{invocation}_in_progress){{
                     deviceState->{invocation}_in_progress=1;
@@ -369,7 +392,7 @@ def create_rts(ctxt:InvocationContext, builder:GraphTypeBuilder):
             if(deviceState->{invocation}_in_progress) {{
               *readyToSend |= deviceState->{invocation}_read_send_mask;
               *readyToSend |= deviceState->{invocation}_write_send_mask;
-              if(deviceState->{invocation}_read_recv_count == deviceProperties->{invocation}_read_recv_total){{
+              if(deviceState->{invocation}_read_recv_count == {invocation}_{set}_read_recv_total){{
                 *readyToSend |= RTS_FLAG_{invocation}_execute;
               }}
               if(deviceState->{invocation}_read_recv_count==0
@@ -459,6 +482,7 @@ def compile_invocation(spec:SystemSpecification, builder:GraphTypeBuilder, ctxt:
     
     create_all_state_and_properties(ctxt, builder)
     create_read_send_masks(ctxt, builder)
+    create_read_recv_counts(ctxt, builder)
     create_write_send_masks(ctxt, builder)
     
     if ctxt.stat.kernel not in emitted_kernels:
@@ -579,7 +603,7 @@ def sync_compiler(spec:SystemSpecification, code:Statement):
             for dat in s.dats.values():
                 builder.add_device_state("{set}", "dat_{}".format(dat.id), dat.data_type)
     
-    kernels=find_kernels_in_code(stat)
+    kernels=find_kernels_in_code(code)
             
     emitted_kernels=set()
     for (i,stat) in enumerate(kernels):

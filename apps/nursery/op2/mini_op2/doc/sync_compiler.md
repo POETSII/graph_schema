@@ -245,7 +245,7 @@ we could imagine an execution order such as:
 - Recv:   `{invocation}_arg{index1}_read_recv` : Get the value of an input dat
 - "Send": `{invocation}_execute` : No dependencies on mutable constants, so can do the execution.
 - Send:   `{invocation}_arg{index2}_write_send` : Send our output value on to it's destination
-- Send:   `{invocation}_dat{datB}_read_send` : We send the input value for an indirect dat that we host
+- Send:   `{invocation}_dat_{datB}_read_send` : We send the input value for an indirect dat that we host
 - Recv:   `{invocation}_begin` : Have to wait until we are "officially" told that invocation has started
 - Send:   `{invocation}_end` : Acknowledge completion, so that controlled knows the round has finished.
 
@@ -254,7 +254,7 @@ we could imagine an execution order such as:
 Each dat in the `indirect_read_dats` set will be sent once for a given
 invocation, using an output pin called:
 
-   {to_set}.{invocation}_{dat}_read_send
+   {to_set}.{invocation}_dat_{dat}_read_send
 
 It is up to the topology builder to add edges from the single dat
 pin to the zero or more consumers of that value within the invocation.
