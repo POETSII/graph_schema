@@ -63,6 +63,14 @@ class ScalarTypedDataSpec(TypedDataSpec):
         else:
             return self._check_value(inst)
             
+    def contract(self,inst):
+        if inst is not None:
+            default=self.default or 0
+            if inst!=default:
+                return inst
+        return None
+            
+            
     def __eq__(self, o):
         return isinstance(o, ScalarTypedDataSpec) and self.name==o.name and self.type==o.type and self.default==o.default
 
@@ -110,6 +118,17 @@ class TupleTypedDataSpec(TypedDataSpec):
         for e in self._elts_by_index:
             inst[e.name]=e.expand(inst.get(e.name,None))
         return inst
+        
+    def contract(self,inst):
+        if inst is None:
+            return inst
+        res={}
+        for (k,v) in inst:
+            ks=self._elts_by_name[k]
+            nv=ks.contract(v)
+            if nv is not None:
+                res[k]=nv
+        return res
 
     def is_refinement_compatible(self,inst):
         if inst is None:
@@ -155,6 +174,18 @@ class ArrayTypedDataSpec(TypedDataSpec):
         for i in range(self.length):
             inst[i]=self.type.expand(inst[i])
         return inst
+        
+    def contract(self,inst):
+        if inst is None:
+            return inst
+        assert isinstance(inst,list)
+        assert len(inst)==self.length
+        for x in inst:
+            nv=self.type.contract(inst[i])
+            if nv is not None:
+                return inst
+        return None
+
 
     def is_refinement_compatible(self,inst):
         if inst is None:

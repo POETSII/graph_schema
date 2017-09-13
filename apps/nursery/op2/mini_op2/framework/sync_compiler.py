@@ -599,12 +599,19 @@ def sync_compiler(spec:SystemSpecification, code:Statement):
             builder.add_graph_property("global_{}".format(global_.id), global_.data_type)
         else:
             raise RuntimeError("Unexpected global type : {}", type(global_))
-    
+            
+    builder.merge_message_type("__init__", {})
     for s in spec.sets.values():
         with builder.subst(set="set_"+s.id):
             builder.create_device_type("{set}")
+            init_handler=""
             for dat in s.dats.values():
-                builder.add_device_state("{set}", "dat_{}".format(dat.id), dat.data_type)
+                with builder.subst(dat=dat.id):
+                    builder.add_device_property("{set}", "init_dat_{dat}", dat.data_type)
+                    builder.add_device_state("{set}", "dat_{dat}", dat.data_type)
+                    init_handler+=builder.s("       copy_value(deviceState->dat_{dat}, deviceProperties->init_dat_{dat});\n")
+            builder.add_input_pin("{set}", "__init__", "__init__", None, None, init_handler)
+    
     
     kernels=find_kernels_in_code(code)
             

@@ -133,6 +133,13 @@ def build_graph(globalDeviceType:str, spec:SystemSpecification, inst:SystemInsta
             instances.append(di)
             instancesByName[name]=di
     
+    for (dat,vals) in inst.dats.items():
+        init_dat_name="init_dat_{}".format(dat.id)
+        for (index,di) in enumerate(instancesBySet[dat.set]):
+            sys.stderr.write("{}, {}, {}\n".format(dat.set.id, dat.id, index))
+            di.set_property(init_dat_name, vals[index].tolist())
+            
+    
     kernels=find_kernels_in_code(code)    
     for (i,stat) in enumerate(kernels):
         ctxt=InvocationContext(spec, stat)
