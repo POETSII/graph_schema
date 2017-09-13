@@ -208,7 +208,7 @@ This message also contains values for any INC variables.
 Devices on the indirect write set will also send back `{invocation}_end`
 messages, but with zeros for any INC globals in the message.
 
-So the controller expects to receive `{invocation}_begin` messages
+So the controller expects to receive `{invocation}_end` messages
 from all devices that are involved in execution and writing, including:
 - Devices involved in an indirect read
 - Devices on the iteration set
@@ -223,7 +223,7 @@ not send a completion message, then the rest of the system could race
 onwards, and then at some random point the pending read is released.
 
 _TODO: Arguably, if they are not connected to anyone then it doesn't matter, but for ease
-of thinking we currently expect competion from everyone. In future we might
+of thinking we currently expect completion from everyone. In future we might
 think about not connecting device instances where they are:
 - only on the indirect read set; and
 - the instance mapping means no-one uses their value.
@@ -296,9 +296,10 @@ Which will take the value in the message and do:
 - RW : `copy_value(deviceState->dat_{dat}, message->value);`
 - WRITE : `copy_value(deviceState->dat_{dat}, message->value);`
 
-The to set device uses a counter `{to_set}::{invocation}_write_recv_pending` to track
-the number of indirect reads which have not been received. Each value>0 represents a
-message we need to wait for before sending `{invocation}_end`.
+The to set device uses a counter `{to_set}::{invocation}_write_recv_count` to track
+the number of indirect writes which have been received. Once it hits
+`deviceProperties->{invocation}_write_recv_total`, then we have seen all
+indirect writes
 
 The number of dat writes could vary between devices, as an INC argument could
 be the target of many (or no) devices, depending on the map. Similarly, while
@@ -306,7 +307,7 @@ a given device's dat's can only appear once as RW or WRITE, they may appear
 zero times as well. The total number of incoming messages expected, across
 all arguments of an invocation, is recorded as a device property:
 
-    {invocation}_write_recv_expected
+    {invocation}_write_recv_total
 
 
 ## Invocation lifecycle
@@ -340,7 +341,7 @@ The final {invocation}_end message can only be sent when:
 Overall this gives us the condition that:
 - if {invocation}_in_progress==0,
 - then {invocation}_read_recv_pending==0
-- and {invocation}_write_recv_pending==0
+- and {invocation}_write_recv_count== deviceProperties->{invocation}_write_recv_total
 
 So the life-cycle of the device is:
 

@@ -74,7 +74,7 @@ class CompositeStatement(Statement):
 class Seq(CompositeStatement):
     def __init__(self, *statements:Statement ) -> None:
         super().__init__()
-        self.statements=self._import_statements(statements) # type:Sequence[Statement]
+        self.statements=list(statements) # type:Sequence[Statement]
         
     def _on_bind_spec_local(self, spec:SystemSpecification) -> None:
         self.statements=self._import_statements(spec, self.statements)
@@ -83,7 +83,7 @@ class Seq(CompositeStatement):
         yield from self.statements
         
     def execute(self, instance:SystemInstance) -> None:
-        self._eval_statements(self.statements)
+        self._eval_statements(instance, self.statements)
     
         
 class Par(CompositeStatement):

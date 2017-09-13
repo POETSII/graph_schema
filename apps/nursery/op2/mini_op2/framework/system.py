@@ -102,6 +102,7 @@ class SystemInstance(object):
                 logging.info("%s : %s, maxErr=%g", snapshot, g.id, maxErr)
             else:
                 logging.error("%s : %s, maxErr=%g (Too high)", snapshot, g.id, maxErr)
+                logging.error("%s : %s, got=%s, ref=%s", snapshot, g.id, got, ref)
         
     
     def __init__(self, spec:SystemSpecification, src:Dict[str,Any]) -> None:

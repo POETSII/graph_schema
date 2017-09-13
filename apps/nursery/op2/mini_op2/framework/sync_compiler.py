@@ -185,7 +185,10 @@ def create_read_send_masks(ctxt:InvocationContext, builder:GraphTypeBuilder):
                 )
 
 def create_read_recv_counts(ctxt:InvocationContext, builder:GraphTypeBuilder):
-    read_recvs={ s:0 for s in ctxt.get_all_involved_sets() }
+    
+    # Start off at 1, as that represents {invocation}_begin
+    read_recvs={ s:1 for s in ctxt.get_all_involved_sets() }
+    
     for (ai,arg) in ctxt.indirect_reads:
         if arg.index<0:
             read_recvs[arg.iter_set] += -arg.index # We'll receive multiple values on this pin
@@ -283,7 +286,7 @@ def create_invocation_end(ctxt:InvocationContext, builder:GraphTypeBuilder):
             assert(deviceState->{invocation}_in_progress);
             assert( deviceState->{invocation}_read_send_mask == 0 );
             assert( deviceState->{invocation}_write_send_mask == 0 );
-            assert( deviceState->{invocation}_read_recv_count == {invocation}_{set}_read_recv_total );
+            assert( deviceState->{invocation}_read_recv_count == 0 );
             assert( deviceState->{invocation}_write_recv_count == deviceProperties->{invocation}_write_recv_total );
             
             deviceState->{invocation}_in_progress=0;
@@ -617,6 +620,7 @@ def sync_compiler(spec:SystemSpecification, code:Statement):
 def load_model(args:List[str]):
     import mini_op2.apps.airfoil
     import mini_op2.apps.aero
+    import mini_op2.apps.iota_sum
     
     model="airfoil"
     if len(args)>1:
@@ -628,6 +632,8 @@ def load_model(args:List[str]):
         srcFile="meshes/airfoil_1.5625%.hdf5"
     elif model=="aero":
         srcFile="meshes/aero_1.5625%.hdf5"
+    elif model=="iota_sum":
+        srcFile=8
     else:
         raise RuntimeError("Don't know a default file.")
     
@@ -635,6 +641,9 @@ def load_model(args:List[str]):
         build_system=mini_op2.apps.airfoil.build_system
     elif model=="aero":
         build_system=mini_op2.apps.aero.build_system
+    elif model=="iota_sum":
+        srcFile=int(srcFile)
+        build_system=mini_op2.apps.iota_sum.build_system
     else:
         raise RuntimeError("Don't know this model.")
 
