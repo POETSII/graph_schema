@@ -466,6 +466,7 @@ def create_invocation_tester(testIndex:int, isLast:bool, ctxt:InvocationContext,
                     handler_exit(0);
                 }}else{{
                     deviceState->test_state++; // start the next invocation
+                    deviceState->end_received=0;
                 }}
             }}
         """
