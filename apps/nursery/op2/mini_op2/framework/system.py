@@ -89,20 +89,25 @@ class SystemInstance(object):
                 logging.info("%s : %s, maxErr=%g", snapshot, d.id, maxErr)
             else:
                 logging.error("%s : %s, maxErr=%g (Too high)", snapshot, d.id, maxErr)
+                logging.error("%s : %s, got=%s, ref=%s", snapshot, d.id, got, ref)
         
         for g in self.spec.globals.values():
             if not g.id in src:
                 continue # Not all globals will exist in reference
-            ref=src[g.id]
-            got=self.globals[g]
-            assert ref.shape==got.shape
-            diff=ref-got
-            maxErr=numpy.max(numpy.abs(diff))
-            if maxErr <= 1e-6 :
-                logging.info("%s : %s, maxErr=%g", snapshot, g.id, maxErr)
-            else:
-                logging.error("%s : %s, maxErr=%g (Too high)", snapshot, g.id, maxErr)
-                logging.error("%s : %s, got=%s, ref=%s", snapshot, g.id, got, ref)
+            try:
+                ref=src[g.id]
+                got=self.globals[g]
+                assert ref.shape==got.shape
+                diff=ref-got
+                maxErr=numpy.max(numpy.abs(diff))
+                if maxErr <= 1e-6 :
+                    logging.info("%s : %s, maxErr=%g", snapshot, g.id, maxErr)
+                else:
+                    logging.error("%s : %s, maxErr=%g (Too high)", snapshot, g.id, maxErr)
+                    logging.error("%s : %s, got=%s, ref=%s", snapshot, g.id, got, ref)
+            except Exception as e:
+                logging.error("Exception while checking item %s in snapshot %s : %s", g.id, snapshot, e)
+                raise
         
     
     def __init__(self, spec:SystemSpecification, src:Dict[str,Any]) -> None:
@@ -155,13 +160,17 @@ class SystemInstance(object):
         for d in spec.dats.values():
             set_size=self.sets[d.set]
             dat_type=DataType( dtype=d.data_type.dtype, shape=(set_size,)+d.data_type.shape)
-            if not d.id in src:
-                logging.info("Zero initialising dat %s on set %s",d.id,d.set.id) 
-                aval=dat_type.create_default_value()
-            else:
-                logging.info("Loading dat %s on set %s of %u x shape=%s", d.id,d.set.id, set_size, d.data_type.shape)
-                arr=src[d.id]
-                aval=dat_type.import_value(arr)
+            try:
+                if not d.id in src:
+                    logging.info("Zero initialising dat %s on set %s",d.id,d.set.id) 
+                    aval=dat_type.create_default_value()
+                else:
+                    logging.info("Loading dat %s on set %s of %u x shape=%s", d.id,d.set.id, set_size, d.data_type.shape)
+                    arr=src[d.id]
+                    aval=dat_type.import_value(arr)
+            except Exception as e:
+                logging.error("Exception while importing dat %s : %s", d.id, e)
+                raise
             self.dats[d]=aval
         
         for m in spec.maps.values():

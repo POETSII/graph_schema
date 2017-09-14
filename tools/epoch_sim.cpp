@@ -425,14 +425,14 @@ struct EpochSim
         try{
           pin->onReceive(&receiveServices, m_graphProperties.get(), dst.properties.get(), dst.state.get(), slot.properties.get(), slot.state.get(), message.get());
         }catch(provider_assertion_error &e){
-          fprintf(stderr, "Caught handler exception during Receive. devId=%s, devType=%s, outPin=%s.\n", src.name, src.type->getId().c_str(), pin->getName().c_str());
+          fprintf(stderr, "Caught handler exception during Receive. devId=%s, dstDevType=%s, dstPin=%s.\n", dst.name, dst.type->getId().c_str(), pin->getName().c_str());
           fprintf(stderr, "  %s\n", e.what());
           
           fprintf(stderr, "     message = %s\n", pin->getMessageType()->getMessageSpec()->toJSON(message).c_str());
           if(capturePreEventState){
-            fprintf(stderr, "  preRecvState = %s\n", src.type->getStateSpec()->toJSON(prevState).c_str());
+            fprintf(stderr, "  preRecvState = %s\n", dst.type->getStateSpec()->toJSON(prevState).c_str());
           }
-          fprintf(stderr, "     currState = %s\n", src.type->getStateSpec()->toJSON(src.state).c_str());
+          fprintf(stderr, "     currState = %s\n", dst.type->getStateSpec()->toJSON(dst.state).c_str());
           
           throw;
         }

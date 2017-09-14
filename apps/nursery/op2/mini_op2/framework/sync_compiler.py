@@ -518,8 +518,6 @@ while(1){
     begin_invocation(invocation);
     wait end_invocation(invocation);
 }
-
-
 """
 
 def find_kernels_in_code(code:Statement) -> List[ParFor]:
@@ -628,6 +626,8 @@ def load_model(args:List[str]):
     import mini_op2.apps.airfoil
     import mini_op2.apps.aero
     import mini_op2.apps.iota_sum
+    import mini_op2.apps.dot_product
+    import mini_op2.apps.odd_even_dot_product
     
     model="airfoil"
     if len(args)>1:
@@ -641,6 +641,10 @@ def load_model(args:List[str]):
         srcFile="meshes/aero_1.5625%.hdf5"
     elif model=="iota_sum":
         srcFile=8
+    elif model=="dot_product":
+        srcFile=8
+    elif model=="odd_even_dot_product":
+        srcFile=4
     else:
         raise RuntimeError("Don't know a default file.")
     
@@ -651,6 +655,12 @@ def load_model(args:List[str]):
     elif model=="iota_sum":
         srcFile=int(srcFile)
         build_system=mini_op2.apps.iota_sum.build_system
+    elif model=="dot_product":
+        srcFile=int(srcFile)
+        build_system=mini_op2.apps.dot_product.build_system
+    elif model=="odd_even_dot_product":
+        srcFile=int(srcFile)
+        build_system=mini_op2.apps.odd_even_dot_product.build_system
     else:
         raise RuntimeError("Don't know this model.")
 

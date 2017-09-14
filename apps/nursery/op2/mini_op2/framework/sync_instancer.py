@@ -62,8 +62,10 @@ def connect_invocation_indirect_writes(
     invocation=ctxt.stat.id
     
     write_recv_counts=collections.Counter()
-    for di in instances_by_set[ctxt.stat.iter_set]:
-        write_recv_counts[di]+=1 # Everything on iteration set must execute, which is tracked as virtual indirect write
+    
+    for s in ctxt.get_all_involved_sets():
+        for di in instances_by_set[s]:
+            write_recv_counts[di]+=1 # Everything has an execute, even those not on the iter set
     
     for (index,arg) in ctxt.indirect_writes:
         dst_type=graph_type.device_types["set_{}".format(arg.to_set.id)]
