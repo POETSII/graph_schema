@@ -70,6 +70,7 @@ class VarUses(object):
     def create_func_and_ast(self, name:str):
         try:
             self.function_code=self.create_func_source(name)
+            logging.info("Code = %s", self.function_code)
             m=compile(self.function_code,"No-file",'exec')
             
             a=ast.parse(self.function_code)
@@ -90,7 +91,7 @@ class VarUses(object):
         return (getattr(module,name),f)
     
     def create_func(self, name:str):
-        return self.create_func_and_module(name)[0]
+        return self.create_func_and_ast(name)[0]
      
     def execute(self, inst:SystemSpecification):
         if self.function==None:

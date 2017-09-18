@@ -40,6 +40,7 @@ _translate_operator={
     "Div" : "/",
     "Eq" : "==",
     "Lt" : "<",
+    "Gt" : ">",
     "UAdd" : "+",
     "USub" : "-"
 }

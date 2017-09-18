@@ -7,7 +7,7 @@ import logging
 from contextlib import contextmanager
 
 from mini_op2.framework.core import *
-from mini_op2.framework.control_flow import Statement, ParFor, Seq, UserCode, CompositeStatement, CheckState
+from mini_op2.framework.control_flow import Statement, ParFor, Seq, UserCode, CompositeStatement, CheckState, While
 from mini_op2.framework.system import SystemSpecification
 from mini_op2.framework.builder import GraphTypeBuilder, raw
 
@@ -581,6 +581,62 @@ def render_controller_statement_seq(s:Seq, next_state:int):
     
     return handler
     
+def render_controller_statement_while(s:While, next_state:int):
+    children=list(s.children())
+    assert len(children)>0
+    
+    cond_state=get_statement_state(s)
+    body_state=get_statement_state(children[0])
+    tail_state=make_state()
+    
+    handler=raw("""
+    case {this_state}: // While. Condition state.
+        handler_log(4, "While {this_state}, evaluate.");
+        kernel_{user_code_id}(
+    """.format(this_state=get_statement_state(s),user_code_id=s.id))
+    
+    args=list(s.arguments)
+    for (i,arg) in enumerate(args):
+        if isinstance(arg.global_,MutableGlobal):
+            handler+="        deviceState->global_{}".format(arg.global_.id)
+        elif isinstance(arg.global_,ConstGlobal):
+            handler+="        graphProperties->global_{}".format(arg.global_.id)
+        else:
+            raise RuntimeError("Unknown arg type {}.".format(type(arg)))
+        if i+1!=len(args):
+            handler+=","
+        handler+="\n"
+    
+    handler+="""
+        );
+        handler_log(4, "While {this_state}, condition = %d.", deviceState->global__cond_[0]);
+        if(deviceState->global__cond_[0]){{
+            deviceState->state={body_state};
+        }}else{{
+            deviceState->state={next_state};
+        }}
+        break;
+    """.format(this_state=cond_state, body_state=body_state, next_state=next_state)
+        
+    
+    for (i,c) in enumerate(children):
+        if i+1==len(children):
+            local_next_state=tail_state
+        else:
+            local_next_state=get_statement_state(children[i+1])
+        bit=render_controller_statement(c,local_next_state)
+        logging.info("bit = %s", bit)
+        assert isinstance(bit,raw)
+        handler+=bit
+    
+    handler+="""
+    case {tail_state}:
+        deviceState->state={cond_state};
+        break;
+    """.format(tail_state=tail_state,cond_state=cond_state)
+    
+    return handler
+    
 def render_controller_statement_par_for(s:ParFor, next_state:int):
     return raw("""
     case {this_state}: // ParFor
@@ -647,6 +703,8 @@ def render_controller_statement(s:Statement, next_state:int):
         return render_controller_statement_user(s, next_state)
     elif isinstance(s,CheckState):
         return render_controller_statement_check_state(s, next_state)
+    elif isinstance(s,While):
+        return render_controller_statement_while(s, next_state)
     else:
         raise RuntimeError("Didn't understand state of type {}.".format(type(s)))
 
@@ -655,6 +713,10 @@ def compile_global_controller(gi:str, spec:SystemSpecification, builder:GraphTyp
     
     builder.add_device_state(gi, "rts", scalar_uint32)
     builder.add_device_state(gi, "state", scalar_uint32)
+    
+    # This will be used as a hidden global, and captures the value
+    # of the condition for If and While
+    assert "_cond_" in spec.globals
     
     start_state=get_statement_state(code)
     finish_state=make_state()
@@ -696,8 +758,12 @@ def compile_global_controller(gi:str, spec:SystemSpecification, builder:GraphTyp
         assert user_code.ast
         src=mini_op2.framework.kernel_translator.scalar_to_c(user_code.ast, name)
         builder.add_device_shared_code("controller", raw(src))
-        
     
+    for k in code.all_statements():
+        if isinstance(k,While):
+            name=k.id
+            src=mini_op2.framework.kernel_translator.scalar_to_c(k.expr_ast, name)
+            builder.add_device_shared_code("controller", raw(src))
 
 
 def compile_invocation(spec:SystemSpecification, builder:GraphTypeBuilder, ctxt:InvocationContext, emitted_kernels:set):    
@@ -841,6 +907,7 @@ def load_model(args:List[str]):
     import mini_op2.apps.dot_product
     import mini_op2.apps.odd_even_dot_product
     import mini_op2.apps.scalar_seq
+    import mini_op2.apps.scalar_while
     
     model="airfoil"
     if len(args)>1:
@@ -859,6 +926,8 @@ def load_model(args:List[str]):
     elif model=="odd_even_dot_product":
         srcFile=4
     elif model=="scalar_seq":
+        srcFile=None
+    elif model=="scalar_while":
         srcFile=None
     else:
         raise RuntimeError("Don't know a default file.")
@@ -879,6 +948,9 @@ def load_model(args:List[str]):
     elif model=="scalar_seq":
         srcFile=None
         build_system=mini_op2.apps.scalar_seq.build_system
+    elif model=="scalar_while":
+        srcFile=None
+        build_system=mini_op2.apps.scalar_while.build_system
     else:
         raise RuntimeError("Don't know this model.")
 

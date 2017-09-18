@@ -10,16 +10,49 @@ from mini_op2.framework.system import SystemInstance, SystemSpecification
 from mini_op2.framework.user_code_parser import scan_code, VarUses
 
 class Statement(ABC):
+    def _eval_statements(self, instance:SystemInstance, stats:Sequence["Statement"]):
+        for s in stats:
+            s.execute(instance)
+            
+    def _import_statements(self, spec:SystemSpecification, stats:Sequence["Statement"]) -> Sequence["Statement"]:
+        global _scalar_statement_unq
+        res=[]
+        for s in stats:
+            if isinstance(s,str):
+                uses=scan_code(spec,s)
+                unq=_scalar_statement_unq
+                _scalar_statement_unq+=1
+                args=[ GlobalArgument(mode,spec.globals[var]) for (var,mode) in uses.get_args() ]
+                name="controller_{}".format(unq)
+                (func,ast)=uses.create_func_and_ast(name)
+                stat=UserCode( func, ast, *args)
+                stat.id=name
+                res.append(stat)
+            else:
+                res.append(s)
+        return res
+        
+    def _on_bind_spec_local(self, spec:SystemSpecification) -> None:
+        pass
+    
     def __init__(self):
         # Used to assign globally unique ids later one
         self.id=None # type: Optional[str]
         
     def on_bind_spec(self, spec:SystemSpecification) -> "Statement":
+        self._on_bind_spec_local(spec)
+        for s in self.children():
+            s.on_bind_spec(spec)
         return self
+
+    def children(self) -> Iterator["Statement"]:
+        yield from []
         
-    def all_statements(self) -> Iterator['Statement']:
+    def all_statements(self) -> Iterator["Statement"]:
         yield self
-        
+        for s in self.children():
+            yield from s.all_statements()
+
     @abstractmethod
     def execute(self, instance:SystemInstance) -> None:
         raise NotImplementedError()
@@ -38,49 +71,10 @@ class UsesStatement(Statement):
 _scalar_statement_unq=0
 
 class CompositeStatement(Statement):
-    def _import_statements(self, spec:SystemSpecification, stats:Sequence[Statement]) -> Sequence[Statement]:
-        global _scalar_statement_unq
-        res=[]
-        for s in stats:
-            if isinstance(s,str):
-                uses=scan_code(spec,s)
-                unq=_scalar_statement_unq
-                _scalar_statement_unq+=1
-                args=[ GlobalArgument(mode,spec.globals[var]) for (var,mode) in uses.get_args() ]
-                name="controller_{}".format(unq)
-                (func,ast)=uses.create_func_and_ast(name)
-                stat=UserCode( func, ast, *args)
-                stat.id=name
-                res.append(stat)
-            else:
-                res.append(s)
-        return res
-    
-    def _eval_statements(self, instance:SystemInstance, stats:Sequence[Statement]):
-        for s in stats:
-            s.execute(instance)
-            
-    def _on_bind_spec_local(self, spec:SystemSpecification) -> None:
-        raise NotImplementedError("type = {}".format(type(self)))
     
     def __init__(self):
         pass
     
-    def on_bind_spec(self, spec:SystemSpecification) -> Statement:
-        self._on_bind_spec_local(spec)
-        for s in self.children():
-            s.on_bind_spec(spec)
-        return self
-        
-        
-    @abstractmethod
-    def children(self) -> Iterator[Statement]:
-        raise NotImplementedError()
-        
-    def all_statements(self) -> Iterator[Statement]:
-        yield self
-        for s in self.children():
-            yield from s.all_statements()
         
 class Seq(CompositeStatement):
     def __init__(self, *statements:Statement ) -> None:
@@ -131,28 +125,6 @@ class RepeatForCount(CompositeStatement):
             instance.globals[self.variable][0]=i # Update global
             self._eval_statements(instance, self.statements)
                 
-                
-class While(CompositeStatement):
-    def __init__(self, expression:str, *statements:Statement) -> None:
-        super().__init__()
-        self.expression=expression
-        self.statements=list(statements)
-    
-    def children(self) -> Iterator[Statement]:
-        yield from self.statements
-        
-    def _on_bind_spec_local(self, spec:SystemSpecification) -> None:
-        self.statements=self._import_statements(spec, self.statements)
-    
-    
-    def execute(self, instance:SystemInstance) -> None:
-        # TODO : Cache this
-        uses=scan_code(instance.spec, "return "+self.expression )
-        while True:
-            val=uses.execute(instance)
-            if not val:
-                break
-            self._eval_statements(instance, self.statements)
 
 class Execute(Statement):
     def __init__(self):
@@ -245,6 +217,53 @@ class Execute(Statement):
     def _all_args_post(self, instance:SystemInstance, args:List[Argument], current:Sequence[numpy.ndarray], newVals:Sequence[numpy.ndarray]) -> None:
         for (arg,val,new) in zip(args,current,newVals):
             self._arg_post(instance, arg, val, new)
+
+class While(Execute):
+    def _init_func(self, spec:SystemSpecification):
+        global _scalar_statement_unq
+        code="_cond_[0] = "+self.expression
+        uses=scan_code(spec,code)
+        unq=_scalar_statement_unq
+        _scalar_statement_unq+=1
+        args=[ GlobalArgument(mode,spec.globals[var]) for (var,mode) in uses.get_args() ]
+        name="controller_expr_{}".format(unq)
+        (func,ast)=uses.create_func_and_ast(name)
+        self.id=name
+        self.expr_ast=ast
+        self.expr_func=func
+        self.arguments=args
+    
+    def __init__(self, expression:str, *statements:Statement) -> None:
+        super().__init__()
+        self.expression=expression
+        self.statements=list(statements)
+        self.id=None
+        self.expr_ast=None
+        self.expr_func=None
+        self.arguments=None
+        
+    def children(self) -> Iterator[Statement]:
+        yield from self.statements
+        
+        
+    def _on_bind_spec_local(self, spec:SystemSpecification) -> None:
+        self._init_func(spec)
+        self.statements=self._import_statements(spec, self.statements)
+    
+    
+    def execute(self, instance:SystemInstance) -> None:
+        if self.expr_func is None:
+            self._init_func(instance.spec)
+        while True:
+            current=self._get_all_current(instance, None, self.arguments)
+            vals=self._all_args_pre(instance, self.arguments, current)
+            self.expr_func(*vals)
+            self._all_args_post(instance, self.arguments, current, vals)
+            logging.info("globals= %s", ",".join([g.id for g in instance.globals]))
+            val=instance.globals[instance.spec.globals["_cond_"]]
+            if not val:
+                break
+            self._eval_statements(instance, self.statements)
 
 class ParFor(Execute):
     def __init__(self,

@@ -8,6 +8,10 @@ class SystemSpecification(object):
         self.dats={}
         self.maps={}
         
+        # This is an implicit variable used to capture boolean outputs
+        # of expressions
+        self.create_mutable_global("_cond_", DataType(shape=(1,),dtype=numpy.uint32))
+        
     def add_global(self, global_:Global):
        assert global_.id not in self._ids
        self._ids.add(global_.id)
