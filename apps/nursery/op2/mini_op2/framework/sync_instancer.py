@@ -158,6 +158,6 @@ if __name__=="__main__":
     
     (spec,inst,code)=mini_op2.framework.sync_compiler.load_model(sys.argv)
     
-    graph=build_graph("tester", spec, inst, code)
+    graph=build_graph("controller", spec, inst, code)
     
     save_graph(graph, sys.stdout)

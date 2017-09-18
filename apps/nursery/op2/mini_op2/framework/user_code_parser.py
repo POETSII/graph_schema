@@ -36,6 +36,12 @@ class VarUses(object):
         self.code=code
         self.function_code=None
         self.function=None
+        self.args=None
+        
+    def get_args(self):
+        if self.args==None:
+            self.args=sorted([ (global_.id,mode) for (global_,mode) in self.uses.items() ])
+        return self.args
         
     def dump(self):
         for (g,a) in self.uses.items():
@@ -60,19 +66,31 @@ class VarUses(object):
             source +="    "+l+"\n"
         
         return source
-    
-    def create_func(self, name:str):
+        
+    def create_func_and_ast(self, name:str):
         try:
             self.function_code=self.create_func_source(name)
             m=compile(self.function_code,"No-file",'exec')
             
+            a=ast.parse(self.function_code)
+            f=None
+            for s in a.body:
+                if isinstance(s,ast.FunctionDef) and s.name==name:
+                    f=s
+                    break
+            
+            assert f
+            
             module = ModuleType("module_"+name)
             exec(m, module.__dict__)
         except:
-            sys.stderr.write(code)
+            sys.stderr.write(self.function_code)
             raise 
         
-        return getattr(module,name)
+        return (getattr(module,name),f)
+    
+    def create_func(self, name:str):
+        return self.create_func_and_module(name)[0]
      
     def execute(self, inst:SystemSpecification):
         if self.function==None:

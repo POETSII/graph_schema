@@ -26,7 +26,7 @@ class Statement(ABC):
     
 class UsesStatement(Statement):
     """This is a stupid name. It is code that was turned from a string into a function for scalar code."""
-    def __init__(self, uses) -> None:
+    def __init__(self, uses:VarUses) -> None:
         self.uses=uses
     
     def children(self) -> Iterator[Statement]:
@@ -34,13 +34,24 @@ class UsesStatement(Statement):
         
     def execute(self, instance:SystemInstance) -> None:
         self.uses.execute(instance)
-        
+
+_scalar_statement_unq=0
+
 class CompositeStatement(Statement):
     def _import_statements(self, spec:SystemSpecification, stats:Sequence[Statement]) -> Sequence[Statement]:
+        global _scalar_statement_unq
         res=[]
         for s in stats:
             if isinstance(s,str):
-                res.append( UsesStatement(scan_code(spec, s) ) )
+                uses=scan_code(spec,s)
+                unq=_scalar_statement_unq
+                _scalar_statement_unq+=1
+                args=[ GlobalArgument(mode,spec.globals[var]) for (var,mode) in uses.get_args() ]
+                name="controller_{}".format(unq)
+                (func,ast)=uses.create_func_and_ast(name)
+                stat=UserCode( func, ast, *args)
+                stat.id=name
+                res.append(stat)
             else:
                 res.append(s)
         return res
@@ -268,13 +279,16 @@ class ParFor(Execute):
 class UserCode(Execute):
     def __init__(self,
         code:Callable[...,None],
+        ast:any,
         *arguments:Argument
     ) -> None :
         super().__init__()
         
+        assert ast
         for (i,a) in enumerate(arguments):
             assert isinstance(a,GlobalArgument)
         self.code=code
+        self.ast=ast
         self.arguments=list(arguments)
         
     def execute(self, instance:'SystemInstance') -> None:    

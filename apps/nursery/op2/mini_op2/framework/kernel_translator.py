@@ -154,6 +154,7 @@ _to_c_type = {
 def translate_function(f:ast.FunctionDef, dst:io.TextIOBase):
     # HACK : Moving to template types, to allow parameter types to float
     
+    assert f
     args=get_positional_arguments(f)
     
     args_types=["class T{}".format(i) for i in range(len(args))]
@@ -161,24 +162,10 @@ def translate_function(f:ast.FunctionDef, dst:io.TextIOBase):
     dst.write("template<{}>\n".format(",".join(args_types)))
     dst.write("void kernel_{}(\n".format(f.name))
     for (index,arg) in enumerate(args):
-        assert arg.annotation!=None, "Expecting type annotation"
-        type=arg.annotation
-        assert isinstance(type,ast.Name), "Expecting type annotation to be a name"
-        datatype=None
-        # Removed: HACK! : Relying on named alias, as otherwise we have to parse out the types
-        #if type.id=="seq_float":
-        #    datatype="float"
-        #elif type.id=="seq_double":
-        #    datatype="double"
-        #elif type.id=="seq_seq_double":
-        #    datatype="double *"
-        #elif type.id=="seq_int":
-        #    datatype="int"
-        #else:
-        #    raise RuntimeError("Can't interpret type '{}' on arg in index {} of kernel {}".format(datatype,index,f.name))
-        #
-        #dst.write("  {} *{}".format(datatype, arg.arg))
-        
+        #assert arg.annotation!=None, "Expecting type annotation"
+        #type=arg.annotation
+        #assert isinstance(type,ast.Name), "Expecting type annotation to be a name"
+        #datatype=None        
         dst.write("  T{} {}".format(index,arg.arg))
         if index+1 < len(args):
             dst.write(",")
@@ -194,11 +181,15 @@ def translate_function(f:ast.FunctionDef, dst:io.TextIOBase):
 class TranslatorContext:
     def __init__(self, module:types.ModuleType) -> None:
         self.module=module
-        self.source_file=module.__file__
-        logging.debug("using source_file = %s"%(self.source_file))
-        with open(self.source_file,"rt") as src:
-            self.source_code=src.read()
-        self.ast=ast.parse(self.source_code, filename=self.source_file)
+        if hasattr(module, "__file__"):
+            self.source_file=module.__file__
+            logging.debug("using source_file = %s"%(self.source_file))
+            with open(self.source_file,"rt") as src:
+                self.source_code=src.read()
+            self.ast=ast.parse(self.source_code, filename=self.source_file)
+        else:
+            self.source_file="<unknown-file"
+            
     
         assert isinstance(self.ast, ast.Module)
     
@@ -216,6 +207,12 @@ def kernel_to_c(module:types.ModuleType, name:str) -> str:
     tmp=io.StringIO()
     translate_function(n,tmp)
     return tmp.getvalue()
+    
+def scalar_to_c(f:ast.FunctionDef, name:str) -> str:
+    tmp=io.StringIO()
+    translate_function(f,tmp)
+    return tmp.getvalue()
+    
 
 if __name__=="__main__":
     logging.basicConfig(level=4)

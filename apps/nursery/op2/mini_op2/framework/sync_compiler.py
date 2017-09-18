@@ -7,9 +7,9 @@ import logging
 from contextlib import contextmanager
 
 from mini_op2.framework.core import *
-from mini_op2.framework.control_flow import Statement, ParFor
+from mini_op2.framework.control_flow import Statement, ParFor, Seq, UserCode, CompositeStatement, CheckState
 from mini_op2.framework.system import SystemSpecification
-from mini_op2.framework.builder import GraphTypeBuilder
+from mini_op2.framework.builder import GraphTypeBuilder, raw
 
 import mini_op2.framework.kernel_translator
 
@@ -48,12 +48,18 @@ class InvocationContext(object):
         
     def get_all_involved_sets(self) -> typing.Set[ Set ] :
         """Return a list of all sets involved as direct, indirect read, or indirect write"""
-        return set([self.stat.iter_set] + [ arg.to_set for (ai,arg) in (self.indirect_reads | self.indirect_writes) ])
+        if isinstance(self.stat,ParFor):
+            return set([self.stat.iter_set] + [ arg.to_set for (ai,arg) in (self.indirect_reads | self.indirect_writes) ])
+        else:
+            return set([])
     
-    def __init__(self, spec:SystemSpecification, stat:ParFor) -> None:
+    def __init__(self, spec:SystemSpecification, stat:Union[ParFor,UserCode]) -> None:
         super().__init__()
         self.spec=spec
         self.stat=stat
+        
+        is_par_for=isinstance(stat,ParFor)
+        is_scalar=isinstance(stat,UserCode)
         
         if stat.id:
             self.invocation=stat.id
@@ -72,6 +78,7 @@ class InvocationContext(object):
         self.direct_writes=set() # type:List[(int,DirectDatArgument)]
         for (i,arg) in enumerate(stat.arguments):
             if isinstance(arg,IndirectDatArgument):
+                assert is_par_for
                 if arg.access_mode==AccessMode.READ:
                     self.indirect_reads.add( (i,arg) )
                 elif arg.access_mode==AccessMode.WRITE:
@@ -91,6 +98,13 @@ class InvocationContext(object):
                         self.mutable_global_reads.add( (i,arg) )
                 elif arg.access_mode==AccessMode.INC:
                     self.global_writes.add( (i,arg) )
+                elif arg.access_mode==AccessMode.WRITE:
+                    assert is_scalar
+                    self.global_writes.add( (i,arg) )
+                elif arg.access_mode==AccessMode.RW:
+                    assert is_scalar
+                    self.global_writes.add( (i,arg) )
+                    self.global_reads.add( (i,arg) )
                 else:
                     raise RuntimeError("Unexpected access mode for global.")
             elif isinstance(arg,DirectDatArgument):
@@ -422,7 +436,6 @@ def create_kernel_function(ctxt:InvocationContext, builder:GraphTypeBuilder):
     builder.add_device_shared_code_raw("set_{}".format(ctxt.stat.iter_set.id), code)
 
 
-
 def create_invocation_tester(testIndex:int, isLast:bool, ctxt:InvocationContext, builder:GraphTypeBuilder):
     with builder.subst(testIndex=testIndex,isLast=int(isLast)):
         handler="""
@@ -481,6 +494,212 @@ def create_invocation_tester(testIndex:int, isLast:bool, ctxt:InvocationContext,
         )
 
 
+"""
+
+/* The state machine is a single function, which takes as input
+   a pointer to a state number, and returns the parallel_for loop
+   to execute.
+   
+   To avoid the potential for infinite loops, each transition in
+   the spec state machine is a message that doesn't fire.
+   
+*/
+   
+
+void state_machine(
+    device_state_t *devState,
+    bool *cancel,
+    uint32_t *readyToSend
+){
+    *cancel=0;
+    *readyToSend=RTS_FLAG_control;
+
+    while(1){
+    switch(devState->state){
+    case S0:
+        ...
+        devState->state=S1; Sequential step
+        break;
+    case S2:
+        devState->state=S3; // Begin invocation wibble
+        *readyToSend=RTS_FLAG_wibble_begin;
+    case S3:
+        // Finish invocation wibble
+        goto S0;
+    };
+}
+
+int state=0;
+while(1){
+    int invocation=state_machine();
+    begin_invocation(invocation);
+    wait end_invocation(invocation);
+}
+"""
+
+_state_counter=0
+
+def make_state():
+    global _state_counter
+    _state_counter+=1
+    return _state_counter
+
+_statement_to_state={}
+
+def get_statement_state(s:Statement):
+    global _statement_to_state
+    if s in _statement_to_state:
+        return _statement_to_state[s]
+    ss=make_state()
+    _statement_to_state[s]=ss
+    return ss
+
+def create_controller_states(s:Statement):
+    get_statement_state(s)
+    if isinstance(s, CompositeStatement):
+        for c in s.children():
+            create_controller_states(c)
+
+def render_controller_statement_seq(s:Seq, next_state:int):
+    children=list(s.children())
+    assert len(children)>0
+    
+    handler=raw("""
+    case {this_state}: // Seq. fall-through to first statement
+        handler_log(4, "Seq {this_state} begin.");
+    """.format(this_state=get_statement_state(s), first_child_state=get_statement_state(children[0])))
+    
+    for (i,c) in enumerate(children):
+        if i+1==len(children):
+            local_next_state=next_state
+        else:
+            local_next_state=get_statement_state(children[i+1])
+        bit=render_controller_statement(c,local_next_state)
+        logging.info("bit = %s", bit)
+        assert isinstance(bit,raw)
+        handler+=bit
+    
+    return handler
+    
+def render_controller_statement_par_for(s:ParFor, next_state:int):
+    return raw("""
+    case {this_state}: // ParFor
+        {{
+          *readyToSend=RTS_FLAG_{invocation}_begin;
+          deviceState->state={next_state};
+        }}
+        break;
+    """.format(invocation=s.id, next_state=next_state, this_state=get_statement_state(s)))
+    
+def render_controller_statement_user(s:UserCode, next_state:int):
+    handler=raw("""
+    case {this_state}: // UserCode
+        {{
+          handler_log(4, "User code {user_code_id} begin.");
+          kernel_{user_code_id}(
+    """.format(this_state=get_statement_state(s), user_code_id=s.id))
+    
+    args=list(s.arguments)
+    for (i,arg) in enumerate(args):
+        if isinstance(arg.global_,MutableGlobal):
+            handler+="        deviceState->global_{}".format(arg.global_.id)
+        elif isinstance(arg.global_,ConstGlobal):
+            handler+="        graphProperties->global_{}".format(arg.global_.id)
+        else:
+            raise RuntimeError("Unknown arg type {}.".format(type(arg)))
+        if i+1!=len(args):
+            handler+=","
+        handler+="\n"
+    
+    handler+="""
+          );
+          handler_log(4, "User code {user_code_id} end.");
+        }}
+        deviceState->state={next_state};
+        break;
+    """.format(next_state=next_state, user_code_id=s.id)
+    
+    return handler
+    
+def render_controller_statement_check_state(s:CheckState, next_state:int):
+    handler=raw("""
+    case {this_state}: // CheckState
+        {{
+    """.format(this_state=get_statement_state(s)))
+    
+    handler+="      // TODO : CheckState, pattern='{}'".format(s.pattern)
+    
+    handler+="""
+        }}
+        deviceState->state={next_state};
+        break;
+    """.format(next_state=next_state)
+    
+    return handler
+    
+
+def render_controller_statement(s:Statement, next_state:int):
+    if isinstance(s,Seq):
+        return render_controller_statement_seq(s, next_state)
+    elif isinstance(s,ParFor):
+        return render_controller_statement_par_for(s, next_state)
+    elif isinstance(s,UserCode):
+        return render_controller_statement_user(s, next_state)
+    elif isinstance(s,CheckState):
+        return render_controller_statement_check_state(s, next_state)
+    else:
+        raise RuntimeError("Didn't understand state of type {}.".format(type(s)))
+
+def compile_global_controller(gi:str, spec:SystemSpecification, builder:GraphTypeBuilder, code:Statement):
+    create_controller_states(code) # Make sure every statement has an entry state
+    
+    builder.add_device_state(gi, "rts", scalar_uint32)
+    builder.add_device_state(gi, "state", scalar_uint32)
+    
+    start_state=get_statement_state(code)
+    finish_state=make_state()
+    
+    builder.add_rts_clause(gi, "*readyToSend = deviceState->rts;\n")
+    
+    with builder.subst(start_state=start_state):
+        builder.add_input_pin(gi, "__init__", "__init__", None, None,
+            """
+            deviceState->rts=RTS_FLAG_control;
+            deviceState->state={start_state};
+            handler_log(4, "rts=%x, state=%d", deviceState->rts, deviceState->state);
+            """
+        )
+    
+    handler=raw("""
+    handler_log(4, "rts=%x, state=%d", deviceState->rts, deviceState->state);
+    *doSend=0;  // disable this send...
+    deviceState->rts=RTS_FLAG_control; // ... but say that we want to send again (by default)
+    switch(deviceState->state){
+    """)
+    handler+=render_controller_statement(code, finish_state)
+    handler+="""
+    case {finish_state}:
+        handler_log(4, "Hit finish state.");
+        handler_exit(0);
+        break;
+    default:
+        handler_log(3, "Unknown state id %d.", deviceState->state);
+        assert(0);
+    }}
+    """.format(finish_state=finish_state)
+    
+    builder.create_message_type("control", {})
+    builder.add_output_pin(gi, "control", "control", handler)
+    
+    for user_code in find_scalars_in_code(code):
+        name=user_code.id
+        assert user_code.ast
+        src=mini_op2.framework.kernel_translator.scalar_to_c(user_code.ast, name)
+        builder.add_device_shared_code("controller", raw(src))
+        
+    
+
+
 def compile_invocation(spec:SystemSpecification, builder:GraphTypeBuilder, ctxt:InvocationContext, emitted_kernels:set):    
     create_all_messages(ctxt,builder)
     
@@ -503,29 +722,19 @@ def compile_invocation(spec:SystemSpecification, builder:GraphTypeBuilder, ctxt:
     create_rts(ctxt,builder)
     
 
-"""
-
-/* The state machine is a single function, which takes as input
-   a pointer to a state number, and returns the parallel_for loop
-   to execute.
-
-int state_machine(
-    int current
-);
-
-int state=0;
-while(1){
-    int invocation=state_machine();
-    begin_invocation(invocation);
-    wait end_invocation(invocation);
-}
-"""
-
 def find_kernels_in_code(code:Statement) -> List[ParFor]:
     kernels=[] # type:List[ParFor]
     for stat in code.all_statements():
         if isinstance(stat,ParFor):
             id=make_unique_id(stat, stat.name)
+            kernels.append(stat)
+    return kernels
+    
+def find_scalars_in_code(code:Statement) -> List[UserCode]:
+    kernels=[] # type:List[UserCode]
+    for stat in code.all_statements():
+        if isinstance(stat,UserCode):
+            id=make_unique_id(stat, "scalar")
             kernels.append(stat)
     return kernels
 
@@ -586,13 +795,13 @@ def sync_compiler(spec:SystemSpecification, code:Statement):
     builder.create_message_type("executeMsgType", {})
     
     # Support two kinds of global. Only one can be wired into an instance.
-    builder.create_device_type("global") # This runs the actual program logic
+    builder.create_device_type("controller") # This runs the actual program logic
     builder.create_device_type("tester") # This solely tests each invocation in turn
     builder.add_device_state("tester", "test_state", DataType(shape=(), dtype=numpy.uint32))
     builder.add_device_state("tester", "end_received", DataType(shape=(), dtype=numpy.uint32))
     for global_ in spec.globals.values():
         if isinstance(global_,MutableGlobal):
-            builder.add_device_state("global", "global_{}".format(global_.id), global_.data_type)
+            builder.add_device_state("controller", "global_{}".format(global_.id), global_.data_type)
             builder.add_device_state("tester", "global_{}".format(global_.id), global_.data_type)
         elif isinstance(global_,ConstGlobal):
             builder.add_graph_property("global_{}".format(global_.id), global_.data_type)
@@ -621,6 +830,8 @@ def sync_compiler(spec:SystemSpecification, code:Statement):
             compile_invocation(spec,builder,ctxt, emitted_kernels)
             create_invocation_tester(i, i+1==len(kernels), ctxt, builder) 
     
+    compile_global_controller("controller", spec, builder, code)
+    
     return builder
           
 def load_model(args:List[str]):
@@ -629,6 +840,7 @@ def load_model(args:List[str]):
     import mini_op2.apps.iota_sum
     import mini_op2.apps.dot_product
     import mini_op2.apps.odd_even_dot_product
+    import mini_op2.apps.scalar_seq
     
     model="airfoil"
     if len(args)>1:
@@ -646,6 +858,8 @@ def load_model(args:List[str]):
         srcFile=8
     elif model=="odd_even_dot_product":
         srcFile=4
+    elif model=="scalar_seq":
+        srcFile=None
     else:
         raise RuntimeError("Don't know a default file.")
     
@@ -662,6 +876,9 @@ def load_model(args:List[str]):
     elif model=="odd_even_dot_product":
         srcFile=int(srcFile)
         build_system=mini_op2.apps.odd_even_dot_product.build_system
+    elif model=="scalar_seq":
+        srcFile=None
+        build_system=mini_op2.apps.scalar_seq.build_system
     else:
         raise RuntimeError("Don't know this model.")
 

@@ -50,9 +50,27 @@ def import_data_type_tuple(name:str, members:Sequence[DataType]):
     return TupleTypedDataSpec(name, members)
 
 class raw(object):
-    def __init__(value):
+    def __init__(self,value):
         self.value=value
 
+    def __add__(self,o):
+        value=self.value
+        if isinstance(o,raw):
+            value+=o.valuse
+        elif isinstance(o,str):
+            value+=o
+        else:
+            raise RuntimeError("Can't add these together.")
+        return raw(value)
+    
+    def __iadd__(self,o):
+        if isinstance(o,raw):
+            self.value+=o.value
+        elif isinstance(o,str):
+            self.value+=o
+        else:
+            raise RuntimeError("Can't add these together.")
+        return self
 
 class DeviceTypeBuilder(object):
     def __init__(self, id:str):
@@ -144,13 +162,17 @@ class GraphTypeBuilder:
             
     def s(self, x:Union[str,raw], **kwargs) -> str:
         if isinstance(x,raw):
-            return raw.str
+            return x.value
         else:
             if len(kwargs)>0:
                 with self.subst(**kwargs):
                     return self.s(x)
             else:
-                return x.format(**self._subst)
+                try:
+                    return x.format(**self._subst)
+                except:
+                    logging.error("Exception while formatting '%s' with dictionary %s", x, self._subst)
+                    raise
     
     def __init__(self, id:str) -> None:
         self.id=id
