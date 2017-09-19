@@ -38,6 +38,7 @@ _translate_operator={
     "Sub" : "-",
     "Mult" : "*",
     "Div" : "/",
+    "Mod" : "%",
     "Eq" : "==",
     "Lt" : "<",
     "Gt" : ">",
@@ -51,7 +52,8 @@ def translate_operator(e:ast.operator) -> str:
 _translate_function_call={
     "sqrt" : "std::sqrt",
     "fabs" : "std::fabs",
-    "pow" : "std::pow"
+    "pow" : "std::pow",
+    "handler_log" : "handler_log",
 }
 
 def translate_function_call_expr(e:ast.expr) -> str:
@@ -64,6 +66,8 @@ def translate_expression(e:ast.expr) -> str:
         return e.id
     elif isinstance(e, ast.Num):
         return str(e.n)
+    elif isinstance(e, ast.Str):
+        return str('"'+e.s+'"')
     elif isinstance(e, ast.BinOp):
         left=translate_expression(e.left)
         op=translate_operator(e.op)
@@ -112,6 +116,8 @@ def translate_statement(f:ast.stmt, dst:io.TextIOBase, vars:set, indent="") -> N
                 decl="auto "
                 vars.add(f.targets[0].id)
         dst.write("{}{}{} = {};\n".format(indent, decl, translate_expression(f.targets[0]), translate_expression(f.value)))
+    elif isinstance(f, ast.Pass):
+        pass
     elif isinstance(f, ast.AugAssign):
         op=translate_operator(f.op)
         dst.write("{}{} {}= {};\n".format(indent, translate_expression(f.target), op, translate_expression(f.value)))
@@ -134,6 +140,8 @@ def translate_statement(f:ast.stmt, dst:io.TextIOBase, vars:set, indent="") -> N
             translate_statement(s, dst, vars, indent+"  ")
         assert len(f.orelse)==0 # Who uses this construct???
         dst.write("{}}}\n".format(indent))
+    elif isinstance(f, ast.Expr):
+        dst.write("{}{};\n".format(indent, translate_expression(f.value)))
     else:
         raise RuntimeError("unsupported statement {}".format(type(f)))
     

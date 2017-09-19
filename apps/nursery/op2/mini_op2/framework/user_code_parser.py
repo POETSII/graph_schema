@@ -148,7 +148,8 @@ _good_functions=set([
     "sqrt",
     "fabs",
     "print",
-    "range"
+    "range",
+    "handler_log"
 ])
 
 def scan_function_call_expr(uses:VarUses, f:ast.expr) -> None:
@@ -215,6 +216,8 @@ def scan_statement(uses:VarUses, f:ast.stmt) -> None:
         lhs=scan_expression(uses,f.target)
         uses.read(lhs)
         uses.write(lhs)
+    elif isinstance(f, ast.Pass):
+        pass
     elif isinstance(f, ast.If):
         uses.read(scan_expression(uses, f.test))
         for s in f.body:

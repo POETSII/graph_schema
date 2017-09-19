@@ -272,9 +272,10 @@ def build_system(srcFile:str="../airfoil/new_grid.h5", maxiter=1000) -> (SystemI
             CheckState(refFile, "/output/iter{iter}_k{k}")
         ),
         """
-        print(" %d  %10.5e " % (iter[0], sqrt(rms[0] / sizeof_cells[0] )))
-        if (iter%100)==0:
-            print(" %d  %10.5e " % (iter[0], sqrt(rms[0] / sizeof_cells[0] )))
+        #handler_log(4, " %d  %10.5e ", iter[0], sqrt(rms[0] / sizeof_cells[0] ))
+        #if (iter[0]%100)==0:
+        #    handler_log(3, " %d  %10.5e ", iter[0], sqrt(rms[0] / sizeof_cells[0] ))
+        rms[0]=rms[0]
         """
     )
     code.on_bind_spec(sys)

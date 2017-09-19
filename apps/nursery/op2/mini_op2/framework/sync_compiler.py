@@ -7,7 +7,7 @@ import logging
 from contextlib import contextmanager
 
 from mini_op2.framework.core import *
-from mini_op2.framework.control_flow import Statement, ParFor, Seq, UserCode, CompositeStatement, CheckState, While
+from mini_op2.framework.control_flow import Statement, ParFor, Seq, UserCode, CompositeStatement, CheckState, While, RepeatForCount
 from mini_op2.framework.system import SystemSpecification
 from mini_op2.framework.builder import GraphTypeBuilder, raw
 
@@ -492,6 +492,46 @@ def create_invocation_tester(testIndex:int, isLast:bool, ctxt:InvocationContext,
         }}
         """
         )
+        
+        
+def create_invocation_controller(ctxt:InvocationContext, builder:GraphTypeBuilder):
+    handler="""
+        assert(deviceState->end_received==0);
+        assert(deviceState->invocation_index==RTS_INDEX_controller_{invocation}_begin);
+        deviceState->end_received=0;
+        deviceState->rts=0;
+        """
+    for (ai,arg) in ctxt.mutable_global_reads:
+        handler+=builder.s("""
+        copy_value(message->global_{name}, graphProperties->test_{invocation}_{name}_in);
+        """,name=arg.global_.id)
+
+    builder.add_output_pin("controller", "{invocation}_begin", "{invocation}_begin", handler)
+
+    handler="""
+        assert(deviceState->invocation_index==RTS_INDEX_controller_{invocation}_begin);
+        assert(deviceState->end_received < graphProperties->{invocation}_total_responding_devices);
+        deviceState->end_received++;
+    """
+    # Collect any inc's to global values
+    for (ai,arg) in ctxt.global_writes:
+        assert arg.access_mode==AccessMode.INC
+        handler+=builder.s("""
+        inc_value(deviceState->global_{name}, message->global_{name});
+        """,name=arg.global_.id)
+    # Check whether we have finished
+    handler+="""
+        if(deviceState->end_received == graphProperties->{invocation}_total_responding_devices){{
+    """
+
+    handler+="""
+            deviceState->invocation_index=-1;
+            deviceState->end_received=0;
+            deviceState->rts=RTS_FLAG_controller_control;
+        }}
+    """
+    builder.add_input_pin("controller", "{invocation}_end", "{invocation}_end", None, None, handler)
+
 
 
 """
@@ -637,12 +677,59 @@ def render_controller_statement_while(s:While, next_state:int):
     
     return handler
     
+    
+def render_controller_statement_repeat_for_count(s:RepeatForCount, next_state:int):
+    children=list(s.children())
+    assert len(children)>0
+    
+    init_state=get_statement_state(s)
+    top_state=make_state()
+    body_state=get_statement_state(children[0])
+    return_state=make_state()
+    
+    var=s.variable # type:MutableGlobal
+    count=s.count # type:int
+    
+    handler=raw("""
+    case {this_state}: // For. Init
+        handler_log(4, "While {this_state}, evaluate.");
+        deviceState->global_{var}[0]=0;
+        // Fall through to loop condition
+    case {top_state}: // For. Loop top
+        if(deviceState->global_{var}[0] >= {count}){{
+            deviceState->state={next_state};
+            break;
+        }}
+        // Fall through to first statement in loop body
+    """.format(this_state=init_state, top_state=top_state, next_state=next_state, var=var.id, count=count))
+    
+    for (i,c) in enumerate(children):
+        if i+1==len(children):
+            local_next_state=return_state
+        else:
+            local_next_state=get_statement_state(children[i+1])
+        bit=render_controller_statement(c,local_next_state)
+        logging.info("bit = %s", bit)
+        assert isinstance(bit,raw)
+        handler+=bit
+        
+    handler+=raw("""
+    case {return_state}: // For. End
+        deviceState->global_{var}[0]++;
+        // Go back to condition
+        deviceState->state={top_state};
+        break;
+    """.format(return_state=return_state, var=var.id, top_state=top_state))
+    
+    return handler
+    
 def render_controller_statement_par_for(s:ParFor, next_state:int):
     return raw("""
     case {this_state}: // ParFor
         {{
-          *readyToSend=RTS_FLAG_{invocation}_begin;
+          deviceState->rts=RTS_FLAG_{invocation}_begin;
           deviceState->state={next_state};
+          deviceState->invocation_index=RTS_INDEX_controller_{invocation}_begin;
         }}
         break;
     """.format(invocation=s.id, next_state=next_state, this_state=get_statement_state(s)))
@@ -705,6 +792,8 @@ def render_controller_statement(s:Statement, next_state:int):
         return render_controller_statement_check_state(s, next_state)
     elif isinstance(s,While):
         return render_controller_statement_while(s, next_state)
+    elif isinstance(s,RepeatForCount):
+        return render_controller_statement_repeat_for_count(s, next_state)
     else:
         raise RuntimeError("Didn't understand state of type {}.".format(type(s)))
 
@@ -865,6 +954,8 @@ def sync_compiler(spec:SystemSpecification, code:Statement):
     builder.create_device_type("tester") # This solely tests each invocation in turn
     builder.add_device_state("tester", "test_state", DataType(shape=(), dtype=numpy.uint32))
     builder.add_device_state("tester", "end_received", DataType(shape=(), dtype=numpy.uint32))
+    builder.add_device_state("controller", "end_received", DataType(shape=(), dtype=numpy.uint32))
+    builder.add_device_state("controller", "invocation_index", DataType(shape=(), dtype=numpy.uint32))
     for global_ in spec.globals.values():
         if isinstance(global_,MutableGlobal):
             builder.add_device_state("controller", "global_{}".format(global_.id), global_.data_type)
@@ -894,7 +985,8 @@ def sync_compiler(spec:SystemSpecification, code:Statement):
         ctxt=InvocationContext(spec, stat)
         with builder.subst(invocation=ctxt.invocation):
             compile_invocation(spec,builder,ctxt, emitted_kernels)
-            create_invocation_tester(i, i+1==len(kernels), ctxt, builder) 
+            create_invocation_tester(i, i+1==len(kernels), ctxt, builder)
+            create_invocation_controller(ctxt, builder)
     
     compile_global_controller("controller", spec, builder, code)
     
@@ -908,6 +1000,7 @@ def load_model(args:List[str]):
     import mini_op2.apps.odd_even_dot_product
     import mini_op2.apps.scalar_seq
     import mini_op2.apps.scalar_while
+    import mini_op2.apps.scalar_repeat_for
     
     model="airfoil"
     if len(args)>1:
@@ -928,6 +1021,8 @@ def load_model(args:List[str]):
     elif model=="scalar_seq":
         srcFile=None
     elif model=="scalar_while":
+        srcFile=None
+    elif model=="scalar_repeat_for":
         srcFile=None
     else:
         raise RuntimeError("Don't know a default file.")
@@ -951,6 +1046,9 @@ def load_model(args:List[str]):
     elif model=="scalar_while":
         srcFile=None
         build_system=mini_op2.apps.scalar_while.build_system
+    elif model=="scalar_repeat_for":
+        srcFile=None
+        build_system=mini_op2.apps.scalar_repeat_for.build_system
     else:
         raise RuntimeError("Don't know this model.")
 
