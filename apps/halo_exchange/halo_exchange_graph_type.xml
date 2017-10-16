@@ -1,6 +1,205 @@
 <?xml version="1.0"?>
 <Graphs xmlns="https://poets-project.org/schemas/virtual-graph-schema-v2">
 	<GraphType id="halo_exchange">
+		
+		<SharedCode><![CDATA[
+			enum orientation_t { north, east, south, west };
+		
+		int32_t fix_mul(int32_t x, int32_t y)
+		{
+		  auto xy=x*(int64_t)y;
+		  xy += (1<<23);
+		  xy = xy>>24;
+		  assert( -2147483648 <= xy && xy <= 2147483647 );
+		  return (int32_t)(xy);
+		}
+		
+		int32_t fix_add(int32_t x, int32_t y)
+		{
+		  int64_t xy64=x+(int64_t)y;
+		  assert( -2147483648 <= xy64 && xy64 <= 2147483647 );
+		  int32_t xy=x+y;
+		  return xy;
+		}
+		
+		int32_t fix_sub(int32_t x, int32_t y)
+		{
+		  int64_t xy64=x-(int64_t)y;
+		  assert( -2147483648 <= xy64 && xy64 <= 2147483647 );
+		  int32_t xy=x-y;
+		  return xy;
+		}
+		
+		bool fix_gt(int32_t x, int32_t y)
+		{
+		  return x>y;
+		}
+		
+		bool fix_lt(int32_t x, int32_t y)
+		{
+		  return x>y;
+		}
+
+			uint32_t cell_updateFunc(halo_exchange_cell_9by9_state_t *state, const halo_exchange_cell_9by9_properties_t *properties) {
+				 //Process the timestep for this device
+ 
+		uint32_t hL = properties->haloLength;
+	  uint32_t tmpV[hL*hL] = { 0 };
+	 	for(uint32_t i=0; i<hL*hL; i++){ 
+	 	//Accumulate all points surrounding the current point
+
+	 	//North of point
+	 	if(i<hL) //We are at the northern face of this node and need to use the halo value	
+	 		tmpV[i] += state->cN[i];
+	 	else
+	 		tmpV[i] += state->v[i-hL];
+
+	 	//East of point
+	 	if((i!=0) && (i % hL == (hL-1))) //We are at the eastern face of this node and need to use the halo value
+	 		tmpV[i] += state->cE[i/(hL-1)]; 
+	 	else
+	 		tmpV[i] += state->v[i+1];
+
+	 	//South of point
+	 	if(i >= (hL*hL -1) - (hL-1)) //We are at the southern face of this node and need to use the halo value
+	 		tmpV[i] += state->cS[i - ((hL*hL -1) - (hL-1))]; 
+	 	else
+	 		tmpV[i] += state->v[i+hL];
+	 
+	 	//West of point
+	 	if(i % hL == 0) //We are at the western face of this node and need to use the halo value
+	 		tmpV[i] += state->cW[i/hL];
+	 	else
+	 		tmpV[i] += state->v[i-1];
+	 	}
+	 
+	 	for(uint32_t i=0; i<hL*hL; i++) {
+	 		state->v[i] = tmpV[i];
+	 	}
+	 	for(uint32_t i=0; i<hL; i++){ 
+	     handler_log(2 ,"%u	%u	%u	%u	%u	%u	%u	%u	%u", tmpV[(i*hL)+0],tmpV[(i*hL)+1],tmpV[(i*hL)+2],tmpV[(i*hL)+3],tmpV[(i*hL)+4],tmpV[(i*hL)+5],tmpV[(i*hL)+6],tmpV[(i*hL)+7],tmpV[(i*hL)+8]); 
+	 	} 
+	 	return 0; 
+				}
+
+			uint32_t cell_initFunc(halo_exchange_cell_9by9_state_t *state, const halo_exchange_cell_9by9_properties_t *properties) {
+				 //the initial state for this device
+
+			uint32_t hL = properties->haloLength;
+			for(uint32_t i=0; i<hL*hL; i++) {
+					state->v[i] = 0;
+			}
+			return 1;
+				}
+
+			bool allArrived(const halo_exchange_cell_9by9_state_t *state, const halo_exchange_cell_9by9_properties_t *gp) {
+				for(uint32_t i=0; i<4; i++) {
+					if (!state->c_arrivalFlags[i])
+						return false;
+					}
+				return true;
+			}
+			void clearArrived(halo_exchange_cell_9by9_state_t *state) {
+				for(uint32_t i=0; i<4; i++) {
+						state->c_arrivalFlags[i] = 0;
+					}
+				return;
+			}
+
+			bool allSent(const halo_exchange_cell_9by9_state_t *state, const halo_exchange_cell_9by9_properties_t *gp) {
+				for(uint32_t i=0; i<4; i++) {
+					if(!state->sentFlags[i])
+						return false;
+				}
+				return true;
+			}
+
+			void moveToNextIter(halo_exchange_cell_9by9_state_t *state, const halo_exchange_cell_9by9_properties_t *dp, const halo_exchange_properties_t *gp) {
+				for(uint32_t i=0; i< 4; i++) {
+					state->c_arrivalFlags[i] = state->n_arrivalFlags[i];
+					state->n_arrivalFlags[i] = 0;
+					state->sentFlags[i] = 0;
+				}
+				const uint32_t hL = dp->haloLength;
+				for(uint32_t i=0; i< hL; i++) {
+					state->cN[i] = state->nN[i];
+					state->cE[i] = state->nE[i];
+					state->cS[i] = state->nS[i];
+					state->cW[i] = state->nW[i];
+			}
+			state->t = state->t + gp->dt;
+			state->processed = 0;
+			return;
+		}
+
+			void loadMessage(const halo_exchange_update_message_t *message, halo_exchange_cell_9by9_state_t *state, const halo_exchange_cell_9by9_properties_t *dp, const halo_exchange_properties_t *gp, orientation_t dir) {
+				assert( message->t == state->t || message->t == state->t + gp->dt );
+				const uint32_t hL = dp->haloLength;
+				if(message->t == state->t) {
+					for(uint32_t i=0; i<hL; i++) {
+						if(dir == north)
+							state->cN[i] = message->v[i];
+						if(dir == east)
+							state->cE[i] = message->v[i];
+						if(dir == south)
+							state->cS[i] = message->v[i];
+						if(dir == west)
+							state->cW[i] = message->v[i];
+					}
+					state->c_arrivalFlags[dir] = 1;
+				}else if(message->t == state->t + gp->dt) {
+					for(uint32_t i=0; i<hL; i++) {
+						if(dir == north)
+						state->nN[i] = message->v[i];
+						if(dir == east)
+							state->nE[i] = message->v[i];
+						if(dir == south)
+							state->nS[i] = message->v[i];
+						if(dir == west)
+							state->nW[i] = message->v[i];
+					}
+					state->n_arrivalFlags[dir] = 1;
+				}
+			}
+
+
+			uint32_t boundary_updateFunc(halo_exchange_boundary_9_state_t *state, const halo_exchange_boundary_9_properties_t *properties) {
+				//Process the timestep for this device
+ 
+		uint32_t hL = properties->haloLength;
+		uint32_t tmpV[hL];	
+		
+		//c = NorthOf(c) + EastOf(c) + SouthOf(c) 
+		//Northmost element 
+		tmpV[0] = 0 + state->cV[0] + state->v[1];
+		
+		//Middle Elements 
+		for(uint32_t i=1; i<hL-1; i++) { 
+			tmpV[i] = state->v[i-1] + state->cV[i] + state->v[i+1]; 
+		} 
+		
+		//Southmost element 
+		tmpV[hL-1] = state->v[hL-2] + state->cV[hL-1] + 0; 
+		
+		//Load tmp value array into the real value array 
+		for(uint32_t i=0; i<hL; i++) { 
+			state->v[i] = tmpV[i]; 
+		} 
+		return 1;
+				}
+
+			uint32_t boundary_initFunc(halo_exchange_boundary_9_state_t *state, const halo_exchange_boundary_9_properties_t *properties) {
+				//used to initialise the state of the device
+
+		uint32_t hL = properties->haloLength;
+		for(uint32_t i=0; i<hL; i++) {
+			state->v[i] = 2;
+		}
+		return 1;
+				}
+
+		]]></SharedCode>
+
 	<Properties>
 		<Scalar type="uint32_t" name="maxTime" default="5" />
 		<Scalar type="uint32_t" name="nodesPerDevice" default="81" />
@@ -84,140 +283,10 @@
 					deviceState->n_arrivalFlags[i] = 0;
 					deviceState->c_arrivalFlags[i] = 0;
 				}
-				initFunc(deviceState, deviceProperties, orchestrator);
+				cell_initFunc(deviceState, deviceProperties);
 			]]></OnReceive>
 		</InputPin>
 
-		<SharedCode><![CDATA[
-			enum orientation_t { north, east, south, west };
-
-			uint32_t updateFunc(cell_9by9_state_t *state, const cell_9by9_properties_t *properties, OrchestratorServices *orchestrator) {
-				 //Process the timestep for this device
-				 HandlerLogImpl handler_log(orchestrator);
-
- 
-		uint32_t hL = properties->haloLength;
-	  uint32_t tmpV[hL*hL] = { 0 };
-	 	for(uint32_t i=0; i<hL*hL; i++){ 
-	 	//Accumulate all points surrounding the current point
-
-	 	//North of point
-	 	if(i<hL) //We are at the northern face of this node and need to use the halo value	
-	 		tmpV[i] += state->cN[i];
-	 	else
-	 		tmpV[i] += state->v[i-hL];
-
-	 	//East of point
-	 	if((i!=0) && (i % hL == (hL-1))) //We are at the eastern face of this node and need to use the halo value
-	 		tmpV[i] += state->cE[i/(hL-1)]; 
-	 	else
-	 		tmpV[i] += state->v[i+1];
-
-	 	//South of point
-	 	if(i >= (hL*hL -1) - (hL-1)) //We are at the southern face of this node and need to use the halo value
-	 		tmpV[i] += state->cS[i - ((hL*hL -1) - (hL-1))]; 
-	 	else
-	 		tmpV[i] += state->v[i+hL];
-	 
-	 	//West of point
-	 	if(i % hL == 0) //We are at the western face of this node and need to use the halo value
-	 		tmpV[i] += state->cW[i/hL];
-	 	else
-	 		tmpV[i] += state->v[i-1];
-	 	}
-	 
-	 	for(uint32_t i=0; i<hL*hL; i++) {
-	 		state->v[i] = tmpV[i];
-	 	}
-	 	for(uint32_t i=0; i<hL; i++){ 
-	     handler_log(2 ,"%u	%u	%u	%u	%u	%u	%u	%u	%u", tmpV[(i*hL)+0],tmpV[(i*hL)+1],tmpV[(i*hL)+2],tmpV[(i*hL)+3],tmpV[(i*hL)+4],tmpV[(i*hL)+5],tmpV[(i*hL)+6],tmpV[(i*hL)+7],tmpV[(i*hL)+8]); 
-	 	} 
-	 	return 0; 
-				}
-
-			uint32_t initFunc(cell_9by9_state_t *state, const cell_9by9_properties_t *properties, OrchestratorServices *orchestrator) {
-				 //the initial state for this device
-				 HandlerLogImpl handler_log(orchestrator);
-
-
-			uint32_t hL = properties->haloLength;
-			for(uint32_t i=0; i<hL*hL; i++) {
-					state->v[i] = 0;
-			}
-			return 1;
-				}
-
-			bool allArrived(const cell_9by9_state_t *state, const cell_9by9_properties_t *gp) {
-				for(uint32_t i=0; i<4; i++) {
-					if (!state->c_arrivalFlags[i])
-						return false;
-					}
-				return true;
-			}
-			void clearArrived(cell_9by9_state_t *state) {
-				for(uint32_t i=0; i<4; i++) {
-						state->c_arrivalFlags[i] = 0;
-					}
-				return;
-			}
-
-			bool allSent(const cell_9by9_state_t *state, const cell_9by9_properties_t *gp) {
-				for(uint32_t i=0; i<4; i++) {
-					if(!state->sentFlags[i])
-						return false;
-				}
-				return true;
-			}
-
-			void moveToNextIter(cell_9by9_state_t *state, const cell_9by9_properties_t *dp, const halo_exchange_properties_t *gp) {
-				for(uint32_t i=0; i< 4; i++) {
-					state->c_arrivalFlags[i] = state->n_arrivalFlags[i];
-					state->n_arrivalFlags[i] = 0;
-					state->sentFlags[i] = 0;
-				}
-				const uint32_t hL = dp->haloLength;
-				for(uint32_t i=0; i< hL; i++) {
-					state->cN[i] = state->nN[i];
-					state->cE[i] = state->nE[i];
-					state->cS[i] = state->nS[i];
-					state->cW[i] = state->nW[i];
-			}
-			state->t = state->t + gp->dt;
-			state->processed = 0;
-			return;
-		}
-
-			void loadMessage(const update_message_t *message, cell_9by9_state_t *state, const cell_9by9_properties_t *dp, const halo_exchange_properties_t *gp, orientation_t dir) {
-				assert( message->t == state->t || message->t == state->t + gp->dt );
-				const uint32_t hL = dp->haloLength;
-				if(message->t == state->t) {
-					for(uint32_t i=0; i<hL; i++) {
-						if(dir == north)
-							state->cN[i] = message->v[i];
-						if(dir == east)
-							state->cE[i] = message->v[i];
-						if(dir == south)
-							state->cS[i] = message->v[i];
-						if(dir == west)
-							state->cW[i] = message->v[i];
-					}
-					state->c_arrivalFlags[dir] = 1;
-				}else if(message->t == state->t + gp->dt) {
-					for(uint32_t i=0; i<hL; i++) {
-						if(dir == north)
-						state->nN[i] = message->v[i];
-						if(dir == east)
-							state->nE[i] = message->v[i];
-						if(dir == south)
-							state->nS[i] = message->v[i];
-						if(dir == west)
-							state->nW[i] = message->v[i];
-					}
-					state->n_arrivalFlags[dir] = 1;
-				}
-			}
-
-		]]></SharedCode>
 
 		<InputPin name="north_in" messageTypeId="update">
 			<OnReceive><![CDATA[
@@ -227,7 +296,7 @@
 					if(allArrived(deviceState, deviceProperties)) {
 						deviceState->processed=1;;
 						clearArrived(deviceState);
-						updateFunc(deviceState, deviceProperties, orchestrator);
+						cell_updateFunc(deviceState, deviceProperties);
 						handler_log(2, "data-transfer complete computing timestep.");
 					}
 				}
@@ -243,7 +312,7 @@
 					if(allArrived(deviceState, deviceProperties)) {
 						deviceState->processed=1;;
 						clearArrived(deviceState);
-						updateFunc(deviceState, deviceProperties, orchestrator);
+						cell_updateFunc(deviceState, deviceProperties);
 						handler_log(2, "data-transfer complete computing timestep.");
 					}
 				}
@@ -259,7 +328,7 @@
 					if(allArrived(deviceState, deviceProperties)) {
 						deviceState->processed=1;;
 						clearArrived(deviceState);
-						updateFunc(deviceState, deviceProperties, orchestrator);
+						cell_updateFunc(deviceState, deviceProperties);
 						handler_log(2, "data-transfer complete computing timestep.");
 					}
 				}
@@ -275,7 +344,7 @@
 					if(allArrived(deviceState, deviceProperties)) {
 						deviceState->processed=1;;
 						clearArrived(deviceState);
-						updateFunc(deviceState, deviceProperties, orchestrator);
+						cell_updateFunc(deviceState, deviceProperties);
 						handler_log(2, "data-transfer complete computing timestep.");
 					}
 				}
@@ -356,11 +425,12 @@
 			<Scalar type="uint32_t" name="t"/>
 			<Scalar type="int8_t" name="cAvail"/>
 			<Scalar type="int8_t" name="nAvail"/>
+			<Scalar type="int8_t" name="init_firstfire"/>
 		</State>
 
 		<ReadyToSend><![CDATA[
 			*readyToSend=0;
-			if(deviceState->t == 0) {
+			if((deviceState->t == 0) && (deviceState->init_firstfire == 1)) {
 				*readyToSend = RTS_FLAG_out;
 			} else if (deviceState->cAvail) {
 				*readyToSend = RTS_FLAG_out;
@@ -375,53 +445,14 @@
 				deviceState->t = 0;
 				deviceState->cAvail = 0;
 				deviceState->nAvail = 0;
+				deviceState->init_firstfire = 1;
 				for(uint32_t i=0; i<deviceProperties->haloLength; i++){
 					deviceState->cV[i] = 0;
 					deviceState->nV[i] = 0;
 				}
-				initFunc(deviceState, deviceProperties, orchestrator);
+				boundary_initFunc(deviceState, deviceProperties);
 			]]></OnReceive>
 		</InputPin>
-
-		<SharedCode><![CDATA[
-			enum orientation_t { north, east, south, west };
-			uint32_t updateFunc(boundary_9_state_t *state, const boundary_9_properties_t *properties, OrchestratorServices *orchestrator) {
-				//Process the timestep for this device
-				HandlerLogImpl handler_log(orchestrator);
- 
-		uint32_t hL = properties->haloLength;
-		uint32_t tmpV[hL];	
-		
-		//c = NorthOf(c) + EastOf(c) + SouthOf(c) 
-		//Northmost element 
-		tmpV[0] = 0 + state->cV[0] + state->v[1];
-		
-		//Middle Elements 
-		for(uint32_t i=1; i<hL-1; i++) { 
-			tmpV[i] = state->v[i-1] + state->cV[i] + state->v[i+1]; 
-		} 
-		
-		//Southmost element 
-		tmpV[hL-1] = state->v[hL-2] + state->cV[hL-1] + 0; 
-		
-		//Load tmp value array into the real value array 
-		for(uint32_t i=0; i<hL; i++) { 
-			state->v[i] = tmpV[i]; 
-		} 
-		return 1;
-				}
-
-			uint32_t initFunc(boundary_9_state_t *state, const boundary_9_properties_t *properties, OrchestratorServices *orchestrator) {
-				//used to initialise the state of the device
-				HandlerLogImpl handler_log(orchestrator);
-
-		uint32_t hL = properties->haloLength;
-		for(uint32_t i=0; i<hL; i++) {
-			state->v[i] = 2;
-		}
-		return 1;
-				}
-		]]></SharedCode>
 
 		<OutputPin name="out" messageTypeId="update">
 			<OnSend><![CDATA[
@@ -442,6 +473,7 @@
 						deviceState->cV[i] = deviceState->nV[i];
 					}
 				}
+				deviceState->init_firstfire=0;
 			]]></OnSend>
 		</OutputPin>
 
@@ -456,7 +488,7 @@
 				uint32_t hL = deviceProperties->haloLength;
 				if(message->t == deviceState->t) {
 					deviceState->cAvail = 1;
-					updateFunc(deviceState, deviceProperties, orchestrator);
+					boundary_updateFunc(deviceState, deviceProperties);
 				} else if (message->t == deviceState->t+hL) {
 					deviceState->nAvail = 1;
 					for(uint32_t i=0; i<hL; i++) {

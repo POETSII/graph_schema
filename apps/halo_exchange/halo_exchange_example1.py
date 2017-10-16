@@ -127,9 +127,9 @@ def main(argv):
 		return 1;
 	"""
 
-	center = hE.Device(name='center', celltype='box', size=N, updateFunc=center_update, initFunc=center_init) 
-	boundary = hE.Device(name='boundary', celltype='edge', size=N, updateFunc=boundary_update, initFunc=boundary_init) 
-	exit_node = hE.Device(name='exit_node', celltype='exit', size=N, updateFunc='', initFunc='') 
+	center = hE.Device(name='center', celltype='box', size=N, updateFunc=center_update, initFunc=center_init, properties='', state='') 
+	boundary = hE.Device(name='boundary', celltype='edge', size=N, updateFunc=boundary_update, initFunc=boundary_init, properties='', state='') 
+	exit_node = hE.Device(name='exit_node', celltype='exit', size=N, updateFunc='', initFunc='', properties='', state='') 
 	dlist = [center, boundary, exit_node]
 
 	xmlo = hE.generate_graph('halo_exchange',dlist,N,True)
