@@ -161,6 +161,28 @@ def render_typed_data_save(proto, dst, prefix, indent):
     else:
         assert False, "Unknown data-type"
 
+def render_typed_data_as_elements(proto, dst, prefix):
+    if proto is None:
+        dst.write('{}makeTuple("_",{{}})\n'.format(prefix))
+    elif isinstance(proto,ScalarTypedDataSpec):
+        dst.write('{}makeScalar("{}","{}","{}")\n'.format(prefix,proto.name,proto.type, proto.default or 0))
+    elif isinstance(proto,TupleTypedDataSpec):
+        dst.write('{}makeTuple("{}",{{\n'.format(prefix,proto.name))
+        first=True
+        for elt in proto.elements_by_index:
+            if first:
+                first=False
+            else:
+                dst.write("{},\n".format(prefix))
+            render_typed_data_as_elements(elt, dst, prefix+"  ")
+        dst.write('{}}})\n'.format(prefix))
+    elif isinstance(proto,ArrayTypedDataSpec):
+        dst.write('{}makeArray("{}",{},\n'.format(prefix,proto.name,proto.length))
+        render_typed_data_as_elements(proto.type, dst, prefix+"  ")
+        dst.write("{})\n".format(prefix))
+    else:
+        assert False, "Unknown data-type, {}".format(proto)
+
 
 def render_typed_data_as_spec(proto,name,elt_name,dst,asHeader=False):
     dst.write("#pragma pack(push,1)\n")
@@ -177,7 +199,15 @@ def render_typed_data_as_spec(proto,name,elt_name,dst,asHeader=False):
         return
 
     dst.write("class {}_Spec : public TypedDataSpec {{\n".format(name))
+    dst.write("private:\n")
+    dst.write("  std::shared_ptr<TypedDataSpecElementTuple> m_tupleElt;\n")
     dst.write("public:\n")
+    dst.write("  {}_Spec(){{\n".format(name))
+    dst.write("    m_tupleElt=\n".format(name))
+    render_typed_data_as_elements(proto, dst,"      ")
+    dst.write("    ;\n")
+    dst.write("  }\n")
+    dst.write("  std::shared_ptr<TypedDataSpecElementTuple> getTupleElement() override { return m_tupleElt; }\n")
     dst.write("  size_t totalSize() const override {{ return sizeof({})-sizeof(typed_data_t); }}\n".format(name))
     dst.write("  size_t payloadSize() const override {{ return sizeof({}); }}\n".format(name))
     dst.write("  TypedDataPtr create() const override {\n")

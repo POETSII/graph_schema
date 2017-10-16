@@ -31,7 +31,9 @@ endif
 CPPFLAGS += -std=c++11 -g
 #CPPFLAGS += -O0
 
-#CPPFLAGS += -O3 -DNDEBUG=1
+CPPFLAGS += -O2 -fno-omit-frame-pointer -ggdb -DNDEBUG=1
+
+
 
 TRANG = external/trang-20091111/trang.jar
 JING = external/jing-20081028/bin/jing.jar
@@ -191,6 +193,7 @@ include apps/clocked_izhikevich_fix/makefile.inc
 include apps/gals_izhikevich/makefile.inc
 include apps/gals_heat/makefile.inc
 include apps/gals_heat_fix/makefile.inc
+include apps/gals_heat_fix_noedge/makefile.inc
 include apps/storm/makefile.inc
 include apps/halo_exchange/makefile.inc
 

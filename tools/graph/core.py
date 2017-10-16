@@ -277,18 +277,9 @@ class GraphType(object):
         self.device_types[device_type.id]=device_type
 
 class GraphTypeReference(object):
-    def __init__(self,id,src):
+    def __init__(self,id,src=None):
         self.id=id
         self.src=src
-
-        self.properties=properties
-        self.metadata=metadata
-        self.device_types={}
-        self.message_types={}
-
-    @property
-    def native_dimension(self):
-        raise RuntimeError("Cannot get dimension of unresolved GraphTypeReference.")
 
     @property
     def properties(self):

@@ -1,9 +1,9 @@
-#!/usr/bin/python3
+#!/usr/bin/env python3
 
 from graph.core import *
 
 from graph.load_xml import load_graph_types_and_instances
-from graph.save_xml import save_graph
+from graph.save_xml_stream import save_graph
 import sys
 import os
 import math
@@ -124,6 +124,10 @@ if len(sys.argv)>3:
     K=int(sys.argv[3])
 if len(sys.argv)>4:
     maxTicks=int(sys.argv[4])
+if len(sys.argv)>5:
+    maxFanIn=int(sys.argv[5])
+if len(sys.argv)>6:
+    maxFanOut=int(sys.argv[6])
 
 N=Ne+Ni
 K=min(N,K)
@@ -185,9 +189,10 @@ create_fanin(
 srcIToDstI=[[] for i in range(N)]  # Map from src index to array of dest indexes
 
 for dstI in range(N):
-    free=list(range(N))
-    random.shuffle(free)
-    srcs=free[:K]
+    #free=list(range(N))
+    #random.shuffle(free)
+    #srcs=free[:K]
+    srcs=random.sample(range(N),K)
     
     for si in srcs:
         srcIToDstI[si].append(dstI)

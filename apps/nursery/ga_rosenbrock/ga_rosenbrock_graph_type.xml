@@ -1,0 +1,160 @@
+<?xml version="1.0"?>
+<Graphs xmlns="http://TODO.org/POETS/virtual-graph-schema-v1">
+  <GraphType id="ga_rosenbrock__P__">
+	<Documentation>
+	This implements a genetic algorithm for solving the rosenbrock
+	function:
+	
+       f(x) = sum( 100 * ( (x[i+1] - x[i]^2)^2 + (x[i]-1)^2 ), i=1..p-1 )
+	   
+	We use 16-bit signed fixed-point x elements, with 3 (signed) integer digits and
+	13 fractional bits.
+	We constrain x over the __P__ dimensional hyper-cube (-2,2)^__P__
+	
+	The constant p is actually left free here, and represented by the
+	string __P__. This file should be specialised by sed or something
+	to result in a P-specific graph type.
+	
+	TODO: really we should support some notion of compile-time constants
+	for parameterising graphs.
+	
+	The total size of a gene is then __P__*2 bytes.
+	
+	Fitness is represented by a 32-bit signed number.
+	
+	An upper bound on the range is given by:
+		max( sum( 100 * (x[i+1] - x[i]^2)^2 + (x[i]-1)^2 ), i=1..p-1 ) )
+		p * max( 100 * (x[i+1] - x[i]^2)^2   + (x[i]-1)^2 )
+		p * max( 100 * (x[i+1] - x[i]^2)^2)   + max(x[i]-1)^2 )
+		p * max( 100 * (-2 - 2^2)^2)   + max(-3)^2 )
+		p * max( 100 * (-6)^2)   + max(-3)^2 )
+		p * max( 100 * 36   + 9 )
+		p * 3609
+		
+	So if we choose p below 8 then the bound is below 2^15, and we can use
+	16 integer bits and 16 fractional.
+	
+	</Documentation>
+	
+    <MessageTypes>
+      <MessageType id="__init__">
+		<Documentation>This doesn't have any properties</Documentation>
+      </MessageType>
+      
+      <MessageType id="exchange">
+		<Documentation>A tick being sent from the root through to the leaves</Documentation>
+      </MessageType>
+
+      <MessageType id="ack">
+		<Documentation>An acknowledgement being sent from the leaves back through to the root</Documentation>
+      </MessageType>
+    </MessageTypes>
+    
+    <DeviceTypes>
+      <DeviceType id="root">
+		<Properties>
+		  <Scalar type="uint32_t" name="fanout"/>
+		</Properties>
+		
+		<State>
+		  <Scalar type="uint32_t" name="cycle" />
+		  <Scalar type="uint32_t" name="pending" />
+		</State>
+		
+		<ReadyToSend><![CDATA[
+			*readyToSend = deviceState->pending==0 ? OUTPUT_FLAG_root_tick_out : 0;
+		]]></ReadyToSend>
+		
+		<OutputPort name="tick_out" messageTypeId="tick">
+		  <OnSend><![CDATA[
+		  deviceState->cycle++;
+		  deviceState->pending=deviceProperties->fanout;
+		  ]]></OnSend>
+		</OutputPort>
+		
+		<InputPort name="ack_in" messageTypeId="ack">
+		  <OnReceive><![CDATA[
+		  deviceState->pending--;
+		  ]]></OnReceive>
+		</InputPort>
+
+      </DeviceType>
+	
+	<DeviceType id="branch">
+	  <Properties>
+	    <Scalar type="uint32_t" name="fanout"/>
+	  </Properties>
+	  
+	  <State>
+		<!--
+			0 : Idle
+			1 : Tick received, but not forwarded
+			2 : All acks received
+			2+n : Waiting for n acks to be received
+		-->
+		<Scalar type="int32_t" name="status" />
+	  </State>
+	  
+	  <ReadyToSend><![CDATA[
+			if(deviceState->status==0){
+				*readyToSend=0;
+			}else if(deviceState->status==1){
+				*readyToSend = OUTPUT_FLAG_branch_tick_out;
+			}else if(deviceState->status==2){
+				*readyToSend = OUTPUT_FLAG_branch_ack_out;
+			}else{
+				*readyToSend=0;
+			}
+		]]></ReadyToSend>
+	  
+	  <InputPort name="tick_in" messageTypeId="tick">
+	    <OnReceive><![CDATA[
+	    deviceState->status=1;
+	    ]]></OnReceive>
+	  </InputPort>
+	  
+	  <OutputPort name="tick_out" messageTypeId="tick">
+	    <OnSend><![CDATA[
+	    deviceState->status=2+deviceProperties->fanout;
+	    ]]></OnSend>
+	  </OutputPort>
+	  
+	  <InputPort name="ack_in" messageTypeId="ack">
+	    <OnReceive><![CDATA[
+	    deviceState->status--;
+	    ]]></OnReceive>
+	  </InputPort>
+	  
+	  <OutputPort name="ack_out" messageTypeId="ack">
+	    <OnSend><![CDATA[
+	    deviceState->status=0;
+	    ]]></OnSend>
+	  </OutputPort>
+	</DeviceType>
+	
+	<DeviceType id="leaf">
+		<State>
+			<Scalar type="int8_t" name="ready" />
+		</State>
+		
+		<ReadyToSend><![CDATA[
+		*readyToSend = deviceState->ready ? OUTPUT_FLAG_leaf_ack_out : 0;
+		]]></ReadyToSend>
+	
+		  <InputPort name="tick_in" messageTypeId="tick">
+			<OnReceive><![CDATA[
+			deviceState->ready=true;
+			]]>
+			</OnReceive>
+		  </InputPort>
+		  
+		  <OutputPort name="ack_out" messageTypeId="ack">
+			<OnSend><![CDATA[
+			deviceState->ready=false;
+			]]></OnSend>
+		  </OutputPort>
+		</DeviceType>
+	  </DeviceTypes>
+	</GraphType>
+</Graphs>
+

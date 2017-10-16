@@ -6,6 +6,7 @@ define ising_spin_fix_instance_template
 # $1 = n
 # $2 = T
 # $3 = filters
+# $4 render demo
 
 demos/ising_spin_fix/ising_spin_fix_$1.xml : apps/ising_spin_fix/create_ising_spin_fix_instance.py apps/ising_spin_fix/ising_spin_fix_graph_type.xml
 	mkdir -p $$(dir $$@)
@@ -16,6 +17,8 @@ demos/ising_spin_fix/ising_spin_fix_$1.snap : demos/ising_spin_fix/ising_spin_fi
 
 ALL_ising_spin_fix_TESTS += demos/ising_spin_fix/ising_spin_fix_$1.snap
 
+ifneq ($4,)
+
 demos/ising_spin_fix/ising_spin_fix_$1.gif : demos/ising_spin_fix/ising_spin_fix_$1.xml demos/ising_spin_fix/ising_spin_fix_$1.snap
 	mkdir -p demos/ising_spin_fix/ising_spin_fix_$1.tmp
 	$(PYTHON) tools/render_graph_as_dot.py demos/ising_spin_fix/ising_spin_fix_$1.xml \
@@ -25,10 +28,11 @@ demos/ising_spin_fix/ising_spin_fix_$1.gif : demos/ising_spin_fix/ising_spin_fix
 			$3
 	(cd demos/ising_spin_fix/ising_spin_fix_$1.tmp/  &&  for i in *.dot; do echo $$$$i; neato -Gsize=5,5\! -Gdpi=100 -Tpng $$$$i > $$$$i.png; done )
 	(cd demos/ising_spin_fix/ising_spin_fix_$1.tmp/  && convert -delay 20 -loop 0 *.dot.png ../ising_spin_fix_$1.gif)
-	(cd demos/ising_spin_fix/ising_spin_fix_$1.tmp/  && $(FFMPEG) -r 10 -i out_%06d.dot.png -vf "scale=trunc(iw/2)*2:trunc(ih/2)*2" -c:v libx264 -crf 18 ../ising_spin_fix_$1.mp4)
+	$(FFMPEG) -y -r 10 -i demos/ising_spin_fix/ising_spin_fix_$1.tmp/out_%06d.dot.png -vf "scale=trunc(iw/2)*2:trunc(ih/2)*2" -c:v libx264 -crf 18 demos/ising_spin_fix/ising_spin_fix_$1.mp4)
 
 ALL_ising_spin_fix_DEMOS += demos/ising_spin_fix/ising_spin_fix_$1.gif
 
+endif
 			
 $(eval $(call softswitch_instance_template,ising_spin_fix_$1,demos/ising_spin_fix/ising_spin_fix_$1.xml,1))
 $(eval $(call softswitch_instance_template,ising_spin_fix_$1,demos/ising_spin_fix/ising_spin_fix_$1.xml,4))
