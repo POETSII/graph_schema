@@ -5,20 +5,23 @@ import haloExchange as hE
 
 def main(argv):
 	outFileName=''
+	agglomeration_factor=4
 	try:
-		opts, args = getopt.getopt(argv, "h:o", ["output="])
+		opts, args = getopt.getopt(argv, "ha:o", ["agglomeration=","output="])
 	except getopt.GetoptError:
-		print 'Usage python halo_exchange_example1.py --output graph_type.xml'
+		print 'Usage python halo_exchange_example1.py --agglomeration <N> --output graph_type.xml'
 		sys.exit()
 	for opt, arg in opts:
 		if opt == '-h':
-			print 'Usage python halo_exchange_example1.py --output graph_type.xml'
+			print 'Usage python halo_exchange_example1.py --agglomeration <N> --output graph_type.xml'
 			sys.exit()
+		if opt in ("-a", "--agglomeration"):
+			agglomeration_factor = int(arg)	
 		if opt in ("-o", "--output"):
 			outFileName = arg	
 	assert(outFileName != '')	
 
-	N = 9;
+	N = agglomeration_factor;
 
 	# Example of a 4x4 FE agglomerated node
 	#	hL is the length of the halo exchange (i.e. the length of the grid)
@@ -69,9 +72,9 @@ def main(argv):
 	 	for(uint32_t i=0; i<hL*hL; i++) {
 	 		state->v[i] = tmpV[i];
 	 	}
-	 	for(uint32_t i=0; i<hL; i++){ 
-	     handler_log(2 ,"%u\t%u\t%u\t%u\t%u\t%u\t%u\t%u\t%u", tmpV[(i*hL)+0],tmpV[(i*hL)+1],tmpV[(i*hL)+2],tmpV[(i*hL)+3],tmpV[(i*hL)+4],tmpV[(i*hL)+5],tmpV[(i*hL)+6],tmpV[(i*hL)+7],tmpV[(i*hL)+8]); 
-	 	} 
+	 	//for(uint32_t i=0; i<hL; i++){ 
+	     //handler_log(2 ,"%u\t%u\t%u\t%u\t%u\t%u\t%u\t%u\t%u", tmpV[(i*hL)+0],tmpV[(i*hL)+1],tmpV[(i*hL)+2],tmpV[(i*hL)+3],tmpV[(i*hL)+4],tmpV[(i*hL)+5],tmpV[(i*hL)+6],tmpV[(i*hL)+7],tmpV[(i*hL)+8]); 
+	 	//} 
 	 	return 0; 
 	"""
 
@@ -132,7 +135,7 @@ def main(argv):
 	exit_node = hE.Device(name='exit_node', celltype='exit', size=N, updateFunc='', initFunc='', properties='', state='') 
 	dlist = [center, boundary, exit_node]
 
-	xmlo = hE.generate_graph('halo_exchange',dlist,N,True)
+	xmlo = hE.generate_graph('halo_exchange',dlist,N,False)
 
 	outfile = open(outFileName,'w')
 	outfile.write(xmlo)
