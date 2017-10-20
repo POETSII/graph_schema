@@ -40,7 +40,7 @@
 		  return x>y;
 		}
 
-			uint32_t cell_updateFunc(halo_exchange_cell_9by9_state_t *state, const halo_exchange_cell_9by9_properties_t *properties) {
+			uint32_t cell_updateFunc(halo_exchange_cell_10by10_state_t *state, const halo_exchange_cell_10by10_properties_t *properties) {
 				 //Process the timestep for this device
  
 		uint32_t hL = properties->haloLength;
@@ -76,13 +76,13 @@
 	 	for(uint32_t i=0; i<hL*hL; i++) {
 	 		state->v[i] = tmpV[i];
 	 	}
-	 	for(uint32_t i=0; i<hL; i++){ 
-	     handler_log(2 ,"%u	%u	%u	%u	%u	%u	%u	%u	%u", tmpV[(i*hL)+0],tmpV[(i*hL)+1],tmpV[(i*hL)+2],tmpV[(i*hL)+3],tmpV[(i*hL)+4],tmpV[(i*hL)+5],tmpV[(i*hL)+6],tmpV[(i*hL)+7],tmpV[(i*hL)+8]); 
-	 	} 
+	 	//for(uint32_t i=0; i<hL; i++){ 
+	     //handler_log(2 ,"%u	%u	%u	%u	%u	%u	%u	%u	%u", tmpV[(i*hL)+0],tmpV[(i*hL)+1],tmpV[(i*hL)+2],tmpV[(i*hL)+3],tmpV[(i*hL)+4],tmpV[(i*hL)+5],tmpV[(i*hL)+6],tmpV[(i*hL)+7],tmpV[(i*hL)+8]); 
+	 	//} 
 	 	return 0; 
 				}
 
-			uint32_t cell_initFunc(halo_exchange_cell_9by9_state_t *state, const halo_exchange_cell_9by9_properties_t *properties) {
+			uint32_t cell_initFunc(halo_exchange_cell_10by10_state_t *state, const halo_exchange_cell_10by10_properties_t *properties) {
 				 //the initial state for this device
 
 			uint32_t hL = properties->haloLength;
@@ -92,21 +92,21 @@
 			return 1;
 				}
 
-			bool allArrived(const halo_exchange_cell_9by9_state_t *state, const halo_exchange_cell_9by9_properties_t *gp) {
+			bool allArrived(const halo_exchange_cell_10by10_state_t *state, const halo_exchange_cell_10by10_properties_t *gp) {
 				for(uint32_t i=0; i<4; i++) {
 					if (!state->c_arrivalFlags[i])
 						return false;
 					}
 				return true;
 			}
-			void clearArrived(halo_exchange_cell_9by9_state_t *state) {
+			void clearArrived(halo_exchange_cell_10by10_state_t *state) {
 				for(uint32_t i=0; i<4; i++) {
 						state->c_arrivalFlags[i] = 0;
 					}
 				return;
 			}
 
-			bool allSent(const halo_exchange_cell_9by9_state_t *state, const halo_exchange_cell_9by9_properties_t *gp) {
+			bool allSent(const halo_exchange_cell_10by10_state_t *state, const halo_exchange_cell_10by10_properties_t *gp) {
 				for(uint32_t i=0; i<4; i++) {
 					if(!state->sentFlags[i])
 						return false;
@@ -114,7 +114,7 @@
 				return true;
 			}
 
-			void moveToNextIter(halo_exchange_cell_9by9_state_t *state, const halo_exchange_cell_9by9_properties_t *dp, const halo_exchange_properties_t *gp) {
+			void moveToNextIter(halo_exchange_cell_10by10_state_t *state, const halo_exchange_cell_10by10_properties_t *dp, const halo_exchange_properties_t *gp) {
 				for(uint32_t i=0; i< 4; i++) {
 					state->c_arrivalFlags[i] = state->n_arrivalFlags[i];
 					state->n_arrivalFlags[i] = 0;
@@ -132,7 +132,7 @@
 			return;
 		}
 
-			void loadMessage(const halo_exchange_update_message_t *message, halo_exchange_cell_9by9_state_t *state, const halo_exchange_cell_9by9_properties_t *dp, const halo_exchange_properties_t *gp, orientation_t dir) {
+			void loadMessage(const halo_exchange_update_message_t *message, halo_exchange_cell_10by10_state_t *state, const halo_exchange_cell_10by10_properties_t *dp, const halo_exchange_properties_t *gp, orientation_t dir) {
 				assert( message->t == state->t || message->t == state->t + gp->dt );
 				const uint32_t hL = dp->haloLength;
 				if(message->t == state->t) {
@@ -163,7 +163,7 @@
 			}
 
 
-			uint32_t boundary_updateFunc(halo_exchange_boundary_9_state_t *state, const halo_exchange_boundary_9_properties_t *properties) {
+			uint32_t boundary_updateFunc(halo_exchange_boundary_10_state_t *state, const halo_exchange_boundary_10_properties_t *properties) {
 				//Process the timestep for this device
  
 		uint32_t hL = properties->haloLength;
@@ -188,7 +188,7 @@
 		return 1;
 				}
 
-			uint32_t boundary_initFunc(halo_exchange_boundary_9_state_t *state, const halo_exchange_boundary_9_properties_t *properties) {
+			uint32_t boundary_initFunc(halo_exchange_boundary_10_state_t *state, const halo_exchange_boundary_10_properties_t *properties) {
 				//used to initialise the state of the device
 
 		uint32_t hL = properties->haloLength;
@@ -201,8 +201,8 @@
 		]]></SharedCode>
 
 	<Properties>
-		<Scalar type="uint32_t" name="maxTime" default="5" />
-		<Scalar type="uint32_t" name="nodesPerDevice" default="81" />
+		<Scalar type="uint32_t" name="maxTime" default="10000" />
+		<Scalar type="uint32_t" name="nodesPerDevice" default="100" />
 		<Scalar type="uint32_t" name="dt" default="1" />
 	</Properties>
 
@@ -217,31 +217,31 @@
 		<MessageType id="update">
 			<Message>
 				<Scalar type="uint32_t" name="t" />
-				<Array type="uint32_t" name="v" length="9" />
+				<Array type="uint32_t" name="v" length="10" />
 			</Message>
 		</MessageType>
 	</MessageTypes>
 
 	<DeviceTypes>
 
-	<DeviceType id="cell_9by9">
+	<DeviceType id="cell_10by10">
 		<Properties>
 			<Scalar type="int32_t" name="updateDelta" />
-			<Scalar type="uint32_t" name="haloLength" default="9" />
+			<Scalar type="uint32_t" name="haloLength" default="10" />
 		</Properties>
 		<State>
 			<Scalar type="uint32_t" name="t"/>
-			<Array type="uint32_t" name="v" length="81"/>
+			<Array type="uint32_t" name="v" length="100"/>
 
-			<Array type="uint32_t" name="cN" length="9"/>
-			<Array type="uint32_t" name="cE" length="9"/>
-			<Array type="uint32_t" name="cS" length="9"/>
-			<Array type="uint32_t" name="cW" length="9"/>
+			<Array type="uint32_t" name="cN" length="10"/>
+			<Array type="uint32_t" name="cE" length="10"/>
+			<Array type="uint32_t" name="cS" length="10"/>
+			<Array type="uint32_t" name="cW" length="10"/>
 
-			<Array type="uint32_t" name="nN" length="9"/>
-			<Array type="uint32_t" name="nE" length="9"/>
-			<Array type="uint32_t" name="nS" length="9"/>
-			<Array type="uint32_t" name="nW" length="9"/>
+			<Array type="uint32_t" name="nN" length="10"/>
+			<Array type="uint32_t" name="nE" length="10"/>
+			<Array type="uint32_t" name="nS" length="10"/>
+			<Array type="uint32_t" name="nW" length="10"/>
 
 			<Array type="uint8_t" name="c_arrivalFlags" length="4"/>
 			<Array type="uint8_t" name="n_arrivalFlags" length="4"/>
@@ -414,14 +414,14 @@
 		</OutputPin>
 	</DeviceType>
 
-	<DeviceType id="boundary_9">
+	<DeviceType id="boundary_10">
 		<Properties>
-			<Scalar type="uint32_t" name="haloLength" default="9" />
+			<Scalar type="uint32_t" name="haloLength" default="10" />
 		</Properties>
 		<State>
-			<Array type="uint32_t" name="cV" length="9"/>
-			<Array type="uint32_t" name="nV" length="9"/>
-			<Array type="uint32_t" name="v" length="9"/>
+			<Array type="uint32_t" name="cV" length="10"/>
+			<Array type="uint32_t" name="nV" length="10"/>
+			<Array type="uint32_t" name="v" length="10"/>
 			<Scalar type="uint32_t" name="t"/>
 			<Scalar type="int8_t" name="cAvail"/>
 			<Scalar type="int8_t" name="nAvail"/>
@@ -524,31 +524,61 @@
 	</DeviceType>
 	</DeviceTypes>
 </GraphType>
-<GraphInstance id="test_9by9" graphTypeId="halo_exchange">
+<GraphInstance id="test_2by2_of_10by10" graphTypeId="halo_exchange">
 	<DeviceInstances sorted="1">
-		<DevI id="center" type="cell_9by9" />
-		<DevI id="nEdge" type="boundary_9" />
-		<DevI id="eEdge" type="boundary_9" />
-		<DevI id="sEdge" type="boundary_9" />
-		<DevI id="wEdge" type="boundary_9" />
+		<DevI id="nBnode_0" type="boundary_10" />
+		<DevI id="eBnode_0" type="boundary_10" />
+		<DevI id="sBnode_0" type="boundary_10" />
+		<DevI id="wBnode_0" type="boundary_10" />
+		<DevI id="nBnode_1" type="boundary_10" />
+		<DevI id="eBnode_1" type="boundary_10" />
+		<DevI id="sBnode_1" type="boundary_10" />
+		<DevI id="wBnode_1" type="boundary_10" />
+		<DevI id="cnode_0_0" type="cell_10by10" />
+		<DevI id="cnode_0_1" type="cell_10by10" />
+		<DevI id="cnode_1_0" type="cell_10by10" />
+		<DevI id="cnode_1_1" type="cell_10by10" />
 		<DevI id="exit_node_0" type="exit_node">
-			<P>"fanin": 5</P>
+			<P>"fanin": 12</P>
 		</DevI>
 	</DeviceInstances>
 	<EdgeInstances sorted="1">
-		<EdgeI path="center:north_in-nEdge:out"/>
-		<EdgeI path="center:east_in-eEdge:out"/>
-		<EdgeI path="center:south_in-sEdge:out"/>
-		<EdgeI path="center:west_in-wEdge:out"/>
-		<EdgeI path="nEdge:in-center:north_out"/>
-		<EdgeI path="eEdge:in-center:east_out"/>
-		<EdgeI path="sEdge:in-center:south_out"/>
-		<EdgeI path="wEdge:in-center:west_out"/>
-		<EdgeI path="exit_node_0:done-center:finish"/>
-		<EdgeI path="exit_node_0:done-nEdge:finish"/>
-		<EdgeI path="exit_node_0:done-eEdge:finish"/>
-		<EdgeI path="exit_node_0:done-sEdge:finish"/>
-		<EdgeI path="exit_node_0:done-wEdge:finish"/>
+		<EdgeI path="cnode_0_0:north_in-nBnode_0:out"/>
+		<EdgeI path="cnode_0_0:east_in-cnode_1_0:west_out"/>
+		<EdgeI path="cnode_0_0:south_in-cnode_0_1:north_out"/>
+		<EdgeI path="cnode_0_0:west_in-wBnode_0:out"/>
+		<EdgeI path="exit_node_0:done-cnode_0_0:finish"/>
+		<EdgeI path="cnode_0_1:north_in-cnode_0_0:south_out"/>
+		<EdgeI path="cnode_0_1:east_in-cnode_1_1:west_out"/>
+		<EdgeI path="cnode_0_1:south_in-sBnode_0:out"/>
+		<EdgeI path="cnode_0_1:west_in-wBnode_1:out"/>
+		<EdgeI path="exit_node_0:done-cnode_0_1:finish"/>
+		<EdgeI path="cnode_1_0:north_in-nBnode_1:out"/>
+		<EdgeI path="cnode_1_0:east_in-eBnode_0:out"/>
+		<EdgeI path="cnode_1_0:south_in-cnode_1_1:north_out"/>
+		<EdgeI path="cnode_1_0:west_in-cnode_0_0:east_out"/>
+		<EdgeI path="exit_node_0:done-cnode_1_0:finish"/>
+		<EdgeI path="cnode_1_1:north_in-cnode_1_0:south_out"/>
+		<EdgeI path="cnode_1_1:east_in-eBnode_1:out"/>
+		<EdgeI path="cnode_1_1:south_in-sBnode_1:out"/>
+		<EdgeI path="cnode_1_1:west_in-cnode_0_1:east_out"/>
+		<EdgeI path="exit_node_0:done-cnode_1_1:finish"/>
+		<EdgeI path="nBnode_0:in-cnode_0_0:north_out"/>
+		<EdgeI path="eBnode_0:in-cnode_1_0:east_out"/>
+		<EdgeI path="sBnode_0:in-cnode_0_1:south_out"/>
+		<EdgeI path="wBnode_0:in-cnode_0_0:west_out"/>
+		<EdgeI path="nBnode_1:in-cnode_1_0:north_out"/>
+		<EdgeI path="eBnode_1:in-cnode_1_1:east_out"/>
+		<EdgeI path="sBnode_1:in-cnode_1_1:south_out"/>
+		<EdgeI path="wBnode_1:in-cnode_0_1:west_out"/>
+		<EdgeI path="exit_node_0:done-nBnode_0:finish"/>
+		<EdgeI path="exit_node_0:done-eBnode_0:finish"/>
+		<EdgeI path="exit_node_0:done-sBnode_0:finish"/>
+		<EdgeI path="exit_node_0:done-wBnode_0:finish"/>
+		<EdgeI path="exit_node_0:done-nBnode_1:finish"/>
+		<EdgeI path="exit_node_0:done-eBnode_1:finish"/>
+		<EdgeI path="exit_node_0:done-sBnode_1:finish"/>
+		<EdgeI path="exit_node_0:done-wBnode_1:finish"/>
 	</EdgeInstances>
 </GraphInstance>
 </Graphs>

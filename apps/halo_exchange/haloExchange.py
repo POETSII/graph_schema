@@ -10,7 +10,7 @@ def generate_graph(graphname, devicelist, haloLength, debug):
 	o+= generate_messages(haloLength)
 	o+= generate_devices(graphname, devicelist, debug)
 	o+= '</GraphType>\n'	
-	o+= generate_simpleTestInstance(haloLength, graphname)
+	#o+= generate_simpleTestInstance(haloLength, graphname)
 	o+= '</Graphs>\n'	
 	return o
 
@@ -30,7 +30,7 @@ def generate_devices(graphname, devicelist, debug):
 
 def generate_graphProperties(N):
 	o=  '\t<Properties>\n'
-	o+= '\t\t<Scalar type=\"uint32_t\" name=\"maxTime\" default=\"1500\" />\n'
+	o+= '\t\t<Scalar type=\"uint32_t\" name=\"maxTime\" default=\"10000\" />\n'
 	o+= '\t\t<Scalar type=\"uint32_t\" name=\"nodesPerDevice\" default=\"'+str(N*N)+'\" />\n'
 	o+= '\t\t<Scalar type=\"uint32_t\" name=\"dt\" default=\"1\" />\n'
 	o+= '\t</Properties>\n'
