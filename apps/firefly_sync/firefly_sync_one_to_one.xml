@@ -29,8 +29,8 @@
 		<Properties>
 			<Scalar type="uint32_t" name="period" default="180000"/>
 			<Scalar type="int32_t" name="start_phase" default="90000"/>
-			<Scalar type="uint32_t" name="phase_nudge" default="4500"/>
-			<Scalar type="uint32_t" name="flashzone" default="5000"/>
+			<Scalar type="uint32_t" name="phase_nudge" default="10500"/>
+			<Scalar type="uint32_t" name="flashzone" default="1500"/>
 		</Properties>
 		<State>
 			<Scalar type="uint32_t" name="t"/>
@@ -87,9 +87,14 @@
 				uint32_t period = deviceProperties->period;
 				uint32_t flashzone = deviceProperties->flashzone;
 				uint32_t t = deviceState->t;
-				if(t > flashzone) {
-						deviceState->t = deviceState->t + deviceProperties->phase_nudge;	
-				}
+				
+				if(t > flashzone && t < period/2) {
+				    deviceState->t = deviceState->t - deviceProperties->phase_nudge;  
+				} else if ( t >= period/2 && t < (period - flashzone)) {
+				    deviceState->t = deviceState->t + deviceProperties->phase_nudge;  
+				
+				} 
+
 			]]></OnReceive>
 		</InputPin>
 
@@ -133,112 +138,40 @@
 	<EdgeInstances sorted="1">
 		<EdgeI path="firefly_0:tick_in-firefly_0:tick_out"/>
 		<EdgeI path="firefly_0:flash_in-firefly_1:flash_out"/>
-		<EdgeI path="firefly_0:flash_in-firefly_2:flash_out"/>
-		<EdgeI path="firefly_0:flash_in-firefly_3:flash_out"/>
-		<EdgeI path="firefly_0:flash_in-firefly_4:flash_out"/>
-		<EdgeI path="firefly_0:flash_in-firefly_5:flash_out"/>
-		<EdgeI path="firefly_0:flash_in-firefly_6:flash_out"/>
-		<EdgeI path="firefly_0:flash_in-firefly_7:flash_out"/>
-		<EdgeI path="firefly_0:flash_in-firefly_8:flash_out"/>
-		<EdgeI path="firefly_0:flash_in-firefly_9:flash_out"/>
 
 		<EdgeI path="firefly_1:tick_in-firefly_1:tick_out"/>
 		<EdgeI path="firefly_1:flash_in-firefly_0:flash_out"/>
 		<EdgeI path="firefly_1:flash_in-firefly_2:flash_out"/>
-		<EdgeI path="firefly_1:flash_in-firefly_3:flash_out"/>
-		<EdgeI path="firefly_1:flash_in-firefly_4:flash_out"/>
-		<EdgeI path="firefly_1:flash_in-firefly_5:flash_out"/>
-		<EdgeI path="firefly_1:flash_in-firefly_6:flash_out"/>
-		<EdgeI path="firefly_1:flash_in-firefly_7:flash_out"/>
-		<EdgeI path="firefly_1:flash_in-firefly_8:flash_out"/>
-		<EdgeI path="firefly_1:flash_in-firefly_9:flash_out"/>
 
 		<EdgeI path="firefly_2:tick_in-firefly_2:tick_out"/>
-		<EdgeI path="firefly_2:flash_in-firefly_0:flash_out"/>
 		<EdgeI path="firefly_2:flash_in-firefly_1:flash_out"/>
 		<EdgeI path="firefly_2:flash_in-firefly_3:flash_out"/>
-		<EdgeI path="firefly_2:flash_in-firefly_4:flash_out"/>
-		<EdgeI path="firefly_2:flash_in-firefly_5:flash_out"/>
-		<EdgeI path="firefly_2:flash_in-firefly_6:flash_out"/>
-		<EdgeI path="firefly_2:flash_in-firefly_7:flash_out"/>
-		<EdgeI path="firefly_2:flash_in-firefly_8:flash_out"/>
-		<EdgeI path="firefly_2:flash_in-firefly_9:flash_out"/>
 
 		<EdgeI path="firefly_3:tick_in-firefly_3:tick_out"/>
-		<EdgeI path="firefly_3:flash_in-firefly_0:flash_out"/>
-		<EdgeI path="firefly_3:flash_in-firefly_1:flash_out"/>
 		<EdgeI path="firefly_3:flash_in-firefly_2:flash_out"/>
 		<EdgeI path="firefly_3:flash_in-firefly_4:flash_out"/>
-		<EdgeI path="firefly_3:flash_in-firefly_5:flash_out"/>
-		<EdgeI path="firefly_3:flash_in-firefly_6:flash_out"/>
-		<EdgeI path="firefly_3:flash_in-firefly_7:flash_out"/>
-		<EdgeI path="firefly_3:flash_in-firefly_8:flash_out"/>
-		<EdgeI path="firefly_3:flash_in-firefly_9:flash_out"/>
 
 		<EdgeI path="firefly_4:tick_in-firefly_4:tick_out"/>
-		<EdgeI path="firefly_4:flash_in-firefly_0:flash_out"/>
-		<EdgeI path="firefly_4:flash_in-firefly_1:flash_out"/>
-		<EdgeI path="firefly_4:flash_in-firefly_2:flash_out"/>
 		<EdgeI path="firefly_4:flash_in-firefly_3:flash_out"/>
 		<EdgeI path="firefly_4:flash_in-firefly_5:flash_out"/>
-		<EdgeI path="firefly_4:flash_in-firefly_6:flash_out"/>
-		<EdgeI path="firefly_4:flash_in-firefly_7:flash_out"/>
-		<EdgeI path="firefly_4:flash_in-firefly_8:flash_out"/>
-		<EdgeI path="firefly_4:flash_in-firefly_9:flash_out"/>
 
 		<EdgeI path="firefly_5:tick_in-firefly_5:tick_out"/>
-		<EdgeI path="firefly_5:flash_in-firefly_0:flash_out"/>
-		<EdgeI path="firefly_5:flash_in-firefly_1:flash_out"/>
-		<EdgeI path="firefly_5:flash_in-firefly_2:flash_out"/>
-		<EdgeI path="firefly_5:flash_in-firefly_3:flash_out"/>
 		<EdgeI path="firefly_5:flash_in-firefly_4:flash_out"/>
 		<EdgeI path="firefly_5:flash_in-firefly_6:flash_out"/>
-		<EdgeI path="firefly_5:flash_in-firefly_7:flash_out"/>
-		<EdgeI path="firefly_5:flash_in-firefly_8:flash_out"/>
-		<EdgeI path="firefly_5:flash_in-firefly_9:flash_out"/>
 
 		<EdgeI path="firefly_6:tick_in-firefly_6:tick_out"/>
-		<EdgeI path="firefly_6:flash_in-firefly_0:flash_out"/>
-		<EdgeI path="firefly_6:flash_in-firefly_1:flash_out"/>
-		<EdgeI path="firefly_6:flash_in-firefly_2:flash_out"/>
-		<EdgeI path="firefly_6:flash_in-firefly_3:flash_out"/>
-		<EdgeI path="firefly_6:flash_in-firefly_4:flash_out"/>
 		<EdgeI path="firefly_6:flash_in-firefly_5:flash_out"/>
 		<EdgeI path="firefly_6:flash_in-firefly_7:flash_out"/>
-		<EdgeI path="firefly_6:flash_in-firefly_8:flash_out"/>
-		<EdgeI path="firefly_6:flash_in-firefly_9:flash_out"/>
 
 		<EdgeI path="firefly_7:tick_in-firefly_7:tick_out"/>
-		<EdgeI path="firefly_7:flash_in-firefly_0:flash_out"/>
-		<EdgeI path="firefly_7:flash_in-firefly_1:flash_out"/>
-		<EdgeI path="firefly_7:flash_in-firefly_2:flash_out"/>
-		<EdgeI path="firefly_7:flash_in-firefly_3:flash_out"/>
-		<EdgeI path="firefly_7:flash_in-firefly_4:flash_out"/>
-		<EdgeI path="firefly_7:flash_in-firefly_5:flash_out"/>
 		<EdgeI path="firefly_7:flash_in-firefly_6:flash_out"/>
 		<EdgeI path="firefly_7:flash_in-firefly_8:flash_out"/>
-		<EdgeI path="firefly_7:flash_in-firefly_9:flash_out"/>
 
 		<EdgeI path="firefly_8:tick_in-firefly_8:tick_out"/>
-		<EdgeI path="firefly_8:flash_in-firefly_0:flash_out"/>
-		<EdgeI path="firefly_8:flash_in-firefly_1:flash_out"/>
-		<EdgeI path="firefly_8:flash_in-firefly_2:flash_out"/>
-		<EdgeI path="firefly_8:flash_in-firefly_3:flash_out"/>
-		<EdgeI path="firefly_8:flash_in-firefly_4:flash_out"/>
-		<EdgeI path="firefly_8:flash_in-firefly_5:flash_out"/>
-		<EdgeI path="firefly_8:flash_in-firefly_6:flash_out"/>
 		<EdgeI path="firefly_8:flash_in-firefly_7:flash_out"/>
 		<EdgeI path="firefly_8:flash_in-firefly_9:flash_out"/>
 
 		<EdgeI path="firefly_9:tick_in-firefly_9:tick_out"/>
-		<EdgeI path="firefly_9:flash_in-firefly_0:flash_out"/>
-		<EdgeI path="firefly_9:flash_in-firefly_1:flash_out"/>
-		<EdgeI path="firefly_9:flash_in-firefly_2:flash_out"/>
-		<EdgeI path="firefly_9:flash_in-firefly_3:flash_out"/>
-		<EdgeI path="firefly_9:flash_in-firefly_4:flash_out"/>
-		<EdgeI path="firefly_9:flash_in-firefly_5:flash_out"/>
-		<EdgeI path="firefly_9:flash_in-firefly_6:flash_out"/>
-		<EdgeI path="firefly_9:flash_in-firefly_7:flash_out"/>
 		<EdgeI path="firefly_9:flash_in-firefly_8:flash_out"/>
 
 	</EdgeInstances>
