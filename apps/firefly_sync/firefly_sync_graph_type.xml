@@ -1,0 +1,78 @@
+<?xml version="1.0"?>
+<Graphs xmlns="https://poets-project.org/schemas/virtual-graph-schema-v2">
+	<GraphType id="firefly_sync">
+		
+		<SharedCode><![CDATA[
+
+		]]></SharedCode>
+
+	<Properties>
+		<Scalar type="uint32_t" name="dt" default="1" />
+	</Properties>
+
+
+	<MessageTypes>
+		<MessageType id="__init__">
+		</MessageType>
+
+		<MessageType id="tick">
+		</MessageType>
+
+		<MessageType id="flash">
+			<Message>
+				<Scalar type="uint32_t" name="t" />
+			</Message>
+		</MessageType>
+	</MessageTypes>
+
+	<DeviceTypes>
+
+	<DeviceType id="firefly">
+		<State>
+			<Scalar type="uint32_t" name="t"/>
+			<Scalar type="uint8_t" name="rdy_to_tick"/>
+		</State>
+
+		<ReadyToSend><![CDATA[
+			*readyToSend=0;
+			if(deviceState->rdy_to_tick) {
+				*readyToSend = RTS_FLAG_tick_out;
+			}
+		]]></ReadyToSend>
+
+		<InputPin name="__init__" messageTypeId="__init__">
+			<OnReceive><![CDATA[
+				deviceState->t = 0;
+				deviceState->rdy_to_tick = 1;
+				handler_log(2, "initialised a firefly");
+			]]></OnReceive>
+		</InputPin>
+
+
+		<InputPin name="tick_in" messageTypeId="tick">
+			<OnReceive><![CDATA[
+				deviceState->t = (deviceState->t + 1) % 360;			
+				handler_log(2, "tick-tock! clock is %d", deviceState->t);
+				deviceState->rdy_to_tick = 1;
+			]]></OnReceive>
+		</InputPin>
+
+		<OutputPin name="tick_out" messageTypeId="tick">
+				<OnSend><![CDATA[
+					deviceState->rdy_to_tick = 0;	
+				]]></OnSend>
+		</OutputPin>
+
+	</DeviceType>
+
+	</DeviceTypes>
+</GraphType>
+<GraphInstance id="firefly_forest" graphTypeId="firefly_sync">
+	<DeviceInstances sorted="1">
+		<DevI id="firefly_0" type="firefly" />
+	</DeviceInstances>
+	<EdgeInstances sorted="1">
+		<EdgeI path="firefly_0:tick_in-firefly_0:tick_out"/>
+	</EdgeInstances>
+</GraphInstance>
+</Graphs>
