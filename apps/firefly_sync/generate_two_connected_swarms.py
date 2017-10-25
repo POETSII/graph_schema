@@ -8,9 +8,9 @@ import random
 # K - connectivity, a firefly can see flashes from its K nearest neighbours
 # period - The period of each loop
 
-N1=50
-N2=50
-L=5 
+N1=10
+N2=10
+L=1 
 K=8
 period=720000
 

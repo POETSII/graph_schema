@@ -104,319 +104,304 @@
 <GraphInstance id="firefly_forest" graphTypeId="firefly_sync">
 <DeviceInstances sorted='1'>
 	<DevI id="firefly_s1_0" type="firefly">
-		<P>"start_phase": 100549 </P>
+		<P>"start_phase": 103674 </P>
 	</DevI>
 	<DevI id="firefly_s1_1" type="firefly">
-		<P>"start_phase": 459188 </P>
+		<P>"start_phase": 584714 </P>
 	</DevI>
 	<DevI id="firefly_s1_2" type="firefly">
-		<P>"start_phase": 260694 </P>
+		<P>"start_phase": 704883 </P>
 	</DevI>
 	<DevI id="firefly_s1_3" type="firefly">
-		<P>"start_phase": 131549 </P>
+		<P>"start_phase": 512869 </P>
 	</DevI>
 	<DevI id="firefly_s1_4" type="firefly">
-		<P>"start_phase": 599209 </P>
+		<P>"start_phase": 620309 </P>
 	</DevI>
 	<DevI id="firefly_s1_5" type="firefly">
-		<P>"start_phase": 216986 </P>
+		<P>"start_phase": 46018 </P>
 	</DevI>
 	<DevI id="firefly_s1_6" type="firefly">
-		<P>"start_phase": 582359 </P>
+		<P>"start_phase": 58495 </P>
 	</DevI>
 	<DevI id="firefly_s1_7" type="firefly">
-		<P>"start_phase": 366273 </P>
+		<P>"start_phase": 357239 </P>
 	</DevI>
 	<DevI id="firefly_s1_8" type="firefly">
-		<P>"start_phase": 141443 </P>
+		<P>"start_phase": 46264 </P>
 	</DevI>
 	<DevI id="firefly_s1_9" type="firefly">
-		<P>"start_phase": 315720 </P>
+		<P>"start_phase": 281818 </P>
 	</DevI>
 	<DevI id="firefly_s1_10" type="firefly">
-		<P>"start_phase": 386320 </P>
+		<P>"start_phase": 49287 </P>
 	</DevI>
 	<DevI id="firefly_s1_11" type="firefly">
-		<P>"start_phase": 657739 </P>
+		<P>"start_phase": 147451 </P>
 	</DevI>
 	<DevI id="firefly_s1_12" type="firefly">
-		<P>"start_phase": 317325 </P>
+		<P>"start_phase": 307724 </P>
 	</DevI>
 	<DevI id="firefly_s1_13" type="firefly">
-		<P>"start_phase": 607487 </P>
+		<P>"start_phase": 327828 </P>
 	</DevI>
 	<DevI id="firefly_s1_14" type="firefly">
-		<P>"start_phase": 607821 </P>
+		<P>"start_phase": 625902 </P>
 	</DevI>
 	<DevI id="firefly_s1_15" type="firefly">
-		<P>"start_phase": 439003 </P>
+		<P>"start_phase": 387069 </P>
 	</DevI>
 	<DevI id="firefly_s1_16" type="firefly">
-		<P>"start_phase": 307876 </P>
+		<P>"start_phase": 152216 </P>
 	</DevI>
 	<DevI id="firefly_s1_17" type="firefly">
-		<P>"start_phase": 204868 </P>
+		<P>"start_phase": 570286 </P>
 	</DevI>
 	<DevI id="firefly_s1_18" type="firefly">
-		<P>"start_phase": 672827 </P>
+		<P>"start_phase": 83033 </P>
 	</DevI>
 	<DevI id="firefly_s1_19" type="firefly">
-		<P>"start_phase": 468238 </P>
+		<P>"start_phase": 315119 </P>
 	</DevI>
 	<DevI id="firefly_s1_20" type="firefly">
-		<P>"start_phase": 145013 </P>
+		<P>"start_phase": 358333 </P>
 	</DevI>
 	<DevI id="firefly_s1_21" type="firefly">
-		<P>"start_phase": 653074 </P>
+		<P>"start_phase": 557078 </P>
 	</DevI>
 	<DevI id="firefly_s1_22" type="firefly">
-		<P>"start_phase": 232414 </P>
+		<P>"start_phase": 4621 </P>
 	</DevI>
 	<DevI id="firefly_s1_23" type="firefly">
-		<P>"start_phase": 544353 </P>
+		<P>"start_phase": 297900 </P>
 	</DevI>
 	<DevI id="firefly_s1_24" type="firefly">
-		<P>"start_phase": 548462 </P>
+		<P>"start_phase": 642587 </P>
 	</DevI>
 	<DevI id="firefly_s1_25" type="firefly">
-		<P>"start_phase": 319390 </P>
+		<P>"start_phase": 259816 </P>
 	</DevI>
 	<DevI id="firefly_s1_26" type="firefly">
-		<P>"start_phase": 58863 </P>
+		<P>"start_phase": 534401 </P>
 	</DevI>
 	<DevI id="firefly_s1_27" type="firefly">
-		<P>"start_phase": 632062 </P>
+		<P>"start_phase": 507413 </P>
 	</DevI>
 	<DevI id="firefly_s1_28" type="firefly">
-		<P>"start_phase": 717637 </P>
+		<P>"start_phase": 578412 </P>
 	</DevI>
 	<DevI id="firefly_s1_29" type="firefly">
-		<P>"start_phase": 705110 </P>
+		<P>"start_phase": 669743 </P>
 	</DevI>
 	<DevI id="firefly_s1_30" type="firefly">
-		<P>"start_phase": 697957 </P>
+		<P>"start_phase": 530769 </P>
 	</DevI>
 	<DevI id="firefly_s1_31" type="firefly">
-		<P>"start_phase": 188053 </P>
+		<P>"start_phase": 108831 </P>
 	</DevI>
 	<DevI id="firefly_s1_32" type="firefly">
-		<P>"start_phase": 392163 </P>
+		<P>"start_phase": 243724 </P>
 	</DevI>
 	<DevI id="firefly_s1_33" type="firefly">
-		<P>"start_phase": 88200 </P>
+		<P>"start_phase": 715146 </P>
 	</DevI>
 	<DevI id="firefly_s1_34" type="firefly">
-		<P>"start_phase": 486740 </P>
+		<P>"start_phase": 299044 </P>
 	</DevI>
 	<DevI id="firefly_s1_35" type="firefly">
-		<P>"start_phase": 308679 </P>
+		<P>"start_phase": 250670 </P>
 	</DevI>
 	<DevI id="firefly_s1_36" type="firefly">
-		<P>"start_phase": 86344 </P>
+		<P>"start_phase": 441875 </P>
 	</DevI>
 	<DevI id="firefly_s1_37" type="firefly">
-		<P>"start_phase": 394312 </P>
+		<P>"start_phase": 619074 </P>
 	</DevI>
 	<DevI id="firefly_s1_38" type="firefly">
-		<P>"start_phase": 116505 </P>
+		<P>"start_phase": 330321 </P>
 	</DevI>
 	<DevI id="firefly_s1_39" type="firefly">
-		<P>"start_phase": 443910 </P>
+		<P>"start_phase": 26114 </P>
 	</DevI>
 	<DevI id="firefly_s1_40" type="firefly">
-		<P>"start_phase": 50388 </P>
+		<P>"start_phase": 510394 </P>
 	</DevI>
 	<DevI id="firefly_s1_41" type="firefly">
-		<P>"start_phase": 599316 </P>
+		<P>"start_phase": 139841 </P>
 	</DevI>
 	<DevI id="firefly_s1_42" type="firefly">
-		<P>"start_phase": 484727 </P>
+		<P>"start_phase": 82602 </P>
 	</DevI>
 	<DevI id="firefly_s1_43" type="firefly">
-		<P>"start_phase": 393733 </P>
+		<P>"start_phase": 193366 </P>
 	</DevI>
 	<DevI id="firefly_s1_44" type="firefly">
-		<P>"start_phase": 699309 </P>
+		<P>"start_phase": 663051 </P>
 	</DevI>
 	<DevI id="firefly_s1_45" type="firefly">
-		<P>"start_phase": 706999 </P>
+		<P>"start_phase": 164182 </P>
 	</DevI>
 	<DevI id="firefly_s1_46" type="firefly">
-		<P>"start_phase": 302415 </P>
+		<P>"start_phase": 481244 </P>
 	</DevI>
 	<DevI id="firefly_s1_47" type="firefly">
-		<P>"start_phase": 693713 </P>
+		<P>"start_phase": 149099 </P>
 	</DevI>
 	<DevI id="firefly_s1_48" type="firefly">
-		<P>"start_phase": 648946 </P>
+		<P>"start_phase": 307756 </P>
 	</DevI>
 	<DevI id="firefly_s1_49" type="firefly">
-		<P>"start_phase": 531119 </P>
+		<P>"start_phase": 119266 </P>
 	</DevI>
 	<DevI id="firefly_s2_0" type="firefly">
-		<P>"start_phase": 164948 </P>
+		<P>"start_phase": 79408 </P>
 	</DevI>
 	<DevI id="firefly_s2_1" type="firefly">
-		<P>"start_phase": 392385 </P>
+		<P>"start_phase": 313253 </P>
 	</DevI>
 	<DevI id="firefly_s2_2" type="firefly">
-		<P>"start_phase": 432816 </P>
+		<P>"start_phase": 396676 </P>
 	</DevI>
 	<DevI id="firefly_s2_3" type="firefly">
-		<P>"start_phase": 573429 </P>
+		<P>"start_phase": 413418 </P>
 	</DevI>
 	<DevI id="firefly_s2_4" type="firefly">
-		<P>"start_phase": 160604 </P>
+		<P>"start_phase": 287998 </P>
 	</DevI>
 	<DevI id="firefly_s2_5" type="firefly">
-		<P>"start_phase": 374012 </P>
+		<P>"start_phase": 139933 </P>
 	</DevI>
 	<DevI id="firefly_s2_6" type="firefly">
-		<P>"start_phase": 662892 </P>
+		<P>"start_phase": 376167 </P>
 	</DevI>
 	<DevI id="firefly_s2_7" type="firefly">
-		<P>"start_phase": 683335 </P>
+		<P>"start_phase": 37547 </P>
 	</DevI>
 	<DevI id="firefly_s2_8" type="firefly">
-		<P>"start_phase": 487513 </P>
+		<P>"start_phase": 45485 </P>
 	</DevI>
 	<DevI id="firefly_s2_9" type="firefly">
-		<P>"start_phase": 300571 </P>
+		<P>"start_phase": 479792 </P>
 	</DevI>
 	<DevI id="firefly_s2_10" type="firefly">
-		<P>"start_phase": 575869 </P>
+		<P>"start_phase": 440538 </P>
 	</DevI>
 	<DevI id="firefly_s2_11" type="firefly">
-		<P>"start_phase": 38960 </P>
+		<P>"start_phase": 556434 </P>
 	</DevI>
 	<DevI id="firefly_s2_12" type="firefly">
-		<P>"start_phase": 244509 </P>
+		<P>"start_phase": 309935 </P>
 	</DevI>
 	<DevI id="firefly_s2_13" type="firefly">
-		<P>"start_phase": 602483 </P>
+		<P>"start_phase": 520100 </P>
 	</DevI>
 	<DevI id="firefly_s2_14" type="firefly">
-		<P>"start_phase": 13060 </P>
+		<P>"start_phase": 352963 </P>
 	</DevI>
 	<DevI id="firefly_s2_15" type="firefly">
-		<P>"start_phase": 510323 </P>
+		<P>"start_phase": 687797 </P>
 	</DevI>
 	<DevI id="firefly_s2_16" type="firefly">
-		<P>"start_phase": 380306 </P>
+		<P>"start_phase": 522437 </P>
 	</DevI>
 	<DevI id="firefly_s2_17" type="firefly">
-		<P>"start_phase": 155886 </P>
+		<P>"start_phase": 45114 </P>
 	</DevI>
 	<DevI id="firefly_s2_18" type="firefly">
-		<P>"start_phase": 181464 </P>
+		<P>"start_phase": 216170 </P>
 	</DevI>
 	<DevI id="firefly_s2_19" type="firefly">
-		<P>"start_phase": 325959 </P>
+		<P>"start_phase": 552274 </P>
 	</DevI>
 	<DevI id="firefly_s2_20" type="firefly">
-		<P>"start_phase": 17699 </P>
+		<P>"start_phase": 672971 </P>
 	</DevI>
 	<DevI id="firefly_s2_21" type="firefly">
-		<P>"start_phase": 67239 </P>
+		<P>"start_phase": 22228 </P>
 	</DevI>
 	<DevI id="firefly_s2_22" type="firefly">
-		<P>"start_phase": 714212 </P>
+		<P>"start_phase": 436347 </P>
 	</DevI>
 	<DevI id="firefly_s2_23" type="firefly">
-		<P>"start_phase": 129753 </P>
+		<P>"start_phase": 464445 </P>
 	</DevI>
 	<DevI id="firefly_s2_24" type="firefly">
-		<P>"start_phase": 353969 </P>
+		<P>"start_phase": 473234 </P>
 	</DevI>
 	<DevI id="firefly_s2_25" type="firefly">
-		<P>"start_phase": 338465 </P>
+		<P>"start_phase": 281299 </P>
 	</DevI>
 	<DevI id="firefly_s2_26" type="firefly">
-		<P>"start_phase": 544748 </P>
+		<P>"start_phase": 228188 </P>
 	</DevI>
 	<DevI id="firefly_s2_27" type="firefly">
-		<P>"start_phase": 78202 </P>
+		<P>"start_phase": 688077 </P>
 	</DevI>
 	<DevI id="firefly_s2_28" type="firefly">
-		<P>"start_phase": 359968 </P>
+		<P>"start_phase": 536786 </P>
 	</DevI>
 	<DevI id="firefly_s2_29" type="firefly">
-		<P>"start_phase": 698784 </P>
+		<P>"start_phase": 590895 </P>
 	</DevI>
 	<DevI id="firefly_s2_30" type="firefly">
-		<P>"start_phase": 487027 </P>
+		<P>"start_phase": 407940 </P>
 	</DevI>
 	<DevI id="firefly_s2_31" type="firefly">
-		<P>"start_phase": 319716 </P>
+		<P>"start_phase": 664984 </P>
 	</DevI>
 	<DevI id="firefly_s2_32" type="firefly">
-		<P>"start_phase": 339764 </P>
+		<P>"start_phase": 687033 </P>
 	</DevI>
 	<DevI id="firefly_s2_33" type="firefly">
-		<P>"start_phase": 218673 </P>
+		<P>"start_phase": 16168 </P>
 	</DevI>
 	<DevI id="firefly_s2_34" type="firefly">
-		<P>"start_phase": 300028 </P>
+		<P>"start_phase": 382157 </P>
 	</DevI>
 	<DevI id="firefly_s2_35" type="firefly">
-		<P>"start_phase": 11936 </P>
+		<P>"start_phase": 624829 </P>
 	</DevI>
 	<DevI id="firefly_s2_36" type="firefly">
-		<P>"start_phase": 161274 </P>
+		<P>"start_phase": 295246 </P>
 	</DevI>
 	<DevI id="firefly_s2_37" type="firefly">
-		<P>"start_phase": 424714 </P>
+		<P>"start_phase": 635962 </P>
 	</DevI>
 	<DevI id="firefly_s2_38" type="firefly">
-		<P>"start_phase": 226382 </P>
+		<P>"start_phase": 321697 </P>
 	</DevI>
 	<DevI id="firefly_s2_39" type="firefly">
-		<P>"start_phase": 177407 </P>
+		<P>"start_phase": 568865 </P>
 	</DevI>
 	<DevI id="firefly_s2_40" type="firefly">
-		<P>"start_phase": 696319 </P>
+		<P>"start_phase": 661368 </P>
 	</DevI>
 	<DevI id="firefly_s2_41" type="firefly">
-		<P>"start_phase": 277479 </P>
+		<P>"start_phase": 56068 </P>
 	</DevI>
 	<DevI id="firefly_s2_42" type="firefly">
-		<P>"start_phase": 27860 </P>
+		<P>"start_phase": 420359 </P>
 	</DevI>
 	<DevI id="firefly_s2_43" type="firefly">
-		<P>"start_phase": 241522 </P>
+		<P>"start_phase": 548916 </P>
 	</DevI>
 	<DevI id="firefly_s2_44" type="firefly">
-		<P>"start_phase": 155276 </P>
+		<P>"start_phase": 409227 </P>
 	</DevI>
 	<DevI id="firefly_s2_45" type="firefly">
-		<P>"start_phase": 618796 </P>
+		<P>"start_phase": 160104 </P>
 	</DevI>
 	<DevI id="firefly_s2_46" type="firefly">
-		<P>"start_phase": 280572 </P>
+		<P>"start_phase": 235142 </P>
 	</DevI>
 	<DevI id="firefly_s2_47" type="firefly">
-		<P>"start_phase": 378385 </P>
+		<P>"start_phase": 120615 </P>
 	</DevI>
 	<DevI id="firefly_s2_48" type="firefly">
-		<P>"start_phase": 495440 </P>
+		<P>"start_phase": 304785 </P>
 	</DevI>
 	<DevI id="firefly_s2_49" type="firefly">
-		<P>"start_phase": 42146 </P>
-	</DevI>
-	<DevI id="firefly_link_0" type="firefly">
-		<P>"start_phase": 641734 </P>
-	</DevI>
-	<DevI id="firefly_link_1" type="firefly">
-		<P>"start_phase": 643364 </P>
-	</DevI>
-	<DevI id="firefly_link_2" type="firefly">
-		<P>"start_phase": 101580 </P>
-	</DevI>
-	<DevI id="firefly_link_3" type="firefly">
-		<P>"start_phase": 656997 </P>
-	</DevI>
-	<DevI id="firefly_link_4" type="firefly">
-		<P>"start_phase": 262307 </P>
+		<P>"start_phase": 636824 </P>
 	</DevI>
 </DeviceInstances>
 <EdgeInstances sorted='1'>
@@ -1280,31 +1265,6 @@
 		<EdgeI path="firefly_s2_49:flash_in-firefly_s2_46:flash_out"/>
 		<EdgeI path="firefly_s2_49:flash_in-firefly_s2_47:flash_out"/>
 		<EdgeI path="firefly_s2_49:flash_in-firefly_s2_48:flash_out"/>
-	<EdgeI path="firefly_link_0:tick_in-firefly_link_0:tick_out"/>
-		<EdgeI path="firefly_link_0:flash_in-firefly_s1_0:flash_out"/>
-		<EdgeI path="firefly_link_0:flash_in-firefly_s2_0:flash_out"/>
-		<EdgeI path="firefly_s1_0:flash_in-firefly_link_0:flash_out"/>
-		<EdgeI path="firefly_s2_0:flash_in-firefly_link_0:flash_out"/>
-	<EdgeI path="firefly_link_1:tick_in-firefly_link_1:tick_out"/>
-		<EdgeI path="firefly_link_1:flash_in-firefly_s1_1:flash_out"/>
-		<EdgeI path="firefly_link_1:flash_in-firefly_s2_1:flash_out"/>
-		<EdgeI path="firefly_s1_1:flash_in-firefly_link_1:flash_out"/>
-		<EdgeI path="firefly_s2_1:flash_in-firefly_link_1:flash_out"/>
-	<EdgeI path="firefly_link_2:tick_in-firefly_link_2:tick_out"/>
-		<EdgeI path="firefly_link_2:flash_in-firefly_s1_2:flash_out"/>
-		<EdgeI path="firefly_link_2:flash_in-firefly_s2_2:flash_out"/>
-		<EdgeI path="firefly_s1_2:flash_in-firefly_link_2:flash_out"/>
-		<EdgeI path="firefly_s2_2:flash_in-firefly_link_2:flash_out"/>
-	<EdgeI path="firefly_link_3:tick_in-firefly_link_3:tick_out"/>
-		<EdgeI path="firefly_link_3:flash_in-firefly_s1_3:flash_out"/>
-		<EdgeI path="firefly_link_3:flash_in-firefly_s2_3:flash_out"/>
-		<EdgeI path="firefly_s1_3:flash_in-firefly_link_3:flash_out"/>
-		<EdgeI path="firefly_s2_3:flash_in-firefly_link_3:flash_out"/>
-	<EdgeI path="firefly_link_4:tick_in-firefly_link_4:tick_out"/>
-		<EdgeI path="firefly_link_4:flash_in-firefly_s1_4:flash_out"/>
-		<EdgeI path="firefly_link_4:flash_in-firefly_s2_4:flash_out"/>
-		<EdgeI path="firefly_s1_4:flash_in-firefly_link_4:flash_out"/>
-		<EdgeI path="firefly_s2_4:flash_in-firefly_link_4:flash_out"/>
 </EdgeInstances>
 </GraphInstance>
 </Graphs>
