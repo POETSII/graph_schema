@@ -7,7 +7,7 @@ import random
 # period - The period of each loop
 
 N=100
-K=4
+K=16
 period=720000
 
 print '<GraphInstance id=\"firefly_forest\" graphTypeId=\"firefly_sync\">'
