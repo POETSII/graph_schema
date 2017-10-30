@@ -380,7 +380,14 @@ def create_indirect_write_sends(ctxt:InvocationContext, builder:GraphTypeBuilder
 
 def create_indirect_write_recvs(ctxt:InvocationContext, builder:GraphTypeBuilder):
     for (ai,arg) in ctxt.indirect_writes:
-        with builder.subst(set=arg.to_set.id, index=ai, dat=arg.dat.id):
+        with builder.subst(set=arg.to_set.id, index=ai, dat=arg.dat.id, arity=arg.map.arity):
+            if arg.index >= 0:
+                props = None
+                message_type = "dat_{dat}"
+            else:
+                props = {"index": scalar_uint32}
+                message_type = "dat_{dat}_x{arity}"
+
             handler="""
                 assert(deviceState->{invocation}_write_recv_count < deviceProperties->{invocation}_write_recv_total);
                 // Standard edge trigger for start of invocation
@@ -391,16 +398,26 @@ def create_indirect_write_recvs(ctxt:InvocationContext, builder:GraphTypeBuilder
                 deviceState->{invocation}_write_recv_count++;
             """
             if arg.access_mode==AccessMode.WRITE or arg.access_mode==AccessMode.RW:
-                handler+="""
-                copy_value(deviceState->dat_{dat}, message->value);                
-                """
+                if arg.index >= 0:
+                    handler+="""
+                    copy_value(deviceState->dat_{dat}, message->value);                
+                    """
+                else:
+                    handler += """
+                    copy_value(deviceState->dat_{dat}, message->value[edgeProperties->index]);                
+                    """
             elif arg.access_mode==AccessMode.INC:
-                handler+="""
-                inc_value(deviceState->dat_{dat}, message->value);                
-                """
+                if arg.index >= 0:
+                    handler+="""
+                    inc_value(deviceState->dat_{dat}, message->value);                
+                    """
+                else:
+                    handler += """
+                    inc_value(deviceState->dat_{dat}, message->value[edgeProperties->index]);                
+                    """
             else:
                 raise RuntimeError("Unexpected access mode {}".format(arg.access_mode))
-            builder.add_input_pin("set_{set}", "{invocation}_arg{index}_write_recv", "dat_{dat}", None, None, handler)
+            builder.add_input_pin("set_{set}", "{invocation}_arg{index}_write_recv", message_type, props, None, handler)
 
 def create_rts(ctxt:InvocationContext, builder:GraphTypeBuilder):
     for set in ctxt.get_all_involved_sets():
@@ -444,10 +461,10 @@ def create_invocation_tester(testIndex:int, isLast:bool, ctxt:InvocationContext,
             deviceState->test_state++; // Odd value means we are waiting for the return
             deviceState->end_received=0;
             """
-        for (ai,arg) in ctxt.mutable_global_reads:
-            handler+=builder.s("""
-            copy_value(message->global_{name}, graphProperties->test_{invocation}_{name}_in);
-            """,name=arg.global_.id)
+        #for (ai,arg) in ctxt.mutable_global_reads:
+        #    handler+=builder.s("""
+        #    copy_value(message->global_{name}, graphProperties->test_{invocation}_{name}_in);
+        #    """,name=arg.global_.id)
         
         builder.add_output_pin("tester", "{invocation}_begin", "{invocation}_begin", handler)
         
@@ -503,7 +520,7 @@ def create_invocation_controller(ctxt:InvocationContext, builder:GraphTypeBuilde
         """
     for (ai,arg) in ctxt.mutable_global_reads:
         handler+=builder.s("""
-        copy_value(message->global_{name}, graphProperties->test_{invocation}_{name}_in);
+        copy_value(message->global_{name}, deviceState->global_{name});
         """,name=arg.global_.id)
 
     builder.add_output_pin("controller", "{invocation}_begin", "{invocation}_begin", handler)
@@ -770,8 +787,22 @@ def render_controller_statement_check_state(s:CheckState, next_state:int):
         {{
     """.format(this_state=get_statement_state(s)))
     
-    handler+="      // TODO : CheckState, pattern='{}'".format(s.pattern)
-    
+    if False:
+        #handler+="      // TODO : CheckState, pattern='{}'".format(s.pattern)
+        handler+="""      handler_checkpoint(true, "global:"""
+        args=[]
+        pat_todo=s.pattern
+        while True:
+            ib=pat_todo.find("{")
+            if ib==-1:
+                handler+=pat_todo
+                break
+            ie=pat_todo.find("}", ib+1)
+            assert ie!=-1
+            name=pat_todo[ib+1:ie]
+            pat_todo=pat_todo[ie+1:]
+            handler+="%d"
+        
     handler+="""
         }}
         deviceState->state={next_state};
@@ -813,13 +844,18 @@ def compile_global_controller(gi:str, spec:SystemSpecification, builder:GraphTyp
     builder.add_rts_clause(gi, "*readyToSend = deviceState->rts;\n")
     
     with builder.subst(start_state=start_state):
-        builder.add_input_pin(gi, "__init__", "__init__", None, None,
-            """
+        handler= """
             deviceState->rts=RTS_FLAG_control;
             deviceState->state={start_state};
             handler_log(4, "rts=%x, state=%d", deviceState->rts, deviceState->state);
             """
-        )
+        for mg in spec.globals.values():
+            if isinstance(mg,MutableGlobal):
+                handler+="""
+                copy_value(deviceState->global_{global_}, graphProperties->init_global_{global_});
+                """.format(global_=mg.id)
+
+        builder.add_input_pin(gi, "__init__", "__init__", None, None, handler)
     
     handler=raw("""
     handler_log(4, "rts=%x, state=%d", deviceState->rts, deviceState->state);
@@ -898,8 +934,19 @@ def sync_compiler(spec:SystemSpecification, code:Statement):
     builder=GraphTypeBuilder("op2_inst")
     
     builder.add_shared_code_raw(
-    """
+    r"""
     #include <cmath>
+    #include <cstdio>
+    #include <cstdarg>
+    
+    void fprintf_stderr(const char *msg, ...)
+    {
+        va_list v;
+        va_start(v,msg);
+        vfprintf(stderr, msg, v);
+        fprintf(stderr, "\n");
+        va_end(v);
+    }
     
     template<class T,unsigned N>
     void copy_value(T (&x)[N], const T (&y)[N]){
@@ -960,8 +1007,10 @@ def sync_compiler(spec:SystemSpecification, code:Statement):
         if isinstance(global_,MutableGlobal):
             builder.add_device_state("controller", "global_{}".format(global_.id), global_.data_type)
             builder.add_device_state("tester", "global_{}".format(global_.id), global_.data_type)
+            builder.add_graph_property("init_global_{}".format(global_.id), global_.data_type)
         elif isinstance(global_,ConstGlobal):
             builder.add_graph_property("global_{}".format(global_.id), global_.data_type)
+
         else:
             raise RuntimeError("Unexpected global type : {}", type(global_))
             

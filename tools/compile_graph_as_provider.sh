@@ -27,7 +27,8 @@ SO_CPPFLAGS+=" -shared -fPIC"
 LDFLAGS+=" -pthread"
 LDLIBS+=" -ldl -fPIC"
 
-name=$(basename ${input_file} .xml)
+#name=$(basename ${input_file} .xml)
+name=$(${graph_schema_dir}/tools/print_graph_type_id.py ${input_file}) || exit 1
 
 java -jar ${JING} -c ${graph_schema_dir}/master/virtual-graph-schema-v2.rnc ${input_file} || exit 1
 
@@ -38,3 +39,5 @@ python3 ${graph_schema_dir}/tools/render_graph_as_cpp.py --header < ${input_file
 g++ ${CPPFLAGS} -Wno-unused-but-set-variable ${SO_CPPFLAGS} ${working_dir}/${name}.graph.cpp -o ${working_dir}/${name}.graph.so ${LDFLAGS} ${LDLIBS}
 
 echo ${working_dir} 
+cp ${working_dir}/${name}.graph.so .
+echo "Provider is at ${name}.graph.so"

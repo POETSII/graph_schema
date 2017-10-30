@@ -10,6 +10,7 @@ from lxml import etree
 import os
 import sys
 import json
+import collections
 from typing import *
 
 ns={"p":"https://poets-project.org/schemas/virtual-graph-schema-v2"}
@@ -117,40 +118,69 @@ def apply_checkpoints(graphInstPath:str,checkpointPath:str,eventLogPath:str,maxE
     for di in graphInst.device_instances.values():
         states[di.id]=create_default_typed_data(di.device_type.state)
         
+    # Track the messages in flight, as if there is a global checkpoint we
+    # need to ensure that the event log is in a causal order.
+    # Map of message_id -> unreceived_count
+    # If received_count is negative, then a message has been received, but
+    # has not yet been sent, so we are acausal.
+    # If recieved_count is positive, then there are messages which are sent but not yet delivered.
+    # If 0, then they have matched up, and the entry should be deleted.
+    in_flight=collections.Counter()
     
+    # Number of messages with a negative receive count
+    # Whenever it is positive, we are acausal
+    acausal_count=0
     
     class LogSink(LogWriter):
         def __init__(self):
             self.gotErrors=0
+            
+        def _doCheck(self, dev, key, got):
+            if dev not in checkpoints:
+                sys.stderr.write("{}, {} : No reference checkpoints found for checkpointed event.\n".format(e.dev,key))
+                self.gotErrors+=1
+                return
+                
+            cps=checkpoints[dev]            
+            if key not in cps:
+                sys.stderr.write("{}, {} : No reference checkpoint event found.\n".format(dev,key))
+                return
+            ref=cps[key]
+            
+            errors=compare_checkpoint("",ref,got)
+            if len(errors)>0:
+                for err in errors:
+                    sys.stderr.write("{}, {} : {}\n".format(dev,key,err))
+                sys.stderr.write("ref = {}\n".format(json.dumps(ref,indent="  ")))
+                sys.stderr.write("got = {}\n".format(json.dumps(got,indent="  ")))
+                self.gotErrors+=1
         
         def checkEvent(self,e):
             
             #sys.stderr.write("{}\n".format(e.dev))
             preState=states[e.dev]
             postState=e.S
-            
             states[e.dev]=postState
             
             for (pre,key) in e.tags:
-                if e.dev not in checkpoints:
-                    sys.stderr.write("{}, {} : No reference checkpoints found for checkpointed event.\n".format(e.dev,key))
-                    self.gotErrors+=1
-                    break
-                cps=checkpoints[e.dev]
+                is_global=key.startswith("global:")
+                if is_global:
+                    key=key[len("global:"):]
+                    
+                    if acausal_count > 0:
+                        raise RuntimeError("Attempt to do global checkpoint when event log is acausal (receive before send)."
                 
-                if key not in cps:
-                    sys.stderr.write("{}, {} : No reference checkpoint event found.\n".format(e.dev,key))
-                    break
-                ref=cps[key]
-                
+                #Always need to check this device
                 got=preState if pre else postState
-                errors=compare_checkpoint("",ref,got)
-                if len(errors)>0:
-                    for err in errors:
-                        sys.stderr.write("{}, {} : {}\n".format(e.dev,key,err))
-                    sys.stderr.write("ref = {}\n".format(json.dumps(ref,indent="  ")))
-                    sys.stderr.write("got = {}\n".format(json.dumps(got,indent="  ")))
-                    self.gotErrors+=1
+                self._doCheck(e.dev, key, got)
+                
+                if is_global:
+                    # And only sometimes check everything. If it is a global checkpoint then
+                    # we don't worry about pre/post
+                    for (dev,state) in states.items():
+                        if dev==e.dev:
+                            continue
+                        self._doCheck(dev, key, state)
                     
             if(self.gotErrors >= maxErrors):
                 sys.stderr.write("More than {} errors. Quitting.".format(maxErrors))
@@ -160,9 +190,28 @@ def apply_checkpoints(graphInstPath:str,checkpointPath:str,eventLogPath:str,maxE
             self.checkEvent(e)
             
         def onSendEvent(self,e):
+            count=in_flight[e.eventId]
+            if count < 0:
+                acausal_count-=1
+            count+=e.fanout
+            assert count>=0
+            if count==0:
+                del in_flight[e.eventId]
+            else:
+                in_flight[e.eventId]
+                
             self.checkEvent(e)
             
         def onRecvEvent(self,e):
+            count=in_flight[e.sendEventId]
+            if count==0:
+                acausal_count+=1
+            count -= 1
+            if count==0:
+                del in_flight[e.sendEventId]
+            else:
+                in_flight[e.sendEventId]=count
+            
             self.checkEvent(e)
 
     sink=LogSink()

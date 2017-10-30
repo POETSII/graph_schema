@@ -43,7 +43,10 @@ _translate_operator={
     "Lt" : "<",
     "Gt" : ">",
     "UAdd" : "+",
-    "USub" : "-"
+    "USub" : "-",
+    "And" : "&&",
+    "Or" : "||",
+    "Not" : "!",
 }
 
 def translate_operator(e:ast.operator) -> str:
@@ -54,6 +57,9 @@ _translate_function_call={
     "fabs" : "std::fabs",
     "pow" : "std::pow",
     "handler_log" : "handler_log",
+    "isnan" : "std::isnan",
+    "fprintf_stderr": "fprintf_stderr"
+
 }
 
 def translate_function_call_expr(e:ast.expr) -> str:
@@ -83,6 +89,12 @@ def translate_expression(e:ast.expr) -> str:
         left=translate_expression(e.left)
         op=translate_operator(e.ops[0])
         right=translate_expression(e.comparators[0])
+        return "( {} {} {} )".format(left,op,right)
+    elif isinstance(e, ast.BoolOp):
+        assert len(e.values)==2
+        left=translate_expression(e.values[0])
+        op=translate_operator(e.op)
+        right=translate_expression(e.values[1])
         return "( {} {} {} )".format(left,op,right)
     elif isinstance(e, ast.Subscript):
         value=translate_expression(e.value)
@@ -142,6 +154,8 @@ def translate_statement(f:ast.stmt, dst:io.TextIOBase, vars:set, indent="") -> N
         dst.write("{}}}\n".format(indent))
     elif isinstance(f, ast.Expr):
         dst.write("{}{};\n".format(indent, translate_expression(f.value)))
+    elif isinstance(f, ast.Assert):
+        dst.write("{}assert({});\n".format(indent, translate_expression(f.test)))
     else:
         raise RuntimeError("unsupported statement {}".format(type(f)))
     
@@ -197,7 +211,7 @@ class TranslatorContext:
                 self.source_code=src.read()
             self.ast=ast.parse(self.source_code, filename=self.source_file)
         else:
-            self.source_file="<unknown-file"
+            self.source_file="<unknown-file>"
             
     
         assert isinstance(self.ast, ast.Module)

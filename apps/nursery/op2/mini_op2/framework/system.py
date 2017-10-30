@@ -130,6 +130,7 @@ class SystemInstance(object):
         self.sets={}    # type:Dict[Set,int]
         self.dats={}    # type:Dict[Dat,numpy.ndarray]
         self.maps={}    # type:Dict[Map,numpy.ndarray]
+        self.checkpoints={} # type:Dict[str,any]
         
         for g in spec.globals.values():
             if g.id.startswith("sizeof_"):
@@ -190,7 +191,15 @@ class SystemInstance(object):
             if not (aval < to_size).all():
                 raise RuntimeError("Mapping points out of bounds in to_set.")
             self.maps[m]=aval
-            
+        
+        if "output" not in src:
+            logging.info("No checkpoint data present.")
+            for k in src:
+                logging.info(k)
+        else:
+            for (key,cp) in src["output"].items():
+                logging.info("Checkpoint %s", key)
+                self.checkpoints[key]=cp
 
 def load_hdf5_instance(spec:SystemSpecification, src:str) -> SystemInstance:
     with h5py.File(src) as f:

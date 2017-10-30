@@ -423,8 +423,11 @@ public:
   virtual void export_key_value(uint32_t key, uint32_t value) =0;
   
   /*! Log the state of the currently sending/receiving device the
-    current event, and associate with the given numeric id. The id should
+    current event, and associate with the given string tag. The id should
     be unique for any check-point on the calling device.
+  
+    \param global If true, then _all_ devices are checkpointed. Otherwise just
+    the calling device is checkpointed.
   
     \param preEvent If true, then log the state before the event. Otherwise log after
   
@@ -435,8 +438,20 @@ public:
     It is legal to call handler_checkpoint multiple times within a handler,
     as long as the id is different. For example, you might want to call with
     both pre and post event checkpoints.
+    
+    For global checkpoints there is no particular ordering implied on other devices,
+    so the notion of before or after is a bit meaningless. Unless all other devices are ordered with
+    respect to the calling handler (e.g. it is at a global sync point), then the
+    snapshot is likely to be inconsisent and non-deterministic. However, all devices
+    will produce an atomic snapshot, so no torn state is visiblel. The other devices
+    will also produce a causally consistent snapshot with the handler which is creating
+    the checkpoint.
+    
+    Global snapshots are a potential performance killer, so it is entirely
+    possible/reasonable that a given simulator won't support it.
   */
-  virtual void vcheckpoint(bool preEvent, int level, const char *tagFmt, va_list tagArgs) =0;
+  virtual void vcheckpoint(bool global, bool preEvent, int level, const char *tagFmt, va_list tagArgs) =0;
+  
   
   // Mark the application as complete. As soon as any device calls this,
   // the whole graph is considered complete. If multiple devices call

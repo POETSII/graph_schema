@@ -52,7 +52,14 @@ class VarUses(object):
     def create_func_source(self, name:str):
         # Ensure a consistent order
         args=sorted([ (global_.id,mode) for (global_,mode) in self.uses.items() ])
-        source="""from numpy import sqrt, fabs\n"""
+        source="""from numpy import sqrt, fabs, isnan\n"""
+        source+=r"""
+import sys
+def fprintf_stderr(msg, *args):
+    sys.stderr.write(msg % args)
+    sys.stderr.write("\n")
+    """
+
         source+="\n"
         source+="def {}(\n".format(name)
         for (i,(a,m)) in enumerate(args):
@@ -149,7 +156,9 @@ _good_functions=set([
     "fabs",
     "print",
     "range",
-    "handler_log"
+    "handler_log",
+    "isnan",
+    "fprintf_stderr"
 ])
 
 def scan_function_call_expr(uses:VarUses, f:ast.expr) -> None:

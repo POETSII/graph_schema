@@ -44,11 +44,18 @@ def connect_invocation_indirect_reads(
         to_instances=instances_by_set[arg.to_set]
         mapping=inst.maps[arg.map]
         
-        assert arg.index>=0
-        for (dst_index,dst_instance) in enumerate(iter_instances):
-            src_index=mapping[dst_index][arg.index]
-            src_instance=to_instances[src_index]
-            graph.create_edge_instance(dst_instance,dst_pin,src_instance,src_pin)
+        if arg.index>=0:
+            for (dst_index,dst_instance) in enumerate(iter_instances):
+                src_index=mapping[dst_index][arg.index]
+                src_instance=to_instances[src_index]
+                graph.create_edge_instance(dst_instance,dst_pin,src_instance,src_pin)
+        else:
+            assert -arg.index == arg.map.arity
+            for (dst_index,dst_instance) in enumerate(iter_instances):
+                for index in range(arg.map.arity):
+                    src_index=mapping[dst_index][index]
+                    src_instance=to_instances[src_index]
+                    graph.create_edge_instance(dst_instance,dst_pin,src_instance,src_pin, {"index":index})
 
 
 def connect_invocation_indirect_writes(
@@ -77,12 +84,19 @@ def connect_invocation_indirect_writes(
         iter_instances=instances_by_set[arg.iter_set]
         to_instances=instances_by_set[arg.to_set]
         mapping=inst.maps[arg.map]
-        assert arg.index>=0
-        for (src_index,src_instance) in enumerate(iter_instances):
-            dst_index=mapping[src_index][arg.index]
-            dst_instance=to_instances[dst_index]
-            write_recv_counts[dst_instance] += 1
-            graph.create_edge_instance(dst_instance,dst_pin,src_instance,src_pin)
+        if arg.index >= 0:
+            for (src_index,src_instance) in enumerate(iter_instances):
+                dst_index=mapping[src_index][arg.index]
+                dst_instance=to_instances[dst_index]
+                write_recv_counts[dst_instance] += 1
+                graph.create_edge_instance(dst_instance,dst_pin,src_instance,src_pin)
+        else:
+            for (src_index,src_instance) in enumerate(iter_instances):
+                for ai in range(arg.map.arity):
+                    dst_index=mapping[src_index][ai]
+                    dst_instance=to_instances[dst_index]
+                    write_recv_counts[dst_instance] += 1
+                    graph.create_edge_instance(dst_instance,dst_pin,src_instance,src_pin, {"index":ai})
     
     write_recv_total_name="{invocation}_write_recv_total".format(invocation=invocation)
     for (di,count) in write_recv_counts.items():
@@ -121,6 +135,14 @@ def build_graph(globalDeviceType:str, spec:SystemSpecification, inst:SystemInsta
     graphType=graphTypeBuilder.build()
     
     graph=GraphInstance("op2", graphType)
+
+    for g in spec.globals.values():
+        if isinstance(g,MutableGlobal):
+            graph.set_property("init_global_{}".format(g.id), inst.globals[g].tolist())
+        elif isinstance(g,ConstGlobal):
+            graph.set_property("global_{}".format(g.id), inst.globals[g].tolist())
+        else:
+            assert "Unknown global type"
     
     gi=graph.create_device_instance("global", globalDeviceType)
     
@@ -149,6 +171,19 @@ def build_graph(globalDeviceType:str, spec:SystemSpecification, inst:SystemInsta
     
     return graph
 
+def add_checkpoint_data(spec, inst, graph):
+    if graph.metadata is None:
+        graph.metadata={}
+    outCps=graph.metadata.setdefault("op2.checkpoints", {})
+    
+    for (key,inCp) in inst.checkpoints.items():
+        logging.info("Checkpoint %s", key)
+        outCp=outCps.setdefault(key,{})
+        logging.info("  Type = %s, id=%s", type(inCp), inCp.id)
+        for d in inCp:
+            logging.info("    Type = %s", type(d))
+            outCp[d]=inCp[d]
+
 
 if __name__=="__main__":
     logging.basicConfig(level=4)
@@ -159,5 +194,7 @@ if __name__=="__main__":
     (spec,inst,code)=mini_op2.framework.sync_compiler.load_model(sys.argv)
     
     graph=build_graph("controller", spec, inst, code)
+    
+    #add_checkpoint_data(spec, inst, graph)
     
     save_graph(graph, sys.stdout)

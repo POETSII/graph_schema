@@ -46,8 +46,6 @@ def build_system(n:int) -> (SystemInstance,Statement):
         "sum" : numpy.array( [0.0] )
     }
     
-    inst=SystemInstance(sys, instDict)
-    
     instOutput={
         "output" : {
             "final" : copy.copy(instDict)
@@ -56,6 +54,9 @@ def build_system(n:int) -> (SystemInstance,Statement):
     }
     
     instOutput["output"]["final"]["sum"] = numpy.array( [ n*(n-1)/2 ] )
+    
+    inst=SystemInstance(sys, instOutput)
+    
 
     code=Seq(
         """

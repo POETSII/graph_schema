@@ -54,11 +54,11 @@ def render_typed_data_init(proto,dst,prefix):
             etype=proto.type
             if not isinstance(etype.type,ScalarTypedDataSpec):
                 raise RuntimeError("Haven't implemented arrays of arrays of non-scalars yet...")
-                val = proto.type.default or "0"
-                # TODO : embedd a for-loop?
-                for i in range(0,proto.length):
-                    for j in range(0,eproto.length):
-                        dst.write('{}{}[{}][{}] = {};\n'.format(prefix,proto.name,i,j,val))
+            val = etype.type.default or "0"
+            # TODO : embedd a for-loop?
+            for i in range(0,proto.length):
+                for j in range(0,etype.length):
+                    dst.write('{}{}[{}][{}] = {};\n'.format(prefix,proto.name,i,j,val))
         else:
             raise RuntimeError("Haven't implemented arrays of complicated non-scalars yet.")
     else:
@@ -487,7 +487,13 @@ public:
     auto handler_checkpoint=[&](bool preEvent, int level, const char *fmt, ...) -> void {{
         va_list a;
         va_start(a,fmt);
-        orchestrator->vcheckpoint(preEvent,level,fmt,a);
+        orchestrator->vcheckpoint(false, preEvent,level,fmt,a);
+        va_end(a);
+    }};
+    auto handler_checkpoint_global=[&](bool preEvent, int level, const char *fmt, ...) -> void {{
+        va_list a;
+        va_start(a,fmt);
+        orchestrator->vcheckpoint(true, preEvent,level,fmt,a);
         va_end(a);
     }};
 
@@ -569,12 +575,18 @@ def render_output_pin_as_cpp(op,dst):
     dst.write('    auto handler_exit=[&](int code) -> void { orchestrator->application_exit(code); };\n')
     dst.write('    auto handler_export_key_value=[&](uint32_t key, uint32_t value) -> void { orchestrator->export_key_value(key, value); };\n')   
     dst.write("""
-auto handler_checkpoint=[&](bool preEvent, int level, const char *fmt, ...) -> void {
-    va_list a;
-    va_start(a,fmt);
-    orchestrator->vcheckpoint(preEvent,level,fmt,a);
-    va_end(a);
-};
+    auto handler_checkpoint=[&](bool preEvent, int level, const char *fmt, ...) -> void {
+        va_list a;
+        va_start(a,fmt);
+        orchestrator->vcheckpoint(false, preEvent,level,fmt,a);
+        va_end(a);
+    };
+    auto handler_checkpoint_global=[&](bool preEvent, int level, const char *fmt, ...) -> void {
+        va_list a;
+        va_start(a,fmt);
+        orchestrator->vcheckpoint(true, preEvent,level,fmt,a);
+        va_end(a);
+    };
 """)
 
     dst.write('    // Begin custom handler\n')

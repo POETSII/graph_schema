@@ -387,7 +387,7 @@ class EdgeInstance(object):
             assert src_device.device_type.outputs[src_pin.name]==src_pin
 
         if __debug__ and (dst_pin.message_type != src_pin.message_type):
-            raise GraphDescriptionError("Dest pin has type {}, source pin type {}".format(dst_pin.id,src_pin.id))
+            raise GraphDescriptionError("Dest pin has type {}, source pin type {}".format(dst_pin.message_type.id,src_pin.message_type.id))
 
         if __debug__ and (not is_refinement_compatible(dst_pin.properties,properties)):
             raise GraphDescriptionError("Properties are not compatible: proto={}, value={}.".format(dst_pin.properties, properties))

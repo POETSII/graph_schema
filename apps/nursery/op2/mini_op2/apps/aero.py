@@ -16,7 +16,11 @@ seq_float=typing.Sequence[float]
 seq_int=typing.Sequence[int]
 
 
-from numpy import sqrt, fabs
+from numpy import sqrt, fabs, isnan
+
+def fprintf_stderr(msg, *args):
+    sys.stderr.write(msg % args)
+    sys.stderr.write("\n")
 
 def dirichlet(
     res:seq_double
@@ -76,17 +80,20 @@ def res_calc(
         det_x_xi = 0.0;
         N_x = [0.0,0.0,0.0,0.0, 0.0,0.0,0.0,0.0]
 
-        a = 0;
+        a = 0.0;
         #for (int m = 0; m < 4; m++)
         for m in range(4):
             xv=x[m]
             xv1=xv[1]
             det_x_xi += Ng2_xi[4 * i + 16 + m] * xv1
+            assert not isnan(det_x_xi)
+
         #for (int m = 0; m < 4; m++)
         for m in range(4):
           N_x[m] = det_x_xi * Ng2_xi[4 * i + m]
+          assert not isnan(N_x[m])
 
-        a = 0;
+        a = 0.0;
         #for (int m = 0; m < 4; m++)
         for m in range(4):
           a += Ng2_xi[4 * i + m] * x[m][0]
@@ -96,7 +103,7 @@ def res_calc(
 
         det_x_xi *= a
 
-        a = 0
+        a = 0.0
         #for (int m = 0; m < 4; m++)
         for m in range(4):
           a += Ng2_xi[4 * i + m] * x[m][1];
@@ -110,34 +117,52 @@ def res_calc(
         for m in range(4):
           N_x[4 + m] -= b * Ng2_xi[4 * i + m]
 
+        fprintf_stderr(" a = %f, b = %f ", a, b)
         det_x_xi -= a * b
+        assert not (det_x_xi==0)
 
         for j in range(8):
           N_x[j] /= det_x_xi;
+          assert not isnan(N_x[j])
 
         wt1 = wtg2[i] * det_x_xi
+        assert not isnan(wt1)
         
         u = [0.0, 0.0]
+        assert not isnan(u[0])
+        assert not isnan(u[1])
         for j in range(4):
-          u[0] += N_x[j] * phim[j][0]
-          u[1] += N_x[4 + j] * phim[j][0]
+            assert not isnan(N_x[j])
+            assert not isnan(phim[j][0])
+            u[0] += N_x[j] * phim[j][0]
+            fprintf_stderr("N_x[%d]=%f, phim[%d]=%f", j, N_x[j], j, phim[j][0])
+            assert not isnan(u[0])
+            u[1] += N_x[4 + j] * phim[j][0]
+            assert not isnan(u[1])
+        assert not isnan(u[0])
+        assert not isnan(u[1])
         
         Dk = 1.0 + 0.5 * gm1[0] * (m2[0] - (u[0] * u[0] + u[1] * u[1]))
+        assert not isnan(Dk)
         rho = pow(Dk, gm1i[0]) # wow this might be problematic -> go to log?
+        assert not isnan(rho)
         rc2 = rho / Dk
+        assert not isnan(rc2)
 
         for j in range(4):
-            ressss=res[j]
+            #ressss=res[j]
             #print(ressss)
-            tmp = wt1 * rho * (u[0] * N_x[j] + u[1] * N_x[4 + j])
-            ressss[0] += tmp
+            res[j][0] += wt1 * rho * (u[0] * N_x[j] + u[1] * N_x[4 + j])
+            #ressss[0] += tmp
         
         for j in range(4):
           for k in range(4):
+            assert not isnan(K[j * 4 + k])
             K[j * 4 + k] += \
                 wt1 * rho * (N_x[j] * N_x[k] + N_x[4 + j] * N_x[4 + k]) - \
                 wt1 * rc2 * (u[0] * N_x[j] + u[1] * N_x[4 + j]) * \
                     (u[0] * N_x[k] + u[1] * N_x[4 + k])
+            assert not isnan(K[j * 4 + k])
  
 def spMV(
     v : seq_seq_double,
@@ -291,15 +316,15 @@ def build_system(srcFile:str="./meshes/FE_mesh.hdf5", total_iter=20) -> (SystemI
         ),
         CheckState(refFile, "/output/iter{iter}_post_init_cg"),
         """
-        print("  c1 = %g" % (c1[0]) )
+        #print("  c1 = %g" % (c1[0]) )
         res0[0]=sqrt(c1[0])
         res[0]=res0[0]
         inner_iter[0]=0
         maxiter[0]=200
-        print("res=%g, 0.1*res0=%g,  inner_iter=%u, maxiter=%u" % (res[0],0.1*res0[0], inner_iter[0], maxiter[0]) )
+        #print("res=%g, 0.1*res0=%g,  inner_iter=%u, maxiter=%u" % (res[0],0.1*res0[0], inner_iter[0], maxiter[0]) )
         """,
         While( """ (res[0]>0.1*res0[0]) and inner_iter[0] < maxiter[0] """,
-            """print("  res=%g, 0.1*res0=%g,  inner_iter=%u, maxiter=%u" % (res[0],0.1*res0[0], inner_iter[0], maxiter[0]) )""",
+            """fprintf_stderr("  res=%g, 0.1*res0=%g,  inner_iter=%u, maxiter=%u, outer_iter=%u", res[0],0.1*res0[0], inner_iter[0], maxiter[0], iter[0])""",
             ParFor(
                 spMV,
                 cells,
@@ -380,7 +405,7 @@ def build_system(srcFile:str="./meshes/FE_mesh.hdf5", total_iter=20) -> (SystemI
         """
         rmsV=sqrt(rms[0])/sqrt(sizeof_nodes[0])
         iterV=iter[0]
-        print("rms = %10.5g iter: %d" % ( rmsV, iterV) )
+        # handler_log(2, "rms = %10.5g iter: %d" % ( rmsV, iterV) )
         """,
         CheckState(refFile, "/output/iter{iter}")
     )

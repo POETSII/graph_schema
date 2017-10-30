@@ -384,6 +384,8 @@ Device Type         | Direction | Pin Name
 Properties                            | Location | Meaning
 ----------------------------------------------------------------------------------------------------
 {invocation}_total_responding_devices | Graph    | Number of devices which will send {invocation}_end
+init_global_{global}                  | Graph    | Initial value for that particular global
+init_dat_{dat}                        | Device   | Initial value for that dat on the given set node
 
 State                             | Meaning
 ------------------------------------------------------------------------------------------------
