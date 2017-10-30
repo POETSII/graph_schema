@@ -32,6 +32,7 @@ def main(argv):
 	cpy_cmd += 'cp ./scripts/launch_webserver.sh '+temporary_dir+'/;'
 	cpy_cmd += 'cp ./scripts/rt_log_filter.py '+temporary_dir+'/;'
 	os.system(cpy_cmd)
+	subprocess.call(['chmod', '-R 0777', temporary_dir])
 
 	print 'generating data.json for d3.js plot'
 	json_gen = 'python ./scripts/generate_d3_json_data.py --input '+inFileName+' > '+temporary_dir+'/data.json'

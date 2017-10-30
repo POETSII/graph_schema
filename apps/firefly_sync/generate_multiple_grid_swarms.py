@@ -8,11 +8,11 @@ import random
 # sPeriod - The period of each firefly in a swarm 
 # LPeriod - The period of each link firefly should be an integer multiple of the sPeriod 
 
-S=8
-N=4
-M=4
-L=1 
-sPeriod=150000
+S=1
+N=22
+M=22
+L=0 
+sPeriod=75000
 LPeriod=3
 sNudge=int(round(0.30*sPeriod))
 sFlashzone=int(round(0.01*sPeriod))

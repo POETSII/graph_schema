@@ -15,6 +15,7 @@
 </style>
 <svg width="7200" height="4800"></svg>
 <script src="https://d3js.org/d3.v4.min.js"></script>
+<script src="//ajax.googleapis.com/ajax/libs/jquery/1.9.1/jquery.min.js"></script>
 <script>
 
 var svg = d3.select("svg"),
@@ -48,7 +49,7 @@ d3.json("data.json", function(error, graph) {
     .selectAll("circle")
     .data(graph.nodes)
     .enter().append("circle")
-      .attr("r", 18)
+      .attr("r", 13)
       .attr("id", function(d) { return d.id; } )
       .attr("fill", function(d) { return "#606060"; })
       .call(d3.drag()
@@ -68,7 +69,7 @@ d3.json("data.json", function(error, graph) {
 
 	var curTime = 0;	
 
-	var inter = setInterval(function() { flashFireflies();}, 100);
+	var inter = setInterval(function() { flashFireflies();}, 15);
 
 	function flashFireflies() {
 		d3.csv("log.csv", function(data) {
@@ -89,6 +90,13 @@ d3.json("data.json", function(error, graph) {
 				}
 			});
 		});
+		//$.ajax({
+		//				url:'refresh_log.php',
+		//				success:function(){
+		//				    console.log('Deleted !!');
+		//				}
+
+		//})
 	}
 
   function ticked() {
