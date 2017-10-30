@@ -1,0 +1,2106 @@
+<?xml version="1.0"?>
+<Graphs xmlns="https://poets-project.org/schemas/virtual-graph-schema-v2">
+	<GraphType id="firefly_sync">
+		
+		<SharedCode><![CDATA[
+
+		]]></SharedCode>
+
+	<Properties>
+		<Scalar type="uint32_t" name="dt" default="1" />
+	</Properties>
+
+
+	<MessageTypes>
+		<MessageType id="__init__">
+		</MessageType>
+
+		<MessageType id="tick">
+		</MessageType>
+
+		<MessageType id="flash">
+		</MessageType>
+
+	</MessageTypes>
+
+	<DeviceTypes>
+
+	<DeviceType id="firefly">
+		<Properties>
+			<Scalar type="uint32_t" name="period" default="720000"/>
+			<Scalar type="int32_t" name="start_phase" default="90000"/>
+			<Scalar type="uint32_t" name="phase_nudge" default="10000"/>
+			<Scalar type="uint32_t" name="flashzone" default="1500"/>
+		</Properties>
+		<State>
+			<Scalar type="uint32_t" name="t"/>
+			<Scalar type="uint8_t" name="rdy_to_tick"/>
+			<Scalar type="uint8_t" name="rdy_to_flash"/>
+		</State>
+
+		<ReadyToSend><![CDATA[
+			*readyToSend=0;
+			if(deviceState->rdy_to_tick) {
+				*readyToSend = RTS_FLAG_tick_out;
+			} else if (deviceState->rdy_to_flash) {
+				*readyToSend = RTS_FLAG_flash_out;
+			}
+		]]></ReadyToSend>
+
+		<InputPin name="__init__" messageTypeId="__init__">
+			<OnReceive><![CDATA[
+				deviceState->t = deviceProperties->start_phase;
+				deviceState->rdy_to_flash = 0;
+				deviceState->rdy_to_tick = 1;
+			]]></OnReceive>
+		</InputPin>
+
+
+		<InputPin name="tick_in" messageTypeId="tick">
+			<OnReceive><![CDATA[
+				if (deviceState->t < deviceProperties->period) { 
+					deviceState->t = (deviceState->t + 1); 			
+				} else {
+					deviceState->t = 0;
+					deviceState->rdy_to_flash = 1;
+				}
+				deviceState->rdy_to_tick = 1;
+			]]></OnReceive>
+		</InputPin>
+
+		<OutputPin name="tick_out" messageTypeId="tick">
+				<OnSend><![CDATA[
+					deviceState->rdy_to_tick = 0;	
+				]]></OnSend>
+		</OutputPin>
+
+		<OutputPin name="flash_out" messageTypeId="flash">
+			<OnSend><![CDATA[
+				deviceState->rdy_to_flash = 0;	
+				handler_log(2, "FLASH!");
+			]]></OnSend>
+		</OutputPin>
+
+		<InputPin name="flash_in" messageTypeId="flash">
+			<OnReceive><![CDATA[
+				uint32_t period = deviceProperties->period;
+				uint32_t flashzone = deviceProperties->flashzone;
+				uint32_t phase_nudge = deviceProperties->phase_nudge;
+				uint32_t t = deviceState->t;
+
+				uint32_t delta_phase = 0;	
+				
+				if(t > flashzone && t < period/2) {
+						if ( t < phase_nudge) {
+							delta_phase = t;	
+						} else {
+							delta_phase = phase_nudge;
+						}
+						deviceState->t = t - delta_phase;	
+				} else if ( t >= period/2 && t < (period - flashzone)) {
+						if ( (period-t) < phase_nudge) {
+							delta_phase = period - t;
+						} else {
+							delta_phase = phase_nudge;
+						}
+						deviceState->t = t + delta_phase;	
+
+				} 
+			]]></OnReceive>
+		</InputPin>
+
+	</DeviceType>
+
+	</DeviceTypes>
+</GraphType>
+<GraphInstance id="firefly_forest" graphTypeId="firefly_sync">
+<DeviceInstances sorted='1'>
+	<DevI id="firefly_s0_00" type="firefly">
+		<P>"start_phase": 51088, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_01" type="firefly">
+		<P>"start_phase": 78612, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_02" type="firefly">
+		<P>"start_phase": 149988, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_03" type="firefly">
+		<P>"start_phase": 67828, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_04" type="firefly">
+		<P>"start_phase": 19604, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_05" type="firefly">
+		<P>"start_phase": 1435, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_06" type="firefly">
+		<P>"start_phase": 55256, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_07" type="firefly">
+		<P>"start_phase": 73427, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_08" type="firefly">
+		<P>"start_phase": 133080, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_09" type="firefly">
+		<P>"start_phase": 27191, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_010" type="firefly">
+		<P>"start_phase": 111833, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_011" type="firefly">
+		<P>"start_phase": 30870, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_012" type="firefly">
+		<P>"start_phase": 110879, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_013" type="firefly">
+		<P>"start_phase": 56835, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_014" type="firefly">
+		<P>"start_phase": 2782, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_015" type="firefly">
+		<P>"start_phase": 7682, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_160" type="firefly">
+		<P>"start_phase": 83466, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_161" type="firefly">
+		<P>"start_phase": 76482, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_162" type="firefly">
+		<P>"start_phase": 122429, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_163" type="firefly">
+		<P>"start_phase": 139250, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_164" type="firefly">
+		<P>"start_phase": 65154, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_165" type="firefly">
+		<P>"start_phase": 119809, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_166" type="firefly">
+		<P>"start_phase": 67955, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_167" type="firefly">
+		<P>"start_phase": 67793, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_168" type="firefly">
+		<P>"start_phase": 133327, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_169" type="firefly">
+		<P>"start_phase": 121789, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_1610" type="firefly">
+		<P>"start_phase": 145962, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_1611" type="firefly">
+		<P>"start_phase": 66671, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_1612" type="firefly">
+		<P>"start_phase": 116253, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_1613" type="firefly">
+		<P>"start_phase": 17946, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_1614" type="firefly">
+		<P>"start_phase": 60967, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_1615" type="firefly">
+		<P>"start_phase": 142769, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_320" type="firefly">
+		<P>"start_phase": 92274, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_321" type="firefly">
+		<P>"start_phase": 69400, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_322" type="firefly">
+		<P>"start_phase": 42760, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_323" type="firefly">
+		<P>"start_phase": 31078, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_324" type="firefly">
+		<P>"start_phase": 64758, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_325" type="firefly">
+		<P>"start_phase": 42848, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_326" type="firefly">
+		<P>"start_phase": 118017, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_327" type="firefly">
+		<P>"start_phase": 130062, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_328" type="firefly">
+		<P>"start_phase": 3584, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_329" type="firefly">
+		<P>"start_phase": 146906, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_3210" type="firefly">
+		<P>"start_phase": 109855, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_3211" type="firefly">
+		<P>"start_phase": 86315, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_3212" type="firefly">
+		<P>"start_phase": 61101, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_3213" type="firefly">
+		<P>"start_phase": 19592, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_3214" type="firefly">
+		<P>"start_phase": 35483, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_3215" type="firefly">
+		<P>"start_phase": 147805, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_480" type="firefly">
+		<P>"start_phase": 72673, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_481" type="firefly">
+		<P>"start_phase": 140591, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_482" type="firefly">
+		<P>"start_phase": 78728, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_483" type="firefly">
+		<P>"start_phase": 45155, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_484" type="firefly">
+		<P>"start_phase": 128694, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_485" type="firefly">
+		<P>"start_phase": 33895, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_486" type="firefly">
+		<P>"start_phase": 97663, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_487" type="firefly">
+		<P>"start_phase": 27819, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_488" type="firefly">
+		<P>"start_phase": 54175, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_489" type="firefly">
+		<P>"start_phase": 97363, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_4810" type="firefly">
+		<P>"start_phase": 29217, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_4811" type="firefly">
+		<P>"start_phase": 124851, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_4812" type="firefly">
+		<P>"start_phase": 31524, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_4813" type="firefly">
+		<P>"start_phase": 78112, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_4814" type="firefly">
+		<P>"start_phase": 45709, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_4815" type="firefly">
+		<P>"start_phase": 112544, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_640" type="firefly">
+		<P>"start_phase": 132051, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_641" type="firefly">
+		<P>"start_phase": 90704, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_642" type="firefly">
+		<P>"start_phase": 94788, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_643" type="firefly">
+		<P>"start_phase": 126511, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_644" type="firefly">
+		<P>"start_phase": 10116, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_645" type="firefly">
+		<P>"start_phase": 83916, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_646" type="firefly">
+		<P>"start_phase": 49475, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_647" type="firefly">
+		<P>"start_phase": 91335, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_648" type="firefly">
+		<P>"start_phase": 64654, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_649" type="firefly">
+		<P>"start_phase": 97935, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_6410" type="firefly">
+		<P>"start_phase": 136788, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_6411" type="firefly">
+		<P>"start_phase": 47096, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_6412" type="firefly">
+		<P>"start_phase": 112613, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_6413" type="firefly">
+		<P>"start_phase": 34320, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_6414" type="firefly">
+		<P>"start_phase": 20038, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_6415" type="firefly">
+		<P>"start_phase": 29163, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_800" type="firefly">
+		<P>"start_phase": 37357, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_801" type="firefly">
+		<P>"start_phase": 47855, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_802" type="firefly">
+		<P>"start_phase": 92458, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_803" type="firefly">
+		<P>"start_phase": 21019, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_804" type="firefly">
+		<P>"start_phase": 133874, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_805" type="firefly">
+		<P>"start_phase": 55158, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_806" type="firefly">
+		<P>"start_phase": 33335, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_807" type="firefly">
+		<P>"start_phase": 129142, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_808" type="firefly">
+		<P>"start_phase": 44074, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_809" type="firefly">
+		<P>"start_phase": 90832, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_8010" type="firefly">
+		<P>"start_phase": 145405, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_8011" type="firefly">
+		<P>"start_phase": 79097, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_8012" type="firefly">
+		<P>"start_phase": 13284, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_8013" type="firefly">
+		<P>"start_phase": 100115, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_8014" type="firefly">
+		<P>"start_phase": 120557, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_8015" type="firefly">
+		<P>"start_phase": 50762, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_960" type="firefly">
+		<P>"start_phase": 146821, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_961" type="firefly">
+		<P>"start_phase": 37727, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_962" type="firefly">
+		<P>"start_phase": 2035, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_963" type="firefly">
+		<P>"start_phase": 97136, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_964" type="firefly">
+		<P>"start_phase": 42839, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_965" type="firefly">
+		<P>"start_phase": 138132, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_966" type="firefly">
+		<P>"start_phase": 100389, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_967" type="firefly">
+		<P>"start_phase": 95566, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_968" type="firefly">
+		<P>"start_phase": 88869, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_969" type="firefly">
+		<P>"start_phase": 49755, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_9610" type="firefly">
+		<P>"start_phase": 115758, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_9611" type="firefly">
+		<P>"start_phase": 86434, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_9612" type="firefly">
+		<P>"start_phase": 145973, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_9613" type="firefly">
+		<P>"start_phase": 120875, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_9614" type="firefly">
+		<P>"start_phase": 101410, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_9615" type="firefly">
+		<P>"start_phase": 111103, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_1120" type="firefly">
+		<P>"start_phase": 76121, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_1121" type="firefly">
+		<P>"start_phase": 52378, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_1122" type="firefly">
+		<P>"start_phase": 66662, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_1123" type="firefly">
+		<P>"start_phase": 100694, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_1124" type="firefly">
+		<P>"start_phase": 84788, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_1125" type="firefly">
+		<P>"start_phase": 31001, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_1126" type="firefly">
+		<P>"start_phase": 120963, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_1127" type="firefly">
+		<P>"start_phase": 43182, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_1128" type="firefly">
+		<P>"start_phase": 94972, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_1129" type="firefly">
+		<P>"start_phase": 77421, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_11210" type="firefly">
+		<P>"start_phase": 5640, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_11211" type="firefly">
+		<P>"start_phase": 1764, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_11212" type="firefly">
+		<P>"start_phase": 45502, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_11213" type="firefly">
+		<P>"start_phase": 79180, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_11214" type="firefly">
+		<P>"start_phase": 2450, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_11215" type="firefly">
+		<P>"start_phase": 97538, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_1280" type="firefly">
+		<P>"start_phase": 92013, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_1281" type="firefly">
+		<P>"start_phase": 82892, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_1282" type="firefly">
+		<P>"start_phase": 88290, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_1283" type="firefly">
+		<P>"start_phase": 2288, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_1284" type="firefly">
+		<P>"start_phase": 42553, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_1285" type="firefly">
+		<P>"start_phase": 136531, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_1286" type="firefly">
+		<P>"start_phase": 80051, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_1287" type="firefly">
+		<P>"start_phase": 60881, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_1288" type="firefly">
+		<P>"start_phase": 42398, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_1289" type="firefly">
+		<P>"start_phase": 30420, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_12810" type="firefly">
+		<P>"start_phase": 137676, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_12811" type="firefly">
+		<P>"start_phase": 146153, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_12812" type="firefly">
+		<P>"start_phase": 1518, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_12813" type="firefly">
+		<P>"start_phase": 54570, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_12814" type="firefly">
+		<P>"start_phase": 8680, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_12815" type="firefly">
+		<P>"start_phase": 128234, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_1440" type="firefly">
+		<P>"start_phase": 141610, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_1441" type="firefly">
+		<P>"start_phase": 22244, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_1442" type="firefly">
+		<P>"start_phase": 70783, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_1443" type="firefly">
+		<P>"start_phase": 71113, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_1444" type="firefly">
+		<P>"start_phase": 64861, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_1445" type="firefly">
+		<P>"start_phase": 12860, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_1446" type="firefly">
+		<P>"start_phase": 75208, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_1447" type="firefly">
+		<P>"start_phase": 131464, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_1448" type="firefly">
+		<P>"start_phase": 114478, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_1449" type="firefly">
+		<P>"start_phase": 97820, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_14410" type="firefly">
+		<P>"start_phase": 35985, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_14411" type="firefly">
+		<P>"start_phase": 137365, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_14412" type="firefly">
+		<P>"start_phase": 137596, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_14413" type="firefly">
+		<P>"start_phase": 65741, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_14414" type="firefly">
+		<P>"start_phase": 54973, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_14415" type="firefly">
+		<P>"start_phase": 49136, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_1600" type="firefly">
+		<P>"start_phase": 126006, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_1601" type="firefly">
+		<P>"start_phase": 129579, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_1602" type="firefly">
+		<P>"start_phase": 117492, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_1603" type="firefly">
+		<P>"start_phase": 125430, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_1604" type="firefly">
+		<P>"start_phase": 143421, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_1605" type="firefly">
+		<P>"start_phase": 89633, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_1606" type="firefly">
+		<P>"start_phase": 13603, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_1607" type="firefly">
+		<P>"start_phase": 58190, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_1608" type="firefly">
+		<P>"start_phase": 12160, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_1609" type="firefly">
+		<P>"start_phase": 39325, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_16010" type="firefly">
+		<P>"start_phase": 42401, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_16011" type="firefly">
+		<P>"start_phase": 100571, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_16012" type="firefly">
+		<P>"start_phase": 78228, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_16013" type="firefly">
+		<P>"start_phase": 15890, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_16014" type="firefly">
+		<P>"start_phase": 20521, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_16015" type="firefly">
+		<P>"start_phase": 14958, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_1760" type="firefly">
+		<P>"start_phase": 130593, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_1761" type="firefly">
+		<P>"start_phase": 37390, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_1762" type="firefly">
+		<P>"start_phase": 7129, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_1763" type="firefly">
+		<P>"start_phase": 526, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_1764" type="firefly">
+		<P>"start_phase": 25723, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_1765" type="firefly">
+		<P>"start_phase": 115821, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_1766" type="firefly">
+		<P>"start_phase": 94627, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_1767" type="firefly">
+		<P>"start_phase": 89679, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_1768" type="firefly">
+		<P>"start_phase": 104715, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_1769" type="firefly">
+		<P>"start_phase": 119397, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_17610" type="firefly">
+		<P>"start_phase": 18899, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_17611" type="firefly">
+		<P>"start_phase": 107919, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_17612" type="firefly">
+		<P>"start_phase": 74329, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_17613" type="firefly">
+		<P>"start_phase": 48872, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_17614" type="firefly">
+		<P>"start_phase": 7684, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_17615" type="firefly">
+		<P>"start_phase": 67622, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_1920" type="firefly">
+		<P>"start_phase": 74818, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_1921" type="firefly">
+		<P>"start_phase": 2262, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_1922" type="firefly">
+		<P>"start_phase": 33863, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_1923" type="firefly">
+		<P>"start_phase": 47660, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_1924" type="firefly">
+		<P>"start_phase": 18686, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_1925" type="firefly">
+		<P>"start_phase": 132051, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_1926" type="firefly">
+		<P>"start_phase": 15239, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_1927" type="firefly">
+		<P>"start_phase": 40648, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_1928" type="firefly">
+		<P>"start_phase": 123283, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_1929" type="firefly">
+		<P>"start_phase": 47806, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_19210" type="firefly">
+		<P>"start_phase": 79221, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_19211" type="firefly">
+		<P>"start_phase": 42359, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_19212" type="firefly">
+		<P>"start_phase": 139709, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_19213" type="firefly">
+		<P>"start_phase": 47824, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_19214" type="firefly">
+		<P>"start_phase": 62476, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_19215" type="firefly">
+		<P>"start_phase": 110347, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_2080" type="firefly">
+		<P>"start_phase": 97288, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_2081" type="firefly">
+		<P>"start_phase": 52062, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_2082" type="firefly">
+		<P>"start_phase": 27334, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_2083" type="firefly">
+		<P>"start_phase": 979, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_2084" type="firefly">
+		<P>"start_phase": 83599, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_2085" type="firefly">
+		<P>"start_phase": 145855, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_2086" type="firefly">
+		<P>"start_phase": 97844, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_2087" type="firefly">
+		<P>"start_phase": 145186, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_2088" type="firefly">
+		<P>"start_phase": 87286, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_2089" type="firefly">
+		<P>"start_phase": 125657, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_20810" type="firefly">
+		<P>"start_phase": 64821, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_20811" type="firefly">
+		<P>"start_phase": 2151, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_20812" type="firefly">
+		<P>"start_phase": 23624, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_20813" type="firefly">
+		<P>"start_phase": 132247, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_20814" type="firefly">
+		<P>"start_phase": 110053, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_20815" type="firefly">
+		<P>"start_phase": 136602, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_2240" type="firefly">
+		<P>"start_phase": 64292, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_2241" type="firefly">
+		<P>"start_phase": 10495, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_2242" type="firefly">
+		<P>"start_phase": 143969, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_2243" type="firefly">
+		<P>"start_phase": 84252, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_2244" type="firefly">
+		<P>"start_phase": 148739, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_2245" type="firefly">
+		<P>"start_phase": 35935, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_2246" type="firefly">
+		<P>"start_phase": 70828, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_2247" type="firefly">
+		<P>"start_phase": 29810, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_2248" type="firefly">
+		<P>"start_phase": 111093, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_2249" type="firefly">
+		<P>"start_phase": 57316, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_22410" type="firefly">
+		<P>"start_phase": 92032, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_22411" type="firefly">
+		<P>"start_phase": 125307, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_22412" type="firefly">
+		<P>"start_phase": 53465, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_22413" type="firefly">
+		<P>"start_phase": 129818, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_22414" type="firefly">
+		<P>"start_phase": 14358, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_22415" type="firefly">
+		<P>"start_phase": 129742, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_2400" type="firefly">
+		<P>"start_phase": 68574, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_2401" type="firefly">
+		<P>"start_phase": 119216, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_2402" type="firefly">
+		<P>"start_phase": 41448, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_2403" type="firefly">
+		<P>"start_phase": 121058, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_2404" type="firefly">
+		<P>"start_phase": 145086, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_2405" type="firefly">
+		<P>"start_phase": 112176, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_2406" type="firefly">
+		<P>"start_phase": 26216, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_2407" type="firefly">
+		<P>"start_phase": 141848, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_2408" type="firefly">
+		<P>"start_phase": 30517, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_2409" type="firefly">
+		<P>"start_phase": 43466, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_24010" type="firefly">
+		<P>"start_phase": 104038, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_24011" type="firefly">
+		<P>"start_phase": 137688, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_24012" type="firefly">
+		<P>"start_phase": 121884, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_24013" type="firefly">
+		<P>"start_phase": 129556, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_24014" type="firefly">
+		<P>"start_phase": 122319, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+	<DevI id="firefly_s0_24015" type="firefly">
+		<P>"start_phase": 130917, "period": 150000, "phase_nudge":45000, "flashzone":1500 </P>
+	</DevI>
+</DeviceInstances>
+<EdgeInstances sorted='1'>
+	<EdgeI path="firefly_s0_00:tick_in-firefly_s0_00:tick_out"/>
+		<EdgeI path="firefly_s0_00:flash_in-firefly_s0_160:flash_out"/>
+		<EdgeI path="firefly_s0_00:flash_in-firefly_s0_01:flash_out"/>
+	<EdgeI path="firefly_s0_01:tick_in-firefly_s0_01:tick_out"/>
+		<EdgeI path="firefly_s0_01:flash_in-firefly_s0_161:flash_out"/>
+		<EdgeI path="firefly_s0_01:flash_in-firefly_s0_02:flash_out"/>
+		<EdgeI path="firefly_s0_01:flash_in-firefly_s0_00:flash_out"/>
+	<EdgeI path="firefly_s0_02:tick_in-firefly_s0_02:tick_out"/>
+		<EdgeI path="firefly_s0_02:flash_in-firefly_s0_162:flash_out"/>
+		<EdgeI path="firefly_s0_02:flash_in-firefly_s0_03:flash_out"/>
+		<EdgeI path="firefly_s0_02:flash_in-firefly_s0_01:flash_out"/>
+	<EdgeI path="firefly_s0_03:tick_in-firefly_s0_03:tick_out"/>
+		<EdgeI path="firefly_s0_03:flash_in-firefly_s0_163:flash_out"/>
+		<EdgeI path="firefly_s0_03:flash_in-firefly_s0_04:flash_out"/>
+		<EdgeI path="firefly_s0_03:flash_in-firefly_s0_02:flash_out"/>
+	<EdgeI path="firefly_s0_04:tick_in-firefly_s0_04:tick_out"/>
+		<EdgeI path="firefly_s0_04:flash_in-firefly_s0_164:flash_out"/>
+		<EdgeI path="firefly_s0_04:flash_in-firefly_s0_05:flash_out"/>
+		<EdgeI path="firefly_s0_04:flash_in-firefly_s0_03:flash_out"/>
+	<EdgeI path="firefly_s0_05:tick_in-firefly_s0_05:tick_out"/>
+		<EdgeI path="firefly_s0_05:flash_in-firefly_s0_165:flash_out"/>
+		<EdgeI path="firefly_s0_05:flash_in-firefly_s0_06:flash_out"/>
+		<EdgeI path="firefly_s0_05:flash_in-firefly_s0_04:flash_out"/>
+	<EdgeI path="firefly_s0_06:tick_in-firefly_s0_06:tick_out"/>
+		<EdgeI path="firefly_s0_06:flash_in-firefly_s0_166:flash_out"/>
+		<EdgeI path="firefly_s0_06:flash_in-firefly_s0_07:flash_out"/>
+		<EdgeI path="firefly_s0_06:flash_in-firefly_s0_05:flash_out"/>
+	<EdgeI path="firefly_s0_07:tick_in-firefly_s0_07:tick_out"/>
+		<EdgeI path="firefly_s0_07:flash_in-firefly_s0_167:flash_out"/>
+		<EdgeI path="firefly_s0_07:flash_in-firefly_s0_08:flash_out"/>
+		<EdgeI path="firefly_s0_07:flash_in-firefly_s0_06:flash_out"/>
+	<EdgeI path="firefly_s0_08:tick_in-firefly_s0_08:tick_out"/>
+		<EdgeI path="firefly_s0_08:flash_in-firefly_s0_168:flash_out"/>
+		<EdgeI path="firefly_s0_08:flash_in-firefly_s0_09:flash_out"/>
+		<EdgeI path="firefly_s0_08:flash_in-firefly_s0_07:flash_out"/>
+	<EdgeI path="firefly_s0_09:tick_in-firefly_s0_09:tick_out"/>
+		<EdgeI path="firefly_s0_09:flash_in-firefly_s0_169:flash_out"/>
+		<EdgeI path="firefly_s0_09:flash_in-firefly_s0_010:flash_out"/>
+		<EdgeI path="firefly_s0_09:flash_in-firefly_s0_08:flash_out"/>
+	<EdgeI path="firefly_s0_010:tick_in-firefly_s0_010:tick_out"/>
+		<EdgeI path="firefly_s0_010:flash_in-firefly_s0_1610:flash_out"/>
+		<EdgeI path="firefly_s0_010:flash_in-firefly_s0_011:flash_out"/>
+		<EdgeI path="firefly_s0_010:flash_in-firefly_s0_09:flash_out"/>
+	<EdgeI path="firefly_s0_011:tick_in-firefly_s0_011:tick_out"/>
+		<EdgeI path="firefly_s0_011:flash_in-firefly_s0_1611:flash_out"/>
+		<EdgeI path="firefly_s0_011:flash_in-firefly_s0_012:flash_out"/>
+		<EdgeI path="firefly_s0_011:flash_in-firefly_s0_010:flash_out"/>
+	<EdgeI path="firefly_s0_012:tick_in-firefly_s0_012:tick_out"/>
+		<EdgeI path="firefly_s0_012:flash_in-firefly_s0_1612:flash_out"/>
+		<EdgeI path="firefly_s0_012:flash_in-firefly_s0_013:flash_out"/>
+		<EdgeI path="firefly_s0_012:flash_in-firefly_s0_011:flash_out"/>
+	<EdgeI path="firefly_s0_013:tick_in-firefly_s0_013:tick_out"/>
+		<EdgeI path="firefly_s0_013:flash_in-firefly_s0_1613:flash_out"/>
+		<EdgeI path="firefly_s0_013:flash_in-firefly_s0_014:flash_out"/>
+		<EdgeI path="firefly_s0_013:flash_in-firefly_s0_012:flash_out"/>
+	<EdgeI path="firefly_s0_014:tick_in-firefly_s0_014:tick_out"/>
+		<EdgeI path="firefly_s0_014:flash_in-firefly_s0_1614:flash_out"/>
+		<EdgeI path="firefly_s0_014:flash_in-firefly_s0_015:flash_out"/>
+		<EdgeI path="firefly_s0_014:flash_in-firefly_s0_013:flash_out"/>
+	<EdgeI path="firefly_s0_015:tick_in-firefly_s0_015:tick_out"/>
+		<EdgeI path="firefly_s0_015:flash_in-firefly_s0_1615:flash_out"/>
+		<EdgeI path="firefly_s0_015:flash_in-firefly_s0_014:flash_out"/>
+	<EdgeI path="firefly_s0_160:tick_in-firefly_s0_160:tick_out"/>
+		<EdgeI path="firefly_s0_160:flash_in-firefly_s0_320:flash_out"/>
+		<EdgeI path="firefly_s0_160:flash_in-firefly_s0_161:flash_out"/>
+		<EdgeI path="firefly_s0_160:flash_in-firefly_s0_00:flash_out"/>
+	<EdgeI path="firefly_s0_161:tick_in-firefly_s0_161:tick_out"/>
+		<EdgeI path="firefly_s0_161:flash_in-firefly_s0_321:flash_out"/>
+		<EdgeI path="firefly_s0_161:flash_in-firefly_s0_162:flash_out"/>
+		<EdgeI path="firefly_s0_161:flash_in-firefly_s0_01:flash_out"/>
+		<EdgeI path="firefly_s0_161:flash_in-firefly_s0_160:flash_out"/>
+	<EdgeI path="firefly_s0_162:tick_in-firefly_s0_162:tick_out"/>
+		<EdgeI path="firefly_s0_162:flash_in-firefly_s0_322:flash_out"/>
+		<EdgeI path="firefly_s0_162:flash_in-firefly_s0_163:flash_out"/>
+		<EdgeI path="firefly_s0_162:flash_in-firefly_s0_02:flash_out"/>
+		<EdgeI path="firefly_s0_162:flash_in-firefly_s0_161:flash_out"/>
+	<EdgeI path="firefly_s0_163:tick_in-firefly_s0_163:tick_out"/>
+		<EdgeI path="firefly_s0_163:flash_in-firefly_s0_323:flash_out"/>
+		<EdgeI path="firefly_s0_163:flash_in-firefly_s0_164:flash_out"/>
+		<EdgeI path="firefly_s0_163:flash_in-firefly_s0_03:flash_out"/>
+		<EdgeI path="firefly_s0_163:flash_in-firefly_s0_162:flash_out"/>
+	<EdgeI path="firefly_s0_164:tick_in-firefly_s0_164:tick_out"/>
+		<EdgeI path="firefly_s0_164:flash_in-firefly_s0_324:flash_out"/>
+		<EdgeI path="firefly_s0_164:flash_in-firefly_s0_165:flash_out"/>
+		<EdgeI path="firefly_s0_164:flash_in-firefly_s0_04:flash_out"/>
+		<EdgeI path="firefly_s0_164:flash_in-firefly_s0_163:flash_out"/>
+	<EdgeI path="firefly_s0_165:tick_in-firefly_s0_165:tick_out"/>
+		<EdgeI path="firefly_s0_165:flash_in-firefly_s0_325:flash_out"/>
+		<EdgeI path="firefly_s0_165:flash_in-firefly_s0_166:flash_out"/>
+		<EdgeI path="firefly_s0_165:flash_in-firefly_s0_05:flash_out"/>
+		<EdgeI path="firefly_s0_165:flash_in-firefly_s0_164:flash_out"/>
+	<EdgeI path="firefly_s0_166:tick_in-firefly_s0_166:tick_out"/>
+		<EdgeI path="firefly_s0_166:flash_in-firefly_s0_326:flash_out"/>
+		<EdgeI path="firefly_s0_166:flash_in-firefly_s0_167:flash_out"/>
+		<EdgeI path="firefly_s0_166:flash_in-firefly_s0_06:flash_out"/>
+		<EdgeI path="firefly_s0_166:flash_in-firefly_s0_165:flash_out"/>
+	<EdgeI path="firefly_s0_167:tick_in-firefly_s0_167:tick_out"/>
+		<EdgeI path="firefly_s0_167:flash_in-firefly_s0_327:flash_out"/>
+		<EdgeI path="firefly_s0_167:flash_in-firefly_s0_168:flash_out"/>
+		<EdgeI path="firefly_s0_167:flash_in-firefly_s0_07:flash_out"/>
+		<EdgeI path="firefly_s0_167:flash_in-firefly_s0_166:flash_out"/>
+	<EdgeI path="firefly_s0_168:tick_in-firefly_s0_168:tick_out"/>
+		<EdgeI path="firefly_s0_168:flash_in-firefly_s0_328:flash_out"/>
+		<EdgeI path="firefly_s0_168:flash_in-firefly_s0_169:flash_out"/>
+		<EdgeI path="firefly_s0_168:flash_in-firefly_s0_08:flash_out"/>
+		<EdgeI path="firefly_s0_168:flash_in-firefly_s0_167:flash_out"/>
+	<EdgeI path="firefly_s0_169:tick_in-firefly_s0_169:tick_out"/>
+		<EdgeI path="firefly_s0_169:flash_in-firefly_s0_329:flash_out"/>
+		<EdgeI path="firefly_s0_169:flash_in-firefly_s0_1610:flash_out"/>
+		<EdgeI path="firefly_s0_169:flash_in-firefly_s0_09:flash_out"/>
+		<EdgeI path="firefly_s0_169:flash_in-firefly_s0_168:flash_out"/>
+	<EdgeI path="firefly_s0_1610:tick_in-firefly_s0_1610:tick_out"/>
+		<EdgeI path="firefly_s0_1610:flash_in-firefly_s0_3210:flash_out"/>
+		<EdgeI path="firefly_s0_1610:flash_in-firefly_s0_1611:flash_out"/>
+		<EdgeI path="firefly_s0_1610:flash_in-firefly_s0_010:flash_out"/>
+		<EdgeI path="firefly_s0_1610:flash_in-firefly_s0_169:flash_out"/>
+	<EdgeI path="firefly_s0_1611:tick_in-firefly_s0_1611:tick_out"/>
+		<EdgeI path="firefly_s0_1611:flash_in-firefly_s0_3211:flash_out"/>
+		<EdgeI path="firefly_s0_1611:flash_in-firefly_s0_1612:flash_out"/>
+		<EdgeI path="firefly_s0_1611:flash_in-firefly_s0_011:flash_out"/>
+		<EdgeI path="firefly_s0_1611:flash_in-firefly_s0_1610:flash_out"/>
+	<EdgeI path="firefly_s0_1612:tick_in-firefly_s0_1612:tick_out"/>
+		<EdgeI path="firefly_s0_1612:flash_in-firefly_s0_3212:flash_out"/>
+		<EdgeI path="firefly_s0_1612:flash_in-firefly_s0_1613:flash_out"/>
+		<EdgeI path="firefly_s0_1612:flash_in-firefly_s0_012:flash_out"/>
+		<EdgeI path="firefly_s0_1612:flash_in-firefly_s0_1611:flash_out"/>
+	<EdgeI path="firefly_s0_1613:tick_in-firefly_s0_1613:tick_out"/>
+		<EdgeI path="firefly_s0_1613:flash_in-firefly_s0_3213:flash_out"/>
+		<EdgeI path="firefly_s0_1613:flash_in-firefly_s0_1614:flash_out"/>
+		<EdgeI path="firefly_s0_1613:flash_in-firefly_s0_013:flash_out"/>
+		<EdgeI path="firefly_s0_1613:flash_in-firefly_s0_1612:flash_out"/>
+	<EdgeI path="firefly_s0_1614:tick_in-firefly_s0_1614:tick_out"/>
+		<EdgeI path="firefly_s0_1614:flash_in-firefly_s0_3214:flash_out"/>
+		<EdgeI path="firefly_s0_1614:flash_in-firefly_s0_1615:flash_out"/>
+		<EdgeI path="firefly_s0_1614:flash_in-firefly_s0_014:flash_out"/>
+		<EdgeI path="firefly_s0_1614:flash_in-firefly_s0_1613:flash_out"/>
+	<EdgeI path="firefly_s0_1615:tick_in-firefly_s0_1615:tick_out"/>
+		<EdgeI path="firefly_s0_1615:flash_in-firefly_s0_3215:flash_out"/>
+		<EdgeI path="firefly_s0_1615:flash_in-firefly_s0_015:flash_out"/>
+		<EdgeI path="firefly_s0_1615:flash_in-firefly_s0_1614:flash_out"/>
+	<EdgeI path="firefly_s0_320:tick_in-firefly_s0_320:tick_out"/>
+		<EdgeI path="firefly_s0_320:flash_in-firefly_s0_480:flash_out"/>
+		<EdgeI path="firefly_s0_320:flash_in-firefly_s0_321:flash_out"/>
+		<EdgeI path="firefly_s0_320:flash_in-firefly_s0_160:flash_out"/>
+	<EdgeI path="firefly_s0_321:tick_in-firefly_s0_321:tick_out"/>
+		<EdgeI path="firefly_s0_321:flash_in-firefly_s0_481:flash_out"/>
+		<EdgeI path="firefly_s0_321:flash_in-firefly_s0_322:flash_out"/>
+		<EdgeI path="firefly_s0_321:flash_in-firefly_s0_161:flash_out"/>
+		<EdgeI path="firefly_s0_321:flash_in-firefly_s0_320:flash_out"/>
+	<EdgeI path="firefly_s0_322:tick_in-firefly_s0_322:tick_out"/>
+		<EdgeI path="firefly_s0_322:flash_in-firefly_s0_482:flash_out"/>
+		<EdgeI path="firefly_s0_322:flash_in-firefly_s0_323:flash_out"/>
+		<EdgeI path="firefly_s0_322:flash_in-firefly_s0_162:flash_out"/>
+		<EdgeI path="firefly_s0_322:flash_in-firefly_s0_321:flash_out"/>
+	<EdgeI path="firefly_s0_323:tick_in-firefly_s0_323:tick_out"/>
+		<EdgeI path="firefly_s0_323:flash_in-firefly_s0_483:flash_out"/>
+		<EdgeI path="firefly_s0_323:flash_in-firefly_s0_324:flash_out"/>
+		<EdgeI path="firefly_s0_323:flash_in-firefly_s0_163:flash_out"/>
+		<EdgeI path="firefly_s0_323:flash_in-firefly_s0_322:flash_out"/>
+	<EdgeI path="firefly_s0_324:tick_in-firefly_s0_324:tick_out"/>
+		<EdgeI path="firefly_s0_324:flash_in-firefly_s0_484:flash_out"/>
+		<EdgeI path="firefly_s0_324:flash_in-firefly_s0_325:flash_out"/>
+		<EdgeI path="firefly_s0_324:flash_in-firefly_s0_164:flash_out"/>
+		<EdgeI path="firefly_s0_324:flash_in-firefly_s0_323:flash_out"/>
+	<EdgeI path="firefly_s0_325:tick_in-firefly_s0_325:tick_out"/>
+		<EdgeI path="firefly_s0_325:flash_in-firefly_s0_485:flash_out"/>
+		<EdgeI path="firefly_s0_325:flash_in-firefly_s0_326:flash_out"/>
+		<EdgeI path="firefly_s0_325:flash_in-firefly_s0_165:flash_out"/>
+		<EdgeI path="firefly_s0_325:flash_in-firefly_s0_324:flash_out"/>
+	<EdgeI path="firefly_s0_326:tick_in-firefly_s0_326:tick_out"/>
+		<EdgeI path="firefly_s0_326:flash_in-firefly_s0_486:flash_out"/>
+		<EdgeI path="firefly_s0_326:flash_in-firefly_s0_327:flash_out"/>
+		<EdgeI path="firefly_s0_326:flash_in-firefly_s0_166:flash_out"/>
+		<EdgeI path="firefly_s0_326:flash_in-firefly_s0_325:flash_out"/>
+	<EdgeI path="firefly_s0_327:tick_in-firefly_s0_327:tick_out"/>
+		<EdgeI path="firefly_s0_327:flash_in-firefly_s0_487:flash_out"/>
+		<EdgeI path="firefly_s0_327:flash_in-firefly_s0_328:flash_out"/>
+		<EdgeI path="firefly_s0_327:flash_in-firefly_s0_167:flash_out"/>
+		<EdgeI path="firefly_s0_327:flash_in-firefly_s0_326:flash_out"/>
+	<EdgeI path="firefly_s0_328:tick_in-firefly_s0_328:tick_out"/>
+		<EdgeI path="firefly_s0_328:flash_in-firefly_s0_488:flash_out"/>
+		<EdgeI path="firefly_s0_328:flash_in-firefly_s0_329:flash_out"/>
+		<EdgeI path="firefly_s0_328:flash_in-firefly_s0_168:flash_out"/>
+		<EdgeI path="firefly_s0_328:flash_in-firefly_s0_327:flash_out"/>
+	<EdgeI path="firefly_s0_329:tick_in-firefly_s0_329:tick_out"/>
+		<EdgeI path="firefly_s0_329:flash_in-firefly_s0_489:flash_out"/>
+		<EdgeI path="firefly_s0_329:flash_in-firefly_s0_3210:flash_out"/>
+		<EdgeI path="firefly_s0_329:flash_in-firefly_s0_169:flash_out"/>
+		<EdgeI path="firefly_s0_329:flash_in-firefly_s0_328:flash_out"/>
+	<EdgeI path="firefly_s0_3210:tick_in-firefly_s0_3210:tick_out"/>
+		<EdgeI path="firefly_s0_3210:flash_in-firefly_s0_4810:flash_out"/>
+		<EdgeI path="firefly_s0_3210:flash_in-firefly_s0_3211:flash_out"/>
+		<EdgeI path="firefly_s0_3210:flash_in-firefly_s0_1610:flash_out"/>
+		<EdgeI path="firefly_s0_3210:flash_in-firefly_s0_329:flash_out"/>
+	<EdgeI path="firefly_s0_3211:tick_in-firefly_s0_3211:tick_out"/>
+		<EdgeI path="firefly_s0_3211:flash_in-firefly_s0_4811:flash_out"/>
+		<EdgeI path="firefly_s0_3211:flash_in-firefly_s0_3212:flash_out"/>
+		<EdgeI path="firefly_s0_3211:flash_in-firefly_s0_1611:flash_out"/>
+		<EdgeI path="firefly_s0_3211:flash_in-firefly_s0_3210:flash_out"/>
+	<EdgeI path="firefly_s0_3212:tick_in-firefly_s0_3212:tick_out"/>
+		<EdgeI path="firefly_s0_3212:flash_in-firefly_s0_4812:flash_out"/>
+		<EdgeI path="firefly_s0_3212:flash_in-firefly_s0_3213:flash_out"/>
+		<EdgeI path="firefly_s0_3212:flash_in-firefly_s0_1612:flash_out"/>
+		<EdgeI path="firefly_s0_3212:flash_in-firefly_s0_3211:flash_out"/>
+	<EdgeI path="firefly_s0_3213:tick_in-firefly_s0_3213:tick_out"/>
+		<EdgeI path="firefly_s0_3213:flash_in-firefly_s0_4813:flash_out"/>
+		<EdgeI path="firefly_s0_3213:flash_in-firefly_s0_3214:flash_out"/>
+		<EdgeI path="firefly_s0_3213:flash_in-firefly_s0_1613:flash_out"/>
+		<EdgeI path="firefly_s0_3213:flash_in-firefly_s0_3212:flash_out"/>
+	<EdgeI path="firefly_s0_3214:tick_in-firefly_s0_3214:tick_out"/>
+		<EdgeI path="firefly_s0_3214:flash_in-firefly_s0_4814:flash_out"/>
+		<EdgeI path="firefly_s0_3214:flash_in-firefly_s0_3215:flash_out"/>
+		<EdgeI path="firefly_s0_3214:flash_in-firefly_s0_1614:flash_out"/>
+		<EdgeI path="firefly_s0_3214:flash_in-firefly_s0_3213:flash_out"/>
+	<EdgeI path="firefly_s0_3215:tick_in-firefly_s0_3215:tick_out"/>
+		<EdgeI path="firefly_s0_3215:flash_in-firefly_s0_4815:flash_out"/>
+		<EdgeI path="firefly_s0_3215:flash_in-firefly_s0_1615:flash_out"/>
+		<EdgeI path="firefly_s0_3215:flash_in-firefly_s0_3214:flash_out"/>
+	<EdgeI path="firefly_s0_480:tick_in-firefly_s0_480:tick_out"/>
+		<EdgeI path="firefly_s0_480:flash_in-firefly_s0_640:flash_out"/>
+		<EdgeI path="firefly_s0_480:flash_in-firefly_s0_481:flash_out"/>
+		<EdgeI path="firefly_s0_480:flash_in-firefly_s0_320:flash_out"/>
+	<EdgeI path="firefly_s0_481:tick_in-firefly_s0_481:tick_out"/>
+		<EdgeI path="firefly_s0_481:flash_in-firefly_s0_641:flash_out"/>
+		<EdgeI path="firefly_s0_481:flash_in-firefly_s0_482:flash_out"/>
+		<EdgeI path="firefly_s0_481:flash_in-firefly_s0_321:flash_out"/>
+		<EdgeI path="firefly_s0_481:flash_in-firefly_s0_480:flash_out"/>
+	<EdgeI path="firefly_s0_482:tick_in-firefly_s0_482:tick_out"/>
+		<EdgeI path="firefly_s0_482:flash_in-firefly_s0_642:flash_out"/>
+		<EdgeI path="firefly_s0_482:flash_in-firefly_s0_483:flash_out"/>
+		<EdgeI path="firefly_s0_482:flash_in-firefly_s0_322:flash_out"/>
+		<EdgeI path="firefly_s0_482:flash_in-firefly_s0_481:flash_out"/>
+	<EdgeI path="firefly_s0_483:tick_in-firefly_s0_483:tick_out"/>
+		<EdgeI path="firefly_s0_483:flash_in-firefly_s0_643:flash_out"/>
+		<EdgeI path="firefly_s0_483:flash_in-firefly_s0_484:flash_out"/>
+		<EdgeI path="firefly_s0_483:flash_in-firefly_s0_323:flash_out"/>
+		<EdgeI path="firefly_s0_483:flash_in-firefly_s0_482:flash_out"/>
+	<EdgeI path="firefly_s0_484:tick_in-firefly_s0_484:tick_out"/>
+		<EdgeI path="firefly_s0_484:flash_in-firefly_s0_644:flash_out"/>
+		<EdgeI path="firefly_s0_484:flash_in-firefly_s0_485:flash_out"/>
+		<EdgeI path="firefly_s0_484:flash_in-firefly_s0_324:flash_out"/>
+		<EdgeI path="firefly_s0_484:flash_in-firefly_s0_483:flash_out"/>
+	<EdgeI path="firefly_s0_485:tick_in-firefly_s0_485:tick_out"/>
+		<EdgeI path="firefly_s0_485:flash_in-firefly_s0_645:flash_out"/>
+		<EdgeI path="firefly_s0_485:flash_in-firefly_s0_486:flash_out"/>
+		<EdgeI path="firefly_s0_485:flash_in-firefly_s0_325:flash_out"/>
+		<EdgeI path="firefly_s0_485:flash_in-firefly_s0_484:flash_out"/>
+	<EdgeI path="firefly_s0_486:tick_in-firefly_s0_486:tick_out"/>
+		<EdgeI path="firefly_s0_486:flash_in-firefly_s0_646:flash_out"/>
+		<EdgeI path="firefly_s0_486:flash_in-firefly_s0_487:flash_out"/>
+		<EdgeI path="firefly_s0_486:flash_in-firefly_s0_326:flash_out"/>
+		<EdgeI path="firefly_s0_486:flash_in-firefly_s0_485:flash_out"/>
+	<EdgeI path="firefly_s0_487:tick_in-firefly_s0_487:tick_out"/>
+		<EdgeI path="firefly_s0_487:flash_in-firefly_s0_647:flash_out"/>
+		<EdgeI path="firefly_s0_487:flash_in-firefly_s0_488:flash_out"/>
+		<EdgeI path="firefly_s0_487:flash_in-firefly_s0_327:flash_out"/>
+		<EdgeI path="firefly_s0_487:flash_in-firefly_s0_486:flash_out"/>
+	<EdgeI path="firefly_s0_488:tick_in-firefly_s0_488:tick_out"/>
+		<EdgeI path="firefly_s0_488:flash_in-firefly_s0_648:flash_out"/>
+		<EdgeI path="firefly_s0_488:flash_in-firefly_s0_489:flash_out"/>
+		<EdgeI path="firefly_s0_488:flash_in-firefly_s0_328:flash_out"/>
+		<EdgeI path="firefly_s0_488:flash_in-firefly_s0_487:flash_out"/>
+	<EdgeI path="firefly_s0_489:tick_in-firefly_s0_489:tick_out"/>
+		<EdgeI path="firefly_s0_489:flash_in-firefly_s0_649:flash_out"/>
+		<EdgeI path="firefly_s0_489:flash_in-firefly_s0_4810:flash_out"/>
+		<EdgeI path="firefly_s0_489:flash_in-firefly_s0_329:flash_out"/>
+		<EdgeI path="firefly_s0_489:flash_in-firefly_s0_488:flash_out"/>
+	<EdgeI path="firefly_s0_4810:tick_in-firefly_s0_4810:tick_out"/>
+		<EdgeI path="firefly_s0_4810:flash_in-firefly_s0_6410:flash_out"/>
+		<EdgeI path="firefly_s0_4810:flash_in-firefly_s0_4811:flash_out"/>
+		<EdgeI path="firefly_s0_4810:flash_in-firefly_s0_3210:flash_out"/>
+		<EdgeI path="firefly_s0_4810:flash_in-firefly_s0_489:flash_out"/>
+	<EdgeI path="firefly_s0_4811:tick_in-firefly_s0_4811:tick_out"/>
+		<EdgeI path="firefly_s0_4811:flash_in-firefly_s0_6411:flash_out"/>
+		<EdgeI path="firefly_s0_4811:flash_in-firefly_s0_4812:flash_out"/>
+		<EdgeI path="firefly_s0_4811:flash_in-firefly_s0_3211:flash_out"/>
+		<EdgeI path="firefly_s0_4811:flash_in-firefly_s0_4810:flash_out"/>
+	<EdgeI path="firefly_s0_4812:tick_in-firefly_s0_4812:tick_out"/>
+		<EdgeI path="firefly_s0_4812:flash_in-firefly_s0_6412:flash_out"/>
+		<EdgeI path="firefly_s0_4812:flash_in-firefly_s0_4813:flash_out"/>
+		<EdgeI path="firefly_s0_4812:flash_in-firefly_s0_3212:flash_out"/>
+		<EdgeI path="firefly_s0_4812:flash_in-firefly_s0_4811:flash_out"/>
+	<EdgeI path="firefly_s0_4813:tick_in-firefly_s0_4813:tick_out"/>
+		<EdgeI path="firefly_s0_4813:flash_in-firefly_s0_6413:flash_out"/>
+		<EdgeI path="firefly_s0_4813:flash_in-firefly_s0_4814:flash_out"/>
+		<EdgeI path="firefly_s0_4813:flash_in-firefly_s0_3213:flash_out"/>
+		<EdgeI path="firefly_s0_4813:flash_in-firefly_s0_4812:flash_out"/>
+	<EdgeI path="firefly_s0_4814:tick_in-firefly_s0_4814:tick_out"/>
+		<EdgeI path="firefly_s0_4814:flash_in-firefly_s0_6414:flash_out"/>
+		<EdgeI path="firefly_s0_4814:flash_in-firefly_s0_4815:flash_out"/>
+		<EdgeI path="firefly_s0_4814:flash_in-firefly_s0_3214:flash_out"/>
+		<EdgeI path="firefly_s0_4814:flash_in-firefly_s0_4813:flash_out"/>
+	<EdgeI path="firefly_s0_4815:tick_in-firefly_s0_4815:tick_out"/>
+		<EdgeI path="firefly_s0_4815:flash_in-firefly_s0_6415:flash_out"/>
+		<EdgeI path="firefly_s0_4815:flash_in-firefly_s0_3215:flash_out"/>
+		<EdgeI path="firefly_s0_4815:flash_in-firefly_s0_4814:flash_out"/>
+	<EdgeI path="firefly_s0_640:tick_in-firefly_s0_640:tick_out"/>
+		<EdgeI path="firefly_s0_640:flash_in-firefly_s0_800:flash_out"/>
+		<EdgeI path="firefly_s0_640:flash_in-firefly_s0_641:flash_out"/>
+		<EdgeI path="firefly_s0_640:flash_in-firefly_s0_480:flash_out"/>
+	<EdgeI path="firefly_s0_641:tick_in-firefly_s0_641:tick_out"/>
+		<EdgeI path="firefly_s0_641:flash_in-firefly_s0_801:flash_out"/>
+		<EdgeI path="firefly_s0_641:flash_in-firefly_s0_642:flash_out"/>
+		<EdgeI path="firefly_s0_641:flash_in-firefly_s0_481:flash_out"/>
+		<EdgeI path="firefly_s0_641:flash_in-firefly_s0_640:flash_out"/>
+	<EdgeI path="firefly_s0_642:tick_in-firefly_s0_642:tick_out"/>
+		<EdgeI path="firefly_s0_642:flash_in-firefly_s0_802:flash_out"/>
+		<EdgeI path="firefly_s0_642:flash_in-firefly_s0_643:flash_out"/>
+		<EdgeI path="firefly_s0_642:flash_in-firefly_s0_482:flash_out"/>
+		<EdgeI path="firefly_s0_642:flash_in-firefly_s0_641:flash_out"/>
+	<EdgeI path="firefly_s0_643:tick_in-firefly_s0_643:tick_out"/>
+		<EdgeI path="firefly_s0_643:flash_in-firefly_s0_803:flash_out"/>
+		<EdgeI path="firefly_s0_643:flash_in-firefly_s0_644:flash_out"/>
+		<EdgeI path="firefly_s0_643:flash_in-firefly_s0_483:flash_out"/>
+		<EdgeI path="firefly_s0_643:flash_in-firefly_s0_642:flash_out"/>
+	<EdgeI path="firefly_s0_644:tick_in-firefly_s0_644:tick_out"/>
+		<EdgeI path="firefly_s0_644:flash_in-firefly_s0_804:flash_out"/>
+		<EdgeI path="firefly_s0_644:flash_in-firefly_s0_645:flash_out"/>
+		<EdgeI path="firefly_s0_644:flash_in-firefly_s0_484:flash_out"/>
+		<EdgeI path="firefly_s0_644:flash_in-firefly_s0_643:flash_out"/>
+	<EdgeI path="firefly_s0_645:tick_in-firefly_s0_645:tick_out"/>
+		<EdgeI path="firefly_s0_645:flash_in-firefly_s0_805:flash_out"/>
+		<EdgeI path="firefly_s0_645:flash_in-firefly_s0_646:flash_out"/>
+		<EdgeI path="firefly_s0_645:flash_in-firefly_s0_485:flash_out"/>
+		<EdgeI path="firefly_s0_645:flash_in-firefly_s0_644:flash_out"/>
+	<EdgeI path="firefly_s0_646:tick_in-firefly_s0_646:tick_out"/>
+		<EdgeI path="firefly_s0_646:flash_in-firefly_s0_806:flash_out"/>
+		<EdgeI path="firefly_s0_646:flash_in-firefly_s0_647:flash_out"/>
+		<EdgeI path="firefly_s0_646:flash_in-firefly_s0_486:flash_out"/>
+		<EdgeI path="firefly_s0_646:flash_in-firefly_s0_645:flash_out"/>
+	<EdgeI path="firefly_s0_647:tick_in-firefly_s0_647:tick_out"/>
+		<EdgeI path="firefly_s0_647:flash_in-firefly_s0_807:flash_out"/>
+		<EdgeI path="firefly_s0_647:flash_in-firefly_s0_648:flash_out"/>
+		<EdgeI path="firefly_s0_647:flash_in-firefly_s0_487:flash_out"/>
+		<EdgeI path="firefly_s0_647:flash_in-firefly_s0_646:flash_out"/>
+	<EdgeI path="firefly_s0_648:tick_in-firefly_s0_648:tick_out"/>
+		<EdgeI path="firefly_s0_648:flash_in-firefly_s0_808:flash_out"/>
+		<EdgeI path="firefly_s0_648:flash_in-firefly_s0_649:flash_out"/>
+		<EdgeI path="firefly_s0_648:flash_in-firefly_s0_488:flash_out"/>
+		<EdgeI path="firefly_s0_648:flash_in-firefly_s0_647:flash_out"/>
+	<EdgeI path="firefly_s0_649:tick_in-firefly_s0_649:tick_out"/>
+		<EdgeI path="firefly_s0_649:flash_in-firefly_s0_809:flash_out"/>
+		<EdgeI path="firefly_s0_649:flash_in-firefly_s0_6410:flash_out"/>
+		<EdgeI path="firefly_s0_649:flash_in-firefly_s0_489:flash_out"/>
+		<EdgeI path="firefly_s0_649:flash_in-firefly_s0_648:flash_out"/>
+	<EdgeI path="firefly_s0_6410:tick_in-firefly_s0_6410:tick_out"/>
+		<EdgeI path="firefly_s0_6410:flash_in-firefly_s0_8010:flash_out"/>
+		<EdgeI path="firefly_s0_6410:flash_in-firefly_s0_6411:flash_out"/>
+		<EdgeI path="firefly_s0_6410:flash_in-firefly_s0_4810:flash_out"/>
+		<EdgeI path="firefly_s0_6410:flash_in-firefly_s0_649:flash_out"/>
+	<EdgeI path="firefly_s0_6411:tick_in-firefly_s0_6411:tick_out"/>
+		<EdgeI path="firefly_s0_6411:flash_in-firefly_s0_8011:flash_out"/>
+		<EdgeI path="firefly_s0_6411:flash_in-firefly_s0_6412:flash_out"/>
+		<EdgeI path="firefly_s0_6411:flash_in-firefly_s0_4811:flash_out"/>
+		<EdgeI path="firefly_s0_6411:flash_in-firefly_s0_6410:flash_out"/>
+	<EdgeI path="firefly_s0_6412:tick_in-firefly_s0_6412:tick_out"/>
+		<EdgeI path="firefly_s0_6412:flash_in-firefly_s0_8012:flash_out"/>
+		<EdgeI path="firefly_s0_6412:flash_in-firefly_s0_6413:flash_out"/>
+		<EdgeI path="firefly_s0_6412:flash_in-firefly_s0_4812:flash_out"/>
+		<EdgeI path="firefly_s0_6412:flash_in-firefly_s0_6411:flash_out"/>
+	<EdgeI path="firefly_s0_6413:tick_in-firefly_s0_6413:tick_out"/>
+		<EdgeI path="firefly_s0_6413:flash_in-firefly_s0_8013:flash_out"/>
+		<EdgeI path="firefly_s0_6413:flash_in-firefly_s0_6414:flash_out"/>
+		<EdgeI path="firefly_s0_6413:flash_in-firefly_s0_4813:flash_out"/>
+		<EdgeI path="firefly_s0_6413:flash_in-firefly_s0_6412:flash_out"/>
+	<EdgeI path="firefly_s0_6414:tick_in-firefly_s0_6414:tick_out"/>
+		<EdgeI path="firefly_s0_6414:flash_in-firefly_s0_8014:flash_out"/>
+		<EdgeI path="firefly_s0_6414:flash_in-firefly_s0_6415:flash_out"/>
+		<EdgeI path="firefly_s0_6414:flash_in-firefly_s0_4814:flash_out"/>
+		<EdgeI path="firefly_s0_6414:flash_in-firefly_s0_6413:flash_out"/>
+	<EdgeI path="firefly_s0_6415:tick_in-firefly_s0_6415:tick_out"/>
+		<EdgeI path="firefly_s0_6415:flash_in-firefly_s0_8015:flash_out"/>
+		<EdgeI path="firefly_s0_6415:flash_in-firefly_s0_4815:flash_out"/>
+		<EdgeI path="firefly_s0_6415:flash_in-firefly_s0_6414:flash_out"/>
+	<EdgeI path="firefly_s0_800:tick_in-firefly_s0_800:tick_out"/>
+		<EdgeI path="firefly_s0_800:flash_in-firefly_s0_960:flash_out"/>
+		<EdgeI path="firefly_s0_800:flash_in-firefly_s0_801:flash_out"/>
+		<EdgeI path="firefly_s0_800:flash_in-firefly_s0_640:flash_out"/>
+	<EdgeI path="firefly_s0_801:tick_in-firefly_s0_801:tick_out"/>
+		<EdgeI path="firefly_s0_801:flash_in-firefly_s0_961:flash_out"/>
+		<EdgeI path="firefly_s0_801:flash_in-firefly_s0_802:flash_out"/>
+		<EdgeI path="firefly_s0_801:flash_in-firefly_s0_641:flash_out"/>
+		<EdgeI path="firefly_s0_801:flash_in-firefly_s0_800:flash_out"/>
+	<EdgeI path="firefly_s0_802:tick_in-firefly_s0_802:tick_out"/>
+		<EdgeI path="firefly_s0_802:flash_in-firefly_s0_962:flash_out"/>
+		<EdgeI path="firefly_s0_802:flash_in-firefly_s0_803:flash_out"/>
+		<EdgeI path="firefly_s0_802:flash_in-firefly_s0_642:flash_out"/>
+		<EdgeI path="firefly_s0_802:flash_in-firefly_s0_801:flash_out"/>
+	<EdgeI path="firefly_s0_803:tick_in-firefly_s0_803:tick_out"/>
+		<EdgeI path="firefly_s0_803:flash_in-firefly_s0_963:flash_out"/>
+		<EdgeI path="firefly_s0_803:flash_in-firefly_s0_804:flash_out"/>
+		<EdgeI path="firefly_s0_803:flash_in-firefly_s0_643:flash_out"/>
+		<EdgeI path="firefly_s0_803:flash_in-firefly_s0_802:flash_out"/>
+	<EdgeI path="firefly_s0_804:tick_in-firefly_s0_804:tick_out"/>
+		<EdgeI path="firefly_s0_804:flash_in-firefly_s0_964:flash_out"/>
+		<EdgeI path="firefly_s0_804:flash_in-firefly_s0_805:flash_out"/>
+		<EdgeI path="firefly_s0_804:flash_in-firefly_s0_644:flash_out"/>
+		<EdgeI path="firefly_s0_804:flash_in-firefly_s0_803:flash_out"/>
+	<EdgeI path="firefly_s0_805:tick_in-firefly_s0_805:tick_out"/>
+		<EdgeI path="firefly_s0_805:flash_in-firefly_s0_965:flash_out"/>
+		<EdgeI path="firefly_s0_805:flash_in-firefly_s0_806:flash_out"/>
+		<EdgeI path="firefly_s0_805:flash_in-firefly_s0_645:flash_out"/>
+		<EdgeI path="firefly_s0_805:flash_in-firefly_s0_804:flash_out"/>
+	<EdgeI path="firefly_s0_806:tick_in-firefly_s0_806:tick_out"/>
+		<EdgeI path="firefly_s0_806:flash_in-firefly_s0_966:flash_out"/>
+		<EdgeI path="firefly_s0_806:flash_in-firefly_s0_807:flash_out"/>
+		<EdgeI path="firefly_s0_806:flash_in-firefly_s0_646:flash_out"/>
+		<EdgeI path="firefly_s0_806:flash_in-firefly_s0_805:flash_out"/>
+	<EdgeI path="firefly_s0_807:tick_in-firefly_s0_807:tick_out"/>
+		<EdgeI path="firefly_s0_807:flash_in-firefly_s0_967:flash_out"/>
+		<EdgeI path="firefly_s0_807:flash_in-firefly_s0_808:flash_out"/>
+		<EdgeI path="firefly_s0_807:flash_in-firefly_s0_647:flash_out"/>
+		<EdgeI path="firefly_s0_807:flash_in-firefly_s0_806:flash_out"/>
+	<EdgeI path="firefly_s0_808:tick_in-firefly_s0_808:tick_out"/>
+		<EdgeI path="firefly_s0_808:flash_in-firefly_s0_968:flash_out"/>
+		<EdgeI path="firefly_s0_808:flash_in-firefly_s0_809:flash_out"/>
+		<EdgeI path="firefly_s0_808:flash_in-firefly_s0_648:flash_out"/>
+		<EdgeI path="firefly_s0_808:flash_in-firefly_s0_807:flash_out"/>
+	<EdgeI path="firefly_s0_809:tick_in-firefly_s0_809:tick_out"/>
+		<EdgeI path="firefly_s0_809:flash_in-firefly_s0_969:flash_out"/>
+		<EdgeI path="firefly_s0_809:flash_in-firefly_s0_8010:flash_out"/>
+		<EdgeI path="firefly_s0_809:flash_in-firefly_s0_649:flash_out"/>
+		<EdgeI path="firefly_s0_809:flash_in-firefly_s0_808:flash_out"/>
+	<EdgeI path="firefly_s0_8010:tick_in-firefly_s0_8010:tick_out"/>
+		<EdgeI path="firefly_s0_8010:flash_in-firefly_s0_9610:flash_out"/>
+		<EdgeI path="firefly_s0_8010:flash_in-firefly_s0_8011:flash_out"/>
+		<EdgeI path="firefly_s0_8010:flash_in-firefly_s0_6410:flash_out"/>
+		<EdgeI path="firefly_s0_8010:flash_in-firefly_s0_809:flash_out"/>
+	<EdgeI path="firefly_s0_8011:tick_in-firefly_s0_8011:tick_out"/>
+		<EdgeI path="firefly_s0_8011:flash_in-firefly_s0_9611:flash_out"/>
+		<EdgeI path="firefly_s0_8011:flash_in-firefly_s0_8012:flash_out"/>
+		<EdgeI path="firefly_s0_8011:flash_in-firefly_s0_6411:flash_out"/>
+		<EdgeI path="firefly_s0_8011:flash_in-firefly_s0_8010:flash_out"/>
+	<EdgeI path="firefly_s0_8012:tick_in-firefly_s0_8012:tick_out"/>
+		<EdgeI path="firefly_s0_8012:flash_in-firefly_s0_9612:flash_out"/>
+		<EdgeI path="firefly_s0_8012:flash_in-firefly_s0_8013:flash_out"/>
+		<EdgeI path="firefly_s0_8012:flash_in-firefly_s0_6412:flash_out"/>
+		<EdgeI path="firefly_s0_8012:flash_in-firefly_s0_8011:flash_out"/>
+	<EdgeI path="firefly_s0_8013:tick_in-firefly_s0_8013:tick_out"/>
+		<EdgeI path="firefly_s0_8013:flash_in-firefly_s0_9613:flash_out"/>
+		<EdgeI path="firefly_s0_8013:flash_in-firefly_s0_8014:flash_out"/>
+		<EdgeI path="firefly_s0_8013:flash_in-firefly_s0_6413:flash_out"/>
+		<EdgeI path="firefly_s0_8013:flash_in-firefly_s0_8012:flash_out"/>
+	<EdgeI path="firefly_s0_8014:tick_in-firefly_s0_8014:tick_out"/>
+		<EdgeI path="firefly_s0_8014:flash_in-firefly_s0_9614:flash_out"/>
+		<EdgeI path="firefly_s0_8014:flash_in-firefly_s0_8015:flash_out"/>
+		<EdgeI path="firefly_s0_8014:flash_in-firefly_s0_6414:flash_out"/>
+		<EdgeI path="firefly_s0_8014:flash_in-firefly_s0_8013:flash_out"/>
+	<EdgeI path="firefly_s0_8015:tick_in-firefly_s0_8015:tick_out"/>
+		<EdgeI path="firefly_s0_8015:flash_in-firefly_s0_9615:flash_out"/>
+		<EdgeI path="firefly_s0_8015:flash_in-firefly_s0_6415:flash_out"/>
+		<EdgeI path="firefly_s0_8015:flash_in-firefly_s0_8014:flash_out"/>
+	<EdgeI path="firefly_s0_960:tick_in-firefly_s0_960:tick_out"/>
+		<EdgeI path="firefly_s0_960:flash_in-firefly_s0_1120:flash_out"/>
+		<EdgeI path="firefly_s0_960:flash_in-firefly_s0_961:flash_out"/>
+		<EdgeI path="firefly_s0_960:flash_in-firefly_s0_800:flash_out"/>
+	<EdgeI path="firefly_s0_961:tick_in-firefly_s0_961:tick_out"/>
+		<EdgeI path="firefly_s0_961:flash_in-firefly_s0_1121:flash_out"/>
+		<EdgeI path="firefly_s0_961:flash_in-firefly_s0_962:flash_out"/>
+		<EdgeI path="firefly_s0_961:flash_in-firefly_s0_801:flash_out"/>
+		<EdgeI path="firefly_s0_961:flash_in-firefly_s0_960:flash_out"/>
+	<EdgeI path="firefly_s0_962:tick_in-firefly_s0_962:tick_out"/>
+		<EdgeI path="firefly_s0_962:flash_in-firefly_s0_1122:flash_out"/>
+		<EdgeI path="firefly_s0_962:flash_in-firefly_s0_963:flash_out"/>
+		<EdgeI path="firefly_s0_962:flash_in-firefly_s0_802:flash_out"/>
+		<EdgeI path="firefly_s0_962:flash_in-firefly_s0_961:flash_out"/>
+	<EdgeI path="firefly_s0_963:tick_in-firefly_s0_963:tick_out"/>
+		<EdgeI path="firefly_s0_963:flash_in-firefly_s0_1123:flash_out"/>
+		<EdgeI path="firefly_s0_963:flash_in-firefly_s0_964:flash_out"/>
+		<EdgeI path="firefly_s0_963:flash_in-firefly_s0_803:flash_out"/>
+		<EdgeI path="firefly_s0_963:flash_in-firefly_s0_962:flash_out"/>
+	<EdgeI path="firefly_s0_964:tick_in-firefly_s0_964:tick_out"/>
+		<EdgeI path="firefly_s0_964:flash_in-firefly_s0_1124:flash_out"/>
+		<EdgeI path="firefly_s0_964:flash_in-firefly_s0_965:flash_out"/>
+		<EdgeI path="firefly_s0_964:flash_in-firefly_s0_804:flash_out"/>
+		<EdgeI path="firefly_s0_964:flash_in-firefly_s0_963:flash_out"/>
+	<EdgeI path="firefly_s0_965:tick_in-firefly_s0_965:tick_out"/>
+		<EdgeI path="firefly_s0_965:flash_in-firefly_s0_1125:flash_out"/>
+		<EdgeI path="firefly_s0_965:flash_in-firefly_s0_966:flash_out"/>
+		<EdgeI path="firefly_s0_965:flash_in-firefly_s0_805:flash_out"/>
+		<EdgeI path="firefly_s0_965:flash_in-firefly_s0_964:flash_out"/>
+	<EdgeI path="firefly_s0_966:tick_in-firefly_s0_966:tick_out"/>
+		<EdgeI path="firefly_s0_966:flash_in-firefly_s0_1126:flash_out"/>
+		<EdgeI path="firefly_s0_966:flash_in-firefly_s0_967:flash_out"/>
+		<EdgeI path="firefly_s0_966:flash_in-firefly_s0_806:flash_out"/>
+		<EdgeI path="firefly_s0_966:flash_in-firefly_s0_965:flash_out"/>
+	<EdgeI path="firefly_s0_967:tick_in-firefly_s0_967:tick_out"/>
+		<EdgeI path="firefly_s0_967:flash_in-firefly_s0_1127:flash_out"/>
+		<EdgeI path="firefly_s0_967:flash_in-firefly_s0_968:flash_out"/>
+		<EdgeI path="firefly_s0_967:flash_in-firefly_s0_807:flash_out"/>
+		<EdgeI path="firefly_s0_967:flash_in-firefly_s0_966:flash_out"/>
+	<EdgeI path="firefly_s0_968:tick_in-firefly_s0_968:tick_out"/>
+		<EdgeI path="firefly_s0_968:flash_in-firefly_s0_1128:flash_out"/>
+		<EdgeI path="firefly_s0_968:flash_in-firefly_s0_969:flash_out"/>
+		<EdgeI path="firefly_s0_968:flash_in-firefly_s0_808:flash_out"/>
+		<EdgeI path="firefly_s0_968:flash_in-firefly_s0_967:flash_out"/>
+	<EdgeI path="firefly_s0_969:tick_in-firefly_s0_969:tick_out"/>
+		<EdgeI path="firefly_s0_969:flash_in-firefly_s0_1129:flash_out"/>
+		<EdgeI path="firefly_s0_969:flash_in-firefly_s0_9610:flash_out"/>
+		<EdgeI path="firefly_s0_969:flash_in-firefly_s0_809:flash_out"/>
+		<EdgeI path="firefly_s0_969:flash_in-firefly_s0_968:flash_out"/>
+	<EdgeI path="firefly_s0_9610:tick_in-firefly_s0_9610:tick_out"/>
+		<EdgeI path="firefly_s0_9610:flash_in-firefly_s0_11210:flash_out"/>
+		<EdgeI path="firefly_s0_9610:flash_in-firefly_s0_9611:flash_out"/>
+		<EdgeI path="firefly_s0_9610:flash_in-firefly_s0_8010:flash_out"/>
+		<EdgeI path="firefly_s0_9610:flash_in-firefly_s0_969:flash_out"/>
+	<EdgeI path="firefly_s0_9611:tick_in-firefly_s0_9611:tick_out"/>
+		<EdgeI path="firefly_s0_9611:flash_in-firefly_s0_11211:flash_out"/>
+		<EdgeI path="firefly_s0_9611:flash_in-firefly_s0_9612:flash_out"/>
+		<EdgeI path="firefly_s0_9611:flash_in-firefly_s0_8011:flash_out"/>
+		<EdgeI path="firefly_s0_9611:flash_in-firefly_s0_9610:flash_out"/>
+	<EdgeI path="firefly_s0_9612:tick_in-firefly_s0_9612:tick_out"/>
+		<EdgeI path="firefly_s0_9612:flash_in-firefly_s0_11212:flash_out"/>
+		<EdgeI path="firefly_s0_9612:flash_in-firefly_s0_9613:flash_out"/>
+		<EdgeI path="firefly_s0_9612:flash_in-firefly_s0_8012:flash_out"/>
+		<EdgeI path="firefly_s0_9612:flash_in-firefly_s0_9611:flash_out"/>
+	<EdgeI path="firefly_s0_9613:tick_in-firefly_s0_9613:tick_out"/>
+		<EdgeI path="firefly_s0_9613:flash_in-firefly_s0_11213:flash_out"/>
+		<EdgeI path="firefly_s0_9613:flash_in-firefly_s0_9614:flash_out"/>
+		<EdgeI path="firefly_s0_9613:flash_in-firefly_s0_8013:flash_out"/>
+		<EdgeI path="firefly_s0_9613:flash_in-firefly_s0_9612:flash_out"/>
+	<EdgeI path="firefly_s0_9614:tick_in-firefly_s0_9614:tick_out"/>
+		<EdgeI path="firefly_s0_9614:flash_in-firefly_s0_11214:flash_out"/>
+		<EdgeI path="firefly_s0_9614:flash_in-firefly_s0_9615:flash_out"/>
+		<EdgeI path="firefly_s0_9614:flash_in-firefly_s0_8014:flash_out"/>
+		<EdgeI path="firefly_s0_9614:flash_in-firefly_s0_9613:flash_out"/>
+	<EdgeI path="firefly_s0_9615:tick_in-firefly_s0_9615:tick_out"/>
+		<EdgeI path="firefly_s0_9615:flash_in-firefly_s0_11215:flash_out"/>
+		<EdgeI path="firefly_s0_9615:flash_in-firefly_s0_8015:flash_out"/>
+		<EdgeI path="firefly_s0_9615:flash_in-firefly_s0_9614:flash_out"/>
+	<EdgeI path="firefly_s0_1120:tick_in-firefly_s0_1120:tick_out"/>
+		<EdgeI path="firefly_s0_1120:flash_in-firefly_s0_1280:flash_out"/>
+		<EdgeI path="firefly_s0_1120:flash_in-firefly_s0_1121:flash_out"/>
+		<EdgeI path="firefly_s0_1120:flash_in-firefly_s0_960:flash_out"/>
+	<EdgeI path="firefly_s0_1121:tick_in-firefly_s0_1121:tick_out"/>
+		<EdgeI path="firefly_s0_1121:flash_in-firefly_s0_1281:flash_out"/>
+		<EdgeI path="firefly_s0_1121:flash_in-firefly_s0_1122:flash_out"/>
+		<EdgeI path="firefly_s0_1121:flash_in-firefly_s0_961:flash_out"/>
+		<EdgeI path="firefly_s0_1121:flash_in-firefly_s0_1120:flash_out"/>
+	<EdgeI path="firefly_s0_1122:tick_in-firefly_s0_1122:tick_out"/>
+		<EdgeI path="firefly_s0_1122:flash_in-firefly_s0_1282:flash_out"/>
+		<EdgeI path="firefly_s0_1122:flash_in-firefly_s0_1123:flash_out"/>
+		<EdgeI path="firefly_s0_1122:flash_in-firefly_s0_962:flash_out"/>
+		<EdgeI path="firefly_s0_1122:flash_in-firefly_s0_1121:flash_out"/>
+	<EdgeI path="firefly_s0_1123:tick_in-firefly_s0_1123:tick_out"/>
+		<EdgeI path="firefly_s0_1123:flash_in-firefly_s0_1283:flash_out"/>
+		<EdgeI path="firefly_s0_1123:flash_in-firefly_s0_1124:flash_out"/>
+		<EdgeI path="firefly_s0_1123:flash_in-firefly_s0_963:flash_out"/>
+		<EdgeI path="firefly_s0_1123:flash_in-firefly_s0_1122:flash_out"/>
+	<EdgeI path="firefly_s0_1124:tick_in-firefly_s0_1124:tick_out"/>
+		<EdgeI path="firefly_s0_1124:flash_in-firefly_s0_1284:flash_out"/>
+		<EdgeI path="firefly_s0_1124:flash_in-firefly_s0_1125:flash_out"/>
+		<EdgeI path="firefly_s0_1124:flash_in-firefly_s0_964:flash_out"/>
+		<EdgeI path="firefly_s0_1124:flash_in-firefly_s0_1123:flash_out"/>
+	<EdgeI path="firefly_s0_1125:tick_in-firefly_s0_1125:tick_out"/>
+		<EdgeI path="firefly_s0_1125:flash_in-firefly_s0_1285:flash_out"/>
+		<EdgeI path="firefly_s0_1125:flash_in-firefly_s0_1126:flash_out"/>
+		<EdgeI path="firefly_s0_1125:flash_in-firefly_s0_965:flash_out"/>
+		<EdgeI path="firefly_s0_1125:flash_in-firefly_s0_1124:flash_out"/>
+	<EdgeI path="firefly_s0_1126:tick_in-firefly_s0_1126:tick_out"/>
+		<EdgeI path="firefly_s0_1126:flash_in-firefly_s0_1286:flash_out"/>
+		<EdgeI path="firefly_s0_1126:flash_in-firefly_s0_1127:flash_out"/>
+		<EdgeI path="firefly_s0_1126:flash_in-firefly_s0_966:flash_out"/>
+		<EdgeI path="firefly_s0_1126:flash_in-firefly_s0_1125:flash_out"/>
+	<EdgeI path="firefly_s0_1127:tick_in-firefly_s0_1127:tick_out"/>
+		<EdgeI path="firefly_s0_1127:flash_in-firefly_s0_1287:flash_out"/>
+		<EdgeI path="firefly_s0_1127:flash_in-firefly_s0_1128:flash_out"/>
+		<EdgeI path="firefly_s0_1127:flash_in-firefly_s0_967:flash_out"/>
+		<EdgeI path="firefly_s0_1127:flash_in-firefly_s0_1126:flash_out"/>
+	<EdgeI path="firefly_s0_1128:tick_in-firefly_s0_1128:tick_out"/>
+		<EdgeI path="firefly_s0_1128:flash_in-firefly_s0_1288:flash_out"/>
+		<EdgeI path="firefly_s0_1128:flash_in-firefly_s0_1129:flash_out"/>
+		<EdgeI path="firefly_s0_1128:flash_in-firefly_s0_968:flash_out"/>
+		<EdgeI path="firefly_s0_1128:flash_in-firefly_s0_1127:flash_out"/>
+	<EdgeI path="firefly_s0_1129:tick_in-firefly_s0_1129:tick_out"/>
+		<EdgeI path="firefly_s0_1129:flash_in-firefly_s0_1289:flash_out"/>
+		<EdgeI path="firefly_s0_1129:flash_in-firefly_s0_11210:flash_out"/>
+		<EdgeI path="firefly_s0_1129:flash_in-firefly_s0_969:flash_out"/>
+		<EdgeI path="firefly_s0_1129:flash_in-firefly_s0_1128:flash_out"/>
+	<EdgeI path="firefly_s0_11210:tick_in-firefly_s0_11210:tick_out"/>
+		<EdgeI path="firefly_s0_11210:flash_in-firefly_s0_12810:flash_out"/>
+		<EdgeI path="firefly_s0_11210:flash_in-firefly_s0_11211:flash_out"/>
+		<EdgeI path="firefly_s0_11210:flash_in-firefly_s0_9610:flash_out"/>
+		<EdgeI path="firefly_s0_11210:flash_in-firefly_s0_1129:flash_out"/>
+	<EdgeI path="firefly_s0_11211:tick_in-firefly_s0_11211:tick_out"/>
+		<EdgeI path="firefly_s0_11211:flash_in-firefly_s0_12811:flash_out"/>
+		<EdgeI path="firefly_s0_11211:flash_in-firefly_s0_11212:flash_out"/>
+		<EdgeI path="firefly_s0_11211:flash_in-firefly_s0_9611:flash_out"/>
+		<EdgeI path="firefly_s0_11211:flash_in-firefly_s0_11210:flash_out"/>
+	<EdgeI path="firefly_s0_11212:tick_in-firefly_s0_11212:tick_out"/>
+		<EdgeI path="firefly_s0_11212:flash_in-firefly_s0_12812:flash_out"/>
+		<EdgeI path="firefly_s0_11212:flash_in-firefly_s0_11213:flash_out"/>
+		<EdgeI path="firefly_s0_11212:flash_in-firefly_s0_9612:flash_out"/>
+		<EdgeI path="firefly_s0_11212:flash_in-firefly_s0_11211:flash_out"/>
+	<EdgeI path="firefly_s0_11213:tick_in-firefly_s0_11213:tick_out"/>
+		<EdgeI path="firefly_s0_11213:flash_in-firefly_s0_12813:flash_out"/>
+		<EdgeI path="firefly_s0_11213:flash_in-firefly_s0_11214:flash_out"/>
+		<EdgeI path="firefly_s0_11213:flash_in-firefly_s0_9613:flash_out"/>
+		<EdgeI path="firefly_s0_11213:flash_in-firefly_s0_11212:flash_out"/>
+	<EdgeI path="firefly_s0_11214:tick_in-firefly_s0_11214:tick_out"/>
+		<EdgeI path="firefly_s0_11214:flash_in-firefly_s0_12814:flash_out"/>
+		<EdgeI path="firefly_s0_11214:flash_in-firefly_s0_11215:flash_out"/>
+		<EdgeI path="firefly_s0_11214:flash_in-firefly_s0_9614:flash_out"/>
+		<EdgeI path="firefly_s0_11214:flash_in-firefly_s0_11213:flash_out"/>
+	<EdgeI path="firefly_s0_11215:tick_in-firefly_s0_11215:tick_out"/>
+		<EdgeI path="firefly_s0_11215:flash_in-firefly_s0_12815:flash_out"/>
+		<EdgeI path="firefly_s0_11215:flash_in-firefly_s0_9615:flash_out"/>
+		<EdgeI path="firefly_s0_11215:flash_in-firefly_s0_11214:flash_out"/>
+	<EdgeI path="firefly_s0_1280:tick_in-firefly_s0_1280:tick_out"/>
+		<EdgeI path="firefly_s0_1280:flash_in-firefly_s0_1440:flash_out"/>
+		<EdgeI path="firefly_s0_1280:flash_in-firefly_s0_1281:flash_out"/>
+		<EdgeI path="firefly_s0_1280:flash_in-firefly_s0_1120:flash_out"/>
+	<EdgeI path="firefly_s0_1281:tick_in-firefly_s0_1281:tick_out"/>
+		<EdgeI path="firefly_s0_1281:flash_in-firefly_s0_1441:flash_out"/>
+		<EdgeI path="firefly_s0_1281:flash_in-firefly_s0_1282:flash_out"/>
+		<EdgeI path="firefly_s0_1281:flash_in-firefly_s0_1121:flash_out"/>
+		<EdgeI path="firefly_s0_1281:flash_in-firefly_s0_1280:flash_out"/>
+	<EdgeI path="firefly_s0_1282:tick_in-firefly_s0_1282:tick_out"/>
+		<EdgeI path="firefly_s0_1282:flash_in-firefly_s0_1442:flash_out"/>
+		<EdgeI path="firefly_s0_1282:flash_in-firefly_s0_1283:flash_out"/>
+		<EdgeI path="firefly_s0_1282:flash_in-firefly_s0_1122:flash_out"/>
+		<EdgeI path="firefly_s0_1282:flash_in-firefly_s0_1281:flash_out"/>
+	<EdgeI path="firefly_s0_1283:tick_in-firefly_s0_1283:tick_out"/>
+		<EdgeI path="firefly_s0_1283:flash_in-firefly_s0_1443:flash_out"/>
+		<EdgeI path="firefly_s0_1283:flash_in-firefly_s0_1284:flash_out"/>
+		<EdgeI path="firefly_s0_1283:flash_in-firefly_s0_1123:flash_out"/>
+		<EdgeI path="firefly_s0_1283:flash_in-firefly_s0_1282:flash_out"/>
+	<EdgeI path="firefly_s0_1284:tick_in-firefly_s0_1284:tick_out"/>
+		<EdgeI path="firefly_s0_1284:flash_in-firefly_s0_1444:flash_out"/>
+		<EdgeI path="firefly_s0_1284:flash_in-firefly_s0_1285:flash_out"/>
+		<EdgeI path="firefly_s0_1284:flash_in-firefly_s0_1124:flash_out"/>
+		<EdgeI path="firefly_s0_1284:flash_in-firefly_s0_1283:flash_out"/>
+	<EdgeI path="firefly_s0_1285:tick_in-firefly_s0_1285:tick_out"/>
+		<EdgeI path="firefly_s0_1285:flash_in-firefly_s0_1445:flash_out"/>
+		<EdgeI path="firefly_s0_1285:flash_in-firefly_s0_1286:flash_out"/>
+		<EdgeI path="firefly_s0_1285:flash_in-firefly_s0_1125:flash_out"/>
+		<EdgeI path="firefly_s0_1285:flash_in-firefly_s0_1284:flash_out"/>
+	<EdgeI path="firefly_s0_1286:tick_in-firefly_s0_1286:tick_out"/>
+		<EdgeI path="firefly_s0_1286:flash_in-firefly_s0_1446:flash_out"/>
+		<EdgeI path="firefly_s0_1286:flash_in-firefly_s0_1287:flash_out"/>
+		<EdgeI path="firefly_s0_1286:flash_in-firefly_s0_1126:flash_out"/>
+		<EdgeI path="firefly_s0_1286:flash_in-firefly_s0_1285:flash_out"/>
+	<EdgeI path="firefly_s0_1287:tick_in-firefly_s0_1287:tick_out"/>
+		<EdgeI path="firefly_s0_1287:flash_in-firefly_s0_1447:flash_out"/>
+		<EdgeI path="firefly_s0_1287:flash_in-firefly_s0_1288:flash_out"/>
+		<EdgeI path="firefly_s0_1287:flash_in-firefly_s0_1127:flash_out"/>
+		<EdgeI path="firefly_s0_1287:flash_in-firefly_s0_1286:flash_out"/>
+	<EdgeI path="firefly_s0_1288:tick_in-firefly_s0_1288:tick_out"/>
+		<EdgeI path="firefly_s0_1288:flash_in-firefly_s0_1448:flash_out"/>
+		<EdgeI path="firefly_s0_1288:flash_in-firefly_s0_1289:flash_out"/>
+		<EdgeI path="firefly_s0_1288:flash_in-firefly_s0_1128:flash_out"/>
+		<EdgeI path="firefly_s0_1288:flash_in-firefly_s0_1287:flash_out"/>
+	<EdgeI path="firefly_s0_1289:tick_in-firefly_s0_1289:tick_out"/>
+		<EdgeI path="firefly_s0_1289:flash_in-firefly_s0_1449:flash_out"/>
+		<EdgeI path="firefly_s0_1289:flash_in-firefly_s0_12810:flash_out"/>
+		<EdgeI path="firefly_s0_1289:flash_in-firefly_s0_1129:flash_out"/>
+		<EdgeI path="firefly_s0_1289:flash_in-firefly_s0_1288:flash_out"/>
+	<EdgeI path="firefly_s0_12810:tick_in-firefly_s0_12810:tick_out"/>
+		<EdgeI path="firefly_s0_12810:flash_in-firefly_s0_14410:flash_out"/>
+		<EdgeI path="firefly_s0_12810:flash_in-firefly_s0_12811:flash_out"/>
+		<EdgeI path="firefly_s0_12810:flash_in-firefly_s0_11210:flash_out"/>
+		<EdgeI path="firefly_s0_12810:flash_in-firefly_s0_1289:flash_out"/>
+	<EdgeI path="firefly_s0_12811:tick_in-firefly_s0_12811:tick_out"/>
+		<EdgeI path="firefly_s0_12811:flash_in-firefly_s0_14411:flash_out"/>
+		<EdgeI path="firefly_s0_12811:flash_in-firefly_s0_12812:flash_out"/>
+		<EdgeI path="firefly_s0_12811:flash_in-firefly_s0_11211:flash_out"/>
+		<EdgeI path="firefly_s0_12811:flash_in-firefly_s0_12810:flash_out"/>
+	<EdgeI path="firefly_s0_12812:tick_in-firefly_s0_12812:tick_out"/>
+		<EdgeI path="firefly_s0_12812:flash_in-firefly_s0_14412:flash_out"/>
+		<EdgeI path="firefly_s0_12812:flash_in-firefly_s0_12813:flash_out"/>
+		<EdgeI path="firefly_s0_12812:flash_in-firefly_s0_11212:flash_out"/>
+		<EdgeI path="firefly_s0_12812:flash_in-firefly_s0_12811:flash_out"/>
+	<EdgeI path="firefly_s0_12813:tick_in-firefly_s0_12813:tick_out"/>
+		<EdgeI path="firefly_s0_12813:flash_in-firefly_s0_14413:flash_out"/>
+		<EdgeI path="firefly_s0_12813:flash_in-firefly_s0_12814:flash_out"/>
+		<EdgeI path="firefly_s0_12813:flash_in-firefly_s0_11213:flash_out"/>
+		<EdgeI path="firefly_s0_12813:flash_in-firefly_s0_12812:flash_out"/>
+	<EdgeI path="firefly_s0_12814:tick_in-firefly_s0_12814:tick_out"/>
+		<EdgeI path="firefly_s0_12814:flash_in-firefly_s0_14414:flash_out"/>
+		<EdgeI path="firefly_s0_12814:flash_in-firefly_s0_12815:flash_out"/>
+		<EdgeI path="firefly_s0_12814:flash_in-firefly_s0_11214:flash_out"/>
+		<EdgeI path="firefly_s0_12814:flash_in-firefly_s0_12813:flash_out"/>
+	<EdgeI path="firefly_s0_12815:tick_in-firefly_s0_12815:tick_out"/>
+		<EdgeI path="firefly_s0_12815:flash_in-firefly_s0_14415:flash_out"/>
+		<EdgeI path="firefly_s0_12815:flash_in-firefly_s0_11215:flash_out"/>
+		<EdgeI path="firefly_s0_12815:flash_in-firefly_s0_12814:flash_out"/>
+	<EdgeI path="firefly_s0_1440:tick_in-firefly_s0_1440:tick_out"/>
+		<EdgeI path="firefly_s0_1440:flash_in-firefly_s0_1600:flash_out"/>
+		<EdgeI path="firefly_s0_1440:flash_in-firefly_s0_1441:flash_out"/>
+		<EdgeI path="firefly_s0_1440:flash_in-firefly_s0_1280:flash_out"/>
+	<EdgeI path="firefly_s0_1441:tick_in-firefly_s0_1441:tick_out"/>
+		<EdgeI path="firefly_s0_1441:flash_in-firefly_s0_1601:flash_out"/>
+		<EdgeI path="firefly_s0_1441:flash_in-firefly_s0_1442:flash_out"/>
+		<EdgeI path="firefly_s0_1441:flash_in-firefly_s0_1281:flash_out"/>
+		<EdgeI path="firefly_s0_1441:flash_in-firefly_s0_1440:flash_out"/>
+	<EdgeI path="firefly_s0_1442:tick_in-firefly_s0_1442:tick_out"/>
+		<EdgeI path="firefly_s0_1442:flash_in-firefly_s0_1602:flash_out"/>
+		<EdgeI path="firefly_s0_1442:flash_in-firefly_s0_1443:flash_out"/>
+		<EdgeI path="firefly_s0_1442:flash_in-firefly_s0_1282:flash_out"/>
+		<EdgeI path="firefly_s0_1442:flash_in-firefly_s0_1441:flash_out"/>
+	<EdgeI path="firefly_s0_1443:tick_in-firefly_s0_1443:tick_out"/>
+		<EdgeI path="firefly_s0_1443:flash_in-firefly_s0_1603:flash_out"/>
+		<EdgeI path="firefly_s0_1443:flash_in-firefly_s0_1444:flash_out"/>
+		<EdgeI path="firefly_s0_1443:flash_in-firefly_s0_1283:flash_out"/>
+		<EdgeI path="firefly_s0_1443:flash_in-firefly_s0_1442:flash_out"/>
+	<EdgeI path="firefly_s0_1444:tick_in-firefly_s0_1444:tick_out"/>
+		<EdgeI path="firefly_s0_1444:flash_in-firefly_s0_1604:flash_out"/>
+		<EdgeI path="firefly_s0_1444:flash_in-firefly_s0_1445:flash_out"/>
+		<EdgeI path="firefly_s0_1444:flash_in-firefly_s0_1284:flash_out"/>
+		<EdgeI path="firefly_s0_1444:flash_in-firefly_s0_1443:flash_out"/>
+	<EdgeI path="firefly_s0_1445:tick_in-firefly_s0_1445:tick_out"/>
+		<EdgeI path="firefly_s0_1445:flash_in-firefly_s0_1605:flash_out"/>
+		<EdgeI path="firefly_s0_1445:flash_in-firefly_s0_1446:flash_out"/>
+		<EdgeI path="firefly_s0_1445:flash_in-firefly_s0_1285:flash_out"/>
+		<EdgeI path="firefly_s0_1445:flash_in-firefly_s0_1444:flash_out"/>
+	<EdgeI path="firefly_s0_1446:tick_in-firefly_s0_1446:tick_out"/>
+		<EdgeI path="firefly_s0_1446:flash_in-firefly_s0_1606:flash_out"/>
+		<EdgeI path="firefly_s0_1446:flash_in-firefly_s0_1447:flash_out"/>
+		<EdgeI path="firefly_s0_1446:flash_in-firefly_s0_1286:flash_out"/>
+		<EdgeI path="firefly_s0_1446:flash_in-firefly_s0_1445:flash_out"/>
+	<EdgeI path="firefly_s0_1447:tick_in-firefly_s0_1447:tick_out"/>
+		<EdgeI path="firefly_s0_1447:flash_in-firefly_s0_1607:flash_out"/>
+		<EdgeI path="firefly_s0_1447:flash_in-firefly_s0_1448:flash_out"/>
+		<EdgeI path="firefly_s0_1447:flash_in-firefly_s0_1287:flash_out"/>
+		<EdgeI path="firefly_s0_1447:flash_in-firefly_s0_1446:flash_out"/>
+	<EdgeI path="firefly_s0_1448:tick_in-firefly_s0_1448:tick_out"/>
+		<EdgeI path="firefly_s0_1448:flash_in-firefly_s0_1608:flash_out"/>
+		<EdgeI path="firefly_s0_1448:flash_in-firefly_s0_1449:flash_out"/>
+		<EdgeI path="firefly_s0_1448:flash_in-firefly_s0_1288:flash_out"/>
+		<EdgeI path="firefly_s0_1448:flash_in-firefly_s0_1447:flash_out"/>
+	<EdgeI path="firefly_s0_1449:tick_in-firefly_s0_1449:tick_out"/>
+		<EdgeI path="firefly_s0_1449:flash_in-firefly_s0_1609:flash_out"/>
+		<EdgeI path="firefly_s0_1449:flash_in-firefly_s0_14410:flash_out"/>
+		<EdgeI path="firefly_s0_1449:flash_in-firefly_s0_1289:flash_out"/>
+		<EdgeI path="firefly_s0_1449:flash_in-firefly_s0_1448:flash_out"/>
+	<EdgeI path="firefly_s0_14410:tick_in-firefly_s0_14410:tick_out"/>
+		<EdgeI path="firefly_s0_14410:flash_in-firefly_s0_16010:flash_out"/>
+		<EdgeI path="firefly_s0_14410:flash_in-firefly_s0_14411:flash_out"/>
+		<EdgeI path="firefly_s0_14410:flash_in-firefly_s0_12810:flash_out"/>
+		<EdgeI path="firefly_s0_14410:flash_in-firefly_s0_1449:flash_out"/>
+	<EdgeI path="firefly_s0_14411:tick_in-firefly_s0_14411:tick_out"/>
+		<EdgeI path="firefly_s0_14411:flash_in-firefly_s0_16011:flash_out"/>
+		<EdgeI path="firefly_s0_14411:flash_in-firefly_s0_14412:flash_out"/>
+		<EdgeI path="firefly_s0_14411:flash_in-firefly_s0_12811:flash_out"/>
+		<EdgeI path="firefly_s0_14411:flash_in-firefly_s0_14410:flash_out"/>
+	<EdgeI path="firefly_s0_14412:tick_in-firefly_s0_14412:tick_out"/>
+		<EdgeI path="firefly_s0_14412:flash_in-firefly_s0_16012:flash_out"/>
+		<EdgeI path="firefly_s0_14412:flash_in-firefly_s0_14413:flash_out"/>
+		<EdgeI path="firefly_s0_14412:flash_in-firefly_s0_12812:flash_out"/>
+		<EdgeI path="firefly_s0_14412:flash_in-firefly_s0_14411:flash_out"/>
+	<EdgeI path="firefly_s0_14413:tick_in-firefly_s0_14413:tick_out"/>
+		<EdgeI path="firefly_s0_14413:flash_in-firefly_s0_16013:flash_out"/>
+		<EdgeI path="firefly_s0_14413:flash_in-firefly_s0_14414:flash_out"/>
+		<EdgeI path="firefly_s0_14413:flash_in-firefly_s0_12813:flash_out"/>
+		<EdgeI path="firefly_s0_14413:flash_in-firefly_s0_14412:flash_out"/>
+	<EdgeI path="firefly_s0_14414:tick_in-firefly_s0_14414:tick_out"/>
+		<EdgeI path="firefly_s0_14414:flash_in-firefly_s0_16014:flash_out"/>
+		<EdgeI path="firefly_s0_14414:flash_in-firefly_s0_14415:flash_out"/>
+		<EdgeI path="firefly_s0_14414:flash_in-firefly_s0_12814:flash_out"/>
+		<EdgeI path="firefly_s0_14414:flash_in-firefly_s0_14413:flash_out"/>
+	<EdgeI path="firefly_s0_14415:tick_in-firefly_s0_14415:tick_out"/>
+		<EdgeI path="firefly_s0_14415:flash_in-firefly_s0_16015:flash_out"/>
+		<EdgeI path="firefly_s0_14415:flash_in-firefly_s0_12815:flash_out"/>
+		<EdgeI path="firefly_s0_14415:flash_in-firefly_s0_14414:flash_out"/>
+	<EdgeI path="firefly_s0_1600:tick_in-firefly_s0_1600:tick_out"/>
+		<EdgeI path="firefly_s0_1600:flash_in-firefly_s0_1760:flash_out"/>
+		<EdgeI path="firefly_s0_1600:flash_in-firefly_s0_1601:flash_out"/>
+		<EdgeI path="firefly_s0_1600:flash_in-firefly_s0_1440:flash_out"/>
+	<EdgeI path="firefly_s0_1601:tick_in-firefly_s0_1601:tick_out"/>
+		<EdgeI path="firefly_s0_1601:flash_in-firefly_s0_1761:flash_out"/>
+		<EdgeI path="firefly_s0_1601:flash_in-firefly_s0_1602:flash_out"/>
+		<EdgeI path="firefly_s0_1601:flash_in-firefly_s0_1441:flash_out"/>
+		<EdgeI path="firefly_s0_1601:flash_in-firefly_s0_1600:flash_out"/>
+	<EdgeI path="firefly_s0_1602:tick_in-firefly_s0_1602:tick_out"/>
+		<EdgeI path="firefly_s0_1602:flash_in-firefly_s0_1762:flash_out"/>
+		<EdgeI path="firefly_s0_1602:flash_in-firefly_s0_1603:flash_out"/>
+		<EdgeI path="firefly_s0_1602:flash_in-firefly_s0_1442:flash_out"/>
+		<EdgeI path="firefly_s0_1602:flash_in-firefly_s0_1601:flash_out"/>
+	<EdgeI path="firefly_s0_1603:tick_in-firefly_s0_1603:tick_out"/>
+		<EdgeI path="firefly_s0_1603:flash_in-firefly_s0_1763:flash_out"/>
+		<EdgeI path="firefly_s0_1603:flash_in-firefly_s0_1604:flash_out"/>
+		<EdgeI path="firefly_s0_1603:flash_in-firefly_s0_1443:flash_out"/>
+		<EdgeI path="firefly_s0_1603:flash_in-firefly_s0_1602:flash_out"/>
+	<EdgeI path="firefly_s0_1604:tick_in-firefly_s0_1604:tick_out"/>
+		<EdgeI path="firefly_s0_1604:flash_in-firefly_s0_1764:flash_out"/>
+		<EdgeI path="firefly_s0_1604:flash_in-firefly_s0_1605:flash_out"/>
+		<EdgeI path="firefly_s0_1604:flash_in-firefly_s0_1444:flash_out"/>
+		<EdgeI path="firefly_s0_1604:flash_in-firefly_s0_1603:flash_out"/>
+	<EdgeI path="firefly_s0_1605:tick_in-firefly_s0_1605:tick_out"/>
+		<EdgeI path="firefly_s0_1605:flash_in-firefly_s0_1765:flash_out"/>
+		<EdgeI path="firefly_s0_1605:flash_in-firefly_s0_1606:flash_out"/>
+		<EdgeI path="firefly_s0_1605:flash_in-firefly_s0_1445:flash_out"/>
+		<EdgeI path="firefly_s0_1605:flash_in-firefly_s0_1604:flash_out"/>
+	<EdgeI path="firefly_s0_1606:tick_in-firefly_s0_1606:tick_out"/>
+		<EdgeI path="firefly_s0_1606:flash_in-firefly_s0_1766:flash_out"/>
+		<EdgeI path="firefly_s0_1606:flash_in-firefly_s0_1607:flash_out"/>
+		<EdgeI path="firefly_s0_1606:flash_in-firefly_s0_1446:flash_out"/>
+		<EdgeI path="firefly_s0_1606:flash_in-firefly_s0_1605:flash_out"/>
+	<EdgeI path="firefly_s0_1607:tick_in-firefly_s0_1607:tick_out"/>
+		<EdgeI path="firefly_s0_1607:flash_in-firefly_s0_1767:flash_out"/>
+		<EdgeI path="firefly_s0_1607:flash_in-firefly_s0_1608:flash_out"/>
+		<EdgeI path="firefly_s0_1607:flash_in-firefly_s0_1447:flash_out"/>
+		<EdgeI path="firefly_s0_1607:flash_in-firefly_s0_1606:flash_out"/>
+	<EdgeI path="firefly_s0_1608:tick_in-firefly_s0_1608:tick_out"/>
+		<EdgeI path="firefly_s0_1608:flash_in-firefly_s0_1768:flash_out"/>
+		<EdgeI path="firefly_s0_1608:flash_in-firefly_s0_1609:flash_out"/>
+		<EdgeI path="firefly_s0_1608:flash_in-firefly_s0_1448:flash_out"/>
+		<EdgeI path="firefly_s0_1608:flash_in-firefly_s0_1607:flash_out"/>
+	<EdgeI path="firefly_s0_1609:tick_in-firefly_s0_1609:tick_out"/>
+		<EdgeI path="firefly_s0_1609:flash_in-firefly_s0_1769:flash_out"/>
+		<EdgeI path="firefly_s0_1609:flash_in-firefly_s0_16010:flash_out"/>
+		<EdgeI path="firefly_s0_1609:flash_in-firefly_s0_1449:flash_out"/>
+		<EdgeI path="firefly_s0_1609:flash_in-firefly_s0_1608:flash_out"/>
+	<EdgeI path="firefly_s0_16010:tick_in-firefly_s0_16010:tick_out"/>
+		<EdgeI path="firefly_s0_16010:flash_in-firefly_s0_17610:flash_out"/>
+		<EdgeI path="firefly_s0_16010:flash_in-firefly_s0_16011:flash_out"/>
+		<EdgeI path="firefly_s0_16010:flash_in-firefly_s0_14410:flash_out"/>
+		<EdgeI path="firefly_s0_16010:flash_in-firefly_s0_1609:flash_out"/>
+	<EdgeI path="firefly_s0_16011:tick_in-firefly_s0_16011:tick_out"/>
+		<EdgeI path="firefly_s0_16011:flash_in-firefly_s0_17611:flash_out"/>
+		<EdgeI path="firefly_s0_16011:flash_in-firefly_s0_16012:flash_out"/>
+		<EdgeI path="firefly_s0_16011:flash_in-firefly_s0_14411:flash_out"/>
+		<EdgeI path="firefly_s0_16011:flash_in-firefly_s0_16010:flash_out"/>
+	<EdgeI path="firefly_s0_16012:tick_in-firefly_s0_16012:tick_out"/>
+		<EdgeI path="firefly_s0_16012:flash_in-firefly_s0_17612:flash_out"/>
+		<EdgeI path="firefly_s0_16012:flash_in-firefly_s0_16013:flash_out"/>
+		<EdgeI path="firefly_s0_16012:flash_in-firefly_s0_14412:flash_out"/>
+		<EdgeI path="firefly_s0_16012:flash_in-firefly_s0_16011:flash_out"/>
+	<EdgeI path="firefly_s0_16013:tick_in-firefly_s0_16013:tick_out"/>
+		<EdgeI path="firefly_s0_16013:flash_in-firefly_s0_17613:flash_out"/>
+		<EdgeI path="firefly_s0_16013:flash_in-firefly_s0_16014:flash_out"/>
+		<EdgeI path="firefly_s0_16013:flash_in-firefly_s0_14413:flash_out"/>
+		<EdgeI path="firefly_s0_16013:flash_in-firefly_s0_16012:flash_out"/>
+	<EdgeI path="firefly_s0_16014:tick_in-firefly_s0_16014:tick_out"/>
+		<EdgeI path="firefly_s0_16014:flash_in-firefly_s0_17614:flash_out"/>
+		<EdgeI path="firefly_s0_16014:flash_in-firefly_s0_16015:flash_out"/>
+		<EdgeI path="firefly_s0_16014:flash_in-firefly_s0_14414:flash_out"/>
+		<EdgeI path="firefly_s0_16014:flash_in-firefly_s0_16013:flash_out"/>
+	<EdgeI path="firefly_s0_16015:tick_in-firefly_s0_16015:tick_out"/>
+		<EdgeI path="firefly_s0_16015:flash_in-firefly_s0_17615:flash_out"/>
+		<EdgeI path="firefly_s0_16015:flash_in-firefly_s0_14415:flash_out"/>
+		<EdgeI path="firefly_s0_16015:flash_in-firefly_s0_16014:flash_out"/>
+	<EdgeI path="firefly_s0_1760:tick_in-firefly_s0_1760:tick_out"/>
+		<EdgeI path="firefly_s0_1760:flash_in-firefly_s0_1920:flash_out"/>
+		<EdgeI path="firefly_s0_1760:flash_in-firefly_s0_1761:flash_out"/>
+		<EdgeI path="firefly_s0_1760:flash_in-firefly_s0_1600:flash_out"/>
+	<EdgeI path="firefly_s0_1761:tick_in-firefly_s0_1761:tick_out"/>
+		<EdgeI path="firefly_s0_1761:flash_in-firefly_s0_1921:flash_out"/>
+		<EdgeI path="firefly_s0_1761:flash_in-firefly_s0_1762:flash_out"/>
+		<EdgeI path="firefly_s0_1761:flash_in-firefly_s0_1601:flash_out"/>
+		<EdgeI path="firefly_s0_1761:flash_in-firefly_s0_1760:flash_out"/>
+	<EdgeI path="firefly_s0_1762:tick_in-firefly_s0_1762:tick_out"/>
+		<EdgeI path="firefly_s0_1762:flash_in-firefly_s0_1922:flash_out"/>
+		<EdgeI path="firefly_s0_1762:flash_in-firefly_s0_1763:flash_out"/>
+		<EdgeI path="firefly_s0_1762:flash_in-firefly_s0_1602:flash_out"/>
+		<EdgeI path="firefly_s0_1762:flash_in-firefly_s0_1761:flash_out"/>
+	<EdgeI path="firefly_s0_1763:tick_in-firefly_s0_1763:tick_out"/>
+		<EdgeI path="firefly_s0_1763:flash_in-firefly_s0_1923:flash_out"/>
+		<EdgeI path="firefly_s0_1763:flash_in-firefly_s0_1764:flash_out"/>
+		<EdgeI path="firefly_s0_1763:flash_in-firefly_s0_1603:flash_out"/>
+		<EdgeI path="firefly_s0_1763:flash_in-firefly_s0_1762:flash_out"/>
+	<EdgeI path="firefly_s0_1764:tick_in-firefly_s0_1764:tick_out"/>
+		<EdgeI path="firefly_s0_1764:flash_in-firefly_s0_1924:flash_out"/>
+		<EdgeI path="firefly_s0_1764:flash_in-firefly_s0_1765:flash_out"/>
+		<EdgeI path="firefly_s0_1764:flash_in-firefly_s0_1604:flash_out"/>
+		<EdgeI path="firefly_s0_1764:flash_in-firefly_s0_1763:flash_out"/>
+	<EdgeI path="firefly_s0_1765:tick_in-firefly_s0_1765:tick_out"/>
+		<EdgeI path="firefly_s0_1765:flash_in-firefly_s0_1925:flash_out"/>
+		<EdgeI path="firefly_s0_1765:flash_in-firefly_s0_1766:flash_out"/>
+		<EdgeI path="firefly_s0_1765:flash_in-firefly_s0_1605:flash_out"/>
+		<EdgeI path="firefly_s0_1765:flash_in-firefly_s0_1764:flash_out"/>
+	<EdgeI path="firefly_s0_1766:tick_in-firefly_s0_1766:tick_out"/>
+		<EdgeI path="firefly_s0_1766:flash_in-firefly_s0_1926:flash_out"/>
+		<EdgeI path="firefly_s0_1766:flash_in-firefly_s0_1767:flash_out"/>
+		<EdgeI path="firefly_s0_1766:flash_in-firefly_s0_1606:flash_out"/>
+		<EdgeI path="firefly_s0_1766:flash_in-firefly_s0_1765:flash_out"/>
+	<EdgeI path="firefly_s0_1767:tick_in-firefly_s0_1767:tick_out"/>
+		<EdgeI path="firefly_s0_1767:flash_in-firefly_s0_1927:flash_out"/>
+		<EdgeI path="firefly_s0_1767:flash_in-firefly_s0_1768:flash_out"/>
+		<EdgeI path="firefly_s0_1767:flash_in-firefly_s0_1607:flash_out"/>
+		<EdgeI path="firefly_s0_1767:flash_in-firefly_s0_1766:flash_out"/>
+	<EdgeI path="firefly_s0_1768:tick_in-firefly_s0_1768:tick_out"/>
+		<EdgeI path="firefly_s0_1768:flash_in-firefly_s0_1928:flash_out"/>
+		<EdgeI path="firefly_s0_1768:flash_in-firefly_s0_1769:flash_out"/>
+		<EdgeI path="firefly_s0_1768:flash_in-firefly_s0_1608:flash_out"/>
+		<EdgeI path="firefly_s0_1768:flash_in-firefly_s0_1767:flash_out"/>
+	<EdgeI path="firefly_s0_1769:tick_in-firefly_s0_1769:tick_out"/>
+		<EdgeI path="firefly_s0_1769:flash_in-firefly_s0_1929:flash_out"/>
+		<EdgeI path="firefly_s0_1769:flash_in-firefly_s0_17610:flash_out"/>
+		<EdgeI path="firefly_s0_1769:flash_in-firefly_s0_1609:flash_out"/>
+		<EdgeI path="firefly_s0_1769:flash_in-firefly_s0_1768:flash_out"/>
+	<EdgeI path="firefly_s0_17610:tick_in-firefly_s0_17610:tick_out"/>
+		<EdgeI path="firefly_s0_17610:flash_in-firefly_s0_19210:flash_out"/>
+		<EdgeI path="firefly_s0_17610:flash_in-firefly_s0_17611:flash_out"/>
+		<EdgeI path="firefly_s0_17610:flash_in-firefly_s0_16010:flash_out"/>
+		<EdgeI path="firefly_s0_17610:flash_in-firefly_s0_1769:flash_out"/>
+	<EdgeI path="firefly_s0_17611:tick_in-firefly_s0_17611:tick_out"/>
+		<EdgeI path="firefly_s0_17611:flash_in-firefly_s0_19211:flash_out"/>
+		<EdgeI path="firefly_s0_17611:flash_in-firefly_s0_17612:flash_out"/>
+		<EdgeI path="firefly_s0_17611:flash_in-firefly_s0_16011:flash_out"/>
+		<EdgeI path="firefly_s0_17611:flash_in-firefly_s0_17610:flash_out"/>
+	<EdgeI path="firefly_s0_17612:tick_in-firefly_s0_17612:tick_out"/>
+		<EdgeI path="firefly_s0_17612:flash_in-firefly_s0_19212:flash_out"/>
+		<EdgeI path="firefly_s0_17612:flash_in-firefly_s0_17613:flash_out"/>
+		<EdgeI path="firefly_s0_17612:flash_in-firefly_s0_16012:flash_out"/>
+		<EdgeI path="firefly_s0_17612:flash_in-firefly_s0_17611:flash_out"/>
+	<EdgeI path="firefly_s0_17613:tick_in-firefly_s0_17613:tick_out"/>
+		<EdgeI path="firefly_s0_17613:flash_in-firefly_s0_19213:flash_out"/>
+		<EdgeI path="firefly_s0_17613:flash_in-firefly_s0_17614:flash_out"/>
+		<EdgeI path="firefly_s0_17613:flash_in-firefly_s0_16013:flash_out"/>
+		<EdgeI path="firefly_s0_17613:flash_in-firefly_s0_17612:flash_out"/>
+	<EdgeI path="firefly_s0_17614:tick_in-firefly_s0_17614:tick_out"/>
+		<EdgeI path="firefly_s0_17614:flash_in-firefly_s0_19214:flash_out"/>
+		<EdgeI path="firefly_s0_17614:flash_in-firefly_s0_17615:flash_out"/>
+		<EdgeI path="firefly_s0_17614:flash_in-firefly_s0_16014:flash_out"/>
+		<EdgeI path="firefly_s0_17614:flash_in-firefly_s0_17613:flash_out"/>
+	<EdgeI path="firefly_s0_17615:tick_in-firefly_s0_17615:tick_out"/>
+		<EdgeI path="firefly_s0_17615:flash_in-firefly_s0_19215:flash_out"/>
+		<EdgeI path="firefly_s0_17615:flash_in-firefly_s0_16015:flash_out"/>
+		<EdgeI path="firefly_s0_17615:flash_in-firefly_s0_17614:flash_out"/>
+	<EdgeI path="firefly_s0_1920:tick_in-firefly_s0_1920:tick_out"/>
+		<EdgeI path="firefly_s0_1920:flash_in-firefly_s0_2080:flash_out"/>
+		<EdgeI path="firefly_s0_1920:flash_in-firefly_s0_1921:flash_out"/>
+		<EdgeI path="firefly_s0_1920:flash_in-firefly_s0_1760:flash_out"/>
+	<EdgeI path="firefly_s0_1921:tick_in-firefly_s0_1921:tick_out"/>
+		<EdgeI path="firefly_s0_1921:flash_in-firefly_s0_2081:flash_out"/>
+		<EdgeI path="firefly_s0_1921:flash_in-firefly_s0_1922:flash_out"/>
+		<EdgeI path="firefly_s0_1921:flash_in-firefly_s0_1761:flash_out"/>
+		<EdgeI path="firefly_s0_1921:flash_in-firefly_s0_1920:flash_out"/>
+	<EdgeI path="firefly_s0_1922:tick_in-firefly_s0_1922:tick_out"/>
+		<EdgeI path="firefly_s0_1922:flash_in-firefly_s0_2082:flash_out"/>
+		<EdgeI path="firefly_s0_1922:flash_in-firefly_s0_1923:flash_out"/>
+		<EdgeI path="firefly_s0_1922:flash_in-firefly_s0_1762:flash_out"/>
+		<EdgeI path="firefly_s0_1922:flash_in-firefly_s0_1921:flash_out"/>
+	<EdgeI path="firefly_s0_1923:tick_in-firefly_s0_1923:tick_out"/>
+		<EdgeI path="firefly_s0_1923:flash_in-firefly_s0_2083:flash_out"/>
+		<EdgeI path="firefly_s0_1923:flash_in-firefly_s0_1924:flash_out"/>
+		<EdgeI path="firefly_s0_1923:flash_in-firefly_s0_1763:flash_out"/>
+		<EdgeI path="firefly_s0_1923:flash_in-firefly_s0_1922:flash_out"/>
+	<EdgeI path="firefly_s0_1924:tick_in-firefly_s0_1924:tick_out"/>
+		<EdgeI path="firefly_s0_1924:flash_in-firefly_s0_2084:flash_out"/>
+		<EdgeI path="firefly_s0_1924:flash_in-firefly_s0_1925:flash_out"/>
+		<EdgeI path="firefly_s0_1924:flash_in-firefly_s0_1764:flash_out"/>
+		<EdgeI path="firefly_s0_1924:flash_in-firefly_s0_1923:flash_out"/>
+	<EdgeI path="firefly_s0_1925:tick_in-firefly_s0_1925:tick_out"/>
+		<EdgeI path="firefly_s0_1925:flash_in-firefly_s0_2085:flash_out"/>
+		<EdgeI path="firefly_s0_1925:flash_in-firefly_s0_1926:flash_out"/>
+		<EdgeI path="firefly_s0_1925:flash_in-firefly_s0_1765:flash_out"/>
+		<EdgeI path="firefly_s0_1925:flash_in-firefly_s0_1924:flash_out"/>
+	<EdgeI path="firefly_s0_1926:tick_in-firefly_s0_1926:tick_out"/>
+		<EdgeI path="firefly_s0_1926:flash_in-firefly_s0_2086:flash_out"/>
+		<EdgeI path="firefly_s0_1926:flash_in-firefly_s0_1927:flash_out"/>
+		<EdgeI path="firefly_s0_1926:flash_in-firefly_s0_1766:flash_out"/>
+		<EdgeI path="firefly_s0_1926:flash_in-firefly_s0_1925:flash_out"/>
+	<EdgeI path="firefly_s0_1927:tick_in-firefly_s0_1927:tick_out"/>
+		<EdgeI path="firefly_s0_1927:flash_in-firefly_s0_2087:flash_out"/>
+		<EdgeI path="firefly_s0_1927:flash_in-firefly_s0_1928:flash_out"/>
+		<EdgeI path="firefly_s0_1927:flash_in-firefly_s0_1767:flash_out"/>
+		<EdgeI path="firefly_s0_1927:flash_in-firefly_s0_1926:flash_out"/>
+	<EdgeI path="firefly_s0_1928:tick_in-firefly_s0_1928:tick_out"/>
+		<EdgeI path="firefly_s0_1928:flash_in-firefly_s0_2088:flash_out"/>
+		<EdgeI path="firefly_s0_1928:flash_in-firefly_s0_1929:flash_out"/>
+		<EdgeI path="firefly_s0_1928:flash_in-firefly_s0_1768:flash_out"/>
+		<EdgeI path="firefly_s0_1928:flash_in-firefly_s0_1927:flash_out"/>
+	<EdgeI path="firefly_s0_1929:tick_in-firefly_s0_1929:tick_out"/>
+		<EdgeI path="firefly_s0_1929:flash_in-firefly_s0_2089:flash_out"/>
+		<EdgeI path="firefly_s0_1929:flash_in-firefly_s0_19210:flash_out"/>
+		<EdgeI path="firefly_s0_1929:flash_in-firefly_s0_1769:flash_out"/>
+		<EdgeI path="firefly_s0_1929:flash_in-firefly_s0_1928:flash_out"/>
+	<EdgeI path="firefly_s0_19210:tick_in-firefly_s0_19210:tick_out"/>
+		<EdgeI path="firefly_s0_19210:flash_in-firefly_s0_20810:flash_out"/>
+		<EdgeI path="firefly_s0_19210:flash_in-firefly_s0_19211:flash_out"/>
+		<EdgeI path="firefly_s0_19210:flash_in-firefly_s0_17610:flash_out"/>
+		<EdgeI path="firefly_s0_19210:flash_in-firefly_s0_1929:flash_out"/>
+	<EdgeI path="firefly_s0_19211:tick_in-firefly_s0_19211:tick_out"/>
+		<EdgeI path="firefly_s0_19211:flash_in-firefly_s0_20811:flash_out"/>
+		<EdgeI path="firefly_s0_19211:flash_in-firefly_s0_19212:flash_out"/>
+		<EdgeI path="firefly_s0_19211:flash_in-firefly_s0_17611:flash_out"/>
+		<EdgeI path="firefly_s0_19211:flash_in-firefly_s0_19210:flash_out"/>
+	<EdgeI path="firefly_s0_19212:tick_in-firefly_s0_19212:tick_out"/>
+		<EdgeI path="firefly_s0_19212:flash_in-firefly_s0_20812:flash_out"/>
+		<EdgeI path="firefly_s0_19212:flash_in-firefly_s0_19213:flash_out"/>
+		<EdgeI path="firefly_s0_19212:flash_in-firefly_s0_17612:flash_out"/>
+		<EdgeI path="firefly_s0_19212:flash_in-firefly_s0_19211:flash_out"/>
+	<EdgeI path="firefly_s0_19213:tick_in-firefly_s0_19213:tick_out"/>
+		<EdgeI path="firefly_s0_19213:flash_in-firefly_s0_20813:flash_out"/>
+		<EdgeI path="firefly_s0_19213:flash_in-firefly_s0_19214:flash_out"/>
+		<EdgeI path="firefly_s0_19213:flash_in-firefly_s0_17613:flash_out"/>
+		<EdgeI path="firefly_s0_19213:flash_in-firefly_s0_19212:flash_out"/>
+	<EdgeI path="firefly_s0_19214:tick_in-firefly_s0_19214:tick_out"/>
+		<EdgeI path="firefly_s0_19214:flash_in-firefly_s0_20814:flash_out"/>
+		<EdgeI path="firefly_s0_19214:flash_in-firefly_s0_19215:flash_out"/>
+		<EdgeI path="firefly_s0_19214:flash_in-firefly_s0_17614:flash_out"/>
+		<EdgeI path="firefly_s0_19214:flash_in-firefly_s0_19213:flash_out"/>
+	<EdgeI path="firefly_s0_19215:tick_in-firefly_s0_19215:tick_out"/>
+		<EdgeI path="firefly_s0_19215:flash_in-firefly_s0_20815:flash_out"/>
+		<EdgeI path="firefly_s0_19215:flash_in-firefly_s0_17615:flash_out"/>
+		<EdgeI path="firefly_s0_19215:flash_in-firefly_s0_19214:flash_out"/>
+	<EdgeI path="firefly_s0_2080:tick_in-firefly_s0_2080:tick_out"/>
+		<EdgeI path="firefly_s0_2080:flash_in-firefly_s0_2240:flash_out"/>
+		<EdgeI path="firefly_s0_2080:flash_in-firefly_s0_2081:flash_out"/>
+		<EdgeI path="firefly_s0_2080:flash_in-firefly_s0_1920:flash_out"/>
+	<EdgeI path="firefly_s0_2081:tick_in-firefly_s0_2081:tick_out"/>
+		<EdgeI path="firefly_s0_2081:flash_in-firefly_s0_2241:flash_out"/>
+		<EdgeI path="firefly_s0_2081:flash_in-firefly_s0_2082:flash_out"/>
+		<EdgeI path="firefly_s0_2081:flash_in-firefly_s0_1921:flash_out"/>
+		<EdgeI path="firefly_s0_2081:flash_in-firefly_s0_2080:flash_out"/>
+	<EdgeI path="firefly_s0_2082:tick_in-firefly_s0_2082:tick_out"/>
+		<EdgeI path="firefly_s0_2082:flash_in-firefly_s0_2242:flash_out"/>
+		<EdgeI path="firefly_s0_2082:flash_in-firefly_s0_2083:flash_out"/>
+		<EdgeI path="firefly_s0_2082:flash_in-firefly_s0_1922:flash_out"/>
+		<EdgeI path="firefly_s0_2082:flash_in-firefly_s0_2081:flash_out"/>
+	<EdgeI path="firefly_s0_2083:tick_in-firefly_s0_2083:tick_out"/>
+		<EdgeI path="firefly_s0_2083:flash_in-firefly_s0_2243:flash_out"/>
+		<EdgeI path="firefly_s0_2083:flash_in-firefly_s0_2084:flash_out"/>
+		<EdgeI path="firefly_s0_2083:flash_in-firefly_s0_1923:flash_out"/>
+		<EdgeI path="firefly_s0_2083:flash_in-firefly_s0_2082:flash_out"/>
+	<EdgeI path="firefly_s0_2084:tick_in-firefly_s0_2084:tick_out"/>
+		<EdgeI path="firefly_s0_2084:flash_in-firefly_s0_2244:flash_out"/>
+		<EdgeI path="firefly_s0_2084:flash_in-firefly_s0_2085:flash_out"/>
+		<EdgeI path="firefly_s0_2084:flash_in-firefly_s0_1924:flash_out"/>
+		<EdgeI path="firefly_s0_2084:flash_in-firefly_s0_2083:flash_out"/>
+	<EdgeI path="firefly_s0_2085:tick_in-firefly_s0_2085:tick_out"/>
+		<EdgeI path="firefly_s0_2085:flash_in-firefly_s0_2245:flash_out"/>
+		<EdgeI path="firefly_s0_2085:flash_in-firefly_s0_2086:flash_out"/>
+		<EdgeI path="firefly_s0_2085:flash_in-firefly_s0_1925:flash_out"/>
+		<EdgeI path="firefly_s0_2085:flash_in-firefly_s0_2084:flash_out"/>
+	<EdgeI path="firefly_s0_2086:tick_in-firefly_s0_2086:tick_out"/>
+		<EdgeI path="firefly_s0_2086:flash_in-firefly_s0_2246:flash_out"/>
+		<EdgeI path="firefly_s0_2086:flash_in-firefly_s0_2087:flash_out"/>
+		<EdgeI path="firefly_s0_2086:flash_in-firefly_s0_1926:flash_out"/>
+		<EdgeI path="firefly_s0_2086:flash_in-firefly_s0_2085:flash_out"/>
+	<EdgeI path="firefly_s0_2087:tick_in-firefly_s0_2087:tick_out"/>
+		<EdgeI path="firefly_s0_2087:flash_in-firefly_s0_2247:flash_out"/>
+		<EdgeI path="firefly_s0_2087:flash_in-firefly_s0_2088:flash_out"/>
+		<EdgeI path="firefly_s0_2087:flash_in-firefly_s0_1927:flash_out"/>
+		<EdgeI path="firefly_s0_2087:flash_in-firefly_s0_2086:flash_out"/>
+	<EdgeI path="firefly_s0_2088:tick_in-firefly_s0_2088:tick_out"/>
+		<EdgeI path="firefly_s0_2088:flash_in-firefly_s0_2248:flash_out"/>
+		<EdgeI path="firefly_s0_2088:flash_in-firefly_s0_2089:flash_out"/>
+		<EdgeI path="firefly_s0_2088:flash_in-firefly_s0_1928:flash_out"/>
+		<EdgeI path="firefly_s0_2088:flash_in-firefly_s0_2087:flash_out"/>
+	<EdgeI path="firefly_s0_2089:tick_in-firefly_s0_2089:tick_out"/>
+		<EdgeI path="firefly_s0_2089:flash_in-firefly_s0_2249:flash_out"/>
+		<EdgeI path="firefly_s0_2089:flash_in-firefly_s0_20810:flash_out"/>
+		<EdgeI path="firefly_s0_2089:flash_in-firefly_s0_1929:flash_out"/>
+		<EdgeI path="firefly_s0_2089:flash_in-firefly_s0_2088:flash_out"/>
+	<EdgeI path="firefly_s0_20810:tick_in-firefly_s0_20810:tick_out"/>
+		<EdgeI path="firefly_s0_20810:flash_in-firefly_s0_22410:flash_out"/>
+		<EdgeI path="firefly_s0_20810:flash_in-firefly_s0_20811:flash_out"/>
+		<EdgeI path="firefly_s0_20810:flash_in-firefly_s0_19210:flash_out"/>
+		<EdgeI path="firefly_s0_20810:flash_in-firefly_s0_2089:flash_out"/>
+	<EdgeI path="firefly_s0_20811:tick_in-firefly_s0_20811:tick_out"/>
+		<EdgeI path="firefly_s0_20811:flash_in-firefly_s0_22411:flash_out"/>
+		<EdgeI path="firefly_s0_20811:flash_in-firefly_s0_20812:flash_out"/>
+		<EdgeI path="firefly_s0_20811:flash_in-firefly_s0_19211:flash_out"/>
+		<EdgeI path="firefly_s0_20811:flash_in-firefly_s0_20810:flash_out"/>
+	<EdgeI path="firefly_s0_20812:tick_in-firefly_s0_20812:tick_out"/>
+		<EdgeI path="firefly_s0_20812:flash_in-firefly_s0_22412:flash_out"/>
+		<EdgeI path="firefly_s0_20812:flash_in-firefly_s0_20813:flash_out"/>
+		<EdgeI path="firefly_s0_20812:flash_in-firefly_s0_19212:flash_out"/>
+		<EdgeI path="firefly_s0_20812:flash_in-firefly_s0_20811:flash_out"/>
+	<EdgeI path="firefly_s0_20813:tick_in-firefly_s0_20813:tick_out"/>
+		<EdgeI path="firefly_s0_20813:flash_in-firefly_s0_22413:flash_out"/>
+		<EdgeI path="firefly_s0_20813:flash_in-firefly_s0_20814:flash_out"/>
+		<EdgeI path="firefly_s0_20813:flash_in-firefly_s0_19213:flash_out"/>
+		<EdgeI path="firefly_s0_20813:flash_in-firefly_s0_20812:flash_out"/>
+	<EdgeI path="firefly_s0_20814:tick_in-firefly_s0_20814:tick_out"/>
+		<EdgeI path="firefly_s0_20814:flash_in-firefly_s0_22414:flash_out"/>
+		<EdgeI path="firefly_s0_20814:flash_in-firefly_s0_20815:flash_out"/>
+		<EdgeI path="firefly_s0_20814:flash_in-firefly_s0_19214:flash_out"/>
+		<EdgeI path="firefly_s0_20814:flash_in-firefly_s0_20813:flash_out"/>
+	<EdgeI path="firefly_s0_20815:tick_in-firefly_s0_20815:tick_out"/>
+		<EdgeI path="firefly_s0_20815:flash_in-firefly_s0_22415:flash_out"/>
+		<EdgeI path="firefly_s0_20815:flash_in-firefly_s0_19215:flash_out"/>
+		<EdgeI path="firefly_s0_20815:flash_in-firefly_s0_20814:flash_out"/>
+	<EdgeI path="firefly_s0_2240:tick_in-firefly_s0_2240:tick_out"/>
+		<EdgeI path="firefly_s0_2240:flash_in-firefly_s0_2400:flash_out"/>
+		<EdgeI path="firefly_s0_2240:flash_in-firefly_s0_2241:flash_out"/>
+		<EdgeI path="firefly_s0_2240:flash_in-firefly_s0_2080:flash_out"/>
+	<EdgeI path="firefly_s0_2241:tick_in-firefly_s0_2241:tick_out"/>
+		<EdgeI path="firefly_s0_2241:flash_in-firefly_s0_2401:flash_out"/>
+		<EdgeI path="firefly_s0_2241:flash_in-firefly_s0_2242:flash_out"/>
+		<EdgeI path="firefly_s0_2241:flash_in-firefly_s0_2081:flash_out"/>
+		<EdgeI path="firefly_s0_2241:flash_in-firefly_s0_2240:flash_out"/>
+	<EdgeI path="firefly_s0_2242:tick_in-firefly_s0_2242:tick_out"/>
+		<EdgeI path="firefly_s0_2242:flash_in-firefly_s0_2402:flash_out"/>
+		<EdgeI path="firefly_s0_2242:flash_in-firefly_s0_2243:flash_out"/>
+		<EdgeI path="firefly_s0_2242:flash_in-firefly_s0_2082:flash_out"/>
+		<EdgeI path="firefly_s0_2242:flash_in-firefly_s0_2241:flash_out"/>
+	<EdgeI path="firefly_s0_2243:tick_in-firefly_s0_2243:tick_out"/>
+		<EdgeI path="firefly_s0_2243:flash_in-firefly_s0_2403:flash_out"/>
+		<EdgeI path="firefly_s0_2243:flash_in-firefly_s0_2244:flash_out"/>
+		<EdgeI path="firefly_s0_2243:flash_in-firefly_s0_2083:flash_out"/>
+		<EdgeI path="firefly_s0_2243:flash_in-firefly_s0_2242:flash_out"/>
+	<EdgeI path="firefly_s0_2244:tick_in-firefly_s0_2244:tick_out"/>
+		<EdgeI path="firefly_s0_2244:flash_in-firefly_s0_2404:flash_out"/>
+		<EdgeI path="firefly_s0_2244:flash_in-firefly_s0_2245:flash_out"/>
+		<EdgeI path="firefly_s0_2244:flash_in-firefly_s0_2084:flash_out"/>
+		<EdgeI path="firefly_s0_2244:flash_in-firefly_s0_2243:flash_out"/>
+	<EdgeI path="firefly_s0_2245:tick_in-firefly_s0_2245:tick_out"/>
+		<EdgeI path="firefly_s0_2245:flash_in-firefly_s0_2405:flash_out"/>
+		<EdgeI path="firefly_s0_2245:flash_in-firefly_s0_2246:flash_out"/>
+		<EdgeI path="firefly_s0_2245:flash_in-firefly_s0_2085:flash_out"/>
+		<EdgeI path="firefly_s0_2245:flash_in-firefly_s0_2244:flash_out"/>
+	<EdgeI path="firefly_s0_2246:tick_in-firefly_s0_2246:tick_out"/>
+		<EdgeI path="firefly_s0_2246:flash_in-firefly_s0_2406:flash_out"/>
+		<EdgeI path="firefly_s0_2246:flash_in-firefly_s0_2247:flash_out"/>
+		<EdgeI path="firefly_s0_2246:flash_in-firefly_s0_2086:flash_out"/>
+		<EdgeI path="firefly_s0_2246:flash_in-firefly_s0_2245:flash_out"/>
+	<EdgeI path="firefly_s0_2247:tick_in-firefly_s0_2247:tick_out"/>
+		<EdgeI path="firefly_s0_2247:flash_in-firefly_s0_2407:flash_out"/>
+		<EdgeI path="firefly_s0_2247:flash_in-firefly_s0_2248:flash_out"/>
+		<EdgeI path="firefly_s0_2247:flash_in-firefly_s0_2087:flash_out"/>
+		<EdgeI path="firefly_s0_2247:flash_in-firefly_s0_2246:flash_out"/>
+	<EdgeI path="firefly_s0_2248:tick_in-firefly_s0_2248:tick_out"/>
+		<EdgeI path="firefly_s0_2248:flash_in-firefly_s0_2408:flash_out"/>
+		<EdgeI path="firefly_s0_2248:flash_in-firefly_s0_2249:flash_out"/>
+		<EdgeI path="firefly_s0_2248:flash_in-firefly_s0_2088:flash_out"/>
+		<EdgeI path="firefly_s0_2248:flash_in-firefly_s0_2247:flash_out"/>
+	<EdgeI path="firefly_s0_2249:tick_in-firefly_s0_2249:tick_out"/>
+		<EdgeI path="firefly_s0_2249:flash_in-firefly_s0_2409:flash_out"/>
+		<EdgeI path="firefly_s0_2249:flash_in-firefly_s0_22410:flash_out"/>
+		<EdgeI path="firefly_s0_2249:flash_in-firefly_s0_2089:flash_out"/>
+		<EdgeI path="firefly_s0_2249:flash_in-firefly_s0_2248:flash_out"/>
+	<EdgeI path="firefly_s0_22410:tick_in-firefly_s0_22410:tick_out"/>
+		<EdgeI path="firefly_s0_22410:flash_in-firefly_s0_24010:flash_out"/>
+		<EdgeI path="firefly_s0_22410:flash_in-firefly_s0_22411:flash_out"/>
+		<EdgeI path="firefly_s0_22410:flash_in-firefly_s0_20810:flash_out"/>
+		<EdgeI path="firefly_s0_22410:flash_in-firefly_s0_2249:flash_out"/>
+	<EdgeI path="firefly_s0_22411:tick_in-firefly_s0_22411:tick_out"/>
+		<EdgeI path="firefly_s0_22411:flash_in-firefly_s0_24011:flash_out"/>
+		<EdgeI path="firefly_s0_22411:flash_in-firefly_s0_22412:flash_out"/>
+		<EdgeI path="firefly_s0_22411:flash_in-firefly_s0_20811:flash_out"/>
+		<EdgeI path="firefly_s0_22411:flash_in-firefly_s0_22410:flash_out"/>
+	<EdgeI path="firefly_s0_22412:tick_in-firefly_s0_22412:tick_out"/>
+		<EdgeI path="firefly_s0_22412:flash_in-firefly_s0_24012:flash_out"/>
+		<EdgeI path="firefly_s0_22412:flash_in-firefly_s0_22413:flash_out"/>
+		<EdgeI path="firefly_s0_22412:flash_in-firefly_s0_20812:flash_out"/>
+		<EdgeI path="firefly_s0_22412:flash_in-firefly_s0_22411:flash_out"/>
+	<EdgeI path="firefly_s0_22413:tick_in-firefly_s0_22413:tick_out"/>
+		<EdgeI path="firefly_s0_22413:flash_in-firefly_s0_24013:flash_out"/>
+		<EdgeI path="firefly_s0_22413:flash_in-firefly_s0_22414:flash_out"/>
+		<EdgeI path="firefly_s0_22413:flash_in-firefly_s0_20813:flash_out"/>
+		<EdgeI path="firefly_s0_22413:flash_in-firefly_s0_22412:flash_out"/>
+	<EdgeI path="firefly_s0_22414:tick_in-firefly_s0_22414:tick_out"/>
+		<EdgeI path="firefly_s0_22414:flash_in-firefly_s0_24014:flash_out"/>
+		<EdgeI path="firefly_s0_22414:flash_in-firefly_s0_22415:flash_out"/>
+		<EdgeI path="firefly_s0_22414:flash_in-firefly_s0_20814:flash_out"/>
+		<EdgeI path="firefly_s0_22414:flash_in-firefly_s0_22413:flash_out"/>
+	<EdgeI path="firefly_s0_22415:tick_in-firefly_s0_22415:tick_out"/>
+		<EdgeI path="firefly_s0_22415:flash_in-firefly_s0_24015:flash_out"/>
+		<EdgeI path="firefly_s0_22415:flash_in-firefly_s0_20815:flash_out"/>
+		<EdgeI path="firefly_s0_22415:flash_in-firefly_s0_22414:flash_out"/>
+	<EdgeI path="firefly_s0_2400:tick_in-firefly_s0_2400:tick_out"/>
+		<EdgeI path="firefly_s0_2400:flash_in-firefly_s0_2401:flash_out"/>
+		<EdgeI path="firefly_s0_2400:flash_in-firefly_s0_2240:flash_out"/>
+	<EdgeI path="firefly_s0_2401:tick_in-firefly_s0_2401:tick_out"/>
+		<EdgeI path="firefly_s0_2401:flash_in-firefly_s0_2402:flash_out"/>
+		<EdgeI path="firefly_s0_2401:flash_in-firefly_s0_2241:flash_out"/>
+		<EdgeI path="firefly_s0_2401:flash_in-firefly_s0_2400:flash_out"/>
+	<EdgeI path="firefly_s0_2402:tick_in-firefly_s0_2402:tick_out"/>
+		<EdgeI path="firefly_s0_2402:flash_in-firefly_s0_2403:flash_out"/>
+		<EdgeI path="firefly_s0_2402:flash_in-firefly_s0_2242:flash_out"/>
+		<EdgeI path="firefly_s0_2402:flash_in-firefly_s0_2401:flash_out"/>
+	<EdgeI path="firefly_s0_2403:tick_in-firefly_s0_2403:tick_out"/>
+		<EdgeI path="firefly_s0_2403:flash_in-firefly_s0_2404:flash_out"/>
+		<EdgeI path="firefly_s0_2403:flash_in-firefly_s0_2243:flash_out"/>
+		<EdgeI path="firefly_s0_2403:flash_in-firefly_s0_2402:flash_out"/>
+	<EdgeI path="firefly_s0_2404:tick_in-firefly_s0_2404:tick_out"/>
+		<EdgeI path="firefly_s0_2404:flash_in-firefly_s0_2405:flash_out"/>
+		<EdgeI path="firefly_s0_2404:flash_in-firefly_s0_2244:flash_out"/>
+		<EdgeI path="firefly_s0_2404:flash_in-firefly_s0_2403:flash_out"/>
+	<EdgeI path="firefly_s0_2405:tick_in-firefly_s0_2405:tick_out"/>
+		<EdgeI path="firefly_s0_2405:flash_in-firefly_s0_2406:flash_out"/>
+		<EdgeI path="firefly_s0_2405:flash_in-firefly_s0_2245:flash_out"/>
+		<EdgeI path="firefly_s0_2405:flash_in-firefly_s0_2404:flash_out"/>
+	<EdgeI path="firefly_s0_2406:tick_in-firefly_s0_2406:tick_out"/>
+		<EdgeI path="firefly_s0_2406:flash_in-firefly_s0_2407:flash_out"/>
+		<EdgeI path="firefly_s0_2406:flash_in-firefly_s0_2246:flash_out"/>
+		<EdgeI path="firefly_s0_2406:flash_in-firefly_s0_2405:flash_out"/>
+	<EdgeI path="firefly_s0_2407:tick_in-firefly_s0_2407:tick_out"/>
+		<EdgeI path="firefly_s0_2407:flash_in-firefly_s0_2408:flash_out"/>
+		<EdgeI path="firefly_s0_2407:flash_in-firefly_s0_2247:flash_out"/>
+		<EdgeI path="firefly_s0_2407:flash_in-firefly_s0_2406:flash_out"/>
+	<EdgeI path="firefly_s0_2408:tick_in-firefly_s0_2408:tick_out"/>
+		<EdgeI path="firefly_s0_2408:flash_in-firefly_s0_2409:flash_out"/>
+		<EdgeI path="firefly_s0_2408:flash_in-firefly_s0_2248:flash_out"/>
+		<EdgeI path="firefly_s0_2408:flash_in-firefly_s0_2407:flash_out"/>
+	<EdgeI path="firefly_s0_2409:tick_in-firefly_s0_2409:tick_out"/>
+		<EdgeI path="firefly_s0_2409:flash_in-firefly_s0_24010:flash_out"/>
+		<EdgeI path="firefly_s0_2409:flash_in-firefly_s0_2249:flash_out"/>
+		<EdgeI path="firefly_s0_2409:flash_in-firefly_s0_2408:flash_out"/>
+	<EdgeI path="firefly_s0_24010:tick_in-firefly_s0_24010:tick_out"/>
+		<EdgeI path="firefly_s0_24010:flash_in-firefly_s0_24011:flash_out"/>
+		<EdgeI path="firefly_s0_24010:flash_in-firefly_s0_22410:flash_out"/>
+		<EdgeI path="firefly_s0_24010:flash_in-firefly_s0_2409:flash_out"/>
+	<EdgeI path="firefly_s0_24011:tick_in-firefly_s0_24011:tick_out"/>
+		<EdgeI path="firefly_s0_24011:flash_in-firefly_s0_24012:flash_out"/>
+		<EdgeI path="firefly_s0_24011:flash_in-firefly_s0_22411:flash_out"/>
+		<EdgeI path="firefly_s0_24011:flash_in-firefly_s0_24010:flash_out"/>
+	<EdgeI path="firefly_s0_24012:tick_in-firefly_s0_24012:tick_out"/>
+		<EdgeI path="firefly_s0_24012:flash_in-firefly_s0_24013:flash_out"/>
+		<EdgeI path="firefly_s0_24012:flash_in-firefly_s0_22412:flash_out"/>
+		<EdgeI path="firefly_s0_24012:flash_in-firefly_s0_24011:flash_out"/>
+	<EdgeI path="firefly_s0_24013:tick_in-firefly_s0_24013:tick_out"/>
+		<EdgeI path="firefly_s0_24013:flash_in-firefly_s0_24014:flash_out"/>
+		<EdgeI path="firefly_s0_24013:flash_in-firefly_s0_22413:flash_out"/>
+		<EdgeI path="firefly_s0_24013:flash_in-firefly_s0_24012:flash_out"/>
+	<EdgeI path="firefly_s0_24014:tick_in-firefly_s0_24014:tick_out"/>
+		<EdgeI path="firefly_s0_24014:flash_in-firefly_s0_24015:flash_out"/>
+		<EdgeI path="firefly_s0_24014:flash_in-firefly_s0_22414:flash_out"/>
+		<EdgeI path="firefly_s0_24014:flash_in-firefly_s0_24013:flash_out"/>
+	<EdgeI path="firefly_s0_24015:tick_in-firefly_s0_24015:tick_out"/>
+		<EdgeI path="firefly_s0_24015:flash_in-firefly_s0_22415:flash_out"/>
+		<EdgeI path="firefly_s0_24015:flash_in-firefly_s0_24014:flash_out"/>
+</EdgeInstances>
+</GraphInstance>
+</Graphs>
