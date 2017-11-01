@@ -424,6 +424,7 @@ def render_input_pin_as_cpp(ip,dst):
         "devicePropertiesStructName"    : "{}_properties_t".format(dt.id),
         "deviceStateStructName"         : "{}_state_t".format(dt.id),
         "messageTypeId"                 : mt.id,
+        "isApplication"                 : "true" if ip.is_application else "false",
         "messageStructName"             : "{}_message_t".format(mt.id),
         "pinName"                      : ip.name,
         "pinIndex"                     : index,
@@ -458,6 +459,7 @@ public:
         "{pinName}",
         {pinIndex},
         {messageTypeId}_Spec_get(),
+        {isApplication},
         {pinPropertiesStructName}_Spec_get(),
         {pinStateStructName}_Spec_get(),
         {deviceTypeId}_{pinName}_handler_code
@@ -487,13 +489,7 @@ public:
     auto handler_checkpoint=[&](bool preEvent, int level, const char *fmt, ...) -> void {{
         va_list a;
         va_start(a,fmt);
-        orchestrator->vcheckpoint(false, preEvent,level,fmt,a);
-        va_end(a);
-    }};
-    auto handler_checkpoint_global=[&](bool preEvent, int level, const char *fmt, ...) -> void {{
-        va_list a;
-        va_start(a,fmt);
-        orchestrator->vcheckpoint(true, preEvent,level,fmt,a);
+        orchestrator->vcheckpoint(preEvent,level,fmt,a);
         va_end(a);
     }};
 
@@ -532,6 +528,7 @@ def render_output_pin_as_cpp(op,dst):
         "deviceStateStructName"         : "{}_state_t".format(dt.id),
         "messageTypeId"                 : mt.id,
         "messageStructName"             : "{}_message_t".format(mt.id),
+        "isApplication"                 : "true" if op.is_application else "false",
         "pinName"                      : op.name,
         "pinIndex"                     : index,
         "pinPropertiesStructName"       : "{}_{}_properties_t".format(dt.id,op.name),
@@ -556,7 +553,7 @@ def render_output_pin_as_cpp(op,dst):
     dst.write('static const char *{}_{}_handler_code=R"CDATA({})CDATA";\n'.format(dt.id, op.name, op.send_handler))
 
     dst.write("class {}_{}_Spec : public OutputPinImpl {{\n".format(dt.id,op.name))
-    dst.write('  public: {}_{}_Spec() : OutputPinImpl({}_Spec_get, "{}", {}, {}_Spec_get(), {}_{}_handler_code) {{}} \n'.format(dt.id,op.name, dt.id, op.name, index, op.message_type.id, dt.id, op.name))
+    dst.write('  public: {}_{}_Spec() : OutputPinImpl({}_Spec_get, "{}", {}, {}_Spec_get(), {}, {}_{}_handler_code) {{}} \n'.format(dt.id,op.name, dt.id, op.name, index, op.message_type.id, "true" if op.is_application else "false", dt.id, op.name))
     dst.write("""    virtual void onSend(
                       OrchestratorServices *orchestrator,
                       const typed_data_t *gGraphProperties,
@@ -578,13 +575,7 @@ def render_output_pin_as_cpp(op,dst):
     auto handler_checkpoint=[&](bool preEvent, int level, const char *fmt, ...) -> void {
         va_list a;
         va_start(a,fmt);
-        orchestrator->vcheckpoint(false, preEvent,level,fmt,a);
-        va_end(a);
-    };
-    auto handler_checkpoint_global=[&](bool preEvent, int level, const char *fmt, ...) -> void {
-        va_list a;
-        va_start(a,fmt);
-        orchestrator->vcheckpoint(true, preEvent,level,fmt,a);
+        orchestrator->vcheckpoint(preEvent,level,fmt,a);
         va_end(a);
     };
 """)

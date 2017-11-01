@@ -235,25 +235,26 @@ class MessageType(object):
 
 
 class Pin(object):
-    def __init__(self,parent,name,message_type,metadata,source_file,source_line):
+    def __init__(self,parent,name,message_type,is_application,metadata,source_file,source_line):
         self.parent=parent
         self.name=name
         self.message_type=message_type
+        self.is_application=is_application
         self.metadata=metadata
         self.source_file=source_file
         self.source_line=source_line
 
 
 class InputPin(Pin):
-    def __init__(self,parent,name,message_type,properties,state,metadata,receive_handler,source_file=None,source_line=None):
-        Pin.__init__(self,parent,name,message_type,metadata,source_file,source_line)
+    def __init__(self,parent,name,message_type,is_application,properties,state,metadata,receive_handler,source_file=None,source_line=None):
+        Pin.__init__(self,parent,name,message_type,is_application,metadata,source_file,source_line)
         self.properties=properties
         self.state=state
         self.receive_handler=receive_handler
 
 class OutputPin(Pin):
-    def __init__(self,parent,name,message_type,metadata,send_handler,source_file,source_line):
-        Pin.__init__(self,parent,name,message_type,metadata,source_file,source_line)
+    def __init__(self,parent,name,message_type,is_application,metadata,send_handler,source_file,source_line):
+        Pin.__init__(self,parent,name,message_type,is_application,metadata,source_file,source_line)
         self.send_handler=send_handler
 
 
@@ -274,7 +275,7 @@ class DeviceType(object):
         self.shared_code=shared_code
         self.ready_to_send_handler="" # Hrmm, this was missing as an explicit member, but is used by load/save
 
-    def add_input(self,name,message_type,properties,state,metadata,receive_handler,source_file=None,source_line={}):
+    def add_input(self,name,message_type,is_application,properties,state,metadata,receive_handler,source_file=None,source_line={}):
         assert (state is None) or isinstance(state,TypedDataSpec)
         assert (properties is None) or isinstance(properties,TypedDataSpec)
         if name in self.pins:
@@ -283,19 +284,19 @@ class DeviceType(object):
             raise GraphDescriptionError("Unregistered message type {} on pin {} of device type {}".format(message_type.id,name,self.id))
         if message_type != self.parent.message_types[message_type.id]:
             raise GraphDescriptionError("Incorrect message type object {} on pin {} of device type {}".format(message_type.id,name,self.id))
-        p=InputPin(self, name, self.parent.message_types[message_type.id], properties, state, metadata, receive_handler, source_file, source_line)
+        p=InputPin(self, name, self.parent.message_types[message_type.id], is_application, properties, state, metadata, receive_handler, source_file, source_line)
         self.inputs[name]=p
         self.inputs_by_index.append(p)
         self.pins[name]=p
 
-    def add_output(self,name,message_type,metadata,send_handler,source_file=None,source_line=None):
+    def add_output(self,name,message_type,is_application, metadata,send_handler,source_file=None,source_line=None):
         if name in self.pins:
             raise GraphDescriptionError("Duplicate pin {} on device type {}".format(name,self.id))
         if message_type.id not in self.parent.message_types:
             raise GraphDescriptionError("Unregistered message type {} on pin {} of device type {}".format(message_type.id,name,self.id))
         if message_type != self.parent.message_types[message_type.id]:
             raise GraphDescriptionError("Incorrect message type object {} on pin {} of device type {}".format(message_type.id,name,self.id))
-        p=OutputPin(self, name, self.parent.message_types[message_type.id], metadata, send_handler, source_file, source_line)
+        p=OutputPin(self, name, self.parent.message_types[message_type.id], is_application, metadata, send_handler, source_file, source_line)
         self.outputs[name]=p
         self.outputs_by_index.append(p)
         self.pins[name]=p
@@ -391,6 +392,11 @@ class EdgeInstance(object):
 
         if __debug__ and (not is_refinement_compatible(dst_pin.properties,properties)):
             raise GraphDescriptionError("Properties are not compatible: proto={}, value={}.".format(dst_pin.properties, properties))
+            
+        if __debug__ and dst_pin.is_application:
+            raise GraphDescriptionError("Attempt to connect edge instance to application input pin")
+        if __debug__ and src_pin.is_application:
+            raise GraphDescriptionError("Attempt to connect edge instance to application output pin")
 
         self.id = "{}:{}-{}:{}".format(dst_device.id,dst_pin.name,src_device.id,src_pin.name)
 

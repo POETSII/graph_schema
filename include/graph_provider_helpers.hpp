@@ -57,6 +57,21 @@ std::string get_attribute_optional(xmlpp::Element *eParent, const char *name)
   return a->get_value();
 }
 
+bool get_attribute_optional_bool(xmlpp::Element *eParent, const char *name)
+{
+  auto a=get_attribute_optional(eParent, name);
+  if(a.empty()){
+    return false;
+  }
+  if(a=="true" || a=="1"){
+    return true;
+  }
+  if(a=="false" || a=="0"){
+    return false;
+  }
+  throw std::runtime_error("Couldn't interpret '"+a+"' as a bool.");
+}
+
 template<class T>
 const T *cast_typed_properties(const typed_data_t *properties)
 {  return static_cast<const T *>(properties); }
@@ -173,6 +188,7 @@ private:
   std::string m_name;
   unsigned m_index;
   MessageTypePtr m_messageType;
+  bool m_isApplication;
   TypedDataSpecPtr m_propertiesType;
   TypedDataSpecPtr m_stateType;
   std::string m_code;
@@ -184,6 +200,7 @@ protected:
     const std::string &name,
     unsigned index,
     MessageTypePtr messageType,
+    bool isApplication,
     TypedDataSpecPtr propertiesType,
     TypedDataSpecPtr stateType,
     const std::string &code
@@ -192,6 +209,7 @@ protected:
     , m_name(name)
     , m_index(index)
     , m_messageType(messageType)
+    , m_isApplication(isApplication)
     , m_propertiesType(propertiesType)
     , m_stateType(stateType)
     , m_code(code)
@@ -215,6 +233,9 @@ public:
 
   virtual const MessageTypePtr &getMessageType() const override
   { return m_messageType; }
+  
+  virtual bool isApplication() const override
+  { return m_isApplication; }
 
   virtual const TypedDataSpecPtr &getPropertiesSpec() const override
   { return m_propertiesType; }
@@ -239,15 +260,17 @@ private:
   std::string m_name;
   unsigned m_index;
   MessageTypePtr m_messageType;
+  bool m_isApplication;
   std::string m_code;
 
   rapidjson::Document m_metadata;
 protected:
-  OutputPinImpl(std::function<DeviceTypePtr ()> deviceTypeSrc, const std::string &name, unsigned index, MessageTypePtr messageType, const std::string &code)
+  OutputPinImpl(std::function<DeviceTypePtr ()> deviceTypeSrc, const std::string &name, unsigned index, MessageTypePtr messageType, bool isApplication, const std::string &code)
     : m_deviceTypeSrc(deviceTypeSrc)
     , m_name(name)
     , m_index(index)
     , m_messageType(messageType)
+    , m_isApplication(isApplication)
     , m_code(code)
   {
     m_metadata.SetObject();
@@ -268,6 +291,9 @@ public:
 
   virtual const MessageTypePtr &getMessageType() const override
   { return m_messageType; }
+  
+  virtual bool isApplication() const override
+  { return m_isApplication; }
 
   virtual const std::string &getHandlerCode() const override
   { return m_code; }
