@@ -15,12 +15,12 @@
 
 static unsigned  logLevel=2;
 
-void write_application_output(const char *devId, const OutputPin *pin, const TypedDataPtr &data)
+void write_application_output(unsigned m_epoch, const char *devId, const OutputPin *pin, const TypedDataPtr &data)
 {
   assert(pin->isApplication());
   std::stringstream acc;
   
-  std::cout<<"{\"dev\":\""<<devId<<"\",\"pin\":\""<<pin->getName()<<"\",\"msg\":";
+  std::cout<<"{\"epoch\":\""<<m_epoch<<"\",\"dev\":\""<<devId<<"\",\"pin\":\""<<pin->getName()<<"\",\"msg\":";
   std::cout<<pin->getMessageType()->getMessageSpec()->toJSON(data);
   std::cout<<"}"<<std::endl;
 }
@@ -416,7 +416,7 @@ struct EpochSim
       sent=true;
       
       if(output->isApplication()){
-        write_application_output(src.name, output.get(), message);
+        write_application_output(m_epoch, src.name, output.get(), message);
       }else{
         for(auto &out : src.outputs[sel]){
           auto &dst=m_devices[out.dstDevice];

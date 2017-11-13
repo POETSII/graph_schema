@@ -210,6 +210,8 @@ include apps/storm/makefile.inc
 include apps/amg/makefile.inc
 include apps/apsp/makefile.inc
 
+include apps/firefly_sync/makefile.inc
+
 # Non-default
 include apps/nursery/airfoil/airfoil.inc
 
