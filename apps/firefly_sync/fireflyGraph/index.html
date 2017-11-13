@@ -71,14 +71,15 @@ d3.json("data.json", function(error, graph) {
 
 	var inter = setInterval(function() { flashFireflies();}, 15);
 
+	var parseNDJSON = require('parse-ndjson');
+
 	function flashFireflies() {
 		d3.csv("log.csv", function(data) {
 			data.forEach(function(d) {
-				if(+d.time > curTime) {	
-					d3.selectAll('#'+d.firefly)
+				if(+d.epoch > curTime) {	
+					d3.selectAll('#'+d.dev)
 					  .transition().duration(100).attr("fill", function(d) { var patt = new RegExp("s999"); 
 																																	 if (patt.test(this.id)) {
-																																			console.log("link firefly flash!");
 																																			return "#00FF00";
 																																	 } else {
 																																			return "#FFFFFF"; }
@@ -86,17 +87,14 @@ d3.json("data.json", function(error, graph) {
 					  .transition().duration(200)
 					  .transition().duration(200).attr("fill", "#606060")
 
-					curTime = d.time;
+					curTime = d.epoch;
 				}
 			});
 		});
-		//$.ajax({
-		//				url:'refresh_log.php',
-		//				success:function(){
-		//				    console.log('Deleted !!');
-		//				}
-
-		//})
+		$.ajax({
+						url:'refresh_log.php',
+						method: 'GET'
+		})
 	}
 
   function ticked() {

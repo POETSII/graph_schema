@@ -9,10 +9,10 @@ import random
 # LPeriod - The period of each link firefly should be an integer multiple of the sPeriod 
 
 S=1
-N=2
-M=2
+N=16
+M=16
 L=0 
-sPeriod=5000
+sPeriod=15000
 LPeriod=3
 sNudge=int(round(0.30*sPeriod))
 sFlashzone=int(round(0.01*sPeriod))

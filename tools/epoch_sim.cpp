@@ -20,9 +20,13 @@ void write_application_output(unsigned m_epoch, const char *devId, const OutputP
   assert(pin->isApplication());
   std::stringstream acc;
   
-  std::cout<<"{\"epoch\":\""<<m_epoch<<"\",\"dev\":\""<<devId<<"\",\"pin\":\""<<pin->getName()<<"\",\"msg\":";
-  std::cout<<pin->getMessageType()->getMessageSpec()->toJSON(data);
-  std::cout<<"}"<<std::endl;
+	//ndjson
+  //std::cout<<"{\"epoch\":\""<<m_epoch<<"\",\"dev\":\""<<devId<<"\",\"pin\":\""<<pin->getName()<<"\",\"msg\":";
+  //std::cout<<pin->getMessageType()->getMessageSpec()->toJSON(data);
+  //std::cout<<"}"<<std::endl;
+
+	//csv
+	std::cout<<m_epoch<<","<<devId<<","<<pin->getName()<<std::endl;
 }
 
 struct EpochSim
