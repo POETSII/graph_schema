@@ -49,7 +49,7 @@ d3.json("data.json", function(error, graph) {
     .selectAll("circle")
     .data(graph.nodes)
     .enter().append("circle")
-      .attr("r", 13)
+      .attr("r", 5)
       .attr("id", function(d) { return d.id; } )
       .attr("fill", function(d) { return "#606060"; })
       .call(d3.drag()
@@ -69,14 +69,14 @@ d3.json("data.json", function(error, graph) {
 
 	var curTime = 0;	
 
-	var inter = setInterval(function() { flashFireflies();}, 15);
+	var inter = setInterval(function() { flashFireflies();}, 20);
 
 	var parseNDJSON = require('parse-ndjson');
 
 	function flashFireflies() {
 		d3.csv("log.csv", function(data) {
 			data.forEach(function(d) {
-				if(+d.epoch > curTime) {	
+				if(+d.epoch >= curTime) {	
 					d3.selectAll('#'+d.dev)
 					  .transition().duration(100).attr("fill", function(d) { var patt = new RegExp("s999"); 
 																																	 if (patt.test(this.id)) {

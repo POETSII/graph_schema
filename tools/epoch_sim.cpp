@@ -546,7 +546,8 @@ int main(int argc, char *argv[])
 
     int maxSteps=INT_MAX;
 
-    double probSend=0.9;
+    //double probSend=0.9;
+    double probSend=1.0;
     
     bool enableAccurateAssertions=false;
 
