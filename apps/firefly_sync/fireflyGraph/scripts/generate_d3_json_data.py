@@ -39,7 +39,7 @@ def main(argv):
 				regex = re.compile(r'(firefly_s[0-9]+_[0-9]+):flash_in\-(firefly_s[0-9]+_[0-9]+):flash_out')
 				m = regex.search(pathstr)
 				if m:
-					o+= '\t\t{\"source\": \"'+ str(m.group(1)) +'\", \"target\": \"'+str(m.group(2))+'\", \"value\":2},\n'
+					o+= '\t\t{\"source\": \"'+ str(m.group(1)) +'\", \"target\": \"'+str(m.group(2))+'\", \"value\":0.001},\n'
 	o = o[:-2] #remove the last comma
 	o+= '\n\t]\n'
 
