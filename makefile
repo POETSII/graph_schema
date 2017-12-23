@@ -30,6 +30,7 @@ CPPFLAGS += -O3 -DNDEBUG=1
 
 TRANG = external/trang-20091111/trang.jar
 JING = external/jing-20081028/bin/jing.jar
+RNG_SVG = external/rng-svg/build.xml
 
 # TODO : OS X specific
 PYTHON = python3.4
@@ -41,17 +42,33 @@ $(TRANG) : external/trang-20091111.zip
 $(JING) : external/jing-20081028.zip
 	(cd external && unzip -o jing-20081028.zip)
 	touch $@
+	
+$(RNG_SVG) : external/rng-svg-latest.zip
+	mkdir external/rng-svg
+	(cd external/rng-svg && unzip -o ../rng-svg-latest)
+	touch $@
 
-rapidjson : external/rapidjson-master.zip
+external/rapidjson-master/include/rapidjson/rapidjson.h : external/rapidjson-master.zip
 	(cd external && unzip -o rapidjson-master)
+
+rapidjson : external/rapidjson-master/include/rapidjson/rapidjson.h
 
 CPPFLAGS += -I external/rapidjson-master/include
 
 graph_library : $(wildcard tools/graph/*.py)
 
-derived/%.rng derived/%.xsd : master/%.rnc $(TRANG)
+derived/%.rng derived/%.xsd : master/%.rnc $(TRANG) $(JING) $(wildcard master/%-example*.xml)
+	# Check the claimed examples in order to make sure that
+	# they validate
+	for i in master/*-example*.xml; do \
+		echo "Checking file $$i"; \
+		java -jar $(JING) -c master/$*.rnc $$i; \
+	done
+	# Update the derived shemas
 	java -jar $(TRANG) -I rnc -O rng master/$*.rnc derived/$*.rng
-	java -jar $(TRANG) -I rnc -O xsd master/$*.rnc  derived/$*.xsd
+	java -jar $(TRANG) -I rnc -O xsd master/$*.rnc derived/$*.xsd
+	
+		
 
 build-virtual-schema : derived/virtual-graph-schema.rng derived/virtual-graph-schema.xsd
 
@@ -84,7 +101,7 @@ output/%.graph.cpp : apps/%.xml graph_library
 	mkdir -p $(dir output/$*)
 	$(PYTHON) tools/render_graph_as_cpp.py < apps/$*.xml > output/$*.graph.cpp
 
-output/%.graph.so : output/%.graph.cpp
+output/%.graph.so : output/%.graph.cpp rapidjson
 	g++ $(CPPFLAGS) $(SO_CPPFLAGS) $< -o $@ $(LDFLAGS)
 
 bin/print_graph_properties : tools/print_graph_properties.cpp

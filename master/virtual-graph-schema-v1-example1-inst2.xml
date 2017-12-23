@@ -1,0 +1,43 @@
+<?xml version="1.0"?>
+<Graphs xmlns="http://TODO.org/POETS/virtual-graph-schema-v1">
+  <GraphTypeReference id="dt10_graph_schema_example" src="virtual-graph-schema-v1-example1.xml" />
+    
+  <GraphInstance id="inst2" graphTypeId="dt10_graph_schema_example">
+    <Documentation>
+    This is a pair of cells called x and y, with x being a leader
+    <pre>
+    ````        
+            id:"x"                     id:"y"
+         +------------+            +------------+
+     .-->|     in     +       .--->|     in     +    
+     |   +------------+      /     +------------+    
+     |   |P  leader=1 |     /      |P  leader=0 |    
+     |   |S  hot=?    |    /       |S  hot=?    |    
+     |   +------------+   /        +------------+    
+     |   |    out     |--'         |    out     |---.
+     |   +------------+            +------------+   |
+     |                                              | 
+     '----------------------------------------------'   
+    ````
+    
+    When activated, the token will pass between the two devices,
+    with x starting hot. When a message is sent, but has not been
+    received, both devices will be cold, as the token will be
+    in the network.
+    </pre>
+    </Documentation>
+    <DeviceInstances>
+      
+      <DevI id="x" type="cell">
+        <P>"leader":1</P> <!-- Set the "leader" property to true. -->
+      </DevI>
+      
+      <DevI id="y" type="cell" /> <!-- For this instance we can let it default to zero. -->
+    </DeviceInstances>
+    
+    <EdgeInstances>
+      <EdgeI path="x:in-y:out" />
+      <EdgeI path="y:in-x:out" />
+    </EdgeInstances>
+  </GraphInstance>
+</Graphs>

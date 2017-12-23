@@ -1,0 +1,229 @@
+<?xml version="1.0"?>
+<Graphs xmlns="http://TODO.org/POETS/virtual-graph-schema-v1">
+  <!-- This type of element is a comment, and will be stripped by the parser.
+       In this document the comments are used as meta-comments, so they are
+       talking about the format, rather than the graph type being described -->
+  <!-- The "xmlns" declaration specifies the namespace of the document, and is
+       what identifies this as a POETS graph container. -->
+  <GraphType id="dt10_graph_schema_example2">
+    <!-- The id of the graph type is "dt10_graph_schema_example_compute", which should
+         uniquely identify this graph type. Graph instances will refer to this
+         id in order to declare what kind of graph they are. -->
+
+    <!-- The documentation elements are used to describe the behaviour of
+         the graph type in a human readable way. The content itself is markdown.
+         Unlike comments (like this one), they -->
+    <Documentation>
+    This is an example of a device with a compute handler. The main purpose
+    of the device is to:
+    - Receive a number on an input port
+    - Raise it to a specific power
+    - Send the number on an output port
+    
+    Because raising to a power takes a lot of compute, we would like
+    to use any spare cycles. However, we'd also like to send as soon
+    as an output message is available, so 
+    </Documentation>
+    
+    <SharedCode>
+    struct output_message_t
+    {
+      device_address_type address;
+      uint32_t in;
+      uint32_t out;
+    };
+    </SharedCode>
+    
+    <!-- This element contains all message types used in
+         this particular graph type. The message ids are
+         indicating meaning as well as structure. For example,
+         both messages here are structurally identical,
+         but you wouldn't want to accidentally connect an
+         init port to a transfer port. -->
+    <MessageTypes>
+        <MessageType id="number">
+            <Documentation>
+            This is used for inputs and outputs
+            </Documentation>
+            <Message>
+              <Scalar type="uint32_t" name="value" />
+            </Message>
+        </MessageType>        
+    </MessageTypes>
+    
+    <DeviceTypes>
+      <DeviceType id="dev">
+          <Documentation>
+          Each calculating device has:
+          - one input port called "base"
+          - one output port called "result"
+          - an integer property called "exponent"
+          - state variable "valid" which indicates if we are working on anything
+          - state variables "value", "mult", and "acc" which track the powering calculation
+          
+          Graphically, the cell looks something like this:
+          <![CDATA[
+          ````        
+                  type:"dev"             
+              +----------------+
+            ->| in:"base"      +
+              +----------------+
+              |P  exp:int      |
+              |S  valid:bool   |
+              |S  mult:int     |
+              |S  count:int    |
+              |S  acc:int      |
+              +----------------+
+              | out:"result"   +->
+              +----------------+
+          ````
+          ]]>
+          In terms of behaviour:
+          - When valid=0, the cell is idle
+          - When valid=0 and count=0, the cell wants to send, but hasn't finished powering
+          - When valid=0 and count>0, the cell wants to send, and has finished powering
+          
+          The state machine is then:
+          <![CDATA[
+          ````
+                  recv,exp=1      +---------------------+
+                  .-------------->+                     |
+                 |                | count=1             |                                
+                 |        .-------+ rts={result}        |
+          +------+--+    /  send  +---------------------+
+          | count=0 +<--'                      ^
+          | rts={}  |                          |
+          |         +<--.                      | compute,count==2
+          +------+--+    \                     | 
+                 |        \ send  +------------+---------+
+                 |         '------+ count>1              |
+                 |                | rts={result,compute} |
+                  '-------------->|                      |
+                   recv           +------------+---------+
+                   exp>1            ^          |
+                                    |          | compute,count>2
+                                    '----------' 
+                                 
+          ````
+          ]]>
+          </Documentation>
+          
+          <DeviceSharedCode><![CDATA[
+          void powering_step(DEVICE_STATE_T *state)
+          {
+            if( state->count & 1){
+              deviceState->acc *= deviceState->mult;
+            }
+            deviceState->mult *= 2;
+            deviceState->count >>= 1;
+          }
+          ]]></DeviceSharedCode>
+          
+          <Properties>
+            <Scalar type="uint32_t" name="exp" />
+          </Properties>
+          
+          <State>
+            <Scalar type="uint32_t" name="mult" />
+            <Scalar type="uint32_t" name="count" />
+            <Scalar type="uint32_t" name="acc" />
+            <Scalar type="int8_t" name="valid" />
+          </State>
+          
+          <InputPort name="base" messageTypeId="number">
+            <OnReceive><![CDATA[
+            deviceState->count=deviceProperties->exp;
+            deviceState->mult=message->mult;
+            deviceState->acc=1;
+            ]]></OnReceive>
+          </InputPort>
+          
+          <OutputPort name="result" messageTypeId="number">
+            <OnSend><![CDATA[
+            // Note: this is for demonstration purposes only. Generally handlers
+            // should not contain unbounded loops. Also this should be log-n.
+            while(deviceState->count>0){
+              powering_step(deviceState); // This function has side effects
+            }
+            
+            message->value=deviceState->value;
+            deviceState->count=0;
+            ]]></OnSend>
+          </OutputPort>
+          
+          <OnCompute><![CDATA[
+          // This function updates the deviceState by one step,
+          // doing a little bit of work.
+          powering_step(deviceState); 
+          ]]></OnCompute>
+          
+          <ReadyToSend><![CDATA[
+          if(!deviceState->valid){
+            *readyToSend=0;
+          }else{
+            *readyToSend = OUTPUT_REQUEST_MASK_result;
+            if(deviceState->count > 0){
+              *readyToSend |= COMPUTE_REQUEST_MASK;
+            }
+          ]]></ReadyToSend>
+      </DeviceType>
+    </DeviceTypes>
+    
+    <SupervisorDeviceType id="direct_tickle"
+      requiresLocalDeviceProperties="yes"
+    >
+      <InputPort name="in" messageTypeId="number" />
+      <OutputPort name="out" messageTypeId="number" />
+      <Code><![CDATA[
+      class DirectTickleSupervisor : public SupervisorDevice
+      {
+      private:
+      
+      public:
+        const char *getGraphType() const override
+        { return dt10_graph_schema_example_compute; }
+        
+        void run(SupervisorContext *context) override
+        {
+          unsigned numDevices;
+          const supervised_device_info_type *pDeviceInfo;
+          
+          context->getSupervisedDevices(numDevices, pDeviceInfo);
+          
+          for(unsigned x=0; x<10; x++){
+            number_message_t message{x};
+          
+            for(unsigned i=0; i<numDevices; i++){
+              assert(!strcmp(pDeviceInfo[i].deviceTypeId, "dev"));
+          
+              context->sendDeviceMessage(
+                context->mapPortNameToIndex(nullptr, "arg"),
+                1, &context->mapDeviceIdToEndpoint(pDeviceInfo[i].id, "base"),
+                sizeof(message), &message
+              );
+              
+              endpoint_type source;
+              port_index_type destPort;
+              unsigned messageSize;
+              context->receiveDeviceMessage(
+                source,
+                destPort,
+                sizeof(message), &message, messageSize
+              );
+              assert(destPort==context->mapPortNameToIndex(nullptr, "answer"));
+              assert(sizeof(message)==messageSize);
+              
+              output_message_t output{ source.getAddress(), x, message.value };
+              context->sendMessageToExecutive( sizeof(output), &output );
+            }
+          }
+        }
+      };
+      ]]></Code>
+    </SupervisorDevice>
+    
+    <ExecutiveDevice>
+      
+    </ExecutiveDevice>
+  </GraphType>
+</Graphs>
