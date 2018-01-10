@@ -1,0 +1,179 @@
+<?xml version="1.0"?>
+<Graphs xmlns="https://poets-project.org/schemas/virtual-graph-schema-v2">
+	<GraphType id="firefly_s0_sync">
+		
+		<SharedCode><![CDATA[
+
+		]]></SharedCode>
+
+	<Properties>
+		<Scalar type="uint32_t" name="dt" default="1" />
+	</Properties>
+
+
+	<MessageTypes>
+		<MessageType id="__init__">
+		</MessageType>
+
+		<MessageType id="tick">
+		</MessageType>
+
+		<MessageType id="flash">
+		</MessageType>
+
+	</MessageTypes>
+
+	<DeviceTypes>
+
+	<DeviceType id="firefly">
+		<Properties>
+			<Scalar type="uint32_t" name="period" default="180000"/>
+			<Scalar type="int32_t" name="start_phase" default="90000"/>
+			<Scalar type="uint32_t" name="phase_nudge" default="10500"/>
+			<Scalar type="uint32_t" name="flashzone" default="1500"/>
+		</Properties>
+		<State>
+			<Scalar type="uint32_t" name="t"/>
+			<Scalar type="uint8_t" name="rdy_to_tick"/>
+			<Scalar type="uint8_t" name="rdy_to_flash"/>
+		</State>
+
+		<ReadyToSend><![CDATA[
+			*readyToSend=0;
+			if(deviceState->rdy_to_tick) {
+				*readyToSend = RTS_FLAG_tick_out;
+			} else if (deviceState->rdy_to_flash) {
+				*readyToSend = RTS_FLAG_flash_out;
+			}
+		]]></ReadyToSend>
+
+		<InputPin name="__init__" messageTypeId="__init__">
+			<OnReceive><![CDATA[
+				deviceState->t = deviceProperties->start_phase;
+				deviceState->rdy_to_flash = 0;
+				deviceState->rdy_to_tick = 1;
+				handler_log(2, "initialised a firefly");
+			]]></OnReceive>
+		</InputPin>
+
+
+		<InputPin name="tick_in" messageTypeId="tick">
+			<OnReceive><![CDATA[
+				if (deviceState->t < deviceProperties->period) { 
+					deviceState->t = (deviceState->t + 1); 			
+				} else {
+					deviceState->t = 0;
+					deviceState->rdy_to_flash = 1;
+				}
+				deviceState->rdy_to_tick = 1;
+			]]></OnReceive>
+		</InputPin>
+
+		<OutputPin name="tick_out" messageTypeId="tick">
+				<OnSend><![CDATA[
+					deviceState->rdy_to_tick = 0;	
+				]]></OnSend>
+		</OutputPin>
+
+		<OutputPin name="flash_out" messageTypeId="flash">
+			<OnSend><![CDATA[
+				deviceState->rdy_to_flash = 0;	
+				handler_log(2, "FLASH!");
+			]]></OnSend>
+		</OutputPin>
+
+		<InputPin name="flash_in" messageTypeId="flash">
+			<OnReceive><![CDATA[
+				uint32_t period = deviceProperties->period;
+				uint32_t flashzone = deviceProperties->flashzone;
+				uint32_t t = deviceState->t;
+				
+				if(t > flashzone && t < period/2) {
+				    deviceState->t = deviceState->t - deviceProperties->phase_nudge;  
+				} else if ( t >= period/2 && t < (period - flashzone)) {
+				    deviceState->t = deviceState->t + deviceProperties->phase_nudge;  
+				
+				} 
+
+			]]></OnReceive>
+		</InputPin>
+
+	</DeviceType>
+
+	</DeviceTypes>
+</GraphType>
+<GraphInstance id="firefly_s0_forest" graphTypeId="firefly_s0_sync">
+	<DeviceInstances sorted="1">
+		<DevI id="firefly_s0_0" type="firefly" >
+			<P>"start_phase": 71393 </P>
+		</DevI>
+		<DevI id="firefly_s0_1" type="firefly" >
+			<P>"start_phase": 88341 </P>
+		</DevI>
+		<DevI id="firefly_s0_2" type="firefly" >
+			<P>"start_phase": 122212 </P>
+		</DevI>
+		<DevI id="firefly_s0_3" type="firefly" >
+			<P>"start_phase": 139980 </P>
+		</DevI>
+		<DevI id="firefly_s0_4" type="firefly" >
+			<P>"start_phase": 164497 </P>
+		</DevI>
+		<DevI id="firefly_s0_5" type="firefly" >
+			<P>"start_phase": 15625 </P>
+		</DevI>
+		<DevI id="firefly_s0_6" type="firefly" >
+			<P>"start_phase": 9542 </P>
+		</DevI>
+		<DevI id="firefly_s0_7" type="firefly" >
+			<P>"start_phase": 39857 </P>
+		</DevI>
+		<DevI id="firefly_s0_8" type="firefly" >
+			<P>"start_phase": 114779 </P>
+		</DevI>
+		<DevI id="firefly_s0_9" type="firefly" >
+			<P>"start_phase": 115777 </P>
+		</DevI>
+	</DeviceInstances>
+	<EdgeInstances sorted="1">
+		<EdgeI path="firefly_s0_0:tick_in-firefly_s0_0:tick_out"/>
+		<EdgeI path="firefly_s0_0:flash_in-firefly_s0_1:flash_out"/>
+
+		<EdgeI path="firefly_s0_1:tick_in-firefly_s0_1:tick_out"/>
+		<EdgeI path="firefly_s0_1:flash_in-firefly_s0_0:flash_out"/>
+		<EdgeI path="firefly_s0_1:flash_in-firefly_s0_2:flash_out"/>
+
+		<EdgeI path="firefly_s0_2:tick_in-firefly_s0_2:tick_out"/>
+		<EdgeI path="firefly_s0_2:flash_in-firefly_s0_1:flash_out"/>
+		<EdgeI path="firefly_s0_2:flash_in-firefly_s0_3:flash_out"/>
+
+		<EdgeI path="firefly_s0_3:tick_in-firefly_s0_3:tick_out"/>
+		<EdgeI path="firefly_s0_3:flash_in-firefly_s0_2:flash_out"/>
+		<EdgeI path="firefly_s0_3:flash_in-firefly_s0_4:flash_out"/>
+
+		<EdgeI path="firefly_s0_4:tick_in-firefly_s0_4:tick_out"/>
+		<EdgeI path="firefly_s0_4:flash_in-firefly_s0_3:flash_out"/>
+		<EdgeI path="firefly_s0_4:flash_in-firefly_s0_5:flash_out"/>
+
+		<EdgeI path="firefly_s0_5:tick_in-firefly_s0_5:tick_out"/>
+		<EdgeI path="firefly_s0_5:flash_in-firefly_s0_4:flash_out"/>
+		<EdgeI path="firefly_s0_5:flash_in-firefly_s0_6:flash_out"/>
+
+		<EdgeI path="firefly_s0_6:tick_in-firefly_s0_6:tick_out"/>
+		<EdgeI path="firefly_s0_6:flash_in-firefly_s0_5:flash_out"/>
+		<EdgeI path="firefly_s0_6:flash_in-firefly_s0_7:flash_out"/>
+
+		<EdgeI path="firefly_s0_7:tick_in-firefly_s0_7:tick_out"/>
+		<EdgeI path="firefly_s0_7:flash_in-firefly_s0_6:flash_out"/>
+		<EdgeI path="firefly_s0_7:flash_in-firefly_s0_8:flash_out"/>
+
+		<EdgeI path="firefly_s0_8:tick_in-firefly_s0_8:tick_out"/>
+		<EdgeI path="firefly_s0_8:flash_in-firefly_s0_7:flash_out"/>
+		<EdgeI path="firefly_s0_8:flash_in-firefly_s0_9:flash_out"/>
+
+		<EdgeI path="firefly_s0_9:tick_in-firefly_s0_9:tick_out"/>
+		<EdgeI path="firefly_s0_9:flash_in-firefly_s0_8:flash_out"/>
+
+	</EdgeInstances>
+</GraphInstance>
+</Graphs>
