@@ -18,9 +18,6 @@
 		</MessageType>
 
 		<MessageType id="flash">
-			<Message>
-				<Scalar name="ticks" type="unit32_t"/>
-			</Message>
 		</MessageType>
 
 	</MessageTypes>
@@ -98,7 +95,6 @@
 
 		<OutputPin name="flash_log" messageTypeId="flash" application="true">
 			<OnSend><![CDATA[
-				message->ticks = deviceState->t;
 				deviceState->rdy_to_log=0;	
 			]]></OnSend>
 		</OutputPin>

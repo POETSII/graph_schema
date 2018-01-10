@@ -9,13 +9,14 @@ import random
 # LPeriod - The period of each link firefly should be an integer multiple of the sPeriod 
 
 S=1
-N=16
-M=16
+N=800
+M=1
 L=0 
-sPeriod=15000
-LPeriod=3
-sNudge=int(round(0.30*sPeriod))
-sFlashzone=int(round(0.01*sPeriod))
+sPeriod=2500
+LPeriod=1
+#sNudge=int(round(0.3*sPeriod))
+sNudge=int(round(0.35*sPeriod))
+sFlashzone=int(round(0.005*sPeriod))
 
 print '<GraphInstance id=\"firefly_forest\" graphTypeId=\"firefly_sync\">'
 print '<DeviceInstances sorted=\'1\'>'

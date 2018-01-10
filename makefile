@@ -211,6 +211,7 @@ include apps/amg/makefile.inc
 include apps/apsp/makefile.inc
 
 include apps/firefly_sync/makefile.inc
+include apps/firefly_nosync/makefile.inc
 
 # Non-default
 include apps/nursery/airfoil/airfoil.inc
