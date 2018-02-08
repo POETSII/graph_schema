@@ -305,6 +305,7 @@ def render_graph_type_as_softswitch_decls(gt,dst):
     #define handler_log softswitch_handler_log  
     #define handler_exit softswitch_handler_exit
     #define handler_export_key_value softswitch_handler_export_key_value
+    #define handler_flush_perfmon softswitch_flush_perfmon
     
     
     ///////////////////////////////////////////////
