@@ -8,7 +8,7 @@
 
 #include <unordered_set>
 
-const unsigned MM=64;
+const unsigned MM=1024;
 
 /*
 Phases:
@@ -277,9 +277,6 @@ struct cell_t
 
         tinselSetByteLen(len);
         tinselSend(dest,(volatile void *)slot);
-
-        memset((void*)slot, 0, TinselBytesPerMsg);
-
     }
 
     void cell_step(
