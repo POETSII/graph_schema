@@ -54,7 +54,7 @@ extern "C" void softswitchMain(
 
     volatile void *sendSlot=tinselSlot(0);
     for(int i=1; i<TinselMsgsPerThread;i++){
-        tinselAlloc(tinselSlot(0));
+        tinselAlloc(tinselSlot(i));
     }
 
     int steps=0;

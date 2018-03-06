@@ -149,6 +149,7 @@ struct particle_t
 {
     vector_t position;
     vector_t velocity;
+    uint32_t id;
     int32_t colour;
 };
 

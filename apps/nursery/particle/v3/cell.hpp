@@ -4,6 +4,9 @@
 #include "particle.hpp"
 
 #include "tinsel_emu.h"
+#include <cstring>
+
+#include <unordered_set>
 
 const unsigned MM=64;
 
@@ -14,25 +17,30 @@ Phases:
   3 - Receive incoming particles
   4 - Update intra-cell forces
   5 - Receive other particles as ghosts from neighbours
-  6 - Update inter-cell forces
-  7 - Move all particles
-  8 - Place cells that have crossed boundaries into outgoing particles
-
+  6 - Send step ack
+  7 - Update inter-cell forces
+  8 - Move all particles
+  9 - Place cells that have crossed boundaries into outgoing particles
+  10 - Wait for all step acks
 */
 
 
 enum message_types{
     message_type_halo,
-    message_type_particles
+    message_type_particles,
+    message_type_step_ack
 };
 
 struct message_t
 {
+    uint32_t hash; // Hash over the entire message with hash==0
+    uint32_t length;
     uint32_t source;
-    uint32_t type   :  8;
-    uint32_t final  :  1;
-    uint32_t count  :  7;
-    uint32_t step   : 16;
+    uint32_t type;//  :  8;
+    uint32_t final;//  :  1;
+    uint32_t count;//  :  7;
+    uint32_t step;//   : 16;
+    uint32_t id; // Combination of host id and sequence number
 };
 
 template<class T,unsigned MAX>
@@ -54,6 +62,17 @@ typedef array_message_t<
     (256-sizeof(message_t))/sizeof(ghost_t)
     > halo_message_t;
 
+
+uint32_t calc_hash(const message_t *msg)
+{
+    const uint8_t *pRaw=(const uint8_t*)msg;
+
+    uint32_t hash=0;
+    for(unsigned i=4; i<msg->length; i++){
+        hash = hash*19937 + pRaw[i];
+    }
+    return hash;
+}
 
 
 template<class T, unsigned SIZE>
@@ -99,7 +118,7 @@ struct Buffer
     bool fill(array_message_t<T,MAXN> *msg)
     {
         unsigned n=std::min(MAXN, count);
-        std::copy(entries+SIZE-n, entries+SIZE, msg->elements);
+        std::copy(entries+count-n, entries+count, msg->elements);
         count-=n;
         bool final=count==0;
         msg->count=n;
@@ -146,68 +165,148 @@ struct cell_t
     Buffer<particle_t,MM> particlesOut[8];
     
     uint32_t halosOutDone; // Count how many people we have sent all our ghosts to
-    
 
-    void cell_on_recv(const void *msg){
-        switch (((const message_t*)msg)->type){
+    unsigned stepAcksDone; // Uses to avoid double-buffering
+
+    unsigned seq=0; // Tracks messages sent
+
+    std::unordered_set<uint32_t> seenMessages;
+
+    void cell_on_recv(const volatile message_t *msg){
+        auto type=msg->type;
+        tinselLogSoft(3, "Recv: id=%u, type=%u, hash=%u, length=%u", msg->id, msg->type, msg->hash, msg->length);
+        uint32_t ghash=calc_hash((message_t*)msg);
+        if(ghash!=msg->hash){
+            tinselLogSoft(0, "Hash failed");
+            tinselLogSoft(0, "id=%u, type=%u, hash=%u, length=%u; calchash=%u", msg->id, msg->type, msg->hash, msg->length, ghash);
+
+            /*for(unsigned i=0; i<msg->length; i++){
+                tinselLogSoft(0, "  msg[%u]=%u", i, ((uint8_t*)msg)[i]);
+                }*/
+            exit(1);
+        }
+        if(seenMessages.find((unsigned)msg->id)!=seenMessages.end()){
+            tinselLogSoft(0, "Duplicate message received.");
+            exit(1);
+        }
+        seenMessages.insert((unsigned)msg->id);
+        
+        switch (type){
         case message_type_particles:
         {
             auto sMsg=(const particle_message_t*)msg;
+            for(unsigned i=0; i<sMsg->count; i++){
+                const auto &particle=sMsg->elements[i];
+                tinselLogSoft(2, "Received particle %u at (%f,%f)", particle.id, particle.position.x.to_double(), particle.position.y.to_double());
+            }
             particlesIn.add(sMsg->count,sMsg->elements);
             if(sMsg->final){
                 particlesInDone++;
             }
+            tinselLogSoft(2, "Received %u particles, final=%u, particlesInDone=%u, particlesInCount=%u\n", sMsg->count, sMsg->final,particlesInDone, particlesIn.size());
+            assert( particlesInDone <= nhoodSize);
             break;
         }
         case message_type_halo:
         {
             auto sMsg=(const halo_message_t*)msg;
+            tinselLogSoft(2, "Received %u ghosts, final=%u\n", sMsg->count, sMsg->final);
             halosIn.add(sMsg->count, sMsg->elements);
             if( sMsg->final ){
                 halosInDone++;
             }
+            assert( halosInDone <= nhoodSize);
+            break;
+        }
+        case message_type_step_ack:
+        {
+            stepAcksDone++;
+            tinselLogSoft(2, "Received stepAck, got=%u, needed=%u\n", stepAcksDone, nhoodSize);
+            assert( stepAcksDone <= nhoodSize);
             break;
         }
         default:
+            tinselLogSoft(0, "Uknonwn tag\n");
+            exit(1);
             assert(0);
             break;
         }
     }
 
-    void cell_send(uint32_t dest, unsigned len, const void *slot)
+    void cell_receive_impl()
+    {
+        assert(tinselCanRecv());
+            
+        auto pMsg=tinselRecv();
+        cell_on_recv((volatile message_t*)pMsg);
+        
+        memset((void*)pMsg, 0, TinselBytesPerMsg);
+        tinselAlloc(pMsg);
+    }
+    
+    
+    // Receive a single message
+    void cell_receive()
+    {
+        tinselWaitUntil(TINSEL_CAN_RECV);
+        cell_receive_impl();
+    }
+
+    void cell_send(uint32_t dest, unsigned len, volatile void *slot)
     {
         while(!tinselCanSend()){
             if(tinselCanRecv()){
-                auto pMsg=tinselRecv();
-                cell_on_recv((void*)pMsg);
-                tinselAlloc(pMsg);
+                cell_receive_impl();
             }else{
                 tinselWaitUntil(TINSEL_CAN_SEND_OR_RECV);
             }        
         }
+        volatile message_t *msg=(volatile message_t*)slot;
+        msg->id = ((seq++)<<16) | tinselId();
+        msg->length=len;
+        msg->source=tinselId();
+        msg->step=step;
+
+        msg->hash=calc_hash((message_t*)msg);
+
+        tinselLogSoft(3, "Send: id=%u, type=%u, hash=%u, length=%u",
+                      msg->id, msg->type, msg->hash, msg->length);
+        /*for(unsigned i=0; i<msg->length; i++){
+            tinselLogSoft(0, "  msg[%u]=%u", i, ((uint8_t*)msg)[i]);
+            }*/
+
         tinselSetByteLen(len);
         tinselSend(dest,(volatile void *)slot);
+
+        memset((void*)slot, 0, TinselBytesPerMsg);
+
     }
 
     void cell_step(
                    world_info_t &world,
                    void *sendSlot
                    ){
+        tinselLogSoft(1, "Begin step %d", step);
+        
         ////////////////////////////////////////////
         // Send all particles
         {
             particle_message_t *pParticleMsg=(particle_message_t*)sendSlot;
-            pParticleMsg->source=tinselId();
-            pParticleMsg->type=message_type_particles;
-            pParticleMsg->step=step;
             
             for(unsigned i=0; i<nhoodSize; i++){
+                if(particlesOut[i].size()>0){
+                    tinselLogSoft(2, "Sending particles to neighbour %u, total=%u\n",
+                                  nhoodAddresses[i], particlesOut[i].size());
+                }
+                
                 bool keepGoing=true;
                 
                 // Must always send at least one message, even if we don't
                 // own anything
                 while(keepGoing){
+                    pParticleMsg->type=message_type_particles;
                     keepGoing=particlesOut[i].fill(pParticleMsg);
+                    tinselLogSoft(3, "Sending particle message to %u, count=%u, final=%u\n", pParticleMsg->id, nhoodAddresses[i], pParticleMsg->count, pParticleMsg->final);
                     
                     cell_send(nhoodAddresses[i], sizeof(particle_message_t), pParticleMsg);
                 }
@@ -221,9 +320,6 @@ struct cell_t
         // Send all halos
         {
             halo_message_t *pHaloMsg=(halo_message_t*)sendSlot;
-            pHaloMsg->source=tinselId();
-            pHaloMsg->type=message_type_halo;
-            pHaloMsg->step=step;
             
             unsigned haloDone=0;
             bool anySent=false;
@@ -231,15 +327,20 @@ struct cell_t
             // Must always send at least one message, even if we don't
             // own anything
             while(!anySent || haloDone < owned.size()){
+                
                 unsigned todo=std::min(owned.size()-haloDone, (unsigned)halo_message_t::max_entries);
+                pHaloMsg->type=message_type_halo;
                 pHaloMsg->final = todo+haloDone==owned.size();
                 pHaloMsg->count = todo;
+                tinselLogSoft(2, "Preparing halo of count=%u, total=%u, final=%u\n", pHaloMsg->count, owned.size(), pHaloMsg->final);
+                
                 for(unsigned i=0; i<todo; i++){
                     pHaloMsg->elements[i].position=owned[haloDone+i].position;
                     pHaloMsg->elements[i].colour=owned[haloDone+i].colour;
                 }
                 
                 for(unsigned i=0; i<nhoodSize; i++){
+                    tinselLogSoft(3, "Delivering halo to neighbour %u (id=%x)\n", nhoodAddresses[i], pHaloMsg->id);
                     cell_send(nhoodAddresses[i], sizeof(halo_message_t), pHaloMsg);
                 }
                 haloDone+=todo;
@@ -252,19 +353,24 @@ struct cell_t
         // Note: this could be overlapped with calculating intra
         
         while(particlesInDone < nhoodSize){
-            tinselWaitUntil(TINSEL_CAN_RECV);
-        }        
+            tinselLogSoft(2, "Wiating for incoming particles: got %u out of %u", particlesInDone, nhoodSize);
+            cell_receive();
+        }
+        if(particlesIn.size()>0){
+            tinselLogSoft(2, "Adding %u new particles.", particlesIn.size());
+            owned.add(particlesIn.size(), particlesIn.entries);
+        }
         
         ///////////////////////////////////////////////////////////
         // Update all of our particles
-        
+
+        tinselLogSoft(1, "Calculating intra forces over %u particles.", owned.size());
         calculate_particle_intra_forces(
                                         world,
                                         owned.size(),
                                        owned.entries,
                                         forces
                                         );
-        // TODO : DANGER! This needs double-buffering, I think
         particlesInDone=0;
         particlesIn.clear();
         
@@ -274,12 +380,28 @@ struct cell_t
         // Note: this could be done progressively and overlapped
         
         while(halosInDone < nhoodSize){
-            tinselWaitUntil(TINSEL_CAN_RECV);
+            tinselLogSoft(2, "Waiting for incoming halos. Got %u out of %u.", halosInDone, nhoodSize);
+            cell_receive();
+        }
+
+        ////////////////////////////////////////////////////////////
+        // Send out our step acks
+
+        {
+            message_t *pAckMsg=(message_t*)sendSlot;
+            pAckMsg->type=message_type_step_ack;
+
+            
+            for(unsigned i=0; i<nhoodSize; i++){
+                tinselLogSoft(2,"Sending ack to thread %u", nhoodAddresses[i]);
+                cell_send(nhoodAddresses[i], sizeof(message_t), pAckMsg);
+            }
         }
         
         ///////////////////////////////////////////////////////////
         // Apply inter forces from halos
-        
+
+        tinselLogSoft(1, "Calculating inter forces.");
         calculate_particle_inter_forces(
                                         world,
                                         owned.size(),
@@ -288,7 +410,6 @@ struct cell_t
                                         halosIn.size(),
                                         halosIn.entries
                                         );
-        // TODO : DANGER! This needs double-buffering, I think
         halosInDone=0;
         halosIn.clear();
         
@@ -318,11 +439,29 @@ struct cell_t
             }
             
             if(xDir!=0 || yDir!=0){
+                tinselLogSoft(2, "Send particle %u at (%f,%f) in dir (%d,%d)", particle.id, particle.position.x.to_double(), particle.position.y.to_double(), xDir, yDir);
                 unsigned neighbourIndex=directionToNeighbours[xDir+1][yDir+1];
                 particlesOut[neighbourIndex].add(particle);
                 owned.remove(i);
             }
         }
+
+        ///////////////////////////////////////////////////////////
+        // Wait until we get all step acks
+
+        while(stepAcksDone < nhoodSize){
+            tinselLogSoft(2, "Waiting for step acks. Got %u out of %u.", stepAcksDone, nhoodSize);
+            cell_receive();
+        }
+        stepAcksDone=0;
+
+        unsigned particlesOutPending=0;
+        for(unsigned i=0;i<nhoodSize;i++){
+            particlesOutPending+=particlesOut[i].size();
+        }
+        tinselLogSoft(1, "Bottom: owned=%u, leaving=%u, halosInDone=%u, ghostsInDone=%u, stepsAckDone=%u",
+                      owned.size(), particlesOutPending, halosInDone, particlesInDone, stepAcksDone);
+
         
         //////////////////////////////////////////////////////////
         // Woo! Done.        
