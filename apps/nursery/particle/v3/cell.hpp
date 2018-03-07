@@ -150,6 +150,12 @@ struct cell_t
     
     int32_t directionToNeighbours[3][3]; // Map of direction neighbours to neighbour indices (-1 is invalid)
     real_t xBegin, xEnd, yBegin, yEnd; // Boundaries of this cell. We own [xBegin,xEnd) x [yBegin,yEnd)
+
+    // Pure debugging
+    real_t xBeginNeighbour[8];
+    real_t xEndNeighbour[8];
+    real_t yBeginNeighbour[8];
+    real_t yEndNeighbour[8];
     
     Buffer<particle_t,MM> owned; // Particles that we own
     vector_t forces[MM];
@@ -210,11 +216,11 @@ struct cell_t
         case message_type_halo:
         {
             auto sMsg=(const halo_message_t*)msg;
-            tinselLogSoft(2, "Received %u ghosts, final=%u\n", sMsg->count, sMsg->final);
             halosIn.add(sMsg->count, sMsg->elements);
             if( sMsg->final ){
                 halosInDone++;
             }
+            tinselLogSoft(2, "Received %u ghosts, final=%u, halosInDone=%u, nhoodSize=%u\n", sMsg->count, sMsg->final, halosInDone, nhoodSize);
             assert( halosInDone <= nhoodSize);
             break;
         }
@@ -304,7 +310,7 @@ struct cell_t
                     pParticleMsg->type=message_type_particles;
                     keepGoing=particlesOut[i].fill(pParticleMsg);
                     tinselLogSoft(3, "Sending particle message to %u, count=%u, final=%u\n", pParticleMsg->id, nhoodAddresses[i], pParticleMsg->count, pParticleMsg->final);
-                    
+                                      
                     cell_send(nhoodAddresses[i], sizeof(particle_message_t), pParticleMsg);
                 }
                 assert(particlesOut[i].size()==0);
@@ -355,6 +361,17 @@ struct cell_t
         }
         if(particlesIn.size()>0){
             tinselLogSoft(2, "Adding %u new particles.", particlesIn.size());
+            for(unsigned i=0; i<particlesIn.size(); i++){
+                auto &p=particlesIn[i];
+                if(p.position.x < xBegin || xEnd <= p.position.x
+                   || p.position.y < yBegin || yEnd <= p.position.y ){
+                    tinselLogSoft(0, "Received a particle at (%f,%f) that is not in range [%f,%f)x[%f,%f)",
+                                  p.position.x.to_double(), p.position.y.to_double(),
+                                  xBegin.to_double(), xEnd.to_double(),
+                                  yBegin.to_double(), yEnd.to_double());
+                    exit(1);
+                }
+            }
             owned.add(particlesIn.size(), particlesIn.entries);
         }
         
@@ -381,20 +398,7 @@ struct cell_t
             cell_receive();
         }
 
-        ////////////////////////////////////////////////////////////
-        // Send out our step acks
-
-        {
-            message_t *pAckMsg=(message_t*)sendSlot;
-            pAckMsg->type=message_type_step_ack;
-
-            
-            for(unsigned i=0; i<nhoodSize; i++){
-                tinselLogSoft(2,"Sending ack to thread %u", nhoodAddresses[i]);
-                cell_send(nhoodAddresses[i], sizeof(message_t), pAckMsg);
-            }
-        }
-        
+       
         ///////////////////////////////////////////////////////////
         // Apply inter forces from halos
 
@@ -409,6 +413,22 @@ struct cell_t
                                         );
         halosInDone=0;
         halosIn.clear();
+
+        ////////////////////////////////////////////////////////////
+        // Send out our step acks
+        // TODO: move this earlier again
+
+        {
+            message_t *pAckMsg=(message_t*)sendSlot;
+            pAckMsg->type=message_type_step_ack;
+
+            
+            for(unsigned i=0; i<nhoodSize; i++){
+                tinselLogSoft(2,"Sending ack to thread %u", nhoodAddresses[i]);
+                cell_send(nhoodAddresses[i], sizeof(message_t), pAckMsg);
+            }
+        }
+
         
         ///////////////////////////////////////////////////////
         // Move the particles
@@ -437,8 +457,13 @@ struct cell_t
             
             if(xDir!=0 || yDir!=0){
                 tinselLogSoft(2, "Send particle %u at (%f,%f) in dir (%d,%d)", particle.id, particle.position.x.to_double(), particle.position.y.to_double(), xDir, yDir);
-                unsigned neighbourIndex=directionToNeighbours[xDir+1][yDir+1];
-                particlesOut[neighbourIndex].add(particle);
+                unsigned ni=directionToNeighbours[xDir+1][yDir+1];
+                if( particle.position.x < xBeginNeighbour[ni] || xEndNeighbour[ni] <= particle.position.x
+                    || particle.position.y < yBeginNeighbour[ni] || yEndNeighbour[ni] <= particle.position.y){
+                    tinselLogSoft(0, "Attempting to send to wrong cell.");
+                }
+                
+                particlesOut[ni].add(particle);
                 owned.remove(i);
             }
         }

@@ -16,6 +16,7 @@ xpos={} # Map of (particle,frame) -> x
 ypos={} # Map of (particle,frame) -> y
 xvel={} # Map of (particle,frame) -> dx
 yvel={} # Map of (particle,frame) -> dy
+tid={}
 colours={} # Map of particle -> colour index
 
 minx=+1000
@@ -29,16 +30,18 @@ import csv
 
 with open('particles.csv', 'r') as csvfile:
     reader = csv.reader(csvfile)
-    for (frame,t,particle,colour,x,y,dx,dy) in reader:
+    for (frame,t,particle,colour,x,y,dx,dy,tinselId) in reader:
         x=float(x)
         y=float(y)
         particle=int(particle)
         colour=int(colour)
         frame=int(frame)
+        tinselId=int(tinselId)
         xpos[(particle,frame)]=x
         ypos[(particle,frame)]=y
         xvel[(particle,frame)]=dx
         yvel[(particle,frame)]=dy
+        tid[(particle,frame)]=tinselId
         colours[particle]=colour
         particles.add(particle)
         frames=max(int(frame)+1,frames)
@@ -62,7 +65,11 @@ palette=['r','g','b','c','y','m','y']
 x=[ xpos[(p,0)] for p in particles ]
 y=[ ypos[(p,0)] for p in particles ]    
 c=[ palette[colours[p] % len(palette)] for p in particles]
+
 splot = ax.scatter(x,y,c=c)
+
+xy=[ [xpos[(i,0)],ypos[(i,0)]] for i in range(len(particles))]
+ttid= [ palette[tid[(i,0)] % len(palette)] for i in range(len(particles))]
 
 # initialization function: plot the background of each frame
 def init():
@@ -71,9 +78,14 @@ def init():
 
 # animation function.  This is called sequentially
 def animate(i):
-    xy=[ (xpos[(p,i)],ypos[(p,i)]) for p in particles ]
+    # Deal with missing particles...
+    for p in particles:
+        if (p,i) in xpos:
+            xy[p]=[ xpos[(p,i)] , ypos[(p,i)] ]
+            ttid[p]=palette[tid[(p,i)] % len(palette)]
         
     splot.set_offsets(xy)
+    splot.set_facecolors(ttid)
     return splot,
 
 # call the animator.  blit=True means only re-draw the parts that have changed.

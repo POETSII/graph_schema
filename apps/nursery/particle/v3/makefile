@@ -20,3 +20,6 @@ cell_1x2 : LDLIBS += /POETS/lib_tinsel_emu/lib/lib_tinsel_emu_unix.a -ldl
 
 cell_2x2 : particle.cpp
 cell_2x2 : LDLIBS += /POETS/lib_tinsel_emu/lib/lib_tinsel_emu_unix.a -ldl
+
+cell_4x4 : particle.cpp
+cell_4x4 : LDLIBS += /POETS/lib_tinsel_emu/lib/lib_tinsel_emu_unix.a -ldl

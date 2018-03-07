@@ -18,7 +18,7 @@ real_t potential(real_t dist_squared, int attract)
 {
     const real_t neg_quarter=real_t::from_double(-0.25);
     const real_t half=real_t::from_double(0.5);
-    const real_t two=real_t::from_double(2.0);
+    //const real_t two=real_t::from_double(2.0);
     
     const real_t thresh=real_t::from_double(0.46);
     dist_squared=std::max(dist_squared, thresh);
@@ -152,8 +152,6 @@ void update_particles(
 
         vector_t np = p.position + nv * info.dt;
 
-        const real_t four=real_t::from_double(4.0);
-        const real_t zero=real_t::from_double(0.0);
         
         reflect( info.left,    0, +1, np, nv);
         reflect( info.right,   0, -1, np, nv);

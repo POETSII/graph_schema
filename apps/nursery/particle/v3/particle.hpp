@@ -62,6 +62,9 @@ public:
     static constexpr real_t from_double(double x)
     { return real_t(int32_t(x* (1<<frac_bits))); }
 
+    static constexpr real_t from_int(int32_t x)
+    { return real_t(int32_t(x<<frac_bits)); }
+
     constexpr double to_double() const
     { return val/double(raw_one); }
 
