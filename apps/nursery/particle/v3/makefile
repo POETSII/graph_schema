@@ -1,25 +1,38 @@
 CPPFLAGS += -g -W -Wall -std=c++11
-CPPFLAGS += -I /POETS/lib_tinsel_emu/include
+CPPFLAGS += -Iinclude
+CPPFLAGS += -I/POETS/lib_tinsel_emu/include
 CPPFLAGS += -pthread
 
 #CPPFLAGS += -O3 -DNDEBUG=1
 
-LDFLAGS += -L /POETS/lib_tinsel_emu/lib
+LDFLAGS += -L/POETS/lib_tinsel_emu/lib
 
 # Make executables export their own function (softswitchMain)
 LDFLAGS += -Wl,--export-dynamic
 
-simple : particle.cpp
+TINSEL_UNIX_LDLIBS = /POETS/lib_tinsel_emu/lib/lib_tinsel_emu_unix.a -ldl
 
-cell_1x1 : particle.cpp
+bin/simple : src/simple/simple.cpp src/shared/particle.cpp
+	mkdir -p bin
+	$(CXX) $(CPPFLAGS) $^ -o $@ $(LDFLAGS) $(LDLIBS)
 
-cell_1x1 : LDLIBS += /POETS/lib_tinsel_emu/lib/lib_tinsel_emu_unix.a -ldl
+define add_impl
 
-cell_1x2 : particle.cpp
-cell_1x2 : LDLIBS += /POETS/lib_tinsel_emu/lib/lib_tinsel_emu_unix.a -ldl
+bin/$1_unix : src/$1/$1.cpp src/shared/particle.cpp
+	mkdir -p bin
+	$(CXX) $(CPPFLAGS) $$^ -o $$@ $(LDFLAGS) $(LDLIBS) $(TINSEL_UNIX_LDLIBS)
 
-cell_2x2 : particle.cpp
-cell_2x2 : LDLIBS += /POETS/lib_tinsel_emu/lib/lib_tinsel_emu_unix.a -ldl
+test_$1_unix : bin/$1_unix
+	mkdir -p output
+	bin/$1_unix --tinsel-hard-log-level 0 --tinsel-soft-log-level 0 -N 1 > output/$1_particles.csv
+	python3 scripts/plot_particles.py output/$1_particles.csv output/$1_particles.mp4
 
-cell_4x4 : particle.cpp
-cell_4x4 : LDLIBS += /POETS/lib_tinsel_emu/lib/lib_tinsel_emu_unix.a -ldl
+bin/$1_tinsel0p2 : src/$1/$1.cpp src/shared/particle.cpp
+	mkdir -p bin
+	$(CXX) $(CPPFLAGS) $$^ -o $$@ $(LDFLAGS) $(LDLIBS) $(TINSEL_TINSEL0P2_LDLIBS)
+
+endef
+
+IMPLS = cell_1x1 cell_1x2 cell_2x2 cell_4x4
+
+$(foreach i,$(IMPLS),$(eval $(call add_impl,$(i))))

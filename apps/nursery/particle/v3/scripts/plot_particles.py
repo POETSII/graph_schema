@@ -27,8 +27,17 @@ particles=set()
 frames=0
 
 import csv
+import sys
 
-with open('particles.csv', 'r') as csvfile:
+sourceFile="particles.csv"
+destFile="animation.mp4"
+
+if len(sys.argv)>1:
+    sourceFile=sys.argv[1]
+if len(sys.argv)>2:
+    destFile=sys.argv[2]
+
+with open(sourceFile, 'r') as csvfile:
     reader = csv.reader(csvfile)
     for (frame,t,particle,colour,x,y,dx,dy,tinselId) in reader:
         x=float(x)
@@ -97,6 +106,6 @@ anim = animation.FuncAnimation(fig, animate, init_func=init,
 # the video can be embedded in html5.  You may need to adjust this for
 # your system: for more information, see
 # http://matplotlib.sourceforge.net/api/animation_api.html
-anim.save('basic_animation.mp4', fps=25, extra_args=['-vcodec', 'libx264'])
+anim.save(destFile, fps=25, extra_args=['-vcodec', 'libx264'])
 
 #plt.show()

@@ -33,7 +33,7 @@ extern "C" void softswitchMain
     const double thermal=0.1;
 
     
-    real_t delta=real_t::from_double(horizon);
+    const real_t delta=real_t::from_double(horizon);
 
     int wCell=4;
     int hCell=4;
