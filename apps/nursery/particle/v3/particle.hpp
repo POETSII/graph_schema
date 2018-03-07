@@ -5,6 +5,10 @@
 #include <stdexcept>
 #include <cmath>
 #include <iostream>
+#include <cassert>
+
+#include "fix_inverse.hpp"
+#include "fix_inverse_sqrt.hpp"
 
 struct real_t
 {
@@ -35,12 +39,12 @@ private:
         return ((a*b)+raw_half)>>frac_bits;
     }
 
-    constexpr double inv_helper(int32_t v) const
+    constexpr int64_t inv_helper(int32_t v) const
     {
         return int64_t((1.0/(v/double(raw_one)))*raw_one);
     }
 
-    constexpr double inv_sqrt_helper(int32_t v) const
+    constexpr int64_t inv_sqrt_helper(int32_t v) const
     {
         return int64_t((1.0/sqrt(v/double(raw_one)))*raw_one);
     }
@@ -56,6 +60,9 @@ public:
     static constexpr real_t zero()
     { return real_t(0); }
     
+    static constexpr real_t max_pos()
+    { return real_t(0x7FFFFFFF); }
+    
     static constexpr real_t one()
     { return real_t(1<<frac_bits); }
 
@@ -64,6 +71,9 @@ public:
 
     static constexpr real_t from_int(int32_t x)
     { return real_t(int32_t(x<<frac_bits)); }
+    
+    static constexpr real_t from_raw(int32_t x)
+    { return real_t(x); }
 
     constexpr double to_double() const
     { return val/double(raw_one); }
@@ -86,12 +96,39 @@ public:
         return check_range(int32_t(mul64(val,o.val)), mul64(val,o.val));
     }
 
-    constexpr real_t inv() const
-    { return check_range(int32_t(inv_helper(val)),inv_helper(val)); }
+    real_t inv() const
+    {
+        return fix_inverse_s15p16(*this);
+        //return check_range(int32_t(inv_helper(val)),inv_helper(val));
+    }
 
-    constexpr real_t inv_sqrt() const
-    { return check_range( int32_t(inv_sqrt_helper(val)), inv_sqrt_helper(val) ); }
+    real_t inv_sqrt() const
+    {
+        return fix_inverse_sqrt_s15p16(*this);
+        //return check_range( int32_t(inv_sqrt_helper(val)), inv_sqrt_helper(val) );
+    }
+    
+    int32_t log2ceil() const
+    {
+        assert(val!=0);
+        int32_t v=std::abs(val)-1;
+        if(v==0){
+            return -16;
+        }
+        int32_t e=-15;
+        if(v>>16){ v=v>>16; e=e+16; }
+        if(v>>8){ v=v>>8; e=e+8; }
+        if(v>>4){ v=v>>4; e=e+4; }
+        if(v>>2){ v=v>>2; e=e+2; }
+        if(v>>1){ v=v>>1; e=e+1; }
+        return e;
+    }
 
+    constexpr bool operator==(real_t o) const
+    { return val == o.val; }
+    
+    constexpr bool operator!=(real_t o) const
+    { return val != o.val; }
 
     constexpr bool operator<(real_t o) const
     { return val < o.val; }
@@ -112,10 +149,10 @@ public:
 inline constexpr real_t abs(real_t a)
 { return a.abs(); }
 
-inline constexpr real_t inv(real_t a)
+inline real_t inv(real_t a)
 { return a.inv(); }
 
-inline constexpr real_t inv_sqrt(real_t a)
+inline real_t inv_sqrt(real_t a)
 { return a.inv_sqrt(); }
 
 
