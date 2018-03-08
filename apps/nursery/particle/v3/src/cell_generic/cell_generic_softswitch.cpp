@@ -26,7 +26,8 @@ extern "C" void softswitchMain
     for(int i=0; i<32; i++){
         lcg(seed); // stir vigorously
     }
-    
+
+
     int wCell=tinselHostGet();
     int hCell=tinselHostGet();
     unsigned initParticles=tinselHostGet();
@@ -34,17 +35,28 @@ extern "C" void softswitchMain
     int yCell=tinselHostGet();
     unsigned timeSteps=tinselHostGet();
     unsigned outputDeltaInterval=tinselHostGet();
-    
-    
+
+    if(xCell >= wCell || yCell >= hCell){
+	// Disable cells that aren't active
+	    tinselHostPut(-1);
+	    while(1);
+    }
+
+
     world_info_t info(dt, mass, horizon, drag, thermal);
     info.left=real_t::from_double(0.0);
     info.right=info.left +real_t::from_int(wCell)*delta -real_t::eps();
     info.bottom=real_t::from_double(0.0);
     info.top=info.bottom+real_t::from_int(hCell)*delta - real_t::eps();
 
-    // This is to avoid calling or emitting the constructor, which is relatively large
-    uint8_t cell_storage[sizeof(cell_t)];
-    cell_t &cell=cell_t::construct(cell_storage, sizeof(cell_storage));
+
+
+    // // This is to avoid calling or emitting the constructor, which is relatively large
+    // uint8_t cell_storage[sizeof(cell_t)];
+    // cell_t &cell=cell_t::construct(cell_storage, sizeof(cell_storage));
+
+    cell_t cell;
+
 
     auto add_neighbour=[&](int dx, int dy)
         {
@@ -75,6 +87,8 @@ extern "C" void softswitchMain
                   cell.yBegin, cell.yEnd,
                   cell.nhoodSize);
 
+
+
     for(unsigned i=0; i<initParticles; i++){
         particle_t p;
         p.position=vector_t{
@@ -90,6 +104,7 @@ extern "C" void softswitchMain
         }
     }
 
+
     volatile void *sendSlot=tinselSlot(0);
     for(int i=1; i<TinselMsgsPerThread;i++){
         tinselLogSoft(5, "Allocating slot %u", i);
@@ -99,6 +114,8 @@ extern "C" void softswitchMain
     int steps=0;
     int outputCountdown=outputDeltaInterval;
 
+
+
     auto log_particle=[&](const particle_t &p){
         tinselHostPut(steps);
         tinselHostPut((p.id<<16) | p.colour);
@@ -106,7 +123,8 @@ extern "C" void softswitchMain
         tinselHostPut(p.position.y.raw());
     };
 
-    while(1){       
+    while(steps < timeSteps){       
+
         cell.cell_step(info, (void*)sendSlot);
 
         if(--outputCountdown==0){
@@ -120,12 +138,8 @@ extern "C" void softswitchMain
             }
             outputCountdown=outputDeltaInterval;
         }
-
-        if(++steps>timeSteps){
-            break;
-        }
     }
     
     tinselHostPut(-1);
-
+    while(1);
 }

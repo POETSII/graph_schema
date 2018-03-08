@@ -311,39 +311,43 @@ struct cell_t
         tinselSend(dest,(volatile void *)slot);
     }
 
-    void cell_step(
+    __attribute__((noinline)) void cell_step(
                    world_info_t &world,
                    void *sendSlot
                    ){
         tinselLogSoft(1, "Begin step %d", step);
-        
+
+
+       
         ////////////////////////////////////////////
         // Send all particles
         {
             particle_message_t *pParticleMsg=(particle_message_t*)sendSlot;
-            
+
             for(unsigned i=0; i<nhoodSize; i++){
                 if(particlesOut[i].size()>0){
                     tinselLogSoft(2, "Sending particles to neighbour %u, total=%u\n",
                                   nhoodAddresses[i], particlesOut[i].size());
                 }
-                
+
                 bool keepGoing=true;
-                
+
                 // Must always send at least one message, even if we don't
                 // own anything
                 while(keepGoing){
+
                     pParticleMsg->type=message_type_particles;
                     keepGoing=particlesOut[i].fill(pParticleMsg);
                     tinselLogSoft(3, "Sending particle message to %u, count=%u, final=%u\n", pParticleMsg->id, nhoodAddresses[i], pParticleMsg->count, pParticleMsg->final);
-                                      
+
                     cell_send(nhoodAddresses[i], sizeof(particle_message_t), pParticleMsg);
                 }
                 assert(particlesOut[i].size()==0);
             }
             particlesOutDone=0;
         }
-        
+
+ 
         
         ////////////////////////////////////////////
         // Send all halos
