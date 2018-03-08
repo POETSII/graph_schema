@@ -18,7 +18,7 @@ bin/simple : src/simple/simple.cpp src/shared/particle.cpp
 
 define add_impl
 
-bin/$1_unix : src/$1/$1.cpp src/shared/particle.cpp
+bin/$1_unix : src/$1/$1.cpp $(wildcard src/$1/$1_*.cpp) src/shared/particle.cpp
 	mkdir -p bin
 	$(CXX) $(CPPFLAGS) $$^ -o $$@ $(LDFLAGS) $(LDLIBS) $(TINSEL_UNIX_LDLIBS)
 
@@ -33,6 +33,6 @@ bin/$1_tinsel0p2 : src/$1/$1.cpp src/shared/particle.cpp
 
 endef
 
-IMPLS = cell_1x1 cell_1x2 cell_2x2 cell_4x4
+IMPLS = cell_1x1 cell_1x2 cell_2x2 cell_4x4 cell_generic
 
 $(foreach i,$(IMPLS),$(eval $(call add_impl,$(i))))

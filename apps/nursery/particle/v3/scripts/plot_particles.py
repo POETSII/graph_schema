@@ -91,10 +91,10 @@ def animate(i):
     for p in particles:
         if (p,i) in xpos:
             xy[p]=[ xpos[(p,i)] , ypos[(p,i)] ]
-            ttid[p]=palette[tid[(p,i)] % len(palette)]
+            #ttid[p]=palette[tid[(p,i)] % len(palette)]
         
     splot.set_offsets(xy)
-    splot.set_facecolors(ttid)
+    #splot.set_facecolors(ttid)
     return splot,
 
 # call the animator.  blit=True means only re-draw the parts that have changed.

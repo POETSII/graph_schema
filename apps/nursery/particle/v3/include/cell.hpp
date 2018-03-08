@@ -6,7 +6,7 @@
 #include "tinsel_emu.h"
 #include <cstring>
 
-#include <unordered_set>
+//#include <unordered_set>
 
 const unsigned MM=1024;
 
@@ -63,7 +63,7 @@ typedef array_message_t<
     > halo_message_t;
 
 
-uint32_t calc_hash(const message_t *msg)
+inline uint32_t calc_hash(const message_t *msg)
 {
     const uint8_t *pRaw=(const uint8_t*)msg;
 
@@ -75,7 +75,7 @@ uint32_t calc_hash(const message_t *msg)
 }
 
 
-template<class T, unsigned SIZE>
+template<class T, uint32_t SIZE>
 struct Buffer
 {
     uint32_t count;
@@ -117,7 +117,7 @@ struct Buffer
     template<unsigned MAXN>
     bool fill(array_message_t<T,MAXN> *msg)
     {
-        unsigned n=std::min(MAXN, count);
+        unsigned n=std::min(uint32_t(MAXN), count);
         std::copy(entries+count-n, entries+count, msg->elements);
         count-=n;
         bool final=count==0;
@@ -143,6 +143,25 @@ struct Buffer
 
 struct cell_t
 {
+    // Note: _everything_ in here can be zero-initialised. That is to
+    // allow us to avoid having the code for the default constructor
+    // where possible
+    cell_t()
+    {
+        // This is just to prove that it works. Ideally we never use it.
+        #ifndef NDEBUG
+        memset(this, 0, sizeof(cell_t));
+        #endif
+    }
+    
+    // Create an empty cell_t in the given space
+    static cell_t &construct(uint8_t *space, unsigned size)
+    {
+        assert(size >= sizeof(cell_t));
+        memset(space, 0, sizeof(cell_t));
+        return *(cell_t*)space;
+    }
+    
     uint32_t step;
     
     uint32_t nhoodSize; // Number of neighbours
@@ -176,10 +195,11 @@ struct cell_t
 
     unsigned seq=0; // Tracks messages sent
 
-    std::unordered_set<uint32_t> seenMessages;
+    //std::unordered_set<uint32_t> seenMessages;
 
     void cell_on_recv(const volatile message_t *msg){
         auto type=msg->type;
+        #ifndef NDEBUG
         tinselLogSoft(3, "Recv: id=%u, type=%u, hash=%u, length=%u", msg->id, msg->type, msg->hash, msg->length);
         uint32_t ghash=calc_hash((message_t*)msg);
         if(ghash!=msg->hash){
@@ -189,22 +209,25 @@ struct cell_t
             /*for(unsigned i=0; i<msg->length; i++){
                 tinselLogSoft(0, "  msg[%u]=%u", i, ((uint8_t*)msg)[i]);
                 }*/
-            exit(1);
+            assert(0);
         }
-        if(seenMessages.find((unsigned)msg->id)!=seenMessages.end()){
+        /*if(seenMessages.find((unsigned)msg->id)!=seenMessages.end()){
             tinselLogSoft(0, "Duplicate message received.");
             exit(1);
         }
-        seenMessages.insert((unsigned)msg->id);
+        seenMessages.insert((unsigned)msg->id);*/
+        #endif
         
         switch (type){
         case message_type_particles:
         {
             auto sMsg=(const particle_message_t*)msg;
+            #ifndef NDEBUG
             for(unsigned i=0; i<sMsg->count; i++){
                 const auto &particle=sMsg->elements[i];
-                tinselLogSoft(2, "Received particle %u at (%f,%f)", particle.id, particle.position.x.to_double(), particle.position.y.to_double());
+                tinselLogSoft(2, "Received particle %u at (%d,%d)", particle.id, particle.position.x.raw(), particle.position.y.raw());
             }
+            #endif
             particlesIn.add(sMsg->count,sMsg->elements);
             if(sMsg->final){
                 particlesInDone++;
@@ -233,7 +256,6 @@ struct cell_t
         }
         default:
             tinselLogSoft(0, "Uknonwn tag\n");
-            exit(1);
             assert(0);
             break;
         }
@@ -246,7 +268,9 @@ struct cell_t
         auto pMsg=tinselRecv();
         cell_on_recv((volatile message_t*)pMsg);
         
+        #ifndef NDEBUG
         memset((void*)pMsg, 0, TinselBytesPerMsg);
+        #endif
         tinselAlloc(pMsg);
     }
     
@@ -273,7 +297,9 @@ struct cell_t
         msg->source=tinselId();
         msg->step=step;
 
+        #ifndef NDEBUG
         msg->hash=calc_hash((message_t*)msg);
+        #endif
 
         tinselLogSoft(3, "Send: id=%u, type=%u, hash=%u, length=%u",
                       msg->id, msg->type, msg->hash, msg->length);
@@ -361,6 +387,7 @@ struct cell_t
         }
         if(particlesIn.size()>0){
             tinselLogSoft(2, "Adding %u new particles.", particlesIn.size());
+            #if 0
             for(unsigned i=0; i<particlesIn.size(); i++){
                 auto &p=particlesIn[i];
                 if(p.position.x < xBegin || xEnd <= p.position.x
@@ -369,16 +396,17 @@ struct cell_t
                                   p.position.x.to_double(), p.position.y.to_double(),
                                   xBegin.to_double(), xEnd.to_double(),
                                   yBegin.to_double(), yEnd.to_double());
-                    exit(1);
+                    assert(0);
                 }
             }
+            #endif
             owned.add(particlesIn.size(), particlesIn.entries);
         }
         
         ///////////////////////////////////////////////////////////
         // Update all of our particles
 
-        tinselLogSoft(1, "Calculating intra forces over %u particles.", owned.size());
+        tinselLogSoft(2, "Calculating intra forces over %u particles.", owned.size());
         calculate_particle_intra_forces(
                                         world,
                                         owned.size(),
@@ -402,7 +430,7 @@ struct cell_t
         ///////////////////////////////////////////////////////////
         // Apply inter forces from halos
 
-        tinselLogSoft(1, "Calculating inter forces.");
+        tinselLogSoft(2, "Calculating inter forces.");
         calculate_particle_inter_forces(
                                         world,
                                         owned.size(),
@@ -456,12 +484,12 @@ struct cell_t
             }
             
             if(xDir!=0 || yDir!=0){
-                tinselLogSoft(2, "Send particle %u at (%f,%f) in dir (%d,%d)", particle.id, particle.position.x.to_double(), particle.position.y.to_double(), xDir, yDir);
+                tinselLogSoft(3, "Send particle %u at (%d,%d) in dir (%d,%d)", particle.id, particle.position.x.raw(), particle.position.y.raw(), xDir, yDir);
                 unsigned ni=directionToNeighbours[xDir+1][yDir+1];
-                if( particle.position.x < xBeginNeighbour[ni] || xEndNeighbour[ni] <= particle.position.x
+                /*if( particle.position.x < xBeginNeighbour[ni] || xEndNeighbour[ni] <= particle.position.x
                     || particle.position.y < yBeginNeighbour[ni] || yEndNeighbour[ni] <= particle.position.y){
                     tinselLogSoft(0, "Attempting to send to wrong cell.");
-                }
+                }*/
                 
                 particlesOut[ni].add(particle);
                 owned.remove(i);
@@ -481,7 +509,7 @@ struct cell_t
         for(unsigned i=0;i<nhoodSize;i++){
             particlesOutPending+=particlesOut[i].size();
         }
-        tinselLogSoft(1, "Bottom: owned=%u, leaving=%u, halosInDone=%u, ghostsInDone=%u, stepsAckDone=%u",
+        tinselLogSoft(2, "Bottom: owned=%u, leaving=%u, halosInDone=%u, ghostsInDone=%u, stepsAckDone=%u",
                       owned.size(), particlesOutPending, halosInDone, particlesInDone, stepAcksDone);
 
         

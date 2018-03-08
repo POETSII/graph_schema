@@ -9,7 +9,6 @@ T fix_inverse_sqrt_s15p16(T v)
     const T zero = T::from_double(0.0);
     const T three = T::from_double(3.0);
     const T half = T::from_double(0.5);
-    const T two_eps = T::from_double(1.0/32768);
     
     // Can't handle zero or negatives
     assert( v > zero );
@@ -63,7 +62,8 @@ T fix_inverse_sqrt_s15p16(T v)
     
     // Do iterations of newton raphson
     for(unsigned i=0; i<5; i++){
-        xi=xi*(three - v * xi * xi )*half;
+        //xi=xi*(three - v * xi * xi )*half;
+        xi=muli(xi,(three - muli(muli(v,xi),xi) )).half();
     }
         
     return xi;

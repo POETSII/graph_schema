@@ -2,13 +2,19 @@
 #define particles_hpp
 
 #include <cstdint>
+#include <algorithm>
 #include <stdexcept>
 #include <cmath>
-#include <iostream>
+//#include <iostream>
 #include <cassert>
 
 #include "fix_inverse.hpp"
 #include "fix_inverse_sqrt.hpp"
+
+inline uint32_t lcg(uint32_t &seed)
+{
+    return seed=1664525*seed+1013904223;
+}
 
 struct real_t
 {
@@ -74,10 +80,21 @@ public:
     
     static constexpr real_t from_raw(int32_t x)
     { return real_t(x); }
+    
+    // Return a number in [0,1)
+    static real_t random(uint32_t &seed)
+    {
+        uint32_t x=lcg(seed);
+        return real_t(x>>(32-frac_bits));
+    }
 
     constexpr double to_double() const
     { return val/double(raw_one); }
+    
+    constexpr int32_t raw() const
+    { return val; }
 
+    // This always gets inline by default
     constexpr real_t operator+(real_t o) const
     {
         return check_range(val+o.val, int64_t(val)+o.val);
@@ -91,9 +108,23 @@ public:
     constexpr real_t operator-() const
     { return real_t(-val); } // TODO : technically could overflow...
 
+    // In risc-v this costs:
+    // - 11 instructions for the body
+    // - 3 instructions for the call-site
+    // - 14 instructions in total
+    // If we inline, then it is 9 instructions. So for inlining we get
+    // - 9/14 = 0.64x time cost per multiply
+    // - 9/3  = 3.00x instruction space per multiply.
+    // For tinsel this is a good tradeof as long as we don't blow the stack
     constexpr real_t operator*(real_t o) const
     {
-        return check_range(int32_t(mul64(val,o.val)), mul64(val,o.val));
+        return check_range(int32_t(((val*int64_t(o.val))+raw_half)>>frac_bits), mul64(val,o.val));
+    }
+    
+    // To be used sparingly, on hot code
+    __attribute__((always_inline)) constexpr real_t muli(real_t o) const
+    {
+        return check_range(int32_t(((val*int64_t(o.val))+raw_half)>>frac_bits), mul64(val,o.val));
     }
 
     real_t inv() const
@@ -142,12 +173,30 @@ public:
     constexpr bool operator>=(real_t o) const
     { return val >= o.val; }
 
-    constexpr real_t abs() const
+    // Always makes sense to inline
+    __attribute__((always_inline)) constexpr real_t abs() const
     { return val>=0 ? *this : real_t(-val); }
+    
+    /*
+    For proper rounding:
+    xxx00 -> xxx0
+    xxx01 -> xxx0
+    xxx10 -> xxx1
+    xxx11 -> xxx0+1
+    */
+    constexpr real_t half() const
+    { return real_t( (val>>1) + (val & (val>>1) & 1) ); }
+    
 };
 
 inline constexpr real_t abs(real_t a)
 { return a.abs(); }
+
+inline constexpr real_t half(real_t a)
+{ return a.half(); }
+
+inline constexpr real_t muli(real_t a, real_t b)
+{ return a.muli(b); }
 
 inline real_t inv(real_t a)
 { return a.inv(); }
@@ -179,10 +228,12 @@ struct vector_t
 
 };
 
+/*
 inline std::ostream &operator<<(std::ostream &dst, const vector_t &v)
 {
     return dst<<"("<<v.x.to_double()<<","<<v.y.to_double()<<")";
 }
+*/
 
 
 struct particle_t
