@@ -6,7 +6,7 @@ QUARTUS_ROOTDIR ?= /opt/altera/16.0/quartus
 
 include $(TINSEL_ROOT)/globals.mk
 
-RV_OBJCOPY = riscv32-unknown-elf-objcopy
+RV_OBJCOPY = riscv64-unknown-elf-objcopy
 
 # Local compiler flags
 CFLAGS = $(RV_CFLAGS) -Og -I $(INC) -I ../../include  -g
@@ -28,13 +28,13 @@ data.v: cell_generic.elf
                 --set-section-flags .bss=alloc,load,contents cell_generic.elf data.v
 
 cell_generic.elf: cell_generic_softswitch.cpp ../shared/particle.cpp link.ld $(INC)/config.h $(INC)/tinsel.h entry.o  $(LIB_TINSEL_EMU_ROOT)/src/impl/tinsel0p2/tinsel0p2_thread.cpp
-	riscv32-unknown-elf-g++ $(CFLAGS) -Wall -c -o tinsel0p2_thread.o $(LIB_TINSEL_EMU_ROOT)/src/impl/tinsel0p2/tinsel0p2_thread.cpp
-	riscv32-unknown-elf-g++ $(CFLAGS) -Wall -c -o cell_generic_softswitch.o cell_generic_softswitch.cpp
-	riscv32-unknown-elf-g++ $(CFLAGS) -Wall -c -o particle.o ../shared/particle.cpp
-	riscv32-unknown-elf-ld $(LDFLAGS) -T link.ld -o $@ entry.o cell_generic_softswitch.o particle.o tinsel0p2_thread.o 
+	riscv64-unknown-elf-g++ $(CFLAGS) -Wall -c -o tinsel0p2_thread.o $(LIB_TINSEL_EMU_ROOT)/src/impl/tinsel0p2/tinsel0p2_thread.cpp
+	riscv64-unknown-elf-g++ $(CFLAGS) -Wall -c -o cell_generic_softswitch.o cell_generic_softswitch.cpp
+	riscv64-unknown-elf-g++ $(CFLAGS) -Wall -c -o particle.o ../shared/particle.cpp
+	riscv64-unknown-elf-ld $(LDFLAGS) -T link.ld -o $@ entry.o cell_generic_softswitch.o particle.o tinsel0p2_thread.o 
 
 entry.o:
-	riscv32-unknown-elf-g++ $(CFLAGS) -Wall -c -o entry.o entry.S
+	riscv64-unknown-elf-g++ $(CFLAGS) -Wall -c -o entry.o entry.S
 
 
 hostlink : Main.cpp 
