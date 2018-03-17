@@ -4,6 +4,7 @@
 #include "tinsel_host_default.hpp"
 
 #include <random>
+#include <iostream>
 
 HostPtr hostCreate(std::shared_ptr<PlatformInfo> platformInfo, int, const char **)
 {

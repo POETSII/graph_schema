@@ -63,12 +63,12 @@ Vagrant.configure(2) do |config|
     vb.cpus = vcpu
   
    # Customize the amount of memory on the VM:
-   # 1  hcpu -> 1 vcpu : 6GB
-   # 2  hcpu -> 1 vcpu : 6GB
-   # 3  hcpu -> 2 vcpu : 8GB
-   # 4  hcpu -> 3 vcpu : 10GB
-   # 5+ hcpu -> 4 vcpu : 12GB
-    vb.memory = 4000 + vcpu * 2000     
+   # 1  hcpu -> 1 vcpu : 5GB
+   # 2  hcpu -> 1 vcpu : 5GB
+   # 3  hcpu -> 2 vcpu : 6GB
+   # 4  hcpu -> 3 vcpu : 7GB
+   # 5+ hcpu -> 4 vcpu : 8GB
+    vb.memory = 4000 + vcpu * 1000     
   
     # If clock drifts more than 500ms, then force it (instead of smooth adjust)
     vb.customize ["guestproperty","set", :id, "/VirtualBox/GuestAdd/VBoxService/--timesync-set-threshold", "500"]

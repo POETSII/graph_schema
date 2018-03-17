@@ -27,13 +27,13 @@ extern "C" void softswitchMain
         lcg(seed); // stir vigorously
     }
     
-    int wCell=tinselHostGet();
-    int hCell=tinselHostGet();
-    unsigned initParticles=tinselHostGet();
-    int xCell=tinselHostGet();
-    int yCell=tinselHostGet();
-    unsigned timeSteps=tinselHostGet();
-    unsigned outputDeltaInterval=tinselHostGet();
+    int wCell=tinselHostToThreadGet();
+    int hCell=tinselHostToThreadGet();
+    unsigned initParticles=tinselHostToThreadGet();
+    int xCell=tinselHostToThreadGet();
+    int yCell=tinselHostToThreadGet();
+    unsigned timeSteps=tinselHostToThreadGet();
+    unsigned outputDeltaInterval=tinselHostToThreadGet();
     
     
     world_info_t info(dt, mass, horizon, drag, thermal);
@@ -100,10 +100,10 @@ extern "C" void softswitchMain
     int outputCountdown=outputDeltaInterval;
 
     auto log_particle=[&](const particle_t &p){
-        tinselHostPut(steps);
-        tinselHostPut((p.id<<16) | p.colour);
-        tinselHostPut(p.position.x.raw());
-        tinselHostPut(p.position.y.raw());
+        tinselThreadToHostPut(steps);
+        tinselThreadToHostPut((p.id<<16) | p.colour);
+        tinselThreadToHostPut(p.position.x.raw());
+        tinselThreadToHostPut(p.position.y.raw());
     };
 
     while(1){       
@@ -126,6 +126,6 @@ extern "C" void softswitchMain
         }
     }
     
-    tinselHostPut(-1);
+    tinselThreadToHostPut(-1);
 
 }

@@ -11,6 +11,7 @@ LDFLAGS += -L/POETS/lib_tinsel_emu/lib
 LDFLAGS += -Wl,--export-dynamic
 
 TINSEL_UNIX_LDLIBS = /POETS/lib_tinsel_emu/lib/lib_tinsel_emu_unix.a -ldl
+TINSEL_SEQ_LDLIBS = /POETS/lib_tinsel_emu/lib/lib_tinsel_emu_seq.a -ldl
 
 bin/simple : src/simple/simple.cpp src/shared/particle.cpp
 	mkdir -p bin
@@ -21,6 +22,11 @@ define add_impl
 bin/$1_unix : src/$1/$1.cpp $(wildcard src/$1/$1_*.cpp) src/shared/particle.cpp
 	mkdir -p bin
 	$(CXX) $(CPPFLAGS) $$^ -o $$@ $(LDFLAGS) $(LDLIBS) $(TINSEL_UNIX_LDLIBS)
+
+bin/$1_seq : src/$1/$1.cpp $(wildcard src/$1/$1_*.cpp) src/shared/particle.cpp
+	mkdir -p bin
+	$(CXX) $(CPPFLAGS) $$^ -o $$@ $(LDFLAGS) $(LDLIBS) $(TINSEL_SEQ_LDLIBS)
+
 
 test_$1_unix : bin/$1_unix
 	mkdir -p output
