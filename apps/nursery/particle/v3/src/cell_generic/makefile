@@ -56,10 +56,15 @@ $(TINSEL_ROOT)/include/config.h: $(TINSEL_ROOT)/config.py
 	echo $(TINSEL_ROOT)
 	make -C $(TINSEL_ROOT)/include
 
+TIMEOUT ?= 60
+
 .PHONY: run-jtag
 run-jtag: code.v data.v hostlink
-	$(QUARTUS_ROOTDIR)/bin/quartus_pgm --quiet  Golden_top.cdf
-	LD_LIBRARY_PATH=$(QUARTUS_ROOTDIR)/linux64 ./hostlink -v code.v data.v 
+	-killall -q -9 -u dt10 hostlink
+	>&2 echo "Configuring"
+	$(QUARTUS_ROOTDIR)/bin/quartus_pgm --quiet  Golden_top.cdf | ( grep -E -v "^\s*Info.*" || /bin/true)
+	>&2 echo "Running hostlink"
+	LD_LIBRARY_PATH=$(QUARTUS_ROOTDIR)/linux64 ./hostlink -v -v -t $(TIMEOUT) code.v data.v 
 
 .PHONY: run-sim
 run-sim: code.v data.v

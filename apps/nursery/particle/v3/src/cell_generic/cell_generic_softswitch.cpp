@@ -16,7 +16,10 @@ extern "C" void softswitchMain
 
     // Check that the two biggests things are no more than 2/3 of stack
     static_assert( (sizeof(cell_t)+sizeof(world_info_t)) * 3 <= (2<<20), "Stack data is too large for hardware.");
-    
+
+	if(tinselId()==0){
+		tinselThreadToHostPut(0x80000000ul);
+	}
     
     const double dt=1.0/64;
     const double mass=1.0;
@@ -131,17 +134,20 @@ extern "C" void softswitchMain
 
 
     volatile void *sendSlot=tinselSlot(0);
-    for(int i=1; i<TinselMsgsPerThread;i++){
+    volatile void *sendSlotAlt=tinselSlot(1);
+    for(int i=2; i<TinselMsgsPerThread;i++){
         tinselLogSoft(5, "Allocating slot %u", i);
         tinselAlloc(tinselSlot(i));
     }
 
     int outputCountdown=outputDeltaInterval;
 
+   uint32_t startTime=tinselCycleCount();
+
 
     while(steps < timeSteps){       
 
-        cell.cell_step(info, (void*)sendSlot);
+        cell.cell_step(info, (void*)sendSlot, (void*)sendSlotAlt);
 
 
 
@@ -162,10 +168,13 @@ extern "C" void softswitchMain
 
 	++steps;
     }
-    
-    if(tinselId()==0){
-     tinselThreadToHostPut(-1);
-   }
+
+    if(tinselId()==0){    
+        uint32_t endTime=tinselCycleCount();
+        uint32_t totalTime=endTime-startTime;
+	tinselThreadToHostPut(0x80000000 | totalTime);
+    }
+
    tinselWaitUntil(TINSEL_CAN_RECV);
     while(1);
 }

@@ -259,6 +259,7 @@ int main(int argc, char* argv[])
     }
   };
 
+/*
   auto put=[&](uint32_t x)
   {
     while(link.canGet()){
@@ -266,6 +267,7 @@ int main(int argc, char* argv[])
     }
     link.put(x);
   };
+*/
 
 
   if(verbosity>1){ fprintf(stderr, "Setting up per-thread info.\n"); }  
@@ -273,10 +275,7 @@ int main(int argc, char* argv[])
     for(unsigned x=0; x<W; x++){
       sms[y*W+x].thread=y*W+x;
     }
-  }
-
-  start=now();
-  
+  }  
 
 
    /////////////////////////////////////////
@@ -288,20 +287,28 @@ int main(int argc, char* argv[])
   link.put(numThreads);
   checksum += StartCmd + numThreads;
   
+  start=now();
+
 
   if(verbosity>1){ fprintf(stderr, "Collecting input.\n"); }  
   // The number of tenths of a second that link has been idle
-  while(finished < 1 ){ //W*H){
+  while(finished < 1){ // W*H){
     while (! link.canGet()) {
-      usleep(100000);
+      double elapsed=now()-start;
+      if( (numSeconds!=-1) && ( elapsed > numSeconds )){
+        if(verbosity>0){ fprintf(stderr, "Aborting with timeout after %f seconds", elapsed); }
+        exit(134);
+      }
+      usleep(10000);
     }
     do_input();
      
   }
 
   double finish=now();
-  fprintf(stdout, "%u, %u, %u, %u, %u, %g\n",
-	CELL_W, CELL_H, particlesPerCell, timeSteps, outputDeltaSteps, g_finish-g_start);
+  double onChip=sms[0].elapsed_timestamp;
+  fprintf(stdout, "%u, %u, %u, %u, %u, %g, %g, %g\n",
+	CELL_W, CELL_H, particlesPerCell, timeSteps, outputDeltaSteps, g_finish-g_start, finish-start, onChip);
 
 
   return 0;
