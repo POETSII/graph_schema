@@ -36,10 +36,10 @@ struct message_t
     uint32_t hash; // Hash over the entire message with hash==0
     uint32_t length;
     uint32_t source;
-    uint32_t type;//  :  8;
-    uint32_t final;//  :  1;
-    uint32_t count;//  :  7;
-    uint32_t step;//   : 16;
+    uint32_t type  :  8;
+    uint32_t final  :  1;
+    uint32_t count  :  7;
+    uint32_t step   : 16;
     uint32_t id; // Combination of host id and sequence number
 };
 
@@ -54,12 +54,12 @@ struct array_message_t
 
 typedef array_message_t<
     particle_t,
-    (256-sizeof(message_t))/sizeof(particle_t)
+    (TinselBytesPerMsg-sizeof(message_t))/sizeof(particle_t)
     > particle_message_t;
 
 typedef array_message_t<
     ghost_t,
-    (256-sizeof(message_t))/sizeof(ghost_t)
+    (TinselBytesPerMsg-sizeof(message_t))/sizeof(ghost_t)
     > halo_message_t;
 
 
@@ -365,7 +365,7 @@ struct cell_t
             // Must always send at least one message, even if we don't
             // own anything
             while(!anySent || haloDone < owned.size()){
-                
+
                 unsigned todo=std::min(owned.size()-haloDone, (unsigned)halo_message_t::max_entries);
                 pHaloMsg->type=message_type_halo;
                 pHaloMsg->final = todo+haloDone==owned.size();
@@ -378,6 +378,10 @@ struct cell_t
                 }
                 
                 for(unsigned i=0; i<nhoodSize; i++){
+		   if(i==1){ // We only prepared the message in one slot
+			// Copy to the other buffer, then both buffers have the message
+			memcpy(sendSlot, sendSlotAlt, sizeof(halo_message_t));
+		    }
                     tinselLogSoft(3, "Delivering halo to neighbour %u (id=%x)\n", nhoodAddresses[i], pHaloMsg->id);
                     cell_send(nhoodAddresses[i], sizeof(halo_message_t), pHaloMsg);
 		    std::swap(sendSlot, sendSlotAlt);
