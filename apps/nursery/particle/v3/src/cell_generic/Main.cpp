@@ -9,6 +9,19 @@
 #include <assert.h>
 #include <time.h>
 #include "HostLink.h"
+#include <cmath>
+
+#include "parameters.hpp"
+
+double now()
+{
+  struct timespec tp;
+  clock_gettime(CLOCK_REALTIME, &tp);
+  return tp.tv_sec+1e-9*tp.tv_nsec;
+}
+
+
+#include "state_machine.hpp"
 
 // Send file contents over host-link
 uint32_t sendFile(BootCmd cmd, HostLink* link, FILE* fp, uint32_t* checksum, int verbosity)
@@ -70,12 +83,6 @@ uint32_t sendFile(BootCmd cmd, HostLink* link, FILE* fp, uint32_t* checksum, int
   return addr;
 }
 
-double now()
-{
-  struct timespec tp;
-  clock_gettime(CLOCK_REALTIME, &tp);
-  return tp.tv_sec+1e-9*tp.tv_nsec;
-}
 
 int usage()
 {
@@ -86,47 +93,9 @@ int usage()
          "    -t [SECONDS]  timeout on message dump\n"
          "    -v            increase verbosity\n"
          "    -h            help\n"
-         "\n"
+         "\n");
   return -1;
 }
-
-
-
-struct sm
-{
-    sm(unsigned _thread)
-        : thread(_thread)
-    {}
-    
-    unsigned thread;
-    unsigned state=0;
-    uint32_t data[4];
-    
-    bool operator()(uint32_t x)
-    {
-        if(state==-1){
-            throw std::runtime_error("Received word after thread finished.");
-        }
-        if(x==-1){
-            state=-1;
-            return false;
-        }
-        assert(state<4);
-        data[state]=x;
-        state++;
-        
-        if(state==4){
-            unsigned steps=data[0];
-            unsigned id=data[1]>>16;
-            unsigned colour=data[1]&0xFFFF;
-            double xpos=ldexp(int32_t(data[2]),-16);
-            double ypos=ldexp(int32_t(data[3]),-16);
-            fprintf(stdout, "%d, %f, %d, %d, %f, %f, 0, 0, %d\n", steps, steps/64.0, id, colour, xpos, ypos, thread);
-            state=0;
-        }
-        return true;
-    }
-};
 
 
 int main(int argc, char* argv[])
@@ -135,26 +104,23 @@ int main(int argc, char* argv[])
   int numSeconds = -1;
   int verbosity = 0;
 
-  FILE *keyValDst = 0;
-  FILE *measureDst = 0;
-  FILE *perfmonDst = 0;
-
   // Option processing
   optind = 1;
   for (;;) {
-    int c = getopt(argc, argv, "hon:t:cpk:i:m:v");
+    int c = getopt(argc, argv, "hn:t:v");
     if (c == -1) break;
     switch (c) {
       case 'h': return usage();
       case 'n': numMessages = atoi(optarg); break;
       case 't': numSeconds = atoi(optarg); break;
       case 'v': verbosity++; break;
-	break;
-      }
       default: return usage();
     }
   }
-  if (optind+2 != argc) return usage();
+  if (optind+2 != argc){
+	fprintf(stderr, "Not enough args.");
+	 return usage();
+  }
 
   if(verbosity>0){
     fprintf(stderr, "Reading code from '%s'\n", argv[optind]);
@@ -188,22 +154,11 @@ int main(int argc, char* argv[])
   rewind(code);
   if(verbosity>0){  fprintf(stderr, "Loading code into instruction memory, size = %u bytes\n", codeSize);  }
 
-  if (startOnlyOneThread)
-    // Write instructions to core 0 only
-    link.setDest(0x00000000);
-  else
-    // Broadcast instructions to all cores
-    link.setDest(0x80000000);
+  // Broadcast instructions to all cores
+  link.setDest(0x80000000);
 
   // Write instructions to instruction memory
   uint32_t instrBase = sendFile(WriteInstrCmd, &link, code, &checksum, verbosity);
-
-  double finish=now();
-  if(measureDst){
-    fprintf(measureDst, "hostlinkLoadInstructions, -, %f, sec\n", finish-start);
-    fflush(measureDst);
-  }
-  start=now();
 
   // Step 2: initialise memory using data file
   // -----------------------------------------
@@ -242,77 +197,112 @@ int main(int argc, char* argv[])
       printf("(0x%x v. 0x%x)\n", checksum, sum);
       exit(EXIT_FAILURE);
     }
-
-    if (startOnlyOneThread) break;
   }
-
-  finish=now();
-  if(measureDst){
-    fprintf(measureDst, "hostlinkLoadData, -, %f, sec\n", finish-start);
-    fflush(measureDst);
-  }
-  start=now();
 
   // Step 3: release the cores
   // -------------------------
  if(verbosity>0){  fprintf(stderr, "Releasing the cores\n");  }
 
-  if (startOnlyOneThread)
-    // Send start command to core 0 only
-    link.setDest(0);
-  else
-    // Broadcast start commands
+    /// Broadcast start commands
     link.setDest(0x80000000);
 
+  
+///////////////////////////////////////////////////////
+// End generic startup
+
+// Begin app-specific
+////////////////////////////////////////////////////////
+
+  g_start=now();
+
+  int W=CELL_W, H=CELL_H;
+  int particlesPerCell=PARTICLES_PER_CELL;
+  int timeSteps=TIME_STEPS;
+  int outputDeltaSteps=OUTPUT_DELTA;
+
+  unsigned finished=0;
+  // No std::vector because... altera
+
+  sm *sms=(sm*)malloc(sizeof(sm)*32*32);
+
+
+  int *inLoValid=(int*)malloc(4*32*32);
+   memset(inLoValid, 0, 4*32*32);
+  uint32_t *inLo=(uint32_t*)malloc(4*32*32);
+
+  auto do_input=[&]()
+  {
+    if(link.canGet()){
+       uint32_t src, val;
+       uint8_t cmd = link.get(&src, &val);
+
+	uint32_t tid=val>>16; 
+        val=val&0xFFFF;
+        if(W*H <= tid){
+	       fprintf(stderr, "Got: %d %x %x, thread=%u, payload=%u\n", src, cmd, val, val>>16, val&0xFFFF);
+		exit(1);
+	}
+
+        if(inLoValid[tid]){
+           val=(val<<16) | inLo[tid];
+	
+       	   bool more=sms[tid](val);
+	   if(!more){
+               finished++;
+               fprintf(stderr, "Thread %d finished, finished=%u\n", tid, finished);
+           }
+	   inLoValid[tid]=0;
+        }else{
+	   inLo[tid]=val;
+           inLoValid[tid]=1;
+	}    	
+    }
+  };
+
+  auto put=[&](uint32_t x)
+  {
+    while(link.canGet()){
+       do_input();
+    }
+    link.put(x);
+  };
+
+
+  if(verbosity>1){ fprintf(stderr, "Setting up per-thread info.\n"); }  
+  for(unsigned y=0; y<H; y++){
+    for(unsigned x=0; x<W; x++){
+      sms[y*W+x].thread=y*W+x;
+    }
+  }
+
+  start=now();
+  
+
+
+   /////////////////////////////////////////
+//
+//  This is from the generic startup
   // Send start command with initial program counter
-  uint32_t numThreads = startOnlyOneThread ? 1 : (1 << TinselLogThreadsPerCore);
+  uint32_t numThreads = (1 << TinselLogThreadsPerCore);
   link.put(StartCmd);
   link.put(numThreads);
   checksum += StartCmd + numThreads;
   
-  int W=4, H=4;
-  
-  link.setDest(0x80000000);
-  link.put(W);
-  link.put(H);
-  link.put(particlesPerCell);
-  
-  unsigned finished=0;
-  std::vector<sm> sms;
-  
-  // Send setup info to threads
-  for(unsigned y=0; y<4; y++){
-    for(unsigned x=0; x<4; x++){
-      link.setDest(y*W+x);
-      link.put(x);
-      link.put(y);
-      assert(y*W+x==sms.size());
-      sms.push_back( sm{ sms.size(); } );
-    }
-  }
-  
-  link.setDest(0x80000000);
-  link.put(timeSteps);
-  link.put(outputDeltaSteps);
-  
-  start=now();
-  
+
+  if(verbosity>1){ fprintf(stderr, "Collecting input.\n"); }  
   // The number of tenths of a second that link has been idle
-  while(finished < W*H){
+  while(finished < 1 ){ //W*H){
     while (! link.canGet()) {
       usleep(100000);
     }
+    do_input();
      
-    uint32_t src, val;
-    uint8_t cmd = link.get(&src, &val);
-    printf("%d %x %x\n", src, cmd, val);
-    
-    bool more=sms.at(src)(val);
-    if(!more){
-      finished++;
-      fprintf(stderr, "Thread %d finished\n", src);
-    }
   }
+
+  double finish=now();
+  fprintf(stdout, "%u, %u, %u, %u, %u, %g\n",
+	CELL_W, CELL_H, particlesPerCell, timeSteps, outputDeltaSteps, g_finish-g_start);
+
 
   return 0;
 }

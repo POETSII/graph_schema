@@ -1,3 +1,7 @@
+#include "tinsel_emu.h"
+
+#include "parameters.hpp"
+
 #include "particle.hpp"
 #include "cell.hpp"
 
@@ -9,6 +13,7 @@ extern "C" void softswitchMain
  void */*mutableBLOB*/
 )
 {
+
     // Check that the two biggests things are no more than 2/3 of stack
     static_assert( (sizeof(cell_t)+sizeof(world_info_t)) * 3 <= (2<<20), "Stack data is too large for hardware.");
     
@@ -27,24 +32,43 @@ extern "C" void softswitchMain
         lcg(seed); // stir vigorously
     }
     
-    int wCell=tinselHostToThreadGet();
-    int hCell=tinselHostToThreadGet();
-    unsigned initParticles=tinselHostToThreadGet();
-    int xCell=tinselHostToThreadGet();
-    int yCell=tinselHostToThreadGet();
-    unsigned timeSteps=tinselHostToThreadGet();
-    unsigned outputDeltaInterval=tinselHostToThreadGet();
-    
-    
+
+    const int wCell=CELL_W;
+    const int hCell=CELL_H;
+    const unsigned initParticles=PARTICLES_PER_CELL;
+    const unsigned timeSteps=TIME_STEPS;
+    const unsigned outputDeltaInterval=OUTPUT_DELTA;
+
+    int xCell=tinselId();
+    int yCell=0;
+    while(xCell>=wCell){
+       xCell-=wCell;
+       yCell++;
+    }
+
+    if(xCell >= wCell || yCell >= hCell){
+      // Disable this core
+      while(1);
+    }
+
+
+   
+
     world_info_t info(dt, mass, horizon, drag, thermal);
     info.left=real_t::from_double(0.0);
     info.right=info.left +real_t::from_int(wCell)*delta -real_t::eps();
     info.bottom=real_t::from_double(0.0);
     info.top=info.bottom+real_t::from_int(hCell)*delta - real_t::eps();
 
-    // This is to avoid calling or emitting the constructor, which is relatively large
-    uint8_t cell_storage[sizeof(cell_t)];
-    cell_t &cell=cell_t::construct(cell_storage, sizeof(cell_storage));
+
+
+    // // This is to avoid calling or emitting the constructor, which is relatively large
+    // uint8_t cell_storage[sizeof(cell_t)];
+    // cell_t &cell=cell_t::construct(cell_storage, sizeof(cell_storage));
+
+    cell_t cell;
+    memset(&cell, 0, sizeof(cell_t));
+
 
     auto add_neighbour=[&](int dx, int dy)
         {
@@ -75,6 +99,20 @@ extern "C" void softswitchMain
                   cell.yBegin, cell.yEnd,
                   cell.nhoodSize);
 
+   int steps=0;
+
+
+    auto log_particle=[&](const particle_t &p){
+        tinselThreadToHostPut(steps);
+        tinselThreadToHostPut((p.id<<16) | p.colour);
+        tinselThreadToHostPut(p.position.x.raw());
+        tinselThreadToHostPut(p.position.y.raw());
+    };
+
+
+
+
+
     for(unsigned i=0; i<initParticles; i++){
         particle_t p;
         p.position=vector_t{
@@ -90,26 +128,24 @@ extern "C" void softswitchMain
         }
     }
 
+
+
     volatile void *sendSlot=tinselSlot(0);
     for(int i=1; i<TinselMsgsPerThread;i++){
         tinselLogSoft(5, "Allocating slot %u", i);
         tinselAlloc(tinselSlot(i));
     }
 
-    int steps=0;
     int outputCountdown=outputDeltaInterval;
 
-    auto log_particle=[&](const particle_t &p){
-        tinselThreadToHostPut(steps);
-        tinselThreadToHostPut((p.id<<16) | p.colour);
-        tinselThreadToHostPut(p.position.x.raw());
-        tinselThreadToHostPut(p.position.y.raw());
-    };
 
-    while(1){       
+    while(steps < timeSteps){       
+
         cell.cell_step(info, (void*)sendSlot);
 
-        if(--outputCountdown==0){
+
+
+        /*if(--outputCountdown==0){
             for(unsigned i=0; i<cell.owned.size(); i++){
                 log_particle(cell.owned[i]);
             }
@@ -118,14 +154,18 @@ extern "C" void softswitchMain
                     log_particle(cell.particlesOut[i][j]);
                 }
             }
+		
             outputCountdown=outputDeltaInterval;
-        }
+        }*/
 
-        if(++steps>timeSteps){
-            break;
-        }
+	
+
+	++steps;
     }
     
-    tinselThreadToHostPut(-1);
-
+    if(tinselId()==0){
+     tinselThreadToHostPut(-1);
+   }
+   tinselWaitUntil(TINSEL_CAN_RECV);
+    while(1);
 }

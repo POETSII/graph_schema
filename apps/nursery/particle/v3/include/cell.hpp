@@ -149,9 +149,9 @@ struct cell_t
     cell_t()
     {
         // This is just to prove that it works. Ideally we never use it.
-        #ifndef NDEBUG
+        //#ifndef NDEBUG
         memset(this, 0, sizeof(cell_t));
-        #endif
+        //#endif
     }
     
     // Create an empty cell_t in the given space
@@ -311,40 +311,49 @@ struct cell_t
         tinselSend(dest,(volatile void *)slot);
     }
 
-    void cell_step(
+    __attribute__((noinline)) void cell_step(
                    world_info_t &world,
                    void *sendSlot
                    ){
         tinselLogSoft(1, "Begin step %d", step);
-        
+
+
+
         ////////////////////////////////////////////
         // Send all particles
         {
             particle_message_t *pParticleMsg=(particle_message_t*)sendSlot;
-            
+
             for(unsigned i=0; i<nhoodSize; i++){
                 if(particlesOut[i].size()>0){
                     tinselLogSoft(2, "Sending particles to neighbour %u, total=%u\n",
                                   nhoodAddresses[i], particlesOut[i].size());
                 }
-                
+
                 bool keepGoing=true;
-                
+
                 // Must always send at least one message, even if we don't
                 // own anything
                 while(keepGoing){
+
                     pParticleMsg->type=message_type_particles;
                     keepGoing=particlesOut[i].fill(pParticleMsg);
                     tinselLogSoft(3, "Sending particle message to %u, count=%u, final=%u\n", pParticleMsg->id, nhoodAddresses[i], pParticleMsg->count, pParticleMsg->final);
-                                      
+
                     cell_send(nhoodAddresses[i], sizeof(particle_message_t), pParticleMsg);
                 }
                 assert(particlesOut[i].size()==0);
             }
             particlesOutDone=0;
         }
-        
-        
+
+	// TODO: move later
+        while(particlesInDone < nhoodSize){
+            tinselLogSoft(2, "Wiating for incoming particles: got %u out of %u", particlesInDone, nhoodSize);
+            cell_receive();
+        }
+
+
         ////////////////////////////////////////////
         // Send all halos
         {
@@ -376,15 +385,21 @@ struct cell_t
                 anySent=true;
             }
         }
+
+        while(halosInDone < nhoodSize){
+            tinselLogSoft(2, "Waiting for incoming halos. Got %u out of %u.", halosInDone, nhoodSize);
+            cell_receive();
+        }
+
+
         
         ///////////////////////////////////////////////////////////
         // Wait for incoming particles to complete, before doing all intra
         // Note: this could be overlapped with calculating intra
-        
-        while(particlesInDone < nhoodSize){
-            tinselLogSoft(2, "Wiating for incoming particles: got %u out of %u", particlesInDone, nhoodSize);
-            cell_receive();
-        }
+        //while(particlesInDone < nhoodSize){
+        //    tinselLogSoft(2, "Wiating for incoming particles: got %u out of %u", particlesInDone, nhoodSize);
+        //    cell_receive();
+        //}        
         if(particlesIn.size()>0){
             tinselLogSoft(2, "Adding %u new particles.", particlesIn.size());
             #if 0
@@ -421,10 +436,10 @@ struct cell_t
         // Wait for all incoming halos
         // Note: this could be done progressively and overlapped
         
-        while(halosInDone < nhoodSize){
-            tinselLogSoft(2, "Waiting for incoming halos. Got %u out of %u.", halosInDone, nhoodSize);
-            cell_receive();
-        }
+        //while(halosInDone < nhoodSize){
+        //    tinselLogSoft(2, "Waiting for incoming halos. Got %u out of %u.", halosInDone, nhoodSize);
+        //    cell_receive();
+       // }
 
        
         ///////////////////////////////////////////////////////////
@@ -441,21 +456,6 @@ struct cell_t
                                         );
         halosInDone=0;
         halosIn.clear();
-
-        ////////////////////////////////////////////////////////////
-        // Send out our step acks
-        // TODO: move this earlier again
-
-        {
-            message_t *pAckMsg=(message_t*)sendSlot;
-            pAckMsg->type=message_type_step_ack;
-
-            
-            for(unsigned i=0; i<nhoodSize; i++){
-                tinselLogSoft(2,"Sending ack to thread %u", nhoodAddresses[i]);
-                cell_send(nhoodAddresses[i], sizeof(message_t), pAckMsg);
-            }
-        }
 
         
         ///////////////////////////////////////////////////////
@@ -486,15 +486,32 @@ struct cell_t
             if(xDir!=0 || yDir!=0){
                 tinselLogSoft(3, "Send particle %u at (%d,%d) in dir (%d,%d)", particle.id, particle.position.x.raw(), particle.position.y.raw(), xDir, yDir);
                 unsigned ni=directionToNeighbours[xDir+1][yDir+1];
-                /*if( particle.position.x < xBeginNeighbour[ni] || xEndNeighbour[ni] <= particle.position.x
-                    || particle.position.y < yBeginNeighbour[ni] || yEndNeighbour[ni] <= particle.position.y){
-                    tinselLogSoft(0, "Attempting to send to wrong cell.");
-                }*/
+                //if( particle.position.x < xBeginNeighbour[ni] || xEndNeighbour[ni] <= particle.position.x
+                //    || particle.position.y < yBeginNeighbour[ni] || yEndNeighbour[ni] <= particle.position.y){
+                //   tinselLogSoft(0, "Attempting to send to wrong cell.");
+                //}
                 
                 particlesOut[ni].add(particle);
                 owned.remove(i);
             }
         }
+
+        ////////////////////////////////////////////////////////////
+        // Send out our step acks
+        // TODO: move this earlier again
+
+        {
+            message_t *pAckMsg=(message_t*)sendSlot;
+            pAckMsg->type=message_type_step_ack;
+
+            
+            for(unsigned i=0; i<nhoodSize; i++){
+                tinselLogSoft(2,"Sending ack to thread %u", nhoodAddresses[i]);
+                cell_send(nhoodAddresses[i], sizeof(message_t), pAckMsg);
+            }
+        }
+
+
 
         ///////////////////////////////////////////////////////////
         // Wait until we get all step acks
@@ -504,6 +521,7 @@ struct cell_t
             cell_receive();
         }
         stepAcksDone=0;
+	
 
         unsigned particlesOutPending=0;
         for(unsigned i=0;i<nhoodSize;i++){
@@ -511,6 +529,8 @@ struct cell_t
         }
         tinselLogSoft(2, "Bottom: owned=%u, leaving=%u, halosInDone=%u, ghostsInDone=%u, stepsAckDone=%u",
                       owned.size(), particlesOutPending, halosInDone, particlesInDone, stepAcksDone);
+
+	
 
         
         //////////////////////////////////////////////////////////

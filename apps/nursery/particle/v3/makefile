@@ -1,6 +1,10 @@
+LIB_TINSEL_EMU_ROOT ?= /POETS/lib_tinsel_emu
+
+LIB_TINSEL_EMU_ROOT := $(realpath $(LIB_TINSEL_EMU_ROOT))
+
 CPPFLAGS += -g -W -Wall -std=c++11
 CPPFLAGS += -Iinclude
-CPPFLAGS += -I/POETS/lib_tinsel_emu/include
+CPPFLAGS += -I$(LIB_TINSEL_EMU_ROOT)/include
 CPPFLAGS += -pthread
 
 #CPPFLAGS += -O3 -DNDEBUG=1
@@ -10,7 +14,7 @@ LDFLAGS += -L/POETS/lib_tinsel_emu/lib
 # Make executables export their own function (softswitchMain)
 LDFLAGS += -Wl,--export-dynamic
 
-TINSEL_UNIX_LDLIBS = /POETS/lib_tinsel_emu/lib/lib_tinsel_emu_unix.a -ldl
+TINSEL_UNIX_LDLIBS = $(LIB_TINSEL_EMU_ROOT)/lib/lib_tinsel_emu_unix.a -ldl
 TINSEL_SEQ_LDLIBS = /POETS/lib_tinsel_emu/lib/lib_tinsel_emu_seq.a -ldl
 
 bin/simple : src/simple/simple.cpp src/shared/particle.cpp

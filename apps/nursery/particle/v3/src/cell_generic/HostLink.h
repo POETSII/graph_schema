@@ -37,6 +37,9 @@ class HostLink {
   inline bool canGet() {
     return raw.canGet();
   }
+
+  inline void flush()
+  { raw.flush(); }
 };
 
 #endif

@@ -6,12 +6,12 @@ T fix_inverse_sqrt_s15p16(T v)
 {
     static_assert(T::frac_bits==16, "Only works for 16 fractional bits.");
     
-    const T zero = T::from_double(0.0);
+    //const T zero = T::from_double(0.0);
     const T three = T::from_double(3.0);
-    const T half = T::from_double(0.5);
+    //const T half = T::from_double(0.5);
     
     // Can't handle zero or negatives
-    assert( v > zero );
+    assert( v > T::from_double(0.0 ));
     // So we round it up to 2^-16 in hardware...
     v=std::max(v,T::eps());
     
