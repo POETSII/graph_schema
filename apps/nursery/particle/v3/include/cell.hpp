@@ -36,10 +36,10 @@ struct message_t
     uint32_t hash; // Hash over the entire message with hash==0
     uint32_t length;
     uint32_t source;
-    uint32_t type;//  :  8;
-    uint32_t final;//  :  1;
-    uint32_t count;//  :  7;
-    uint32_t step;//   : 16;
+    uint32_t type  :  8;
+    uint32_t final  :  1;
+    uint32_t count  :  7;
+    uint32_t step   : 16;
     uint32_t id; // Combination of host id and sequence number
 };
 
@@ -54,13 +54,17 @@ struct array_message_t
 
 typedef array_message_t<
     particle_t,
-    (256-sizeof(message_t))/sizeof(particle_t)
+    (TinselBytesPerMsg-sizeof(message_t))/sizeof(particle_t)
     > particle_message_t;
+
+static_assert(sizeof(particle_message_t)<=TinselBytesPerMsg, "Msg too big.");
 
 typedef array_message_t<
     ghost_t,
-    (256-sizeof(message_t))/sizeof(ghost_t)
+    (TinselBytesPerMsg-sizeof(message_t))/sizeof(ghost_t)
     > halo_message_t;
+
+static_assert(sizeof(halo_message_t)<=TinselBytesPerMsg, "Msg too big.");
 
 
 inline uint32_t calc_hash(const message_t *msg)
@@ -313,7 +317,8 @@ struct cell_t
 
     __attribute__((noinline)) void cell_step(
                    world_info_t &world,
-                   void *sendSlot
+                   void *sendSlot,
+		   void *sendSlotAlt
                    ){
         tinselLogSoft(1, "Begin step %d", step);
 
@@ -323,6 +328,7 @@ struct cell_t
         // Send all particles
         {
             particle_message_t *pParticleMsg=(particle_message_t*)sendSlot;
+            particle_message_t *pParticleMsgAlt=(particle_message_t*)sendSlotAlt;
 
             for(unsigned i=0; i<nhoodSize; i++){
                 if(particlesOut[i].size()>0){
@@ -341,23 +347,24 @@ struct cell_t
                     tinselLogSoft(3, "Sending particle message to %u, count=%u, final=%u\n", pParticleMsg->id, nhoodAddresses[i], pParticleMsg->count, pParticleMsg->final);
 
                     cell_send(nhoodAddresses[i], sizeof(particle_message_t), pParticleMsg);
+		    std::swap(pParticleMsg, pParticleMsgAlt);
                 }
                 assert(particlesOut[i].size()==0);
             }
             particlesOutDone=0;
         }
 
-	// TODO: move later
         while(particlesInDone < nhoodSize){
             tinselLogSoft(2, "Wiating for incoming particles: got %u out of %u", particlesInDone, nhoodSize);
             cell_receive();
-        }
-
+        } 
 
         ////////////////////////////////////////////
         // Send all halos
         {
             halo_message_t *pHaloMsg=(halo_message_t*)sendSlot;
+            halo_message_t *pHaloMsgAlt=(halo_message_t*)sendSlotAlt;
+
             
             unsigned haloDone=0;
             bool anySent=false;
@@ -365,7 +372,7 @@ struct cell_t
             // Must always send at least one message, even if we don't
             // own anything
             while(!anySent || haloDone < owned.size()){
-                
+
                 unsigned todo=std::min(owned.size()-haloDone, (unsigned)halo_message_t::max_entries);
                 pHaloMsg->type=message_type_halo;
                 pHaloMsg->final = todo+haloDone==owned.size();
@@ -378,28 +385,29 @@ struct cell_t
                 }
                 
                 for(unsigned i=0; i<nhoodSize; i++){
+		   if(i==1){ // We only prepared the message in one slot
+			// Copy to the other buffer, then both buffers have the message
+			memcpy(pHaloMsg, pHaloMsgAlt, sizeof(halo_message_t));
+		    }
                     tinselLogSoft(3, "Delivering halo to neighbour %u (id=%x)\n", nhoodAddresses[i], pHaloMsg->id);
                     cell_send(nhoodAddresses[i], sizeof(halo_message_t), pHaloMsg);
+		    std::swap(pHaloMsg, pHaloMsgAlt);
+
                 }
                 haloDone+=todo;
                 anySent=true;
             }
         }
 
-        while(halosInDone < nhoodSize){
-            tinselLogSoft(2, "Waiting for incoming halos. Got %u out of %u.", halosInDone, nhoodSize);
-            cell_receive();
-        }
-
-
-        
         ///////////////////////////////////////////////////////////
         // Wait for incoming particles to complete, before doing all intra
         // Note: this could be overlapped with calculating intra
-        //while(particlesInDone < nhoodSize){
-        //    tinselLogSoft(2, "Wiating for incoming particles: got %u out of %u", particlesInDone, nhoodSize);
-        //    cell_receive();
-        //}        
+	
+        while(particlesInDone < nhoodSize){
+            tinselLogSoft(2, "Wiating for incoming particles: got %u out of %u", particlesInDone, nhoodSize);
+            cell_receive();
+        } 
+	
         if(particlesIn.size()>0){
             tinselLogSoft(2, "Adding %u new particles.", particlesIn.size());
             #if 0
@@ -436,10 +444,10 @@ struct cell_t
         // Wait for all incoming halos
         // Note: this could be done progressively and overlapped
         
-        //while(halosInDone < nhoodSize){
-        //    tinselLogSoft(2, "Waiting for incoming halos. Got %u out of %u.", halosInDone, nhoodSize);
-        //    cell_receive();
-       // }
+        while(halosInDone < nhoodSize){
+            tinselLogSoft(2, "Waiting for incoming halos. Got %u out of %u.", halosInDone, nhoodSize);
+            cell_receive();
+        }
 
        
         ///////////////////////////////////////////////////////////
@@ -457,6 +465,19 @@ struct cell_t
         halosInDone=0;
         halosIn.clear();
 
+        ////////////////////////////////////////////////////////////
+        // Send out our step acks
+        {
+            message_t *pAckMsg=(message_t*)sendSlot;
+            message_t *pAckMsgAlt=(message_t*)sendSlotAlt;
+            
+            for(unsigned i=0; i<nhoodSize; i++){
+                tinselLogSoft(2,"Sending ack to thread %u", nhoodAddresses[i]);
+		pAckMsg->type=message_type_step_ack;
+                cell_send(nhoodAddresses[i], sizeof(message_t), pAckMsg);
+                std::swap(pAckMsg, pAckMsgAlt);
+            }
+        }
         
         ///////////////////////////////////////////////////////
         // Move the particles
@@ -495,23 +516,6 @@ struct cell_t
                 owned.remove(i);
             }
         }
-
-        ////////////////////////////////////////////////////////////
-        // Send out our step acks
-        // TODO: move this earlier again
-
-        {
-            message_t *pAckMsg=(message_t*)sendSlot;
-            pAckMsg->type=message_type_step_ack;
-
-            
-            for(unsigned i=0; i<nhoodSize; i++){
-                tinselLogSoft(2,"Sending ack to thread %u", nhoodAddresses[i]);
-                cell_send(nhoodAddresses[i], sizeof(message_t), pAckMsg);
-            }
-        }
-
-
 
         ///////////////////////////////////////////////////////////
         // Wait until we get all step acks
