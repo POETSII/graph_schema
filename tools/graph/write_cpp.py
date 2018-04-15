@@ -60,7 +60,7 @@ def render_typed_data_add_hash(proto,dst,prefix):
         assert isinstance(proto.type,ScalarTypedDataSpec), "Haven't implemented arrays of non-scalars yet."
         for i in range(0,proto.length):
             dst.write('  hash.add({}{}[{}]);\n'.format(prefix,proto.name,i))
-            
+
     else:
         raise RuntimeError("Unknown data type {}.".format(type(proto)))
 
@@ -87,21 +87,22 @@ def render_typed_data_load_v4_tuple(proto,dst,prefix,indent):
         elif isinstance(elt,ArrayTypedDataSpec):
             assert isinstance(elt.type,ScalarTypedDataSpec), "Haven't implemented non-scalar arrays yet."
             dst.write('{}  assert(n.IsArray());\n')
-            for i in range(0,elt.length):
 
-                if elt.type.type=="int64_t" or elt.type.type=="int32_t" or elt.type.type=="int16_t" or elt.type.type=="int8_t" or elt.type=="char":
-                    dst.write('{}  assert(n[{}].IsInt());\n'.format(indent,i))
-                    dst.write('{}  {}{}[{}]=n[{}].GetInt();\n'.format(indent, prefix, elt.name,i,i))
+            float_types = ["float"]
+            signed_types = ["int64_t", "int32_t", "int16_t", "int8_t", "char"]
+            unsigned_types = ["uint64_t", "uint32_t", "uint16_t", "uint8_t"]
 
-                elif elt.type.type=="uint64_t" or elt.type.type=="uint32_t" or elt.type.type=="uint16_t" or elt.type.type=="uint8_t":
-                    dst.write('{}  assert(n[{}].IsUint());\n'.format(indent,i))
-                    dst.write('{}  {}{}[{}]=n[{}].GetUint();\n'.format(indent, prefix,elt.name,i,i))
+            if not elt.type.type in (float_types + signed_types + unsigned_types):
+                raise RuntimeError("Unknown scalar data type.")
 
-                elif elt.type.type=="float":
-                    dst.write('{}  assert(n[{}].IsDouble());\n'.format(indent,i))
-                    dst.write('{}  {}{}[{}]=n[{}].GetDouble();\n'.format(indent, prefix,elt.name,i,i))
-                else:
-                    raise RuntimeError("Unknown scalar data type.")
+            if elt.type.type in float_types:      is_func, get_func = "IsDouble()", "GetDouble()"
+            elif elt.type.type in signed_types:   is_func, get_func = "IsInt()", "GetInt()"
+            elif elt.type.type in unsigned_types: is_func, get_func = "IsUint()", "GetUint()"
+
+            dst.write("%sfor (int i=0; i<%d; i++) {" % (indent, elt.length))
+            dst.write('{}  assert(n[i].{});\n'.format(indent, is_func))
+            dst.write('{}  {}{}[i]=n[i].{};\n'.format(indent, prefix, elt.name, get_func))
+            dst.write('%s}' % indent)
         else:
             raise RuntimeError("Unknown data type.")
         dst.write('{}  }}\n'.format(indent))
@@ -233,7 +234,7 @@ def render_typed_data_as_spec(proto,name,elt_name,dst,asHeader=False):
         for elt in proto.elements_by_index:
             render_typed_data_add_hash(elt, dst, "src->")
     dst.write('  }\n')
-    
+
     dst.write("};\n")
     dst.write("TypedDataSpecPtr {}_Spec_get(){{\n".format(name))
     dst.write("  static TypedDataSpecPtr singleton(new {}_Spec);\n".format(name))
@@ -374,7 +375,7 @@ public:
     HandlerLogImpl handler_log(orchestrator);
     auto handler_exit=[&](int code) -> void {{ orchestrator->application_exit(code); }};
     auto handler_export_key_value=[&](uint32_t key, uint32_t value) -> void {{ orchestrator->export_key_value(key, value); }};
-    
+
 
     // Begin custom handler
     {preProcLinePragma}
@@ -456,7 +457,7 @@ def render_output_pin_as_cpp(op,dst):
     dst.write('    auto message=cast_typed_data<{}_message_t>(gMessage);\n'.format(op.message_type.id))
     dst.write('    HandlerLogImpl handler_log(orchestrator);\n')
     dst.write('    auto handler_exit=[&](int code) -> void { orchestrator->application_exit(code); };\n')
-    dst.write('    auto handler_export_key_value=[&](uint32_t key, uint32_t value) -> void { orchestrator->export_key_value(key, value); };\n')   
+    dst.write('    auto handler_export_key_value=[&](uint32_t key, uint32_t value) -> void { orchestrator->export_key_value(key, value); };\n')
 
     dst.write('    // Begin custom handler\n')
     if op.source_line and op.source_file:
