@@ -144,13 +144,25 @@ def render_typed_data_save(proto, dst, prefix, indent):
 
 
     elif isinstance(proto,ArrayTypedDataSpec):
+
         assert isinstance(proto.type,ScalarTypedDataSpec), "Haven't implemented non-scalar arrays yet."
         dst.write('{}if(sep){{ dst<<","; }}; dst<<"\\"{}\\":[";'.format(indent,proto.name))
-        for i in range(proto.length):
-            if i>0:
-                dst.write('{}  dst<<",";\n'.format(indent))
-            dst.write('{}  dst<<{}{}[{}];\n'.format(indent, prefix, proto.name, i))
+
+        args = {"plen": str(proto.length), "prefix": prefix,
+                "pnam": proto.name}
+
+        lines = [
+            "for (int i=0; i<{plen}; i++) {{",
+            "  if (i>0) dst<<\",\";",
+            "  dst<<{prefix}{pnam}[i];",
+            "}}"
+        ]
+
+        for line in lines:
+            dst.write(indent + line.format(**args))
+
         dst.write('{}dst<<"]"; sep=true;\n'.format(indent))
+
     elif isinstance(proto,TupleTypedDataSpec):
         dst.write('{}if(sep){ dst<<","; } sep=true;\n'.format(indent))
         dst.write('{}{{ bool sep=false;\n'.format(indent))
