@@ -58,8 +58,11 @@ def render_typed_data_add_hash(proto,dst,prefix):
             render_typed_data_add_hash(elt,dst,prefix+proto.name+".")
     elif isinstance(proto,ArrayTypedDataSpec):
         assert isinstance(proto.type,ScalarTypedDataSpec), "Haven't implemented arrays of non-scalars yet."
-        for i in range(0,proto.length):
-            dst.write('  hash.add({}{}[{}]);\n'.format(prefix,proto.name,i))
+
+        line = "  for (int i=0; i<%d; i++) hash.add(%s%s[i]);" % (
+            proto.length, prefix, proto.name)
+
+        dst.write(line)
 
     else:
         raise RuntimeError("Unknown data type {}.".format(type(proto)))
