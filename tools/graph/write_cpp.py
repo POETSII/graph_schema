@@ -38,12 +38,13 @@ def render_typed_data_init(proto,dst,prefix):
             render_typed_data_init(elt,dst,prefix+proto.name+".")
     elif isinstance(proto,ArrayTypedDataSpec):
         assert isinstance(proto.type,ScalarTypedDataSpec), "Haven't implemented arrays of non-scalars yet."
-        for i in range(0,proto.length):
 
-            if proto.type.default is not None:
-                dst.write('{}{}[{}] = {};\n'.format(prefix,proto.name,i,proto.type.default))
-            else:
-                dst.write('{}{}[{}] = 0;\n'.format(prefix,proto.name,i))
+        init_val = 0 if proto.type.default is None else proto.type.default
+
+        line = "for (int i=0; i<%d; i++) %s%s[i] = %s;" % (
+            proto.length, prefix, proto.name, init_val)
+
+        dst.write(line)
 
     else:
         raise RuntimeError("Unknown data type {}.".format(type(proto)))
