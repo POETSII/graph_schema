@@ -297,6 +297,7 @@ def render_graph_type_as_softswitch_decls(gt,dst):
     #include <stdint.h>
     
     #include "softswitch.hpp"
+    #include "softswitch_hostmessaging.hpp"
     
     #ifdef __cplusplus
     extern "C"{{
