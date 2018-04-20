@@ -456,7 +456,8 @@ def render_device_type_as_softswitch_defs(dt,dst,dtProps):
                 sizeof(packet_t)+sizeof({INPUT_PORT_MESSAGE_T}),
                 {ACTUAL_PROPERTIES_SIZE}, //sizeof({INPUT_PORT_PROPERTIES_T}),
                 {ACTUAL_STATE_SIZE}, //sizeof({INPUT_PORT_STATE_T}),
-                "{INPUT_PORT_NAME}"
+                "{INPUT_PORT_NAME}",
+                {IS_APPLICATION}
             }}
             """.format(ACTUAL_PROPERTIES_SIZE=propertiesSize, ACTUAL_STATE_SIZE=stateSize, **make_input_pin_properties(ip)))
     dst.write("};\n");
@@ -471,7 +472,8 @@ def render_device_type_as_softswitch_defs(dt,dst,dtProps):
             {{
                 (send_handler_t){OUTPUT_PORT_FULL_ID}_send_handler,
                 sizeof(packet_t)+sizeof({OUTPUT_PORT_MESSAGE_T}),
-                "{OUTPUT_PORT_NAME}"
+                "{OUTPUT_PORT_NAME}",
+                {IS_APPLICATION}
             }}
             """.format(**make_output_pin_properties(op)))
     dst.write("};\n");

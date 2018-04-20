@@ -53,7 +53,8 @@ def make_input_pin_properties(ip):
         "INPUT_PORT_STATE_T" : "{}_{}_{}_state_t".format(ip.parent.parent.id,ip.parent.id,ip.name),
         "INPUT_PORT_MESSAGE_T" : "{}_{}_message_t".format(ip.parent.parent.id,ip.message_type.id),
         "INPUT_PORT_RECEIVE_HANDLER" : ip.receive_handler,
-        "INPUT_PORT_RECEIVE_HANDLER_SOURCE_LOCATION" : preProc
+        "INPUT_PORT_RECEIVE_HANDLER_SOURCE_LOCATION" : preProc,
+        "IS_APPLICATION" : 1 if ip.is_application else 0
     })
     
 def make_output_pin_properties(op):
@@ -68,7 +69,8 @@ def make_output_pin_properties(op):
         "OUTPUT_PORT_FULL_ID" : "{}_{}_{}".format(op.parent.parent.id,op.parent.id,op.name),
         "OUTPUT_PORT_MESSAGE_T" : "{}_{}_message_t".format(op.parent.parent.id,op.message_type.id),
         "OUTPUT_PORT_SEND_HANDLER" : op.send_handler,
-        "OUTPUT_PORT_SEND_HANDLER_SOURCE_LOCATION" : preProc
+        "OUTPUT_PORT_SEND_HANDLER_SOURCE_LOCATION" : preProc,
+        "IS_APPLICATION" : 1 if op.is_application else 0
     })
     
     
