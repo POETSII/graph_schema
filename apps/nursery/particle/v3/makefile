@@ -16,6 +16,8 @@ LDFLAGS += -Wl,--export-dynamic
 
 TINSEL_UNIX_LDLIBS = $(LIB_TINSEL_EMU_ROOT)/lib/lib_tinsel_emu_unix.a -ldl
 TINSEL_SEQ_LDLIBS = /POETS/lib_tinsel_emu/lib/lib_tinsel_emu_seq.a -ldl
+TINSEL_TINSEL0P2_LDLIBS = /POETS/lib_tinsel_emu/lib/lib_tinsel_emu_tinsel0p2.a
+
 
 bin/simple : src/simple/simple.cpp src/shared/particle.cpp
 	mkdir -p bin
