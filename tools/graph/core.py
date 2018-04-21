@@ -226,12 +226,13 @@ def is_refinement_compatible(proto,inst):
 
 
 class MessageType(object):
-    def __init__(self,parent,id,message,metadata=None):
+    def __init__(self,parent,id,message,metadata=None,numid=0):
         assert (message is None) or isinstance(message,TypedDataSpec)
         self.id=id
         self.parent=parent
         self.message=message
         self.metadata=metadata
+        self.numid=numid
 
 
 class Pin(object):

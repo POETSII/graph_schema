@@ -288,6 +288,21 @@ class BLOBHolder:
         dst.write("  0\n")
         dst.write("};\n\n")
 
+#enumerate all message types in the graph and assign a unique numerical ID to the message type
+def assign_unique_ident_for_each_message_type(gt):
+    numid = 0
+    for mt in gt.message_types.values():
+        mt.numid = numid
+        numid=numid+1
+
+# creates a list of message types and a unique id that is consistent between the threads and the
+# executive. This can then be used to cast the host message at the executive end so that the
+# message matches the structure defined in the xml.
+# TODO: we only need these for the application pins, currently it dumps all message types
+def output_unique_ident_for_each_message_type(gt, dst):
+    for mt in gt.message_types.values():
+        dst.write("""{},{}\n""".format(mt.id, mt.numid)) 
+
 def render_graph_type_as_softswitch_decls(gt,dst):
     gtProps=make_graph_type_properties(gt)
     dst.write("""
@@ -473,7 +488,8 @@ def render_device_type_as_softswitch_defs(dt,dst,dtProps):
                 (send_handler_t){OUTPUT_PORT_FULL_ID}_send_handler,
                 sizeof(packet_t)+sizeof({OUTPUT_PORT_MESSAGE_T}),
                 "{OUTPUT_PORT_NAME}",
-                {IS_APPLICATION}
+                {IS_APPLICATION},
+                {MESSAGETYPE_NUMID}
             }}
             """.format(**make_output_pin_properties(op)))
     dst.write("};\n");
@@ -934,6 +950,7 @@ parser.add_argument('--log-level', dest="logLevel", help='logging level (INFO,ER
 parser.add_argument('--placement-seed', dest="placementSeed", help="Choose a specific random placement", default=None)
 parser.add_argument('--destination-ordering', dest="destinationOrdering", help="Should messages be send 'furthest-first', 'random', 'nearest-first'", default="random")
 parser.add_argument('--measure', help="Destination for measured properties", default="tinsel.render_softswitch.csv")
+parser.add_argument('--message-types', help="a file that prints the message types and their enumerated values. This is used to decode messages at the executive", default="messages.csv")
 
 args = parser.parse_args()
 
@@ -987,7 +1004,6 @@ destCppPath=os.path.abspath("{}/{}_vtables.cpp".format(destPrefix,graph.id))
 destCpp=open(destCppPath,"wt")
 sys.stderr.write("Using absolute path '{}' for source pre-processor directives\n".format(destCppPath))
 
-    
 class OutputWithPreProcLineNum:
     def __init__(self,dest,destPath):
         self.dest=dest
@@ -1005,6 +1021,9 @@ class OutputWithPreProcLineNum:
                     self.dest.write(line+"\n")
                 self.lineNum+=1
     
+assign_unique_ident_for_each_message_type(graph)
+destMessageTypeID=open(args.message_types, "w+")
+output_unique_ident_for_each_message_type(graph, destMessageTypeID)
 
 render_graph_type_as_softswitch_decls(graph, OutputWithPreProcLineNum(destHpp, destHppPath))
 render_graph_type_as_softswitch_defs(graph, OutputWithPreProcLineNum(destCpp, destCppPath))

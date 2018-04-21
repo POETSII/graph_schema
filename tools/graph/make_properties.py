@@ -70,7 +70,8 @@ def make_output_pin_properties(op):
         "OUTPUT_PORT_MESSAGE_T" : "{}_{}_message_t".format(op.parent.parent.id,op.message_type.id),
         "OUTPUT_PORT_SEND_HANDLER" : op.send_handler,
         "OUTPUT_PORT_SEND_HANDLER_SOURCE_LOCATION" : preProc,
-        "IS_APPLICATION" : 1 if op.is_application else 0
+        "IS_APPLICATION" : 1 if op.is_application else 0,
+        "MESSAGETYPE_NUMID" : op.message_type.numid
     })
     
     
