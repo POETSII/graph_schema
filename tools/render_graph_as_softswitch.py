@@ -303,6 +303,19 @@ def output_unique_ident_for_each_message_type(gt, dst):
     for mt in gt.message_types.values():
         dst.write("""{},{}\n""".format(mt.id, mt.numid)) 
 
+# creates a list of the device_instance application pins and their corrosponding address in the 
+# POETS system (sf306: essentially I believe this is acting as a temporary nameserver for the executive)
+def output_device_instance_addresses(gi,device_to_thread, thread_to_devices, dst): 
+    # format deviceName_inAppPinName, thread addr, dev addr, pinIndex
+    for d in gi.device_instances.values(): # iterate through all devices
+        deviceName = d.id
+        threadId = device_to_thread[d.id]
+        for ip in d.device_type.inputs.values():
+            if ip.is_application == True: #application input pin, so we print the addr 
+                deviceOffset = thread_to_devices[threadId].index(d.id)
+                pinIndex = ip.parent.inputs_by_index.index(ip)
+                dst.write("""{}_{},{},{},{}\n""".format(deviceName, ip.name,threadId,deviceOffset, pinIndex)) 
+
 def render_graph_type_as_softswitch_decls(gt,dst):
     gtProps=make_graph_type_properties(gt)
     dst.write("""
@@ -951,6 +964,7 @@ parser.add_argument('--placement-seed', dest="placementSeed", help="Choose a spe
 parser.add_argument('--destination-ordering', dest="destinationOrdering", help="Should messages be send 'furthest-first', 'random', 'nearest-first'", default="random")
 parser.add_argument('--measure', help="Destination for measured properties", default="tinsel.render_softswitch.csv")
 parser.add_argument('--message-types', help="a file that prints the message types and their enumerated values. This is used to decode messages at the executive", default="messages.csv")
+parser.add_argument('--app-pins-addr-map', help="a file that gives the address map of the input pins, used by the executive to send messages to devices", default="appPinInMap.csv")
 
 args = parser.parse_args()
 
@@ -1021,6 +1035,7 @@ class OutputWithPreProcLineNum:
                     self.dest.write(line+"\n")
                 self.lineNum+=1
     
+# Get a unique id for each message type which will be sent in the message header so that the executive can decode it
 assign_unique_ident_for_each_message_type(graph)
 destMessageTypeID=open(args.message_types, "w+")
 output_unique_ident_for_each_message_type(graph, destMessageTypeID)
@@ -1072,4 +1087,19 @@ if(len(instances)>0):
     destInstPath=os.path.abspath("{}/{}_{}_inst.cpp".format(destPrefix,graph.id,inst.id))
     destInst=open(destInstPath,"wt")
         
+    # create a mapping from threads to devices
+    thread_to_devices=[[] for i in range(hwThreads)]
+    for d in inst.device_instances.values():
+        if d.id not in device_to_thread:
+            logging.error("device {}  not in mapping".format(d.id))
+        t=device_to_thread[d.id]
+        assert(t>=0 and t<hwThreads)
+        print("""adding device: {} to thread {}""".format(d.id,t))
+        thread_to_devices[t].append(d.id)
+
+
+    # dump the device name -> address mappings into a file for sending messages from the executive
+    deviceAddrMap=open(args.app_pins_addr_map,"w+")
+    output_device_instance_addresses(inst, device_to_thread, thread_to_devices, deviceAddrMap) 
+
     render_graph_instance_as_softswitch(inst,destInst,hwThreads,device_to_thread)
