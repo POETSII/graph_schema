@@ -314,7 +314,12 @@ def output_device_instance_addresses(gi,device_to_thread, thread_to_devices, dst
             if ip.is_application == True: #application input pin, so we print the addr 
                 deviceOffset = thread_to_devices[threadId].index(d.id)
                 pinIndex = ip.parent.inputs_by_index.index(ip)
-                dst.write("""{}_{},{},{},{}\n""".format(deviceName, ip.name,threadId,deviceOffset, pinIndex)) 
+                dst.write("""{}_{},in,{},{},{}\n""".format(deviceName, ip.name,threadId,deviceOffset, pinIndex)) 
+        for op in d.device_type.outputs.values():
+            if op.is_application == True: #application output pin, so we print the addr
+                deviceOffset = thread_to_devices[threadId].index(d.id)
+                pinIndex = op.parent.outputs_by_index.index(op)
+                dst.write("""{}_{},out,{},{},{}\n""".format(deviceName, op.name,threadId,deviceOffset, pinIndex)) 
 
 def render_graph_type_as_softswitch_decls(gt,dst):
     gtProps=make_graph_type_properties(gt)
