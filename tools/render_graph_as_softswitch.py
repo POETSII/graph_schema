@@ -1099,7 +1099,6 @@ if(len(instances)>0):
             logging.error("device {}  not in mapping".format(d.id))
         t=device_to_thread[d.id]
         assert(t>=0 and t<hwThreads)
-        print("""adding device: {} to thread {}""".format(d.id,t))
         thread_to_devices[t].append(d.id)
 
 
