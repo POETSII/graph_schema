@@ -129,11 +129,12 @@ public:
     const std::string &name,
     unsigned index,
     MessageTypePtr messageType,
+    bool isApplication,
     TypedDataSpecPtr propertiesType,
     TypedDataSpecPtr stateType,
     const std::string &code
   )
-  : InputPinImpl(deviceTypeSrc, name, index, messageType, propertiesType, stateType, code)
+  : InputPinImpl(deviceTypeSrc, name, index, messageType, isApplication, propertiesType, stateType, code)
   {}
 
   virtual void onReceive(OrchestratorServices*, const typed_data_t*, const typed_data_t*, typed_data_t*, const typed_data_t*, typed_data_t*, const typed_data_t*) const override
@@ -151,9 +152,10 @@ public:
     const std::string &name,
     unsigned index,
     MessageTypePtr messageType,
+    bool isApplication,
     const std::string &code
   )
-  : OutputPinImpl(deviceTypeSrc, name, index, messageType, code)
+  : OutputPinImpl(deviceTypeSrc, name, index, messageType, isApplication, code)
   {}
 
   virtual void onSend(OrchestratorServices*, const typed_data_t*, const typed_data_t*, typed_data_t*, typed_data_t*, bool*) const
@@ -245,6 +247,7 @@ DeviceTypePtr loadDeviceTypeElement(
     
     std::string name=get_attribute_required(e, "name");
     std::string messageTypeId=get_attribute_required(e, "messageTypeId");
+    bool isApplication=get_attribute_optional_bool(e, "application");
     
     if(messageTypes.find(messageTypeId)==messageTypes.end()){
       throw std::runtime_error("Unknown messageTypeId '"+messageTypeId+"'");
@@ -281,6 +284,7 @@ DeviceTypePtr loadDeviceTypeElement(
       name, 
       inputs.size(),
       messageType,
+      isApplication,
       inputProperties,
       inputState,
       onReceive
@@ -300,6 +304,7 @@ DeviceTypePtr loadDeviceTypeElement(
       throw std::runtime_error("Unknown messageTypeId '"+messageTypeId+"'");
     }
     auto messageType=messageTypes.at(messageTypeId);
+    bool isApplication=get_attribute_optional_bool(e, "application");
     
     rapidjson::Document outputMetadata=parse_meta_data(e, "./g:MetaData", ns);
  
@@ -315,6 +320,7 @@ DeviceTypePtr loadDeviceTypeElement(
       name, 
       outputs.size(),
       messageType,
+      isApplication,
       onSend
     ));
   }
@@ -607,6 +613,12 @@ void loadGraph(Registry *registry, const filepath &srcPath, xmlpp::Element *pare
     }
     if(!dstPin){
       throw std::runtime_error("No sink pin called '"+dstPinName+"' on device '"+dstDeviceId);
+    }
+    if(srcPin->isApplication()){
+      throw std::runtime_error("Attempt to connect to application output pin '"+srcPinName+"' on device '"+srcDeviceId);
+    }
+    if(dstPin->isApplication()){
+      throw std::runtime_error("Attempt to connect to application input pin '"+dstPinName+"' on device '"+dstDeviceId);
     }
 
     if(srcPin->getMessageType()!=dstPin->getMessageType())

@@ -44,6 +44,9 @@ public:
     void add(float x)
     { add( *(uint32_t*)&x ); }
     
+    void add(double x)
+    { add( *(uint64_t*)&x ); }
+    
     void add(const uint8_t *x, size_t s)
     {
         for(size_t i=0; i<s; i++){

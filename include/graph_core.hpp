@@ -378,6 +378,7 @@ public:
 
   virtual const std::string &getName() const=0;
   virtual unsigned getIndex() const=0;
+  virtual bool isApplication() const=0;
 
   virtual const MessageTypePtr &getMessageType() const=0;
 
@@ -421,6 +422,24 @@ public:
   // where sequence is a sequence number for that device instance
   // running from zero upwards
   virtual void export_key_value(uint32_t key, uint32_t value) =0;
+  
+  /*! Log the state of the currently sending/receiving device the
+    current event, and associate with the given string tag. The id should
+    be unique for any check-point on the calling device.
+  
+    \param preEvent If true, then log the state before the event. Otherwise log after
+  
+    \param level Used to establish different levels of checkpointing.
+  
+    \param tagFmt format string used to tag the event
+  
+    It is legal to call handler_checkpoint multiple times within a handler,
+    as long as the id is different. For example, you might want to call with
+    both pre and post event checkpoints.
+    
+  */
+  virtual void vcheckpoint(bool preEvent, int level, const char *tagFmt, va_list tagArgs) =0;
+  
   
   // Mark the application as complete. As soon as any device calls this,
   // the whole graph is considered complete. If multiple devices call

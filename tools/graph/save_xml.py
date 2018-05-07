@@ -45,8 +45,11 @@ def save_typed_data_spec(dt):
         n=etree.Element(toNS("p:Array"))
         n.attrib["name"]=dt.name
         n.attrib["length"]=str(dt.length)
-        assert isinstance(dt.type,ScalarTypedDataSpec)
-        n.attrib["type"]=dt.type.type
+        if isinstance(dt.type,ScalarTypedDataSpec):
+            n.attrib["type"]=dt.type.type
+        else:
+            subn=save_typed_data_spec(dt.type)
+            n.append(subn)
     else:
         raise RuntimeError("Unknown data type.")
 
@@ -133,6 +136,8 @@ def save_device_type(parent,dt):
         pn=etree.SubElement(n,toNS("p:InputPin"))
         pn.attrib["name"]=p.name
         pn.attrib["messageTypeId"]=p.message_type.id
+        if p.is_application:
+            pn.attrib["application"]="true"
         if(p.properties):
             save_typed_struct_spec(pn, toNS("p:Properties"), p.properties)
         if(p.state):
@@ -149,6 +154,8 @@ def save_device_type(parent,dt):
         pn=etree.SubElement(n,toNS("OutputPin"))
         pn.attrib["name"]=p.name
         pn.attrib["messageTypeId"]=p.message_type.id
+        if p.is_application:
+            pn.attrib["application"]="true"
 
         save_metadata(pn, "p:MetaData", p.metadata)
 
@@ -190,7 +197,7 @@ def save_edge_instance(parent, ei):
     return n
 
 
-def save_graph_type(parent, graph):
+def save_graph_type(parent, graph):    
     gn = etree.SubElement(parent,toNS("p:GraphType"))
     gn.attrib["id"]=graph.id
 
@@ -272,26 +279,36 @@ def save_graph_instance_metadata_patch(parent, id,graphMeta,deviceMeta,edgeMeta)
 def save_graph(graph,dst):
     nsmap = { None : "https://poets-project.org/schemas/virtual-graph-schema-v2" }
     root=etree.Element(toNS("p:Graphs"), nsmap=nsmap)
-
-    sys.stderr.write("save_graph: Constructing graph type tree\n")
-    save_graph_type(root,graph.graph_type)
-    sys.stderr.write("save_graph: Constructing graph inst tree\n")
-    save_graph_instance(root,graph)
-
-    sys.stderr.write("save_graph: writing\n")
-    # The wierdness is because stdout is in text mode, so we send
-    # it via a string. Ideally it would write it straight to the file...
-    tree = etree.ElementTree(root)
-    #s=etree.tostring(root,pretty_print=True,xml_declaration=True).decode("utf8")
-    #dst.write(s)
     
-    # TODO : Fix this!
-    if (sys.version_info > (3, 0)):
-        # Python3
-        tree.write(dst.buffer, pretty_print=True, xml_declaration=True)
+    if dst is str:
+        if dst.endswith(".gz"):
+            import gzip
+            with gzip.open(dst, 'wt', compresslevel=6) as dstFile:
+                save_graph(graph,dstFile)
+        else:
+            with open(dst,"wt") as dstFile:
+                assert not isinstance(dstFile,str)
+                save_graph(graph,dstFile)
     else:
-        #Python2
-        tree.write(dst, pretty_print=True, xml_declaration=True)
+        sys.stderr.write("save_graph: Constructing graph type tree\n")
+        save_graph_type(root,graph.graph_type)
+        sys.stderr.write("save_graph: Constructing graph inst tree\n")
+        save_graph_instance(root,graph)
+
+        sys.stderr.write("save_graph: writing\n")
+        # The wierdness is because stdout is in text mode, so we send
+        # it via a string. Ideally it would write it straight to the file...
+        tree = etree.ElementTree(root)
+        #s=etree.tostring(root,pretty_print=True,xml_declaration=True).decode("utf8")
+        #dst.write(s)
+        
+        # TODO : Fix this!
+        if (sys.version_info > (3, 0)):
+            # Python3
+            tree.write(dst.buffer, pretty_print=True, xml_declaration=True)
+        else:
+            #Python2
+            tree.write(dst, pretty_print=True, xml_declaration=True)
 
 def save_metadata_patch(id,graphMeta,deviceMeta,edgeMeta,dst):
     nsmap = { None : "https://poets-project.org/schemas/virtual-graph-schema-v2" }

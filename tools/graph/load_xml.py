@@ -41,6 +41,17 @@ def get_attrib_optional(node,name):
     if name not in node.attrib:
         return None
     return node.attrib[name]
+    
+def get_attrib_optional_bool(node,name):
+    if name not in node.attrib:
+        return False
+    v=node.attrib[name]
+    if v=="false" or v=="0":
+        return False;
+    if v=="true" or v=="1":
+        return True;
+    raise XMLSyntaxError("Couldn't convert value {} to bool".format(v, node))
+        
 
 def get_attrib_defaulted(node,name,default):
     if name not in node.attrib:
@@ -72,7 +83,10 @@ def load_typed_data_spec(dt):
         if type:
             type=ScalarTypedDataSpec("_",type)
         else:
-            raise RuntimeError("Haven't implemented arrays of non-scalar types yet.")
+            subs=dt.findall("p:*",ns) # Anything from this namespace must be the sub-type
+            if len(subs)!=1:
+                raise RuntimeError("If there is no type attribute, there should be exactly one sub-type element.")
+            type=load_typed_data_spec(subs[0])
         return ArrayTypedDataSpec(name,length,type)
     elif tag=="p:Scalar":
         type=get_attrib(dt, "type")
@@ -162,6 +176,7 @@ def load_device_type(graph,dtNode,sourceFile):
         if message_type_id not in graph.message_types:
             raise XMLSyntaxError("Unknown messageTypeId {}".format(message_type_id),p)
         message_type=graph.message_types[message_type_id]
+        is_application=get_attrib_optional_bool(p,"application")
 
         try:
             state=None
@@ -182,7 +197,7 @@ def load_device_type(graph,dtNode,sourceFile):
         pinMetadata=load_metadata(p,"p:MetaData")
 
         (handler,sourceLine)=get_child_text(p,"p:OnReceive")
-        dt.add_input(name,message_type,properties,state,pinMetadata, handler,sourceFile,sourceLine)
+        dt.add_input(name,message_type,is_application,properties,state,pinMetadata, handler,sourceFile,sourceLine)
         sys.stderr.write("      Added input {}\n".format(name))
 
     for p in dtNode.findall("p:OutputPin",ns):
@@ -190,10 +205,11 @@ def load_device_type(graph,dtNode,sourceFile):
         message_type_id=get_attrib(p,"messageTypeId")
         if message_type_id not in graph.message_types:
             raise XMLSyntaxError("Unknown messageTypeId {}".format(message_type_id),p)
+        is_application=get_attrib_optional_bool(p,"application")
         message_type=graph.message_types[message_type_id]
         pinMetadata=load_metadata(p,"p:MetaData")
         (handler,sourceLine)=get_child_text(p,"p:OnSend")
-        dt.add_output(name,message_type,pinMetadata,handler,sourceFile,sourceLine)
+        dt.add_output(name,message_type,is_application,pinMetadata,handler,sourceFile,sourceLine)
 
     (handler,sourceLine)=get_child_text(dtNode,"p:ReadyToSend")
     dt.ready_to_send_handler=handler

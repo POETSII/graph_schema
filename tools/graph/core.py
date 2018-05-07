@@ -31,6 +31,8 @@ class ScalarTypedDataSpec(TypedDataSpec):
             assert(0 <= res < 2**8)
         elif self.type=="float":
             res=float(value)
+        elif self.type=="double":
+            res=float(value)
         else:
             assert False, "Unknown data type {}.".format(self.type)
         return res
@@ -60,6 +62,17 @@ class ScalarTypedDataSpec(TypedDataSpec):
             return self.create_default()
         else:
             return self._check_value(inst)
+            
+    def contract(self,inst):
+        if inst is not None:
+            default=self.default or 0
+            if inst!=default:
+                return inst
+        return None
+            
+            
+    def __eq__(self, o):
+        return isinstance(o, ScalarTypedDataSpec) and self.name==o.name and self.type==o.type and self.default==o.default
 
     def __str__(self):
         return "{}:{}={}".format(self.type,self.name,self.default)
@@ -83,8 +96,10 @@ class TupleTypedDataSpec(TypedDataSpec):
     def elements_by_index(self):
         return self._elts_by_index
 
-    def __str__(self):
+    def __eq__(self, o):
+        return isinstance(o, TupleTypedDataSpec) and self.name==o.name and self._elts_by_index==o._elts_by_index
 
+    def __str__(self):
         acc="Tuple:{}[\n".format(self.name)
         for i in range(len(self._elts_by_index)):
             if i!=0:
@@ -103,6 +118,17 @@ class TupleTypedDataSpec(TypedDataSpec):
         for e in self._elts_by_index:
             inst[e.name]=e.expand(inst.get(e.name,None))
         return inst
+        
+    def contract(self,inst):
+        if inst is None:
+            return inst
+        res={}
+        for (k,v) in inst:
+            ks=self._elts_by_name[k]
+            nv=ks.contract(v)
+            if nv is not None:
+                res[k]=nv
+        return res
 
     def is_refinement_compatible(self,inst):
         if inst is None:
@@ -131,8 +157,10 @@ class ArrayTypedDataSpec(TypedDataSpec):
         self.type=type
         self.length=length
 
-    def __str__(self):
+    def __eq__(self, o):
+        return isinstance(o, ArrayTypedDataSpec) and self.name==o.name and self.length==o.length and self.type==o.type
 
+    def __repr__(self):
         return "Array:{}[{}*{}]\n".format(self.name,self.type,self.length)
 
     def create_default(self):
@@ -146,6 +174,18 @@ class ArrayTypedDataSpec(TypedDataSpec):
         for i in range(self.length):
             inst[i]=self.type.expand(inst[i])
         return inst
+        
+    def contract(self,inst):
+        if inst is None:
+            return inst
+        assert isinstance(inst,list)
+        assert len(inst)==self.length
+        for x in inst:
+            nv=self.type.contract(inst[i])
+            if nv is not None:
+                return inst
+        return None
+
 
     def is_refinement_compatible(self,inst):
         if inst is None:
@@ -186,7 +226,8 @@ def is_refinement_compatible(proto,inst):
 
 
 class MessageType(object):
-    def __init__(self,parent,id,message,metadata):
+    def __init__(self,parent,id,message,metadata=None):
+        assert (message is None) or isinstance(message,TypedDataSpec)
         self.id=id
         self.parent=parent
         self.message=message
@@ -194,30 +235,33 @@ class MessageType(object):
 
 
 class Pin(object):
-    def __init__(self,parent,name,message_type,metadata,source_file,source_line):
+    def __init__(self,parent,name,message_type,is_application,metadata,source_file,source_line):
         self.parent=parent
         self.name=name
         self.message_type=message_type
+        self.is_application=is_application
         self.metadata=metadata
         self.source_file=source_file
         self.source_line=source_line
 
 
 class InputPin(Pin):
-    def __init__(self,parent,name,message_type,properties,state,metadata,receive_handler,source_file=None,source_line=None):
-        Pin.__init__(self,parent,name,message_type,metadata,source_file,source_line)
+    def __init__(self,parent,name,message_type,is_application,properties,state,metadata,receive_handler,source_file=None,source_line=None):
+        Pin.__init__(self,parent,name,message_type,is_application,metadata,source_file,source_line)
         self.properties=properties
         self.state=state
         self.receive_handler=receive_handler
 
 class OutputPin(Pin):
-    def __init__(self,parent,name,message_type,metadata,send_handler,source_file,source_line):
-        Pin.__init__(self,parent,name,message_type,metadata,source_file,source_line)
+    def __init__(self,parent,name,message_type,is_application,metadata,send_handler,source_file,source_line):
+        Pin.__init__(self,parent,name,message_type,is_application,metadata,source_file,source_line)
         self.send_handler=send_handler
 
 
 class DeviceType(object):
     def __init__(self,parent,id,properties,state,metadata=None,shared_code=[]):
+        assert (state is None) or isinstance(state,TypedDataSpec)
+        assert (properties is None) or isinstance(properties,TypedDataSpec)
         self.id=id
         self.parent=parent
         self.state=state
@@ -229,34 +273,37 @@ class DeviceType(object):
         self.pins={}
         self.metadata=metadata
         self.shared_code=shared_code
+        self.ready_to_send_handler="" # Hrmm, this was missing as an explicit member, but is used by load/save
 
-    def add_input(self,name,message_type,properties,state,metadata,receive_handler,source_file=None,source_line={}):
+    def add_input(self,name,message_type,is_application,properties,state,metadata,receive_handler,source_file=None,source_line={}):
+        assert (state is None) or isinstance(state,TypedDataSpec)
+        assert (properties is None) or isinstance(properties,TypedDataSpec)
         if name in self.pins:
             raise GraphDescriptionError("Duplicate pin {} on device type {}".format(name,self.id))
         if message_type.id not in self.parent.message_types:
             raise GraphDescriptionError("Unregistered message type {} on pin {} of device type {}".format(message_type.id,name,self.id))
         if message_type != self.parent.message_types[message_type.id]:
             raise GraphDescriptionError("Incorrect message type object {} on pin {} of device type {}".format(message_type.id,name,self.id))
-        p=InputPin(self, name, self.parent.message_types[message_type.id], properties, state, metadata, receive_handler, source_file, source_line)
+        p=InputPin(self, name, self.parent.message_types[message_type.id], is_application, properties, state, metadata, receive_handler, source_file, source_line)
         self.inputs[name]=p
         self.inputs_by_index.append(p)
         self.pins[name]=p
 
-    def add_output(self,name,message_type,metadata,send_handler,source_file=None,source_line=None):
+    def add_output(self,name,message_type,is_application, metadata,send_handler,source_file=None,source_line=None):
         if name in self.pins:
             raise GraphDescriptionError("Duplicate pin {} on device type {}".format(name,self.id))
         if message_type.id not in self.parent.message_types:
             raise GraphDescriptionError("Unregistered message type {} on pin {} of device type {}".format(message_type.id,name,self.id))
         if message_type != self.parent.message_types[message_type.id]:
             raise GraphDescriptionError("Incorrect message type object {} on pin {} of device type {}".format(message_type.id,name,self.id))
-        p=OutputPin(self, name, self.parent.message_types[message_type.id], metadata, send_handler, source_file, source_line)
+        p=OutputPin(self, name, self.parent.message_types[message_type.id], is_application, metadata, send_handler, source_file, source_line)
         self.outputs[name]=p
         self.outputs_by_index.append(p)
         self.pins[name]=p
 
 
 class GraphType(object):
-    def __init__(self,id,properties,metadata,shared_code):
+    def __init__(self,id,properties,metadata=None,shared_code=[]):
         self.id=id
         if properties:
             assert isinstance(properties,TupleTypedDataSpec), "Expected TupleTypedDataSpec, got={}".format(properties)
@@ -301,8 +348,8 @@ class GraphTypeReference(object):
 
 
 class DeviceInstance(object):
-    def __init__(self,parent,id,device_type,properties,metadata=None):
-        if not is_refinement_compatible(device_type.properties,properties):
+    def __init__(self,parent,id,device_type,properties=None,metadata=None):
+        if __debug__ and (properties is not None and not is_refinement_compatible(device_type.properties,properties)):
             raise GraphDescriptionError("Properties not compatible with device type properties: proto={}, value={}".format(device_type.properties, properties))
 
         self.parent=parent
@@ -310,27 +357,48 @@ class DeviceInstance(object):
         self.device_type=device_type
         self.properties=properties
         self.metadata=metadata
+        
+    def set_property(self, name, value):
+        if self.properties==None:
+            self.properties={}
+        self.properties[name]=value
+        if __debug__ and not is_refinement_compatible(self.device_type.properties,self.properties):
+            raise GraphDescriptionError("Setting property {} on {} results in properties incompatible with device type properties: proto={}, value={}".format(name, self.id, self.device_type.properties, self.properties))
+            
 
 
 class EdgeInstance(object):
-    def __init__(self,parent,dst_device,dst_pin_name,src_device,src_pin_name,properties=None,metadata=None):
+    
+    def __init__(self,parent,dst_device,dst_pin,src_device,src_pin,properties=None,metadata=None):
+        # type : (GraphInstance, DeviceInstance, Union[str,InputPin], DeviceInstance, Union[str,OutputPin], Optional[Dict], Optional[Dict] ) -> None
         self.parent=parent
 
-        if dst_pin_name not in dst_device.device_type.inputs:
-            raise GraphDescriptionError("Pin '{}' does not exist on dest device type '{}'".format(dst_pin_name,dst_device.device_type.id))
-        if src_pin_name not in src_device.device_type.outputs:
-            raise GraphDescriptionError("Pin '{}' does not exist on src device type '{}'".format(src_pin_name,src_device.device_type.id))
+        if isinstance(dst_pin,str): 
+            if __debug__ and (dst_pin not in dst_device.device_type.inputs):
+                raise GraphDescriptionError("Pin '{}' does not exist on dest device type '{}'. Candidates are {}".format(dst_pin,dst_device.device_type.id,",".join(dst_device.device_type.inputs)))
+            dst_pin=dst_device.device_type.inputs[dst_pin]
+        else:
+            assert dst_device.device_type.inputs[dst_pin.name]==dst_pin
+        
+        if isinstance(src_pin,str):
+            if __debug__ and (src_pin not in src_device.device_type.outputs):
+                raise GraphDescriptionError("Pin '{}' does not exist on src device type '{}'. Candidates are {}".format(src_pin,src_device.device_type.id,",".join(dst_device.device_type.outputs)))
+            src_pin=src_device.device_type.outputs[src_pin]
+        else:
+            assert src_device.device_type.outputs[src_pin.name]==src_pin
 
-        dst_pin=dst_device.device_type.inputs[dst_pin_name]
-        src_pin=src_device.device_type.outputs[src_pin_name]
+        if __debug__ and (dst_pin.message_type != src_pin.message_type):
+            raise GraphDescriptionError("Dest pin has type {}, source pin type {}".format(dst_pin.message_type.id,src_pin.message_type.id))
 
-        if dst_pin.message_type != src_pin.message_type:
-            raise GraphDescriptionError("Dest pin has type {}, source pin type {}".format(dst_pin.id,src_pin.id))
-
-        if not is_refinement_compatible(dst_pin.properties,properties):
+        if __debug__ and (not is_refinement_compatible(dst_pin.properties,properties)):
             raise GraphDescriptionError("Properties are not compatible: proto={}, value={}.".format(dst_pin.properties, properties))
+            
+        if __debug__ and dst_pin.is_application:
+            raise GraphDescriptionError("Attempt to connect edge instance to application input pin")
+        if __debug__ and src_pin.is_application:
+            raise GraphDescriptionError("Attempt to connect edge instance to application output pin")
 
-        self.id = dst_device.id+":"+dst_pin_name+"-"+src_device.id+":"+src_pin_name
+        self.id = "{}:{}-{}:{}".format(dst_device.id,dst_pin.name,src_device.id,src_pin.name)
 
         self.dst_device=dst_device
         self.src_device=src_device
@@ -376,28 +444,54 @@ class GraphInstance:
         pass
 
 
-    def add_device_instance(self,di,validate=True):
-        if di.id in self.device_instances:
+    def set_property(self, name, value):
+        if self.properties==None:
+            self.properties={}
+        self.properties[name]=value
+        if __debug__ and not is_refinement_compatible(self.graph_type.properties,self.properties):
+            raise GraphDescriptionError("Setting property {} on {} results in properties incompatible with device type properties: proto={}, value={}".format(name, self.id, self.graph_type.properties, self.properties))
+
+    def add_device_instance(self,di,validate=False):
+        if __debug__ and (di.id in self.device_instances):
             raise GraphDescriptionError("Duplicate deviceInstance id {}".format(id))
 
-        if validate:
+        if __debug__ or validate:
             self._validate_device_instance(di)
         else:
             self._validated=False
-
+        
         self.device_instances[di.id]=di
+        
+        return di
+        
+    def create_device_instance(self, id,device_type,properties=None,metadata=None):
+        if isinstance(device_type,str):
+            assert isinstance(self.graph_type,GraphType)
+            if device_type not in self.graph_type.device_types:
+                raise RuntimeError("No such device type called '{}'".format(device_type))
+            device_type=self.graph_type.device_types[device_type]
+        assert isinstance(device_type,DeviceType)
+        di=DeviceInstance(self,id,device_type,properties,metadata)
+        return self.add_device_instance(di)
+        
 
-    def add_edge_instance(self,ei,validate=True):
-        if ei.id in self.edge_instances:
+    def add_edge_instance(self,ei,validate=False):
+        if __debug__ and (ei.id in self.edge_instances):
             raise GraphDescriptionError("Duplicate edgeInstance id {}".format(ei.id))
 
-        if validate:
+        if __debug__ or validate:
             self._validate_edge_instance(ei)
         else:
             self._validated=False
 
         self.edge_instances[ei.id]=ei
         
+        return ei
+        
+    def create_edge_instance(self,dst_device,dst_pin_name,src_device,src_pin_name,properties=None,metadata=None):
+        ei=EdgeInstance(self,dst_device,dst_pin_name,src_device,src_pin_name,properties,metadata)
+        return self.add_edge_instance(ei)
+            
         
     #~ def add_reduction(self,dstDevInst,dstPinName,reducerFactory,maxFanIn,srcInstances,srcPinName):
         #~ """Adds a reduction via a tree of reduction nodes.

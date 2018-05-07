@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
 <Graphs xmlns="https://poets-project.org/schemas/virtual-graph-schema-v2">
-	<GraphType id="firefly_s0_sync">
+	<GraphType id="firefly_sync">
 		
 		<SharedCode><![CDATA[
 
@@ -27,15 +27,19 @@
 
 	<DeviceType id="firefly">
 		<Properties>
-			<Scalar type="uint32_t" name="period" default="180000"/>
+			<Scalar type="uint32_t" name="period" default="720000"/>
 			<Scalar type="int32_t" name="start_phase" default="90000"/>
-			<Scalar type="uint32_t" name="phase_nudge" default="10500"/>
+			<Scalar type="uint32_t" name="phase_nudge" default="10000"/>
 			<Scalar type="uint32_t" name="flashzone" default="1500"/>
+			<Scalar type="uint32_t" name="slowflash_period" default="3"/>
 		</Properties>
 		<State>
 			<Scalar type="uint32_t" name="t"/>
 			<Scalar type="uint8_t" name="rdy_to_tick"/>
 			<Scalar type="uint8_t" name="rdy_to_flash"/>
+			<Scalar type="uint8_t" name="rdy_to_slowflash"/>
+			<Scalar type="uint8_t" name="rdy_to_log"/>
+			<Scalar type="uint32_t" name="slowflash_cnt"/>
 		</State>
 
 		<ReadyToSend><![CDATA[
@@ -44,6 +48,10 @@
 				*readyToSend = RTS_FLAG_tick_out;
 			} else if (deviceState->rdy_to_flash) {
 				*readyToSend = RTS_FLAG_flash_out;
+			} else if (deviceState->rdy_to_slowflash) {
+				*readyToSend = RTS_FLAG_slowflash_out;
+			} else if (deviceState->rdy_to_log) {
+				*readyToSend = RTS_FLAG_flash_log;
 			}
 		]]></ReadyToSend>
 
@@ -51,8 +59,9 @@
 			<OnReceive><![CDATA[
 				deviceState->t = deviceProperties->start_phase;
 				deviceState->rdy_to_flash = 0;
+				deviceState->rdy_to_slowflash = 0;
+				deviceState->rdy_to_log = 0;
 				deviceState->rdy_to_tick = 1;
-				handler_log(2, "initialised a firefly");
 			]]></OnReceive>
 		</InputPin>
 
@@ -64,6 +73,14 @@
 				} else {
 					deviceState->t = 0;
 					deviceState->rdy_to_flash = 1;
+					deviceState->rdy_to_log = 1;
+					if(deviceState->slowflash_cnt < deviceProperties->slowflash_period) {
+						deviceState->slowflash_cnt = deviceState->slowflash_cnt + 1;
+					} else {
+						deviceState->rdy_to_slowflash = 1;
+						deviceState->rdy_to_log = 1;
+						deviceState->slowflash_cnt = 0;
+					}
 				}
 				deviceState->rdy_to_tick = 1;
 			]]></OnReceive>
@@ -75,10 +92,21 @@
 				]]></OnSend>
 		</OutputPin>
 
+		<OutputPin name="flash_log" messageTypeId="flash" application="true">
+			<OnSend><![CDATA[
+				deviceState->rdy_to_log=0;	
+			]]></OnSend>
+		</OutputPin>
+
 		<OutputPin name="flash_out" messageTypeId="flash">
 			<OnSend><![CDATA[
 				deviceState->rdy_to_flash = 0;	
-				handler_log(2, "FLASH!");
+			]]></OnSend>
+		</OutputPin>
+
+		<OutputPin name="slowflash_out" messageTypeId="flash">
+			<OnSend><![CDATA[
+				deviceState->rdy_to_slowflash = 0;	
 			]]></OnSend>
 		</OutputPin>
 
@@ -86,13 +114,26 @@
 			<OnReceive><![CDATA[
 				uint32_t period = deviceProperties->period;
 				uint32_t flashzone = deviceProperties->flashzone;
+				uint32_t phase_nudge = deviceProperties->phase_nudge;
 				uint32_t t = deviceState->t;
+
+				uint32_t delta_phase = 0;	
 				
 				if(t > flashzone && t < period/2) {
-				    deviceState->t = deviceState->t - deviceProperties->phase_nudge;  
+						if ( t < phase_nudge) {
+							delta_phase = t;	
+						} else {
+							delta_phase = phase_nudge;
+						}
+						deviceState->t = t - delta_phase;	
 				} else if ( t >= period/2 && t < (period - flashzone)) {
-				    deviceState->t = deviceState->t + deviceProperties->phase_nudge;  
-				
+						if ( (period-t) < phase_nudge) {
+							delta_phase = period - t;
+						} else {
+							delta_phase = phase_nudge;
+						}
+						deviceState->t = t + delta_phase;	
+
 				} 
 			]]></OnReceive>
 		</InputPin>
@@ -101,7 +142,8 @@
 
 	</DeviceTypes>
 </GraphType>
-<GraphInstance id="firefly_s0_forest" graphTypeId="firefly_s0_sync">
+
+<GraphInstance id="firefly_s0_forest" graphTypeId="firefly_sync">
 	<DeviceInstances sorted="1">
 		<DevI id="firefly_s0_0" type="firefly" >
 			<P>"start_phase": 71393 </P>

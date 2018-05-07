@@ -31,15 +31,17 @@ def main(argv):
 	cpy_cmd += 'cp '+inFileName+' '+temporary_dir+'/;'
 	cpy_cmd += 'cp ./scripts/launch_webserver.sh '+temporary_dir+'/;'
 	cpy_cmd += 'cp ./scripts/rt_log_filter.py '+temporary_dir+'/;'
+	cpy_cmd += 'cp ./scripts/refresh_log.php '+temporary_dir+'/;'
 	os.system(cpy_cmd)
-	subprocess.call(['chmod', '-R 0777', temporary_dir])
+	subprocess.call(['chmod', '-R 7777', temporary_dir])
 
 	print 'generating data.json for d3.js plot'
 	json_gen = 'python ./scripts/generate_d3_json_data.py --input '+inFileName+' > '+temporary_dir+'/data.json'
 	os.system(json_gen)
 	
+
 	print 'launching webserver...'
-	serve_cmd = 'cd '+temporary_dir+'; ./launch_webserver.sh'
+	serve_cmd = 'cd '+temporary_dir+'; ./launch_webserver.sh '
 	os.system(serve_cmd)
 
 if __name__== "__main__":

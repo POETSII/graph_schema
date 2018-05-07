@@ -1,3 +1,4 @@
+
 # -*- mode: ruby -*-
 # vi: set ft=ruby :
 
@@ -23,8 +24,8 @@ Vagrant.configure(2) do |config|
 
   # Create a forwarded port mapping which allows access to a specific port
   # within the machine from a port on the host machine. In the example below,
-  # accessing "localhost:8080" will access port 80 on the guest machine.
-  # config.vm.network "forwarded_port", guest: 80, host: 8080
+  # accessing "localhost:8080" will access port 8000 on the guest machine.
+  config.vm.network "forwarded_port", guest: 80, host: 8080
   
   config.ssh.forward_agent = true
   
@@ -101,11 +102,11 @@ Vagrant.configure(2) do |config|
      sudo apt-get install -y emacs-nox screen
 
      # Algebraic multigrid, plus others
-     sudo apt-get install -y python3-pip python3-numpy python3-scipy
+     sudo apt-get install -y python3-pip python3-numpy python3-scipy ujson svgwrite
      sudo pip3 install pyamg
 
      # Creating meshes
-     sudo apt-get install -y octave octave-msh octave-geometry
+     sudo apt-get install -y octave octave-msh octave-geometry hdf5-tools
      # Fix a bug in geometry package for svg.
      # Note that sed is _not_ using extended regular expressions (no "-r")
      sudo sed -i -e 's/,{0},/,"{0}",/g' -e 's/,{1},/,"{1}",/g'  /usr/share/octave/packages/geometry-2.1.0/io/@svg/parseSVGData.py

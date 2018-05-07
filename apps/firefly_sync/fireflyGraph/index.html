@@ -13,7 +13,7 @@
 }
 
 </style>
-<svg width="7200" height="4800"></svg>
+<svg width="7000" height="4800"></svg>
 <script src="https://d3js.org/d3.v4.min.js"></script>
 <script src="//ajax.googleapis.com/ajax/libs/jquery/1.9.1/jquery.min.js"></script>
 <script>
@@ -49,7 +49,7 @@ d3.json("data.json", function(error, graph) {
     .selectAll("circle")
     .data(graph.nodes)
     .enter().append("circle")
-      .attr("r", 13)
+      .attr("r", 7)
       .attr("id", function(d) { return d.id; } )
       .attr("fill", function(d) { return "#606060"; })
       .call(d3.drag()
@@ -69,16 +69,15 @@ d3.json("data.json", function(error, graph) {
 
 	var curTime = 0;	
 
-	var inter = setInterval(function() { flashFireflies();}, 15);
+	var inter = setInterval(function() { flashFireflies();}, 50);
 
 	function flashFireflies() {
 		d3.csv("log.csv", function(data) {
 			data.forEach(function(d) {
-				if(+d.time > curTime) {	
-					d3.selectAll('#'+d.firefly)
+				if(+d.epoch >= curTime) {	
+					d3.selectAll('#'+d.dev)
 					  .transition().duration(100).attr("fill", function(d) { var patt = new RegExp("s999"); 
 																																	 if (patt.test(this.id)) {
-																																			console.log("link firefly flash!");
 																																			return "#00FF00";
 																																	 } else {
 																																			return "#FFFFFF"; }
@@ -86,17 +85,14 @@ d3.json("data.json", function(error, graph) {
 					  .transition().duration(200)
 					  .transition().duration(200).attr("fill", "#606060")
 
-					curTime = d.time;
+					curTime = d.epoch;
 				}
 			});
 		});
-		//$.ajax({
-		//				url:'refresh_log.php',
-		//				success:function(){
-		//				    console.log('Deleted !!');
-		//				}
-
-		//})
+		$.ajax({
+						url:'refresh_log.php',
+						method: 'GET'
+		})
 	}
 
   function ticked() {
@@ -113,7 +109,7 @@ d3.json("data.json", function(error, graph) {
 });
 
 function dragstarted(d) {
-  if (!d3.event.active) simulation.alphaTarget(0.3).restart();
+  if (!d3.event.active) simulation.alphaTarget(3.5).restart();
   d.fx = d.x;
   d.fy = d.y;
 }

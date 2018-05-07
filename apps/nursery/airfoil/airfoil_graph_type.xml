@@ -1,0 +1,846 @@
+<?xml version="1.0"?>
+<Graphs xmlns="https://poets-project.org/schemas/virtual-graph-schema-v2">
+  <GraphType id="airfoil">
+
+    <MetaData>
+      "nativeDimension":2
+    </MetaData>
+
+    <Properties>
+      <Scalar type="double" name="gam" />
+			<Scalar type="double" name="gm1" />
+			<Scalar type="double" name="cfl" />
+			<Scalar type="double" name="eps" />
+			<Scalar type="double" name="mach" />
+			<Scalar type="double" name="alpha" />
+			<Array type="double" name="qinf" length="4" />
+    </Properties>
+
+    <SharedCode><![CDATA[
+		#include <cmath>
+		#include <cfloat>
+
+		FILE *dump=0;
+
+		template<class TDP,class TDS>
+		void dump_cell(int round, const TDP *dp, const TDS *ds)
+		{
+			/*if(dump==0){
+				dump=fopen("graph-log-array.csv","wt");
+			}
+			fprintf(dump,"%u, \"c%u\", %12.8f",round, dp->id, ds->adt);
+			fprintf(dump,", %12.8f,%12.8f,%12.8f,%12.8f",ds->q[0],ds->q[1],ds->q[2],ds->q[3]);
+			fprintf(dump,", %12.8f,%12.8f,%12.8f,%12.8f",ds->qold[0],ds->qold[1],ds->qold[2],ds->qold[3]);
+			fprintf(dump,", %12.8f,%12.8f,%12.8f,%12.8f",ds->res[0],ds->res[1],ds->res[2],ds->res[3]);
+			fprintf(dump,"\n");*/
+		}
+
+		void check_not_nan(double x)
+		{
+
+		}
+
+		template<class TGP, class TDS>
+		void adt_calc(
+			const TGP *graphProperties, // For the globals
+			TDS *deviceState, // For the "members"
+			double x1[2],
+			double x2[2],
+			double x3[2],
+			double x4[4]
+		){
+			auto &g=*graphProperties;
+			auto &adt=deviceState->adt;
+			auto &q=deviceState->q;
+
+			double dx,dy, ri,u,v,c;
+        
+			adt=0.0;
+			
+			ri =  1.0/q[0];
+			u  =   ri*q[1];
+			v  =   ri*q[2];
+			c  = sqrt(g.gam*g.gm1*(ri*q[3]-0.5*(u*u+v*v)));
+			check_not_nan(c);
+
+			dx = x2[0] - x1[0];
+			dy = x2[1] - x1[1];
+			adt += fabs(u*dy-v*dx) + c*sqrt(dx*dx+dy*dy);
+			check_not_nan(adt);
+
+			dx = x3[0] - x2[0];
+			dy = x3[1] - x2[1];
+			adt += fabs(u*dy-v*dx) + c*sqrt(dx*dx+dy*dy);
+			check_not_nan(adt);
+
+			dx = x4[0] - x3[0];
+			dy = x4[1] - x3[1];
+			adt += fabs(u*dy-v*dx) + c*sqrt(dx*dx+dy*dy);
+			check_not_nan(adt);
+
+			dx = x1[0] - x4[0];
+			dy = x1[1] - x4[1];
+			adt += fabs(u*dy-v*dx) + c*sqrt(dx*dx+dy*dy);
+			check_not_nan(adt);
+
+			adt = adt / g.cfl;
+		}
+
+		template<class TGP, class TDS>
+		void update(
+			const TGP *graphProperties, // For the globals
+			TDS *deviceState, // For the "members"
+			double &rms
+		){
+			auto &adt=deviceState->adt;
+			auto &res=deviceState->res;
+			auto &q=deviceState->q;
+			auto &qold=deviceState->qold;
+
+			double adti = 1.0/adt;
+			for(unsigned i=0; i<4; i++){
+					auto ddel    = adti*res[i];
+					q[i]   = qold[i] - ddel;
+					res[i] = 0.0;
+					rms  += ddel*ddel;
+			}
+		}
+
+		template<class TGP>
+		void res_calc(
+				const TGP *graphProperties,
+				const double x1[2],
+				const double x2[2],
+				const double q1[4],
+				const double q2[4],
+				double adt1,
+				double adt2,
+				double res1[4],
+				double res2[4]
+			)
+		{
+			auto &g=*graphProperties;
+			double dx,dy,mu, ri, p1,vol1, p2,vol2, f;
+
+			dx = x1[0] - x2[0];
+			dy = x1[1] - x2[1];
+			ri   = 1.0/q1[0];
+			p1   = g.gm1*(q1[3]-0.5*ri*(q1[1]*q1[1]+q1[2]*q1[2]));
+			vol1 =  ri*(q1[1]*dy - q1[2]*dx);
+			ri   = 1.0/q2[0];
+			p2   = g.gm1*(q2[3]-0.5*ri*(q2[1]*q2[1]+q2[2]*q2[2]));
+			vol2 =  ri*(q2[1]*dy - q2[2]*dx);
+			mu = 0.5*((adt1)+(adt2))*g.eps;
+			f = 0.5*(vol1* q1[0]         + vol2* q2[0]        ) + mu*(q1[0]-q2[0]);
+			res1[0] += f;
+			res2[0] -= f;
+			f = 0.5*(vol1* q1[1] + p1*dy + vol2* q2[1] + p2*dy) + mu*(q1[1]-q2[1]);
+			res1[1] += f;
+			res2[1] -= f;
+			f = 0.5*(vol1* q1[2] - p1*dx + vol2* q2[2] - p2*dx) + mu*(q1[2]-q2[2]);
+			res1[2] += f;
+			res2[2] -= f;
+			f = 0.5*(vol1*(q1[3]+p1)     + vol2*(q2[3]+p2)    ) + mu*(q1[3]-q2[3]);
+			res1[3] += f;
+			res2[3] -= f;
+		}
+
+
+		template<class TGP,class TDP>
+		void bres_calc(
+				const TGP *graphProperties,
+				const TDP *deviceProperties,
+				const double x1[2],
+				const double x2[2],
+				const double q1[4],
+				double adt1,
+				double res1[4]
+			){
+				auto &g=*graphProperties;
+				auto bound=deviceProperties->bound;
+				double dx, dy, ri, p1, p2, vol1, vol2, mu, f;
+        
+        dx = x1[0] - x2[0];
+        dy = x1[1] - x2[1];
+        ri = 1.0/q1[0];
+        p1 = g.gm1*(q1[3]-0.5*ri*(q1[1]*q1[1]+q1[2]*q1[2]));
+        if (bound==1){
+            res1[1] += + p1*dy;
+            res1[2] += - p1*dx;
+        }else{
+            vol1 =  ri*(q1[1]*dy - q1[2]*dx);
+            ri   = 1.0/g.qinf[0];
+            p2   = g.gm1*(g.qinf[3]-0.5*ri*(g.qinf[1]*g.qinf[1]+g.qinf[2]*g.qinf[2]));
+            vol2 =  ri*(g.qinf[1]*dy - g.qinf[2]*dx);
+            mu = (adt1)*g.eps;
+            f = 0.5*(vol1* q1[0]         + vol2* g.qinf[0]        ) + mu*(q1[0]-g.qinf[0]);
+            res1[0] += f;
+            f = 0.5*(vol1* q1[1] + p1*dy + vol2* g.qinf[1] + p2*dy) + mu*(q1[1]-g.qinf[1]);
+            res1[1] += f;
+            f = 0.5*(vol1* q1[2] - p1*dx + vol2* g.qinf[2] - p2*dx) + mu*(q1[2]-g.qinf[2]);
+            res1[2] += f;
+            f = 0.5*(vol1*(q1[3]+p1)     + vol2*(g.qinf[3]+p2)    ) + mu*(q1[3]-g.qinf[3]);
+            res1[3] += f;
+        }
+			}
+    ]]></SharedCode>
+
+    <MessageTypes>
+      <MessageType id="__init__">
+				<!-- This doesn't have any properties -->
+      </MessageType>
+
+      <MessageType id="__print__">
+				<!-- This doesn't have any properties -->
+      </MessageType>
+
+      <MessageType id="node_pos">
+				<Message>
+					<Array type="double" name="x" length="2" />
+					<Scalar type="uint32_t" name="round" />
+				</Message>
+      </MessageType>
+
+			<MessageType id="node_pos_ack" />
+
+			<MessageType id="cell_q_adt">
+				<Message>
+					<Array type="double" name="q" length="4" />
+					<Scalar type="double" name="adt" />
+					<Scalar type="uint32_t" name="round" />
+				</Message>
+      </MessageType>
+
+			<MessageType id="res_inc">
+				<Message>
+					<Array type="double" name="res" length="4" />
+					<Scalar type="uint32_t" name="round" />
+					<Scalar type="uint32_t" name="sender" /><!--Debugging only. MSB means it is a bedge -->
+				</Message>
+      </MessageType>
+
+
+			<MessageType id="rms_inc">
+				<Message>
+					<Scalar type="double" name="rms" />
+					<Scalar type="uint32_t" name="round" />
+				</Message>
+      </MessageType>
+
+			<MessageType id="rms_inc_ack" />
+
+    </MessageTypes>
+
+		<!-- ######################################################################### -->
+		<!-- ######################################################################### -->
+		<!-- ######################################################################### -->
+		<!-- ######################################################################### -->
+
+    <DeviceTypes>
+      <DeviceType id="node">
+				<Properties>
+					<Array type="double" name="x" length="2" />
+					<Scalar type="uint32_t" name="fanout">
+						<Documentation>
+							The number of people who will receive
+							and acknowledge each x broadcast.
+						</Documentation>
+					</Scalar>
+				</Properties>
+
+				<State>
+					<Scalar name="acks_pending" type="uint8_t">
+						<Documentation>
+							Number of listeners who have not yet acknowledged.
+						</Documentation>
+					</Scalar>
+					<Scalar name="round" type="uint32_t" />
+				</State>
+
+				<ReadyToSend><![CDATA[
+				*readyToSend = deviceState->acks_pending==0 ? RTS_FLAG_pos_out : 0;
+				]]></ReadyToSend>
+
+				<OutputPin name="pos_out" messageTypeId="node_pos">
+					<OnSend><![CDATA[
+						handler_log(2, "r=%u, %f,%f", deviceState->round, deviceProperties->x[0], deviceProperties->x[1]);
+						message->x[0]=deviceProperties->x[0];
+						message->x[1]=deviceProperties->x[1];
+						message->round=deviceState->round;
+						deviceState->acks_pending=deviceProperties->fanout;
+						deviceState->round++;
+					]]></OnSend>
+				</OutputPin>
+
+				<InputPin name="ack_in" messageTypeId="node_pos_ack">
+					<OnReceive><![CDATA[
+					handler_log(3, "r=%u, pending=%u", deviceState->round, deviceState->acks_pending);
+					assert(deviceState->acks_pending>0);
+					deviceState->acks_pending--;
+					]]></OnReceive>
+				</InputPin>
+
+      </DeviceType>
+
+			<!-- ######################################################################### -->
+			<!-- ######################################################################### -->
+			
+
+      <DeviceType id="cell">
+				<SharedCode><![CDATA[
+				enum Phase{
+					Phase_AdtCalc = 0 , // Collecting node positions
+					Phase_Update // collecting res from edges/bedges
+				};
+
+				
+
+				]]></SharedCode>
+
+				<Properties>
+					<Array name="qinit" type="double" length="4"/>
+					<Scalar name="id" type="uint32_t" />
+				</Properties>
+
+				<State>
+					<!-- Intrinsic state of the cell -->
+					<Array name="q" type="double" length="4" />
+					<Array name="qold" type="double" length="4" />
+					<Array name="res" type="double" length="4" />
+					<Scalar name="adt" type="double" />
+
+					<!-- Which phase we are in: 0==adt, 1==update -->
+					<Scalar name="phase" type="uint32_t" />
+
+					<!-- receive x positions from four nodes defining edge corners -->
+					<Array name="x_buff" type="double" length="8" />
+					<Scalar name="x_buff_got" type="uint32_t" />
+					<Scalar name="x_ack_pending" type="uint32_t" /> <!-- Boolean. Set once we have used the x, and want the next one -->
+
+					<Scalar name="res_pending" type="uint32_t" /> <!-- Count down to zero as we receive res increments -->
+
+					<Scalar name="rms_inc_ack_pending" type="uint32_t" /> <!-- Boolean. Set if we have sent an rms_inc, but it is not acked -->
+
+
+					<!-- debugging only -->
+					<Array name="res_senders" type="uint32_t" length="4" />
+					<Array name="res0_in" type="double" length="4" />
+					<Array name="res1_in" type="double" length="4" />
+					<Array name="res2_in" type="double" length="4" />
+					<Array name="res3_in" type="double" length="4" />
+
+					<Scalar name="round" type="uint32_t" />
+				</State>
+
+				<ReadyToSend><![CDATA[
+				*readyToSend=0;
+				if(deviceState->x_ack_pending){
+					*readyToSend |= RTS_FLAG_pos_ack_out;
+				}else if(deviceState->phase==Phase_AdtCalc){
+					if(deviceState->x_buff_got==4){
+						*readyToSend |= RTS_FLAG_adt_calc;
+					}
+				}
+				
+				if(deviceState->phase==Phase_Update){
+					if(deviceState->rms_inc_ack_pending==0 && deviceState->res_pending==0){
+						*readyToSend |= RTS_FLAG_update;
+					}
+				}
+				]]></ReadyToSend>
+
+				<InputPin name="__init__" messageTypeId="__init__">
+					<OnReceive><![CDATA[
+					for(unsigned i=0;i<4;i++){
+						deviceState->q[i]=deviceProperties->qinit[i];
+					}
+					]]></OnReceive>
+				</InputPin>
+
+				<InputPin name="pos_in" messageTypeId="node_pos">
+					<Properties>
+						<Scalar type="uint8_t" name="index" />
+					</Properties>
+					<OnReceive><![CDATA[
+						handler_log(3, "ds.r=%u, msg.r=%u, x_buff_got=%u, nIdx=%u, pos=(%f,%f)", deviceState->round, message->round, deviceState->x_buff_got,
+							edgeProperties->index, message->x[0], message->x[1]
+						);
+
+						assert(message->round==deviceState->round || message->round==deviceState->round+1);
+						assert(deviceState->x_buff_got<4);
+						assert(!deviceState->x_ack_pending);
+						uint32_t offset=2*edgeProperties->index;
+						deviceState->x_buff[offset+0]=message->x[0];
+						deviceState->x_buff[offset+1]=message->x[1];
+						deviceState->x_buff_got++;
+					]]></OnReceive>
+				</InputPin>
+
+				<OutputPin name="adt_calc" messageTypeId="cell_q_adt">
+					<OnSend><![CDATA[
+					handler_log(2, "r=%u", deviceState->round);
+					handler_log(4, "adt=%f, res=[%f,%f,%f,%f], q=[%f,%f,%f,%f], qold=[%f,%f,%f,%f]",
+						deviceState->adt,
+						deviceState->res[0], deviceState->res[1], deviceState->res[2], deviceState->res[3],
+						deviceState->q[0], deviceState->q[1], deviceState->q[2], deviceState->q[3],
+						deviceState->qold[0], deviceState->qold[1], deviceState->qold[2], deviceState->qold[3]
+					);
+					for(unsigned i=0; i<4; i++){
+						handler_log(4, "x[%d]=(%f,%f)", i, deviceState->x_buff[2*i+0], deviceState->x_buff[2*i+1]);
+					}
+					assert(deviceState->phase==Phase_AdtCalc);
+					assert(deviceState->x_buff_got==4);
+					assert(deviceState->x_ack_pending==0);
+
+					if((deviceState->round&1)==0){
+						// TODO: mild hack. This is the equivalent of the save_soln kernel in OP2 version. Too lazy
+						// to add in more states and messages.
+						for(unsigned i=0;i<4;i++){
+							deviceState->qold[i]=deviceState->q[i];
+						}
+					}
+
+					for(unsigned i=0; i<4; i++){
+							check_not_nan(deviceState->q[i]);
+					}
+
+
+					adt_calc(
+						graphProperties, // For the globals
+						deviceState, // For the "members"
+						deviceState->x_buff+0,
+						deviceState->x_buff+2,
+						deviceState->x_buff+4,
+						deviceState->x_buff+6
+					);
+					handler_checkpoint(false, 0, "post-adt-%u", deviceState->round);
+
+					for(unsigned i=0; i<4; i++){
+							check_not_nan(deviceState->q[i]);
+					}
+					check_not_nan(deviceState->adt);
+
+					// Send q and adt to the four edge/bedge
+					for(unsigned j=0; j<4; j++){
+						message->q[j]=deviceState->q[j];
+					}
+					message->adt=deviceState->adt;
+					message->round=deviceState->round;
+
+					deviceState->x_ack_pending=1; // Might as well request the next x (Note: the whole x movement is pointless)
+					deviceState->phase=Phase_Update;
+					deviceState->res_pending=4; // need to get res increments from surrounding 4 edge/bedges
+					]]></OnSend>
+				</OutputPin>
+
+				<OutputPin name="pos_ack_out" messageTypeId="node_pos_ack">
+					<!-- Lower priority than adt_calc_out -->
+					<OnSend><![CDATA[
+					assert(deviceState->x_buff_got==4);
+					assert(deviceState->x_ack_pending);
+					deviceState->x_buff_got=0;
+					deviceState->x_ack_pending=0;
+					]]></OnSend>
+				</OutputPin>
+
+				<InputPin name="res_inc_in" messageTypeId="res_inc">
+					<OnReceive><![CDATA[
+					assert(deviceState->phase==Phase_Update);
+					assert(deviceState->res_pending>0);
+					for(int j=0; j<4; j++){
+						deviceState->res[j] += message->res[j];
+					}
+					deviceState->res_pending--;
+					]]></OnReceive>
+				</InputPin>
+
+				<OutputPin name="update" messageTypeId="rms_inc">
+					<OnSend><![CDATA[
+					handler_log(2, "r=%u", deviceState->round);
+					handler_log(4, "adt=%f, res=[%f,%f,%f,%f], q=[%f,%f,%f,%f], q=[%f,%f,%f,%f]",
+						deviceState->adt,
+						deviceState->res[0], deviceState->res[1], deviceState->res[2], deviceState->res[3],
+						deviceState->q[0], deviceState->q[1], deviceState->q[2], deviceState->q[3],
+						deviceState->qold[0], deviceState->qold[1], deviceState->qold[2], deviceState->qold[3]
+					);
+					assert(deviceState->phase==Phase_Update);
+					assert(deviceState->res_pending==0);
+					assert(!deviceState->rms_inc_ack_pending); // Don't send this update if a previous rms has not acked yet
+
+					for(unsigned i=0; i<4; i++){
+							check_not_nan(deviceState->q[i]);
+					}
+
+					dump_cell(deviceState->round*2, deviceProperties, deviceState);
+					handler_checkpoint(true, 0, "pre-update-%u", deviceState->round);
+
+					double rms=0;
+					update(
+						graphProperties,
+						deviceState,
+						rms
+					);
+					message->rms=rms;
+					message->round=deviceState->round;
+
+					for(unsigned i=0; i<4; i++){
+							check_not_nan(deviceState->q[i]);
+					}
+
+					dump_cell(deviceState->round*2+1, deviceProperties, deviceState);
+					handler_checkpoint(false, 0, "post-update-%u", deviceState->round);
+
+					deviceState->phase=Phase_AdtCalc;
+					deviceState->rms_inc_ack_pending=1;
+					deviceState->round++;
+
+					
+
+					]]></OnSend>
+				</OutputPin>
+
+				<InputPin name="rms_ack" messageTypeId="rms_inc_ack">
+					<OnReceive><![CDATA[
+					assert(deviceState->rms_inc_ack_pending);
+					deviceState->rms_inc_ack_pending=0;
+					]]></OnReceive>
+				</InputPin>
+      </DeviceType>
+
+			<!-- ######################################################################### -->
+			<!-- ######################################################################### -->
+			
+
+			<DeviceType id="edge">
+				<Properties>
+					<Scalar name="id" type="uint32_t" /><!--Mainly for debugging -->
+				</Properties>
+
+				<State>
+					<!-- receive x positions from two nodes defining edge corners -->
+					<Array name="x_buff" type="double" length="8" />
+					<Scalar name="x_buff_got" type="uint32_t" />
+					<Scalar name="x_ack_pending" type="uint32_t" /> <!-- Boolean. Set once we have used the x, and want the next one -->
+
+					<Array name="q_buff" type="double" length="8" />   <!-- Pair of 4-tuples --> 
+					<Array name="adt_buff" type="double" length="2" /> <!-- two scalars -->
+					<Scalar name="q_adt_buff_got" type="uint32_t" />
+
+					<!-- this is only for debugging purposes -->
+					<Array name="res1_buff" type="double" length="4" /> 
+
+					<!-- buffer needed due to the two-way send -->
+					<Array name="res2_buff" type="double" length="4" /> 
+					<Scalar name="res2_pending" type="uint32_t" /> <!-- Boolean. Set if we need to complete the two-way send -->
+
+					<Scalar name="round" type="uint32_t" />
+				</State>
+
+				<SharedCode><![CDATA[
+				]]></SharedCode>
+
+				<ReadyToSend><![CDATA[
+				*readyToSend=0;
+				if(deviceState->res2_pending){
+					*readyToSend |= RTS_FLAG_res_calc_res2;
+				}
+				if(deviceState->x_ack_pending){
+					*readyToSend |= RTS_FLAG_pos_ack_out;
+				}
+				if( deviceState->q_adt_buff_got==2
+						&& deviceState->x_buff_got==2
+						&& !deviceState->x_ack_pending
+						&& !deviceState->res2_pending
+				){
+					*readyToSend |= RTS_FLAG_res_calc_res1;
+				}
+				]]></ReadyToSend>
+
+				<InputPin name="pos_in" messageTypeId="node_pos">
+					<Properties>
+						<Scalar type="uint8_t" name="index" />
+					</Properties>
+					<OnReceive><![CDATA[
+						handler_log(3, "ds.round=%u, msg.round=%u", deviceState->round, message->round);
+
+						assert(message->round==deviceState->round || message->round==deviceState->round+1);
+						assert(deviceState->x_buff_got<4);
+						assert(!deviceState->x_ack_pending);
+						uint32_t offset=2*edgeProperties->index;
+						deviceState->x_buff[offset+0]=message->x[0];
+						deviceState->x_buff[offset+1]=message->x[1];
+						deviceState->x_buff_got++;
+					]]></OnReceive>
+				</InputPin>
+
+				<InputPin name="q_adt_in" messageTypeId="cell_q_adt">
+					<Properties>
+						<Scalar type="uint8_t" name="index" />
+					</Properties>
+					<OnReceive><![CDATA[
+						assert(message->round==deviceState->round);
+						assert(deviceState->q_adt_buff_got<2);
+						uint32_t offset=4*edgeProperties->index;
+						for(unsigned i=0; i<4; i++){
+							deviceState->q_buff[offset+i]=message->q[i];
+						}
+						deviceState->adt_buff[edgeProperties->index]=message->adt;
+						deviceState->q_adt_buff_got++;
+					]]></OnReceive>
+				</InputPin>
+
+				<OutputPin name="res_calc_res1" messageTypeId="res_inc">
+					<OnSend><![CDATA[
+						assert(deviceState->q_adt_buff_got==2);
+						assert(deviceState->x_buff_got==2);
+						assert(!deviceState->x_ack_pending);
+						assert(!deviceState->res2_pending);
+
+						handler_checkpoint(true, 0, "pre-res_calc-%u", deviceState->round);
+
+						for(unsigned i=0; i<4; i++){
+							deviceState->res1_buff[i]=0;
+							message->res[i]=0;
+							deviceState->res2_buff[i]=0;
+						}
+						res_calc(
+							graphProperties,
+							deviceState->x_buff+0,
+							deviceState->x_buff+2,
+							deviceState->q_buff+0,
+							deviceState->q_buff+4,
+							deviceState->adt_buff[0],
+							deviceState->adt_buff[1],
+							message->res,	// First half of the send
+							deviceState->res2_buff // Will do second half later
+						);
+						message->round=deviceState->round;
+						
+						// Debugging
+						message->sender= deviceProperties->id;
+
+						// Note: debugging purposes only
+						for(unsigned i=0; i<4; i++){
+							deviceState->res1_buff[i]=message->res[i];
+						}
+
+						handler_checkpoint(false, 0, "post-res_calc-%u", deviceState->round);
+						
+						deviceState->q_adt_buff_got=0;
+						deviceState->x_ack_pending=1;
+						deviceState->res2_pending=1;
+						deviceState->round++;
+					]]></OnSend>
+				</OutputPin>
+
+				<OutputPin name="res_calc_res2" messageTypeId="res_inc">
+					<OnSend><![CDATA[
+						// Second half of the send
+						assert(deviceState->res2_pending);
+
+						for(int j=0; j<4; j++){
+							message->res[j]=deviceState->res2_buff[j];
+						}
+						message->round=deviceState->round-1; // It actually came from the _previous_ round
+
+						// Debugging
+						message->sender= deviceProperties->id;
+
+						deviceState->res2_pending=0;
+						
+					]]></OnSend>
+				</OutputPin>
+
+				<OutputPin name="pos_ack_out" messageTypeId="node_pos_ack">
+					<!-- Lower priority than res_calc* outputs -->
+					<OnSend><![CDATA[
+					assert(deviceState->x_buff_got==2);
+					assert(deviceState->x_ack_pending);
+					deviceState->x_buff_got=0;
+					deviceState->x_ack_pending=0;
+					]]></OnSend>
+				</OutputPin>
+			</DeviceType>
+
+			<!-- ######################################################################### -->
+			<!-- ######################################################################### -->
+			
+
+			<DeviceType id="bedge">
+				<Properties>
+					<Scalar name="id" type="uint32_t" /><!--Mainly for debugging -->
+					<Scalar name="bound" type="uint32_t" /><!--Boolean. dat on set. -->
+				</Properties>
+				<State>
+					<!-- receive x positions from two nodes defining edge corners -->
+					<Array name="x_buff" type="double" length="8" />
+					<Scalar name="x_buff_got" type="uint32_t" />
+					<Scalar name="x_ack_pending" type="uint32_t" /> <!-- Boolean. Set once we have used the x, and want the next one -->
+
+					<Array name="q_buff" type="double" length="4" />   <!-- Single 4-tuples --> 
+					<Array name="adt_buff" type="double" length="1" /> <!-- one scalars -->
+					<Scalar name="q_adt_buff_got" type="uint32_t" />
+
+					<!-- debug only -->
+					<Array name="res_buff" type="double" length="4" />
+
+					<Scalar name="round" type="uint32_t" />
+				</State>
+
+				<SharedCode><![CDATA[
+				
+				]]></SharedCode>
+
+				<ReadyToSend><![CDATA[
+				*readyToSend=0;
+				if(deviceState->x_ack_pending){
+					*readyToSend |= RTS_FLAG_pos_ack_out;
+				}
+				if( deviceState->q_adt_buff_got==1
+						&& deviceState->x_buff_got==2
+						&& !deviceState->x_ack_pending
+				){
+					*readyToSend |= RTS_FLAG_bres_calc;
+				}
+				]]></ReadyToSend>
+
+				<InputPin name="pos_in" messageTypeId="node_pos">
+					<Properties>
+						<Scalar type="uint8_t" name="index" />
+					</Properties>
+					<OnReceive><![CDATA[
+						assert(deviceState->round==message->round || deviceState->round+1==message->round);
+						assert(deviceState->x_buff_got<4);
+						assert(!deviceState->x_ack_pending);
+						uint32_t offset=2*edgeProperties->index;
+						deviceState->x_buff[offset+0]=message->x[0];
+						deviceState->x_buff[offset+1]=message->x[1];
+						deviceState->x_buff_got++;
+					]]></OnReceive>
+				</InputPin>
+
+				<InputPin name="q_adt_in" messageTypeId="cell_q_adt">
+					<OnReceive><![CDATA[
+						assert(deviceState->round==message->round);
+						assert(deviceState->q_adt_buff_got<1);
+						for(unsigned i=0; i<4; i++){
+							deviceState->q_buff[i]=message->q[i];
+						}
+						deviceState->adt_buff[0]=message->adt;
+						deviceState->q_adt_buff_got++;
+					]]></OnReceive>
+				</InputPin>
+
+				<OutputPin name="bres_calc" messageTypeId="res_inc">
+					<OnSend><![CDATA[
+						assert(deviceState->q_adt_buff_got==1);
+						assert(deviceState->x_buff_got==2);
+						assert(!deviceState->x_ack_pending);
+
+						for(unsigned i=0; i<4; i++){
+							message->res[i]=0;
+						}
+						bres_calc(
+							graphProperties,
+							deviceProperties,
+							deviceState->x_buff+0,
+							deviceState->x_buff+2,
+							deviceState->q_buff,
+							deviceState->adt_buff[0],
+							message->res
+						);
+						message->round=deviceState->round;
+						
+						// Debugging
+						message->sender=0x80000000ul | deviceProperties->id;
+
+						for(unsigned i=0; i<4; i++){
+							deviceState->res_buff[i]=message->res[i];
+						}
+
+						handler_checkpoint(false, 0, "post-bres_calc-%u", deviceState->round);
+
+						deviceState->q_adt_buff_got=0;
+						deviceState->x_ack_pending=1;
+						deviceState->round++;
+					]]></OnSend>
+				</OutputPin>
+
+				<OutputPin name="pos_ack_out" messageTypeId="node_pos_ack">
+					<OnSend><![CDATA[
+					assert(deviceState->x_buff_got==2);
+					assert(deviceState->x_ack_pending);
+					deviceState->x_buff_got=0;
+					deviceState->x_ack_pending=0;
+					]]></OnSend>
+				</OutputPin>
+			</DeviceType>
+
+			<!-- ######################################################################### -->
+			<!-- ######################################################################### -->
+			
+			<DeviceType id="printer">
+				<Properties>
+					<Scalar name="fanin" type="uint32_t" />
+					<Scalar name="delta_print" type="uint32_t" />
+					<Scalar name="delta_exit" type="uint32_t" />
+				</Properties>
+				<State>
+					<Scalar name="iter" type="uint32_t" />
+					<Scalar name="iter_print" type="uint32_t" />
+					<Scalar name="rms_sum" type="double" />
+					<Scalar name="rms_pending" type="uint32_t" />
+				</State>
+
+				<ReadyToSend><![CDATA[
+				*readyToSend=deviceState->rms_pending==0 ? RTS_FLAG_rms_ack : 0;
+				]]></ReadyToSend>
+
+				<InputPin name="__init__" messageTypeId="__init__">
+					<OnReceive><![CDATA[
+					deviceState->rms_pending=deviceProperties->fanin;
+					]]></OnReceive>
+				</InputPin>
+
+				<InputPin name="rms_inc" messageTypeId="rms_inc">
+					<OnReceive><![CDATA[
+						handler_log(3, "r=%u, pending=%u", deviceState->iter, deviceState->rms_pending);
+						assert(message->round==deviceState->iter);
+						assert(deviceState->rms_pending>0);
+						deviceState->rms_sum+=message->rms;
+						deviceState->rms_pending--;
+					]]></OnReceive>
+				</InputPin>
+
+				<OutputPin name="rms_ack" messageTypeId="rms_inc_ack">
+						<OnSend><![CDATA[
+							handler_log(2, "r=%u", deviceState->iter);
+							assert(deviceState->rms_pending==0);
+							deviceState->iter++;
+
+							deviceState->iter_print++;
+							
+							if(deviceState->iter_print==deviceProperties->delta_print){
+								double rms=std::sqrt( deviceState->rms_sum / deviceProperties->fanin );
+
+								int rmsScaled=(int)(rms*100000000);
+								handler_log(0, "  %d  %d*10^-8", deviceState->iter, rmsScaled);
+								handler_export_key_value(deviceState->iter, rmsScaled);
+								
+								deviceState->iter_print=0;
+							}
+
+							if(deviceState->iter==deviceProperties->delta_exit){
+								handler_exit(0);
+								*doSend=0;
+							}else{
+								deviceState->rms_sum=0;
+								deviceState->rms_pending=deviceProperties->fanin;
+							}
+						]]></OnSend>
+				</OutputPin>
+			</DeviceType>
+
+    </DeviceTypes>
+  </GraphType>
+</Graphs>
