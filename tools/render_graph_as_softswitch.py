@@ -34,7 +34,7 @@ def print_statistics(dst, baseName, unit, data):
 
 
 # The alignment to pad to for the next cache line
-_cache_line_size=32
+_cache_line_size=64
 
 # This compacts properties and state down into BLOBs, and
 # makes things faster to compile.
