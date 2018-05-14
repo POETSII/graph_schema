@@ -256,7 +256,7 @@ class BLOBHolder:
             self.segments.append( (offset,length,"__pad__") )
     
     # Returns the offset
-    def add(self,name, payload, align=4):
+    def add(self,name, payload, align=64): #TODO: this is highly wasteful
         self.pad(align) # Always align to 32-bit boundary
         assert isinstance(payload,bytearray)
         assert name not in self.offsets
@@ -652,7 +652,8 @@ def render_graph_instance_as_thread_context(
             0, // rtsFlags
             false, // rtc
             0,  // prev
-            0   // next
+            0,   // next
+            {{0}} // pad init
         }}
         """.format(**diProps))
     dst.write("};\n")
@@ -933,9 +934,14 @@ def render_graph_instance_as_softswitch(gi,dst,num_threads,device_to_thread):
             3,  // softLogLevel
             3,  // hardLogLevel
             0,  // currentDevice
-            0,  // currentMode
-            0,   // currentHandler
-            {}  // pointersAreRelative
+            0,  // currentHandlerType
+            0,   // currentPin
+            0, // currentSize
+            {},  // pointersAreRelative
+            0, // hostBuffer
+            0, // hbuf_head
+            0, // hbuf_tail
+            {{0}} // init pad
         }}\n""".format(ti,graphPropertiesBinding,ti,ti,pointersAreRelative))
         if ti+1<num_threads:
             dst.write(",\n")
