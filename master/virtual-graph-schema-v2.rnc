@@ -28,6 +28,10 @@
 #
 # All XML files should have a Provenance element. This is still only loosely specified though,
 # and needs to be refined.
+#
+# ### Changes from 2 -> 2.1
+#
+# Application message types are added.
 
 # BEGIN_SCHEMA
 
@@ -303,6 +307,12 @@ grammar {
         ## edges to enter or leave a pin. Alongside the edge properties and
         ## edge state this provides storage that scales with the number of edges.
         ##
+        ## Application pins are pins that are implicitly connected to the application,
+        ## so sending on an application output pin will send the message to
+        ## to the application, while application input pins will only receive messages
+        ## from the application. It is illegal to connect an application pin to
+        ## an edge instance, for both input and output application pins.
+        ##
         ## Messages are delivered to the device in any order, and a device has no
         ## way of avoiding receipt of messages.
         ##
@@ -424,6 +434,16 @@ grammar {
             ## A pin can only be connected to an output of the same type (not just structurally,
             ## they must have the same messageTypeId)
             attribute messageTypeId { identifier }
+            
+            &
+            
+            ## If this flag is set, then this pin is an application pin, and will
+            ## _only_ receive messages from the application. It will never be connected
+            ## to any edge instance.
+            ##
+            ## An application input pin cannot have any properties or ports (as it
+            ## will never be connected to an official edge).
+            attribute application { xsd:boolean } ?
 
             &
 
@@ -442,7 +462,8 @@ grammar {
 
             ## Indicates read-only properties associated with each edge. This will be
             ## delivered along-side messages which arrive along that edge
-            ## An input pin may have no properties, in which case this element will not exist
+            ## An input pin may have no properties, in which case this element will not exist.
+            ## Application pins cannot have properties.
             element Properties {
               ## Used to specify what the C type name is for the properties structure.
               ## The default is "{graphTypeId}_{deviceTypeId}_{pinName}_properties_t".
@@ -455,7 +476,8 @@ grammar {
 
             &
 
-            ## Indicates mutable properties associated with an edge.
+            ## Indicates mutable state associated with an edge.
+            ## Application pins cannot have state.
             element State {
               ## Used to specify what the global C type name is for the properties structure.
               ## The default is "{graphTypeId}_{deviceTypeId}_{pinName}_state_t".
@@ -514,6 +536,13 @@ grammar {
             ## A pin can only be connected to a pin of the same type (not just structurally,
             ## they must have the same messageTypeId)
             attribute messageTypeId { string }
+            
+            &
+
+            ## If this flag is set, then this pin is an application pin, and will
+            ## send messages to the application. It will never be connected
+            ## to any edge instance.
+            attribute application { xsd:boolean } ?
 
             &
 

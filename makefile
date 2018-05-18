@@ -29,9 +29,11 @@ endif
 endif
 
 CPPFLAGS += -std=c++11 -g
-#CPPFLAGS += -O0
+CPPFLAGS += -O0
 
-#CPPFLAGS += -O3 -DNDEBUG=1
+#CPPFLAGS += -O2 -fno-omit-frame-pointer -ggdb -DNDEBUG=1
+
+
 
 TRANG = external/trang-20091111/trang.jar
 JING = external/jing-20081028/bin/jing.jar
@@ -149,19 +151,30 @@ bin/% : tools/%.cpp
 
 
 define provider_rules_template
+# $1 : name
+# $2 : optional full xml path (e.g. for things in nursery)
+# $3 : no default. If not empty, don't add to default build
 
-providers/$1.graph.cpp providers/$1.graph.hpp : apps/$1/$1_graph_type.xml $(JING)
+ifeq ($2,)
+$1_src_xml=apps/$1/$2$1_graph_type.xml
+else
+$1_src_xml=$2
+endif
+
+providers/$1.graph.cpp providers/$1.graph.hpp : $$($1_src_xml) $(JING)
 	mkdir -p providers
-	java -jar $(JING) -c master/virtual-graph-schema-v2.rnc apps/$1/$1_graph_type.xml
-	$$(PYTHON) tools/render_graph_as_cpp.py apps/$1/$1_graph_type.xml providers/$1.graph.cpp
-	$$(PYTHON) tools/render_graph_as_cpp.py --header < apps/$1/$1_graph_type.xml > providers/$1.graph.hpp
+	java -jar $(JING) -c master/virtual-graph-schema-v2.rnc $$($1_src_xml)
+	$$(PYTHON) tools/render_graph_as_cpp.py $$($1_src_xml) providers/$1.graph.cpp
+	$$(PYTHON) tools/render_graph_as_cpp.py --header < $$($1_src_xml) > providers/$1.graph.hpp
 
 providers/$1.graph.so : providers/$1.graph.cpp
 	g++ $$(CPPFLAGS) -Wno-unused-but-set-variable $$(SO_CPPFLAGS) $$< -o $$@ $$(LDFLAGS) $(LDLIBS)
 
 $1_provider : providers/$1.graph.so
 
+ifeq ($3,)
 all_providers : $1_provider
+endif
 
 endef
 
@@ -191,11 +204,19 @@ include apps/clocked_izhikevich_fix/makefile.inc
 include apps/gals_izhikevich/makefile.inc
 include apps/gals_heat/makefile.inc
 include apps/gals_heat_fix/makefile.inc
+include apps/gals_heat_fix_noedge/makefile.inc
 include apps/storm/makefile.inc
 
 include apps/amg/makefile.inc
 include apps/apsp/makefile.inc
 
+include apps/firefly_sync/makefile.inc
+include apps/firefly_nosync/makefile.inc
+
+# Non-default
+include apps/nursery/airfoil/airfoil.inc
+
+#TODO : Defunct?
 include tools/partitioner.inc
 
 demos : $(ALL_DEMOS)

@@ -35,11 +35,7 @@ ALL_gals_heat_fix_DEMOS += demos/gals_heat_fix/gals_heat_fix_$1.mp4
 $(eval $(call softswitch_instance_template,gals_heat_fix_$1,demos/gals_heat_fix/gals_heat_fix_$1.xml,1))
 $(eval $(call softswitch_instance_template,gals_heat_fix_$1,demos/gals_heat_fix/gals_heat_fix_$1.xml,4))
 $(eval $(call softswitch_instance_template,gals_heat_fix_$1,demos/gals_heat_fix/gals_heat_fix_$1.xml,16))
-$(eval $(call softswitch_instance_template,gals_heat_fix_$1,demos/gals_heat_fix/gals_heat_fix_$1.xml,32))
-$(eval $(call softswitch_instance_template,gals_heat_fix_$1,demos/gals_heat_fix/gals_heat_fix_$1.xml,64))
-$(eval $(call softswitch_instance_template,gals_heat_fix_$1,demos/gals_heat_fix/gals_heat_fix_$1.xml,128))
-$(eval $(call softswitch_instance_template,gals_heat_fix_$1,demos/gals_heat_fix/gals_heat_fix_$1.xml,256))
-$(eval $(call softswitch_instance_template,gals_heat_fix_$1,demos/gals_heat_fix/gals_heat_fix_$1.xml,512))
+
 
 
 endef

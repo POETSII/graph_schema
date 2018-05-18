@@ -1,10 +1,10 @@
 pkg load geometry
 pkg load msh
 
-args=argv()
-filename=args{1}
+args=argv();
+filename=args{1};
 
-M = msh2m_gmsh (filename);
+M = msh2m_gmsh (filename, "v", 0);
 
 n=size(M.t,2);
 c=msh2m_geometrical_properties(M, "bar");

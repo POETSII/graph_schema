@@ -2,6 +2,7 @@
 #define graph_persist_dom_reader_hpp
 
 #include "graph_persist.hpp"
+#include "graph_provider_helpers.hpp"
 
 //#include <boost/filesystem.hpp>
 #include <libxml++/parsers/domparser.h>
@@ -128,11 +129,12 @@ public:
     const std::string &name,
     unsigned index,
     MessageTypePtr messageType,
+    bool isApplication,
     TypedDataSpecPtr propertiesType,
     TypedDataSpecPtr stateType,
     const std::string &code
   )
-  : InputPinImpl(deviceTypeSrc, name, index, messageType, propertiesType, stateType, code)
+  : InputPinImpl(deviceTypeSrc, name, index, messageType, isApplication, propertiesType, stateType, code)
   {}
 
   virtual void onReceive(OrchestratorServices*, const typed_data_t*, const typed_data_t*, typed_data_t*, const typed_data_t*, typed_data_t*, const typed_data_t*) const override
@@ -150,9 +152,10 @@ public:
     const std::string &name,
     unsigned index,
     MessageTypePtr messageType,
+    bool isApplication,
     const std::string &code
   )
-  : OutputPinImpl(deviceTypeSrc, name, index, messageType, code)
+  : OutputPinImpl(deviceTypeSrc, name, index, messageType, isApplication, code)
   {}
 
   virtual void onSend(OrchestratorServices*, const typed_data_t*, const typed_data_t*, typed_data_t*, typed_data_t*, bool*) const
@@ -244,6 +247,7 @@ DeviceTypePtr loadDeviceTypeElement(
     
     std::string name=get_attribute_required(e, "name");
     std::string messageTypeId=get_attribute_required(e, "messageTypeId");
+    bool isApplication=get_attribute_optional_bool(e, "application");
     
     if(messageTypes.find(messageTypeId)==messageTypes.end()){
       throw std::runtime_error("Unknown messageTypeId '"+messageTypeId+"'");
@@ -280,6 +284,7 @@ DeviceTypePtr loadDeviceTypeElement(
       name, 
       inputs.size(),
       messageType,
+      isApplication,
       inputProperties,
       inputState,
       onReceive
@@ -299,6 +304,7 @@ DeviceTypePtr loadDeviceTypeElement(
       throw std::runtime_error("Unknown messageTypeId '"+messageTypeId+"'");
     }
     auto messageType=messageTypes.at(messageTypeId);
+    bool isApplication=get_attribute_optional_bool(e, "application");
     
     rapidjson::Document outputMetadata=parse_meta_data(e, "./g:MetaData", ns);
  
@@ -314,6 +320,7 @@ DeviceTypePtr loadDeviceTypeElement(
       name, 
       outputs.size(),
       messageType,
+      isApplication,
       onSend
     ));
   }
@@ -372,8 +379,8 @@ GraphTypePtr loadGraphTypeElement(const filepath &srcPath, xmlpp::Element *eGrap
   }
   
   std::vector<std::string> sharedCode;
-  for(auto *nMessageType : eGraphType->find("./g:SharedCode", ns)){
-    std::string x=((xmlpp::Element*)nMessageType)->get_child_text()->get_content();
+  for(auto *nSharedCode : eGraphType->find("./g:SharedCode", ns)){
+    std::string x=readTextContent((xmlpp::Element*)nSharedCode);
     sharedCode.push_back(x);
   }
   
@@ -527,13 +534,12 @@ void loadGraph(Registry *registry, const filepath &srcPath, xmlpp::Element *pare
   }
 
   uint64_t gId;
+  rapidjson::Document graphMetadata;
   if(parseMetaData){
-    auto metadata=parse_meta_data(eGraph, "g:MetaData", ns);
-    gId=events->onBeginGraphInstance(graphType, graphId, graphProperties, std::move(metadata));
-  }else{
-    gId=events->onBeginGraphInstance(graphType, graphId, graphProperties);
+    graphMetadata=parse_meta_data(eGraph, "g:MetaData", ns);
   }
-
+  gId=events->onBeginGraphInstance(graphType, graphId, graphProperties, std::move(graphMetadata));
+  
   std::unordered_map<std::string, std::pair<uint64_t,DeviceTypePtr> > devices;
 
   auto *eDeviceInstances=find_single(eGraph, "./g:DeviceInstances", ns);
@@ -559,12 +565,11 @@ void loadGraph(Registry *registry, const filepath &srcPath, xmlpp::Element *pare
     }
 
     uint64_t dId;
+    rapidjson::Document deviceMetadata;
     if(parseMetaData){
-      rapidjson::Document metadata=parse_meta_data(eGraph, "g:M", ns);
-      dId=events->onDeviceInstance(gId, dt, id, deviceProperties, std::move(metadata));
-    }else{
-      dId=events->onDeviceInstance(gId, dt, id, deviceProperties);
+      deviceMetadata=parse_meta_data(eDevice, "g:M", ns);
     }
+    dId=events->onDeviceInstance(gId, dt, id, deviceProperties, std::move(deviceMetadata));
 
     devices.insert(std::make_pair( id, std::make_pair(dId, dt)));
   }
@@ -609,6 +614,12 @@ void loadGraph(Registry *registry, const filepath &srcPath, xmlpp::Element *pare
     if(!dstPin){
       throw std::runtime_error("No sink pin called '"+dstPinName+"' on device '"+dstDeviceId);
     }
+    if(srcPin->isApplication()){
+      throw std::runtime_error("Attempt to connect to application output pin '"+srcPinName+"' on device '"+srcDeviceId);
+    }
+    if(dstPin->isApplication()){
+      throw std::runtime_error("Attempt to connect to application input pin '"+dstPinName+"' on device '"+dstDeviceId);
+    }
 
     if(srcPin->getMessageType()!=dstPin->getMessageType())
       throw std::runtime_error("Edge type mismatch on pins.");
@@ -639,21 +650,16 @@ void loadGraph(Registry *registry, const filepath &srcPath, xmlpp::Element *pare
       edgeProperties=et->create();
     }
 
-
+    rapidjson::Document metadata;
     if(parseMetaData){
-      auto metadata=parse_meta_data(eGraph, "g:M", ns);
-      events->onEdgeInstance(gId,
-                 dstDevice.first, dstDevice.second, dstPin,
-                 srcDevice.first, srcDevice.second, srcPin,
-                 edgeProperties,
-                 std::move(metadata)
-      );
-    }else{
-      events->onEdgeInstance(gId,
-                 dstDevice.first, dstDevice.second, dstPin,
-                 srcDevice.first, srcDevice.second, srcPin,
-                 edgeProperties);
+      metadata=parse_meta_data(eEdge, "g:M", ns);
     }
+    events->onEdgeInstance(gId,
+                dstDevice.first, dstDevice.second, dstPin,
+                srcDevice.first, srcDevice.second, srcPin,
+                edgeProperties,
+                std::move(metadata)
+    );
   }
 
   events->onBeginEdgeInstances(gId);

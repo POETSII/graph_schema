@@ -21,12 +21,16 @@
 				<Documentation>This doesn't have any properties</Documentation>
       </MessageType>
 
-			<MessageType id="empty">
-				<Documentation>This should be replaced with OnCompute at some point.</Documentation>
+			<MessageType id="output">
+				<Documentation>Send a message to the application.</Documentation>
+				<Message>
+					<Scalar name="ticks" type="uint32_t"/>
+				</Message>
+				
       </MessageType>
       
       <MessageType id="tick">
-		<Documentation>A tick being sent from the root through to the leaves</Documentation>
+				<Documentation>A tick being sent from the root through to the leaves</Documentation>
       </MessageType>
 
       <MessageType id="ack">
@@ -49,7 +53,7 @@
 		<ReadyToSend><![CDATA[
 			*readyToSend = 0; 
 			if(deviceState->doExport){
-				*readyToSend = OUTPUT_FLAG_root_fake_compute;
+				*readyToSend = OUTPUT_FLAG_root_output;
 			}else if(deviceState->pending==0){
 			 	*readyToSend = OUTPUT_FLAG_root_tick_out;
 			}
@@ -71,12 +75,12 @@
 		  ]]></OnSend>
 		</OutputPin>
 
-		<OutputPin name="fake_compute" messageTypeId="empty">
+		<OutputPin name="output" messageTypeId="output" application="true">
 		<OnSend><![CDATA[
 		handler_log(1, "export = %u", deviceState->cycle);
 		handler_export_key_value(0, deviceState->cycle);
 		deviceState->doExport=0;
-		*doSend=false;
+		message->ticks=deviceState->cycle;
 		]]></OnSend>
 		</OutputPin>
 		

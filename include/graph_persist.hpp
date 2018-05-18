@@ -92,20 +92,9 @@ public:
   virtual uint64_t onBeginGraphInstance(
     const GraphTypePtr &graph,
     const std::string &id,
-    const TypedDataPtr &properties
-  ) {
-    throw std::runtime_error("onBeginGraphInstance not implemented.");
-  }
-
-  //! Tells the consumer that a new graph is starting
-  virtual uint64_t onBeginGraphInstance(
-    const GraphTypePtr &graph,
-    const std::string &id,
     const TypedDataPtr &properties,
     rapidjson::Document &&metadata
-  ) {
-    return onBeginGraphInstance(graph, id, properties);
-  }
+  ) =0;
 
   //! The graph is now complete
   virtual void onEndGraphInstance(uint64_t /*graphToken*/)
@@ -127,24 +116,9 @@ public:
    uint64_t graphInst,
    const DeviceTypePtr &dt,
    const std::string &id,
-   const TypedDataPtr &properties
-  ) {
-    throw std::runtime_error("onDeviceInstance not implemented.");
-  }
-
-  // Tells the consumer that a new instance is being added
-  /*! The return value is a unique identifier that means something
-    to the consumer. */
-  virtual uint64_t onDeviceInstance
-  (
-   uint64_t graphInst,
-   const DeviceTypePtr &dt,
-   const std::string &id,
    const TypedDataPtr &properties,
-   rapidjson::Document &&metadata
-  ) {
-    return onDeviceInstance(graphInst, dt, id, properties);
-  }
+   rapidjson::Document &&metadata=rapidjson::Document()
+  ) =0;
 
     //! The edge instances within the graph instance will follow
   virtual void onBeginEdgeInstances(uint64_t /*graphToken*/)
@@ -153,20 +127,6 @@ public:
   //! There will be no more edge instances in the graph.
   virtual void onEndEdgeInstances(uint64_t /*graphToken*/)
   {}
-
-  //! Tells the consumer that the a new edge is being added
-  /*! It is required that both device instances have already been
-    added (otherwise the ids would not been known).
-  */
-  virtual void onEdgeInstance
-  (
-   uint64_t graphInst,
-   uint64_t dstDevInst, const DeviceTypePtr &dstDevType, const InputPinPtr &dstPin,
-   uint64_t srcDevInst,  const DeviceTypePtr &srcDevType, const OutputPinPtr &srcPin,
-   const TypedDataPtr &properties
-  ) {
-    throw std::runtime_error("onEdgeInstance not implemented.");
-  }
 
     //! Tells the consumer that the a new edge is being added
   /*! It is required that both device instances have already been
@@ -178,10 +138,8 @@ public:
    uint64_t dstDevInst, const DeviceTypePtr &dstDevType, const InputPinPtr &dstPin,
    uint64_t srcDevInst,  const DeviceTypePtr &srcDevType, const OutputPinPtr &srcPin,
    const TypedDataPtr &properties,
-   rapidjson::Document &&metadata
-  ) {
-    onEdgeInstance(graphInst, dstDevInst, dstDevType, dstPin, srcDevInst, srcDevType, srcPin, properties);
-  }
+   rapidjson::Document &&metadata=rapidjson::Document()
+  ) =0;
 };
 
 extern "C" void loadGraph(Registry *registry, const std::string &srcPath, xmlpp::Element *elt, GraphLoadEvents *events);

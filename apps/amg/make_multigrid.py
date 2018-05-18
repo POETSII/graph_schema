@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 import pyamg
 import numpy as np
 import scipy.sparse

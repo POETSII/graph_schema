@@ -1,7 +1,9 @@
+#!/usr/bin/env python3
+
 from graph.core import *
 
 from graph.load_xml import load_graph_types_and_instances
-from graph.save_xml import save_graph
+from graph.save_xml_stream import save_graph
 import sys
 import os
 import math
@@ -47,7 +49,7 @@ for i in range(0,5):
         sys.stderr.write("prob[{}] = {} = p\n".format(index,probs[index], p))
 
 properties={
-    "endTime":endTime * 2**20,
+    "endTime":int(endTime * 2**20),
     "width":n,
     "height":n,
     "probabilities":probs

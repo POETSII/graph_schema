@@ -1,4 +1,4 @@
-#!/usr/bin/python3
+#!/usr/bin/env python3
 
 import sys
 import os
@@ -14,7 +14,7 @@ from make_multigrid import MultiGrid
 from graph.core import *
 
 from graph.load_xml import load_graph_types_and_instances
-from graph.save_xml import save_graph
+from graph.save_xml_stream import save_graph
 
 
 def enum_rcv(M):

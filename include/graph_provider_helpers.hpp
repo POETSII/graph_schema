@@ -57,6 +57,21 @@ std::string get_attribute_optional(xmlpp::Element *eParent, const char *name)
   return a->get_value();
 }
 
+bool get_attribute_optional_bool(xmlpp::Element *eParent, const char *name)
+{
+  auto a=get_attribute_optional(eParent, name);
+  if(a.empty()){
+    return false;
+  }
+  if(a=="true" || a=="1"){
+    return true;
+  }
+  if(a=="false" || a=="0"){
+    return false;
+  }
+  throw std::runtime_error("Couldn't interpret '"+a+"' as a bool.");
+}
+
 template<class T>
 const T *cast_typed_properties(const typed_data_t *properties)
 {  return static_cast<const T *>(properties); }
@@ -65,6 +80,24 @@ template<class T>
 T *cast_typed_data(typed_data_t *data)
 {  return static_cast<T *>(data); }
 
+
+
+// Write a round-trippable number
+std::string float_to_string(float x)
+{
+  // https://randomascii.wordpress.com/2012/03/08/float-precisionfrom-zero-to-100-digits-2/
+  char buffer[16]={0};
+  snprintf(buffer, 15, "%.9g", x);
+  return buffer;
+}
+
+std::string float_to_string(double x)
+{
+  // https://randomascii.wordpress.com/2012/03/08/float-precisionfrom-zero-to-100-digits-2/
+  char buffer[32]={0};
+  snprintf(buffer, 31, "%.17g", x);
+  return buffer;
+}
 
 
 class TypedDataSpecImpl
@@ -155,6 +188,7 @@ private:
   std::string m_name;
   unsigned m_index;
   MessageTypePtr m_messageType;
+  bool m_isApplication;
   TypedDataSpecPtr m_propertiesType;
   TypedDataSpecPtr m_stateType;
   std::string m_code;
@@ -166,6 +200,7 @@ protected:
     const std::string &name,
     unsigned index,
     MessageTypePtr messageType,
+    bool isApplication,
     TypedDataSpecPtr propertiesType,
     TypedDataSpecPtr stateType,
     const std::string &code
@@ -174,6 +209,7 @@ protected:
     , m_name(name)
     , m_index(index)
     , m_messageType(messageType)
+    , m_isApplication(isApplication)
     , m_propertiesType(propertiesType)
     , m_stateType(stateType)
     , m_code(code)
@@ -197,6 +233,9 @@ public:
 
   virtual const MessageTypePtr &getMessageType() const override
   { return m_messageType; }
+  
+  virtual bool isApplication() const override
+  { return m_isApplication; }
 
   virtual const TypedDataSpecPtr &getPropertiesSpec() const override
   { return m_propertiesType; }
@@ -221,15 +260,17 @@ private:
   std::string m_name;
   unsigned m_index;
   MessageTypePtr m_messageType;
+  bool m_isApplication;
   std::string m_code;
 
   rapidjson::Document m_metadata;
 protected:
-  OutputPinImpl(std::function<DeviceTypePtr ()> deviceTypeSrc, const std::string &name, unsigned index, MessageTypePtr messageType, const std::string &code)
+  OutputPinImpl(std::function<DeviceTypePtr ()> deviceTypeSrc, const std::string &name, unsigned index, MessageTypePtr messageType, bool isApplication, const std::string &code)
     : m_deviceTypeSrc(deviceTypeSrc)
     , m_name(name)
     , m_index(index)
     , m_messageType(messageType)
+    , m_isApplication(isApplication)
     , m_code(code)
   {
     m_metadata.SetObject();
@@ -250,6 +291,9 @@ public:
 
   virtual const MessageTypePtr &getMessageType() const override
   { return m_messageType; }
+  
+  virtual bool isApplication() const override
+  { return m_isApplication; }
 
   virtual const std::string &getHandlerCode() const override
   { return m_code; }
@@ -295,6 +339,9 @@ private:
   TypedDataSpecPtr m_properties;
   TypedDataSpecPtr m_state;
 
+  std::string m_readyToSendCode;
+  std::string m_sharedCode;
+
   std::vector<InputPinPtr> m_inputsByIndex;
   std::map<std::string,InputPinPtr> m_inputsByName;
 
@@ -329,6 +376,12 @@ public:
 
   virtual const TypedDataSpecPtr &getStateSpec() const override
   { return m_state; }
+
+  virtual const std::string &getReadyToSendCode() const override
+  { return m_readyToSendCode; }
+
+  virtual const std::string &getSharedCode() const override
+  { return m_sharedCode; }
 
   virtual unsigned getInputCount() const override
   { return m_inputsByIndex.size(); }
@@ -466,8 +519,7 @@ public:
 };
 
 
-
-class ReceiveOrchestratorServicesImpl
+class OrchestratorServicesImpl
   : public OrchestratorServices
 {
 private:
@@ -477,27 +529,36 @@ private:
   const char *m_input;
   std::function<void (const char *,uint32_t,uint32_t)> m_onExportKeyValue;
   std::function<void (const char *,int)> m_onApplicationExit;
+  std::function<void (const char *,uint32_t,bool,const char *)> m_onCheckpoint;
 public:
-  ReceiveOrchestratorServicesImpl(
+  OrchestratorServicesImpl(
+    const char *prefix,
     unsigned logLevel, FILE *dst, const char *device, const char *input,
     std::function<void (const char *, uint32_t,uint32_t)> onExportKeyValue, // It is up to application to manage sequence
-    std::function<void (const char *,int)> onApplicationExit
+    std::function<void (const char *,int)> onApplicationExit,
+    std::function<void (const char *,uint32_t,bool,const char *)> onCheckpoint
   )
     : OrchestratorServices(logLevel)
     , m_dst(dst)
-    , m_prefix("Recv: ")
+    , m_prefix(prefix)
     , m_device(device)
     , m_input(input)
     , m_onExportKeyValue(onExportKeyValue)
     , m_onApplicationExit(onApplicationExit)
+    , m_onCheckpoint(onCheckpoint)
   {}
+  
+  static void onCheckpointDefault(const char *,uint32_t,bool,const char *)
+  {
+    // Do nothing
+  }
 
   void setPrefix(const char *prefix)
   {
     m_prefix=prefix;
   }
 
-  void setReceiver(const char *device, const char *input)
+  void setDevice(const char *device, const char *input)
   {
     m_device=device;
     m_input=input;
@@ -512,6 +573,16 @@ public:
     }
   }
   
+  virtual void vcheckpoint(bool preEvent, int level, const char *fmt, va_list args) override
+  {
+    char buffer[256]={0};
+    unsigned p=vsnprintf(buffer, sizeof(buffer)-1, fmt, args);
+    if(p>=sizeof(buffer)-2){
+      throw std::runtime_error("vcheckpoint buffer overflow");
+    }
+    m_onCheckpoint(m_device, preEvent, level, buffer);
+  }
+  
   virtual void export_key_value(uint32_t key, uint32_t value) override
   {
     m_onExportKeyValue(m_device, key, value);
@@ -523,61 +594,42 @@ public:
   }
 };
 
+
+class ReceiveOrchestratorServicesImpl
+  : public OrchestratorServicesImpl
+{
+public:
+  ReceiveOrchestratorServicesImpl(
+    unsigned logLevel, FILE *dst, const char *device, const char *input,
+    std::function<void (const char *, uint32_t,uint32_t)> onExportKeyValue, // It is up to application to manage sequence
+    std::function<void (const char *,int)> onApplicationExit,
+    std::function<void (const char *,uint32_t,bool,const char *)> onCheckpoint = onCheckpointDefault
+  )
+    : OrchestratorServicesImpl(
+        "Recv : ",
+        logLevel,dst,device,input,
+        onExportKeyValue,onApplicationExit,onCheckpoint
+    )
+  {}
+};
+
 // TODO : Fold the services into one class. No reason for separation
 class SendOrchestratorServicesImpl
-  : public OrchestratorServices
+  : public OrchestratorServicesImpl
 {
-private:
-  FILE *m_dst;
-  std::string m_prefix;
-  const char *m_device;
-  const char *m_output;
-
-  std::function<void (const char *,uint32_t,uint32_t)> m_onExportKeyValue;
-  std::function<void (const char *,int)> m_onApplicationExit;
 public:
-  SendOrchestratorServicesImpl(unsigned logLevel, FILE *dst, const char *device, const char *output,
+  SendOrchestratorServicesImpl(
+    unsigned logLevel, FILE *dst, const char *device, const char *input,
     std::function<void (const char *, uint32_t,uint32_t)> onExportKeyValue, // It is up to application to manage sequence
-    std::function<void (const char *,int)> onApplicationExit
+    std::function<void (const char *,int)> onApplicationExit,
+    std::function<void (const char *,uint32_t,bool,const char *)> onCheckpoint = onCheckpointDefault
   )
-    : OrchestratorServices(logLevel)
-    , m_dst(dst)
-    , m_prefix("Send: ")
-    , m_device(device)
-    , m_output(output)
-    , m_onExportKeyValue(onExportKeyValue)
-    , m_onApplicationExit(onApplicationExit)
-  {}
-
-  void setPrefix(const std::string &prefix)
-  {
-    m_prefix=m_prefix;
-  }
-
-  void setSender(const char *device, const char *output)
-  {
-    m_device=device;
-    m_output=output;
-  }
-
-  virtual void vlog(unsigned level, const char *msg, va_list args) override
-  {
-    if(m_logLevel >= level){
-      fprintf(m_dst, "%s%s:%s : ", m_prefix.c_str(), m_device, m_output);
-      vfprintf(m_dst, msg, args);
-      fprintf(m_dst, "\n");
-    }
-  }
-
-  virtual void export_key_value(uint32_t key, uint32_t value) override
-  {
-    m_onExportKeyValue(m_device, key, value);
-  }
-  
-  virtual void application_exit(int code)
-  {
-    m_onApplicationExit(m_device, code);
-  }
+    : OrchestratorServicesImpl(
+        "Send : ",
+        logLevel,dst,device,input,
+        onExportKeyValue,onApplicationExit,onCheckpoint
+    )
+    {}
 };
 
 class HandlerLogImpl
@@ -599,6 +651,44 @@ public:
     }
   }
 };
+
+class provider_assertion_error
+  : public std::runtime_error
+{
+private:
+  const char *m_file;
+  int m_line;
+  const char *m_assertFunc;
+  const char *m_cond;
+
+  static std::string make_what(const char *file, int line, const char *assertFunc,const char *cond)
+  {
+    std::stringstream tmp;
+    tmp<<file<<":"<<line<<": "<<assertFunc<<" Assertion `"<<cond<<"' failed.";
+    return tmp.str();
+  }
+public:
+  provider_assertion_error(const char *file, int line, const char *assertFunc,const char *cond)
+    : std::runtime_error(make_what(file,line,assertFunc,cond))
+    , m_file(file)
+    , m_line(line)
+    , m_assertFunc(assertFunc)
+    , m_cond(cond)
+  {
+
+  }
+};
+
+void handler_assert_func (const char *file, int line, const char *assertFunc,const char *cond)
+{
+  throw provider_assertion_error(file,line,assertFunc,cond);
+}
+
+#ifndef NDEBUG
+#define handler_assert(cond) if(!(cond)){ handler_assert_func(__FILE__,__LINE__,__FUNCTION__,#cond); }
+#else
+#define handler_assert(cond) (void)0
+#endif
 
 class unknown_graph_type_error
   : public std::runtime_error

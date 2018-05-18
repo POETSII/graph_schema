@@ -26,7 +26,7 @@ private:
     State_PostEdgeInstances
   };
   
-  const xmlChar *m_ns=(const xmlChar *)"http://TODO.org/POETS/virtual-graph-schema-v0";
+  const xmlChar *m_ns=(const xmlChar *)"https://poets-project.org/schemas/virtual-graph-schema-v2";
 
 
   
@@ -73,17 +73,186 @@ private:
     if(data){
       std::string json{spec->toJSON(data)};
       if(json.size()>2){ // If it is <=2 it is either empty or just "{}"
-	assert(json[json.size()-1]=='}');
-	assert(json[0]=='{');
-	
-	json.resize(json.size()-1); // Chop off the final '}'. Probably no realloc
+        assert(json[json.size()-1]=='}');
+        assert(json[0]=='{');
+        
+        json.resize(json.size()-1); // Chop off the final '}'. Probably no realloc
 
-	// The +1 skips over the first '{'
+        // The +1 skips over the first '{'
         xmlTextWriterStartElement(m_dst, (const xmlChar *)name);
         xmlTextWriterWriteRaw(m_dst, (const xmlChar *)(json.c_str()+1));
         xmlTextWriterEndElement(m_dst);
       }
     }
+  }
+
+  void writeInputPin(InputPinPtr ip)
+  {
+    xmlTextWriterStartElement(m_dst, (const xmlChar *)"InputPin");
+    xmlTextWriterWriteAttribute(m_dst, (const xmlChar *)"name", (const xmlChar *)ip->getName().c_str() );
+    xmlTextWriterWriteAttribute(m_dst, (const xmlChar *)"messageTypeId", (const xmlChar *)ip->getMessageType()->getId().c_str() );
+    if(ip->isApplication()){
+      xmlTextWriterWriteAttribute(m_dst, (const xmlChar *)"application", "true" );
+    }
+
+    writeMetaData(ip->getMetadata(), "MetaData");
+
+    writeTypedDataSpec(ip->getPropertiesSpec(), "Properties");
+
+    writeTypedDataSpec(ip->getStateSpec(), "State");
+
+    xmlTextWriterStartElement(m_dst, (const xmlChar *)"OnReceive");
+    xmlTextWriterWriteCDATA(m_dst, (const xmlChar *)ip->getHandlerCode().c_str());
+    xmlTextWriterEndElement(m_dst);
+
+    xmlTextWriterEndElement(m_dst);
+  }
+
+  void writeOutputPin(OutputPinPtr op)
+  {
+    xmlTextWriterStartElement(m_dst, (const xmlChar *)"OutputPin");
+    xmlTextWriterWriteAttribute(m_dst, (const xmlChar *)"name", (const xmlChar *)op->getName().c_str() );
+    xmlTextWriterWriteAttribute(m_dst, (const xmlChar *)"messageTypeId", (const xmlChar *)op->getMessageType()->getId().c_str() );
+    
+    if(op->isApplication()){
+      xmlTextWriterWriteAttribute(m_dst, (const xmlChar *)"application", "true" );
+    }
+
+    writeMetaData(op->getMetadata(), "MetaData");
+
+    xmlTextWriterStartElement(m_dst, (const xmlChar *)"OnSend");
+    xmlTextWriterWriteCDATA(m_dst, (const xmlChar *)op->getHandlerCode().c_str());
+    xmlTextWriterEndElement(m_dst);
+
+    xmlTextWriterEndElement(m_dst);
+  }
+
+  void writeDeviceType(DeviceTypePtr deviceType)
+  {
+    xmlTextWriterStartElement(m_dst, (const xmlChar *)"DeviceType");
+
+    xmlTextWriterWriteAttribute(m_dst, (const xmlChar *)"id", (const xmlChar *)deviceType->getId().c_str() );
+
+    writeTypedDataSpec(deviceType->getPropertiesSpec(), "Properties");
+
+    xmlTextWriterStartElement(m_dst, (const xmlChar *)"ReadyToSend");
+    xmlTextWriterWriteCDATA(m_dst, (const xmlChar *)deviceType->getReadyToSendCode().c_str());
+    xmlTextWriterEndElement(m_dst);
+
+    auto sharedCode=deviceType->getSharedCode();
+    if(!sharedCode.empty()){
+      xmlTextWriterStartElement(m_dst, (const xmlChar *)"SharedCode");
+      xmlTextWriterWriteCDATA(m_dst, (const xmlChar *)sharedCode.c_str());
+      xmlTextWriterEndElement(m_dst);
+    }
+
+    writeMetaData(deviceType->getMetadata(), "MetaData");
+
+    for(auto ip : deviceType->getInputs()){
+      writeInputPin(ip);
+    }
+
+    for(auto op : deviceType->getOutputs()){
+      writeOutputPin(op);
+    }
+
+    xmlTextWriterEndElement(m_dst);
+  }
+
+  void writeMessageType(MessageTypePtr messageType)
+  {
+    xmlTextWriterStartElement(m_dst, (const xmlChar *)"MessageType");
+    xmlTextWriterWriteAttribute(m_dst, (const xmlChar *)"id", (const xmlChar *)messageType->getId().c_str() );
+
+    writeTypedDataSpec(messageType->getMessageSpec(), "Message");
+
+    writeMetaData(messageType->getMetadata(), "MetaData");
+
+    xmlTextWriterEndElement(m_dst);
+  }
+
+  std::string getTypedDataSpecElementScalarDefault(std::shared_ptr<TypedDataSpecElementScalar> e)
+  {
+    rapidjson::Document defDoc;
+    auto defVal=e->getJSONDefault(defDoc.GetAllocator());
+    
+    rapidjson::StringBuffer buffer;
+    rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
+    defVal.Accept(writer);
+
+    std::string defStr=buffer.GetString();
+
+    return defStr;
+  }
+
+  void writeTypedDataSpecElementScalar(std::shared_ptr<TypedDataSpecElementScalar> e)
+  {
+    xmlTextWriterStartElement(m_dst, (const xmlChar *)"Scalar");
+    xmlTextWriterWriteAttribute(m_dst, (const xmlChar *)"name", (const xmlChar *)e->getName().c_str()); 
+    xmlTextWriterWriteAttribute(m_dst, (const xmlChar *)"type", (const xmlChar *)e->getTypeName().c_str()); 
+    
+    auto defStr=getTypedDataSpecElementScalarDefault(e);
+    xmlTextWriterWriteAttribute(m_dst, (const xmlChar *)"default", (const xmlChar *)defStr.c_str()); 
+
+    xmlTextWriterEndElement(m_dst);
+  }
+
+  void writeTypedDataSpecElementTuple(std::shared_ptr<TypedDataSpecElementTuple> e)
+  {
+    xmlTextWriterStartElement(m_dst, (const xmlChar *)"Tuple");
+    xmlTextWriterWriteAttribute(m_dst, (const xmlChar *)"name", (const xmlChar *)e->getName().c_str()); 
+
+    for(auto elt : *e){
+      writeTypedDataSpecElement(elt);
+    }
+
+    xmlTextWriterEndElement(m_dst);
+  }
+
+  void writeTypedDataSpecElementArray(std::shared_ptr<TypedDataSpecElementArray> e)
+  {
+    xmlTextWriterStartElement(m_dst, (const xmlChar *)"Tuple");
+    xmlTextWriterWriteAttribute(m_dst, (const xmlChar *)"name", (const xmlChar *)e->getName().c_str()); 
+    xmlTextWriterWriteFormatAttribute(m_dst, (const xmlChar *)"length", "%u", e->getElementCount()); 
+
+    auto eltType=e->getElementType();
+    if(eltType->isScalar()){
+      auto et=std::dynamic_pointer_cast<TypedDataSpecElementScalar>(eltType);
+      xmlTextWriterWriteAttribute(m_dst, (const xmlChar *)"type", (const xmlChar *)et->getTypeName().c_str()); 
+      auto defStr=getTypedDataSpecElementScalarDefault(et);
+      xmlTextWriterWriteAttribute(m_dst, (const xmlChar *)"default", (const xmlChar *)defStr.c_str()); 
+    }else{
+      writeTypedDataSpecElement(eltType);
+    }
+
+    xmlTextWriterEndElement(m_dst);
+  }
+
+   void writeTypedDataSpecElement(std::shared_ptr<TypedDataSpecElement> e)
+  {
+    if(e->isTuple()){
+      writeTypedDataSpecElementTuple(std::dynamic_pointer_cast<TypedDataSpecElementTuple>(e));
+    }else if(e->isScalar()){
+      writeTypedDataSpecElementScalar(std::dynamic_pointer_cast<TypedDataSpecElementScalar>(e));
+    }else if(e->isArray()){
+      writeTypedDataSpecElementArray(std::dynamic_pointer_cast<TypedDataSpecElementArray>(e));
+    }else if(e->isUnion()){
+      throw std::runtime_error("Union not implemented.");
+    }else{
+      throw std::runtime_error("Unknown typed data spec component type.");
+    }
+  }
+
+  void writeTypedDataSpec(TypedDataSpecPtr spec, const char *name)
+  {
+    xmlTextWriterStartElement(m_dst, (const xmlChar *)name);
+
+    std::shared_ptr<TypedDataSpecElementTuple> elements=spec->getTupleElement();
+    for(auto e : *elements){
+      writeTypedDataSpecElement(e);
+    }
+
+    xmlTextWriterEndElement(m_dst);
   }
   
   void writeMetaData(const rapidjson::Document &data, const char *name)
@@ -134,6 +303,38 @@ public:
   
   virtual bool parseMetaData() const override
   { return m_parseMetaData; }
+
+
+  virtual void onGraphType(const GraphTypePtr &graphType) override
+  {
+    xmlTextWriterStartElement(m_dst, (const xmlChar *)"GraphType");
+    xmlTextWriterWriteAttribute(m_dst, (const xmlChar *)"id", (const xmlChar *)graphType->getId().c_str() );
+
+    writeTypedDataSpec(graphType->getPropertiesSpec(), "Properties");
+
+    auto sharedCode=graphType->getSharedCode();
+    if(!sharedCode.empty()){
+      xmlTextWriterStartElement(m_dst, (const xmlChar *)"SharedCode");
+      xmlTextWriterWriteCDATA(m_dst, (const xmlChar *)sharedCode.c_str());
+      xmlTextWriterEndElement(m_dst);
+    }
+
+    writeMetaData(graphType->getMetadata(), "MetaData");
+
+    xmlTextWriterStartElement(m_dst, (const xmlChar *)"MessageTypes");
+    for(unsigned i=0; i<graphType->getMessageTypeCount(); i++){
+      writeMessageType(graphType->getMessageType(i));
+    }
+    xmlTextWriterEndElement(m_dst);
+
+    xmlTextWriterStartElement(m_dst, (const xmlChar *)"DeviceTypes");
+    for(unsigned i=0; i<graphType->getDeviceTypeCount(); i++){
+      writeDeviceType(graphType->getDeviceType(i));
+    }
+    xmlTextWriterEndElement(m_dst);
+
+    xmlTextWriterEndElement(m_dst);
+  }
   
   virtual uint64_t onBeginGraphInstance(
     const GraphTypePtr &graphType,
@@ -289,9 +490,13 @@ public:
 
 }; // detail
 
-std::shared_ptr<GraphLoadEvents> createSAXWriterOnFile(const std::string &path)
+std::shared_ptr<GraphLoadEvents> createSAXWriterOnFile(const std::string &path, bool compress=false)
 {
-  xmlTextWriterPtr dst=xmlNewTextWriterFilename(path.c_str(), 0);
+  if(path.size() > 3 && path.substr(path.size()-3)==".gz" ){
+    compress=true;
+  }
+
+  xmlTextWriterPtr dst=xmlNewTextWriterFilename(path.c_str(), compress?1:0);
   if(!dst)
     throw std::runtime_error("createSAXWriterOnFile("+path+") - Couldn't create xmlTextWriter");
 

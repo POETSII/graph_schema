@@ -9,10 +9,10 @@ __pycache__/
 # Emacs
 *~
 
-demos
-bin
-providers
-.vagrant
+/demos
+/bin
+/providers
+/.vagrant
 
 # OS X profiling
 instruments*.trace
@@ -24,3 +24,10 @@ instruments*.trace
 /CMakeFiles
 /external/rng-svg
 /pypy-env
+
+/*.xml
+/*.gz
+/*.elf
+/*.svg
+/*.dot
+.mypy_cache

@@ -15,8 +15,15 @@ def render_typed_data_as_decl(proto,dst,indent=""):
             render_typed_data_as_decl(elt,dst,indent+"  ")
         dst.write("{}}} {};\n".format(indent,proto.name));
     elif isinstance(proto,ArrayTypedDataSpec):
-        assert isinstance(proto.type,ScalarTypedDataSpec), "Haven't implemented arrays of non-scalars yet."
-        dst.write("{}{} {}[{}];\n".format(indent, proto.type.type, proto.name, proto.length));
+        if isinstance(proto.type,ScalarTypedDataSpec):
+            dst.write("{}{} {}[{}];\n".format(indent, proto.type.type, proto.name, proto.length));
+        elif isinstance(proto.type,ArrayTypedDataSpec):
+            etype=proto.type
+            if not isinstance(etype.type,ScalarTypedDataSpec):
+                raise RuntimeError("Haven't implemented arrays of arrays of non-scalars yet...")
+            dst.write("{}{} {}[{}][{}];\n".format(indent, etype.type.type, proto.name, proto.length, etype.length))
+        else:
+            raise RuntimeError("Haven't implemented arrays of non-scalars yet.")
     else:
         raise RuntimeError("Unknown data type {}.".format(type(proto)))
 
@@ -37,15 +44,23 @@ def render_typed_data_init(proto,dst,prefix):
         for elt in proto.elements_by_index:
             render_typed_data_init(elt,dst,prefix+proto.name+".")
     elif isinstance(proto,ArrayTypedDataSpec):
-        assert isinstance(proto.type,ScalarTypedDataSpec), "Haven't implemented arrays of non-scalars yet."
-
-        init_val = 0 if proto.type.default is None else proto.type.default
-
-        line = "for (int i=0; i<%d; i++) %s%s[i] = %s;" % (
-            proto.length, prefix, proto.name, init_val)
-
-        dst.write(line)
-
+        if isinstance(proto.type,ScalarTypedDataSpec):
+            for i in range(0,proto.length):
+                if proto.type.default is not None:
+                    dst.write('{}{}[{}] = {};\n'.format(prefix,proto.name,i,proto.type.default))
+                else:
+                    dst.write('{}{}[{}] = 0;\n'.format(prefix,proto.name,i))
+        elif isinstance(proto.type,ArrayTypedDataSpec):
+            etype=proto.type
+            if not isinstance(etype.type,ScalarTypedDataSpec):
+                raise RuntimeError("Haven't implemented arrays of arrays of non-scalars yet...")
+            val = etype.type.default or "0"
+            # TODO : embedd a for-loop?
+            for i in range(0,proto.length):
+                for j in range(0,etype.length):
+                    dst.write('{}{}[{}][{}] = {};\n'.format(prefix,proto.name,i,j,val))
+        else:
+            raise RuntimeError("Haven't implemented arrays of complicated non-scalars yet.")
     else:
         raise RuntimeError("Unknown data type {}.".format(type(proto)))
 
@@ -58,13 +73,16 @@ def render_typed_data_add_hash(proto,dst,prefix):
         for elt in proto.elements_by_index:
             render_typed_data_add_hash(elt,dst,prefix+proto.name+".")
     elif isinstance(proto,ArrayTypedDataSpec):
-        assert isinstance(proto.type,ScalarTypedDataSpec), "Haven't implemented arrays of non-scalars yet."
-
-        line = "  for (int i=0; i<%d; i++) hash.add(%s%s[i]);" % (
-            proto.length, prefix, proto.name)
-
-        dst.write(line)
-
+        if isinstance(proto.type,ScalarTypedDataSpec):
+            for i in range(0,proto.length):
+                dst.write('  hash.add({}{}[{}]);\n'.format(prefix,proto.name,i))
+        elif isinstance(proto.type,ArrayTypedDataSpec) and isinstance(proto.type.type,ScalarTypedDataSpec):
+            for i in range(0,proto.length):
+                for j in range(proto.type.length):
+                    dst.write('  hash.add({}{}[{}][{}]);\n'.format(prefix,proto.name,i,j))
+        
+        else:
+            raise RuntimeError("Haven't implemented arrays of non-scalars yet.")
     else:
         raise RuntimeError("Unknown data type {}.".format(type(proto)))
 
@@ -82,31 +100,59 @@ def render_typed_data_load_v4_tuple(proto,dst,prefix,indent):
             elif elt.type=="uint64_t" or elt.type=="uint32_t" or elt.type=="uint16_t" or elt.type=="uint8_t":
                 dst.write('{}  {}{}=n.GetUint();\n'.format(indent, prefix, elt.name))
 
-            elif elt.type=="float":
+            elif elt.type=="float" or elt.type=="double":
                 dst.write('{}  {}{}=n.GetDouble();\n'.format(indent, prefix, elt.name))
             else:
                 raise RuntimeError("Unknown scalar data type.")
         elif isinstance(elt,TupleTypedDataSpec):
             render_typed_data_load_v4_tuple(elt,dst,prefix+elt.name+".",indent+"    ")
         elif isinstance(elt,ArrayTypedDataSpec):
-            assert isinstance(elt.type,ScalarTypedDataSpec), "Haven't implemented non-scalar arrays yet."
             dst.write('{}  assert(n.IsArray());\n')
+            if isinstance(elt.type,ScalarTypedDataSpec):
+                for i in range(0,elt.length):
+                    if elt.type.type=="int64_t" or elt.type.type=="int32_t" or elt.type.type=="int16_t" or elt.type.type=="int8_t" or elt.type=="char":
+                        dst.write('{}  assert(n[{}].IsInt());\n'.format(indent,i))
+                        dst.write('{}  {}{}[{}]=n[{}].GetInt();\n'.format(indent, prefix, elt.name,i,i))
 
-            float_types = ["float"]
-            signed_types = ["int64_t", "int32_t", "int16_t", "int8_t", "char"]
-            unsigned_types = ["uint64_t", "uint32_t", "uint16_t", "uint8_t"]
+                    elif elt.type.type=="uint64_t" or elt.type.type=="uint32_t" or elt.type.type=="uint16_t" or elt.type.type=="uint8_t":
+                        dst.write('{}  assert(n[{}].IsUint());\n'.format(indent,i))
+                        dst.write('{}  {}{}[{}]=n[{}].GetUint();\n'.format(indent, prefix,elt.name,i,i))
 
-            if not elt.type.type in (float_types + signed_types + unsigned_types):
-                raise RuntimeError("Unknown scalar data type.")
+                    elif elt.type.type=="float" or elt.type.type=="double":
+                        dst.write('{}  assert(n[{}].IsDouble());\n'.format(indent,i))
+                        dst.write('{}  {}{}[{}]=n[{}].GetDouble();\n'.format(indent, prefix,elt.name,i,i))
+                    else:
+                        raise RuntimeError("Unknown scalar data type.")
+            elif isinstance(elt.type,ArrayTypedDataSpec):
+                etype=elt.type
+                if not isinstance(etype.type,ScalarTypedDataSpec):
+                    raise RuntimeError("Haven't implemented arrays of arrays of non-scalars yet...")
+                dst.write("""
+{indent}for(unsigned i=0; i<{}; i++){{
+{indent}  auto &x=n[i];
+{indent}  assert(x.IsArray());
+{indent}  for(unsigned j=0; j<{}; j++){{
+{indent}    auto &y=x[j];
+""".format(elt.length, etype.length, indent=indent))
+                if etype.type.type=="int64_t" or etype.type.type=="int32_t" or etype.type.type=="int16_t" or etype.type.type=="int8_t" or elt.type=="char":
+                    dst.write('{indent}    assert(y.IsInt());\n'.format(indent=indent))
+                    dst.write('{indent}    {}{}[i][j]=y.GetInt();\n'.format(prefix, elt.name,indent=indent))
 
-            if elt.type.type in float_types:      is_func, get_func = "IsDouble()", "GetDouble()"
-            elif elt.type.type in signed_types:   is_func, get_func = "IsInt()", "GetInt()"
-            elif elt.type.type in unsigned_types: is_func, get_func = "IsUint()", "GetUint()"
+                elif etype.type.type=="uint64_t" or etype.type.type=="uint32_t" or etype.type.type=="uint16_t" or etype.type.type=="uint8_t":
+                    dst.write('{indent}    assert(y.IsUint());\n'.format(indent=indent))
+                    dst.write('{indent}    {}{}[i][j]=y.GetUint();\n'.format(prefix,elt.name,indent=indent))
 
-            dst.write("%sfor (int i=0; i<%d; i++) {" % (indent, elt.length))
-            dst.write('{}  assert(n[i].{});\n'.format(indent, is_func))
-            dst.write('{}  {}{}[i]=n[i].{};\n'.format(indent, prefix, elt.name, get_func))
-            dst.write('%s}' % indent)
+                elif etype.type.type=="float" or etype.type.type=="double":
+                    dst.write('{indent}    assert(y.IsDouble());\n'.format(indent=indent))
+                    dst.write('{indent}    {}{}[i][j]=y.GetDouble();\n'.format(prefix,elt.name,indent=indent))
+                else:
+                    raise RuntimeError("Unknown scalar data type.")
+                dst.write("""
+{indent}  }}
+{indent}}}
+""".format(indent=indent))
+            else:
+                raise RuntimeError("Haven't implemented non-scalar arrays yet.")
         else:
             raise RuntimeError("Unknown data type.")
         dst.write('{}  }}\n'.format(indent))
@@ -140,33 +186,46 @@ def render_typed_data_save(proto, dst, prefix, indent):
     if isinstance(proto,ScalarTypedDataSpec):
 
         if proto.type=="uint64_t" or proto.type=="uint32_t" or proto.type=="uint16_t" or proto.type=="uint8_t":
-            dst.write('{}if({}{} != {}){{ if(sep){{ dst<<","; }}; dst<<"\\"{}\\":"<<(uint32_t){}{}; sep=true; }}\n'.format(indent, prefix, proto.name, proto.default, proto.name, prefix, proto.name))
+            dst.write('{}if({}{} != {}){{ if(sep){{ dst<<","; }}; dst<<"\\"{}\\":"<<(uint64_t){}{}; sep=true; }}\n'.format(indent, prefix, proto.name, proto.default, proto.name, prefix, proto.name))
         elif proto.type=="int64_t" or proto.type=="int32_t" or proto.type=="int16_t" or proto.type=="int8_t":
-            dst.write('{}if({}{} != {}){{ if(sep){{ dst<<","; }}; dst<<"\\"{}\\":"<<(int32_t){}{}; sep=true; }}\n'.format(indent, prefix, proto.name, proto.default, proto.name, prefix, proto.name))
+            dst.write('{}if({}{} != {}){{ if(sep){{ dst<<","; }}; dst<<"\\"{}\\":"<<(int64_t){}{}; sep=true; }}\n'.format(indent, prefix, proto.name, proto.default, proto.name, prefix, proto.name))
+        elif proto.type=="float" or proto.type=="double":
+            dst.write('{}if({}{} != {}){{ if(sep){{ dst<<","; }}; dst<<"\\"{}\\":"<<float_to_string({}{}); sep=true; }}\n'.format(indent, prefix, proto.name, proto.default, proto.name, prefix, proto.name))
         else:
             dst.write('{}if({}{} != {}){{ if(sep){{ dst<<","; }}; dst<<"\\"{}\\":"<<{}{}; sep=true; }}\n'.format(indent, prefix, proto.name, proto.default, proto.name, prefix, proto.name))
 
 
     elif isinstance(proto,ArrayTypedDataSpec):
-
-        assert isinstance(proto.type,ScalarTypedDataSpec), "Haven't implemented non-scalar arrays yet."
-        dst.write('{}if(sep){{ dst<<","; }}; dst<<"\\"{}\\":[";'.format(indent,proto.name))
-
-        args = {"plen": str(proto.length), "prefix": prefix,
-                "pnam": proto.name}
-
-        lines = [
-            "for (int i=0; i<{plen}; i++) {{",
-            "  if (i>0) dst<<\",\";",
-            "  dst<<{prefix}{pnam}[i];",
-            "}}"
-        ]
-
-        for line in lines:
-            dst.write(indent + line.format(**args))
-
-        dst.write('{}dst<<"]"; sep=true;\n'.format(indent))
-
+        if isinstance(proto.type,ScalarTypedDataSpec):
+            dst.write('{}if(sep){{ dst<<","; }}; dst<<"\\"{}\\":[";'.format(indent,proto.name))
+            for i in range(proto.length):
+                if i>0:
+                    dst.write('{}  dst<<",";\n'.format(indent))
+                if proto.type.type=="float" or proto.type.type=="double":
+                    dst.write('{}  dst<<float_to_string({}{}[{}]);\n'.format(indent, prefix, proto.name, i))
+                else:
+                    dst.write('{}  dst<<{}{}[{}];\n'.format(indent, prefix, proto.name, i))
+            dst.write('{}dst<<"]"; sep=true;\n'.format(indent))
+        elif isinstance(proto.type,ArrayTypedDataSpec):
+            etype=proto.type
+            if not isinstance(etype.type,ScalarTypedDataSpec):
+                raise RuntimeError("Haven't implemented arrays of arrays of non-scalars yet...")
+            dst.write('{}if(sep){{ dst<<","; }}; dst<<"\\"{}\\":[";'.format(indent,proto.name))
+            for i in range(proto.length):
+                if i>0:
+                    dst.write('{}  dst<<",";\n'.format(indent))
+                dst.write('{}  dst<<"[";\n'.format(indent))
+                for j in range(etype.length):
+                    if j>0:
+                        dst.write('{}  dst<<",";\n'.format(indent))
+                    if proto.type.type=="float" or proto.type.type=="double":
+                        dst.write('{}  dst<<float_to_string({}{}[{}][{}]);\n'.format(indent, prefix, proto.name, i,j))
+                    else:
+                        dst.write('{}  dst<<{}{}[{}][{}];\n'.format(indent, prefix, proto.name, i,j))
+                dst.write('{}  dst<<"]";\n'.format(indent))
+            dst.write('{}dst<<"]"; sep=true;\n'.format(indent))
+        else:
+            raise RuntimeError("Haven't implemented non-scalar arrays yet.")
     elif isinstance(proto,TupleTypedDataSpec):
         dst.write('{}if(sep){ dst<<","; } sep=true;\n'.format(indent))
         dst.write('{}{{ bool sep=false;\n'.format(indent))
@@ -177,6 +236,28 @@ def render_typed_data_save(proto, dst, prefix, indent):
         dst.write('{}}}'.format(indent))
     else:
         assert False, "Unknown data-type"
+
+def render_typed_data_as_elements(proto, dst, prefix):
+    if proto is None:
+        dst.write('{}makeTuple("_",{{}})\n'.format(prefix))
+    elif isinstance(proto,ScalarTypedDataSpec):
+        dst.write('{}makeScalar("{}","{}","{}")\n'.format(prefix,proto.name,proto.type, proto.default or 0))
+    elif isinstance(proto,TupleTypedDataSpec):
+        dst.write('{}makeTuple("{}",{{\n'.format(prefix,proto.name))
+        first=True
+        for elt in proto.elements_by_index:
+            if first:
+                first=False
+            else:
+                dst.write("{},\n".format(prefix))
+            render_typed_data_as_elements(elt, dst, prefix+"  ")
+        dst.write('{}}})\n'.format(prefix))
+    elif isinstance(proto,ArrayTypedDataSpec):
+        dst.write('{}makeArray("{}",{},\n'.format(prefix,proto.name,proto.length))
+        render_typed_data_as_elements(proto.type, dst, prefix+"  ")
+        dst.write("{})\n".format(prefix))
+    else:
+        assert False, "Unknown data-type, {}".format(proto)
 
 
 def render_typed_data_as_spec(proto,name,elt_name,dst,asHeader=False):
@@ -194,7 +275,15 @@ def render_typed_data_as_spec(proto,name,elt_name,dst,asHeader=False):
         return
 
     dst.write("class {}_Spec : public TypedDataSpec {{\n".format(name))
+    dst.write("private:\n")
+    dst.write("  std::shared_ptr<TypedDataSpecElementTuple> m_tupleElt;\n")
     dst.write("public:\n")
+    dst.write("  {}_Spec(){{\n".format(name))
+    dst.write("    m_tupleElt=\n".format(name))
+    render_typed_data_as_elements(proto, dst,"      ")
+    dst.write("    ;\n")
+    dst.write("  }\n")
+    dst.write("  std::shared_ptr<TypedDataSpecElementTuple> getTupleElement() override { return m_tupleElt; }\n")
     dst.write("  size_t totalSize() const override {{ return sizeof({})-sizeof(typed_data_t); }}\n".format(name))
     dst.write("  size_t payloadSize() const override {{ return sizeof({}); }}\n".format(name))
     dst.write("  TypedDataPtr create() const override {\n")
@@ -282,21 +371,29 @@ def emit_device_global_constants(dt,subs,indent):
 {indent}const unsigned OUTPUT_FLAG_{deviceTypeId}_{currPinName}=1ul<<{currPinIndex};
 {indent}const unsigned RTS_INDEX_{deviceTypeId}_{currPinName}={currPinIndex};
 {indent}const unsigned RTS_FLAG_{deviceTypeId}_{currPinName}=1ul<<{currPinIndex};
-{indent}const unsigned OUTPUT_INDEX_{currPinName}={currPinIndex};
-{indent}const unsigned OUTPUT_FLAG_{currPinName}=1ul<<{currPinIndex};
-{indent}const unsigned RTS_INDEX_{currPinName}={currPinIndex};
-{indent}const unsigned RTS_FLAG_{currPinName}=1ul<<{currPinIndex};
 """.format(currPinName=ip.name,currPinIndex=currPinIndex,**subs)
         currPinIndex+=1
 
     return res
 
 def emit_device_local_constants(dt,subs,indent=""):
-    return """
+    res="""
 {indent}typedef {graphPropertiesStructName} GRAPH_PROPERTIES_T;
 {indent}typedef {devicePropertiesStructName} DEVICE_PROPERTIES_T;
 {indent}typedef {deviceStateStructName} DEVICE_STATE_T;
 """.format(**subs)
+
+    currPinIndex=0
+    for ip in dt.outputs_by_index:
+        res=res+"""
+{indent}const unsigned OUTPUT_INDEX_{currPinName}={currPinIndex};
+{indent}const unsigned OUTPUT_FLAG_{currPinName}=1ul<<{currPinIndex};
+{indent}const unsigned RTS_INDEX_{currPinName}={currPinIndex};
+{indent}const unsigned RTS_FLAG_{currPinName}=1ul<<{currPinIndex};
+""".format(currPinName=ip.name,currPinIndex=currPinIndex,**subs)
+        currPinIndex+=1
+        
+    return res
 
 def emit_input_pin_local_constants(dt,subs,indent=""):
     return """
@@ -327,6 +424,7 @@ def render_input_pin_as_cpp(ip,dst):
         "devicePropertiesStructName"    : "{}_properties_t".format(dt.id),
         "deviceStateStructName"         : "{}_state_t".format(dt.id),
         "messageTypeId"                 : mt.id,
+        "isApplication"                 : "true" if ip.is_application else "false",
         "messageStructName"             : "{}_message_t".format(mt.id),
         "pinName"                      : ip.name,
         "pinIndex"                     : index,
@@ -338,8 +436,6 @@ def render_input_pin_as_cpp(ip,dst):
         "indent"                        : "  "
     }
 
-    subs["deviceGlobalConstants"]=emit_device_global_constants(dt,subs,"    ")
-    subs["deviceLocalConstants"]=emit_device_local_constants(dt,subs, "    ")
     subs["pinLocalConstants"]=emit_input_pin_local_constants(dt,subs, "    ")
 
 
@@ -363,6 +459,7 @@ public:
         "{pinName}",
         {pinIndex},
         {messageTypeId}_Spec_get(),
+        {isApplication},
         {pinPropertiesStructName}_Spec_get(),
         {pinStateStructName}_Spec_get(),
         {deviceTypeId}_{pinName}_handler_code
@@ -378,8 +475,6 @@ public:
         const typed_data_t *gMessage
     ) const override {{
 
-    {deviceGlobalConstants}
-    {deviceLocalConstants}
     {pinLocalConstants}
 
     auto graphProperties=cast_typed_properties<{graphPropertiesStructName}>(gGraphProperties);
@@ -391,7 +486,12 @@ public:
     HandlerLogImpl handler_log(orchestrator);
     auto handler_exit=[&](int code) -> void {{ orchestrator->application_exit(code); }};
     auto handler_export_key_value=[&](uint32_t key, uint32_t value) -> void {{ orchestrator->export_key_value(key, value); }};
-
+    auto handler_checkpoint=[&](bool preEvent, int level, const char *fmt, ...) -> void {{
+        va_list a;
+        va_start(a,fmt);
+        orchestrator->vcheckpoint(preEvent,level,fmt,a);
+        va_end(a);
+    }};
 
     // Begin custom handler
     {preProcLinePragma}
@@ -428,6 +528,7 @@ def render_output_pin_as_cpp(op,dst):
         "deviceStateStructName"         : "{}_state_t".format(dt.id),
         "messageTypeId"                 : mt.id,
         "messageStructName"             : "{}_message_t".format(mt.id),
+        "isApplication"                 : "true" if op.is_application else "false",
         "pinName"                      : op.name,
         "pinIndex"                     : index,
         "pinPropertiesStructName"       : "{}_{}_properties_t".format(dt.id,op.name),
@@ -438,8 +539,6 @@ def render_output_pin_as_cpp(op,dst):
         "indent"                        : "  "
     }
 
-    subs["deviceGlobalConstants"]=emit_device_global_constants(dt,subs,"    ")
-    subs["deviceLocalConstants"]=emit_device_local_constants(dt,subs, "    ")
     subs["pinLocalConstants"]=emit_output_pin_local_constants(dt,subs, "    ")
 
 
@@ -454,7 +553,7 @@ def render_output_pin_as_cpp(op,dst):
     dst.write('static const char *{}_{}_handler_code=R"CDATA({})CDATA";\n'.format(dt.id, op.name, op.send_handler))
 
     dst.write("class {}_{}_Spec : public OutputPinImpl {{\n".format(dt.id,op.name))
-    dst.write('  public: {}_{}_Spec() : OutputPinImpl({}_Spec_get, "{}", {}, {}_Spec_get(), {}_{}_handler_code) {{}} \n'.format(dt.id,op.name, dt.id, op.name, index, op.message_type.id, dt.id, op.name))
+    dst.write('  public: {}_{}_Spec() : OutputPinImpl({}_Spec_get, "{}", {}, {}_Spec_get(), {}, {}_{}_handler_code) {{}} \n'.format(dt.id,op.name, dt.id, op.name, index, op.message_type.id, "true" if op.is_application else "false", dt.id, op.name))
     dst.write("""    virtual void onSend(
                       OrchestratorServices *orchestrator,
                       const typed_data_t *gGraphProperties,
@@ -463,8 +562,6 @@ def render_output_pin_as_cpp(op,dst):
 		      typed_data_t *gMessage,
 		      bool *doSend
 		      ) const override {""")
-    dst.write('    {deviceGlobalConstants}\n'.format(**subs));
-    dst.write('    {deviceLocalConstants}\n'.format(**subs));
     dst.write('    {pinLocalConstants}\n'.format(**subs));
 
     dst.write('    auto graphProperties=cast_typed_properties<{}_properties_t>(gGraphProperties);\n'.format( graph.id ))
@@ -473,7 +570,15 @@ def render_output_pin_as_cpp(op,dst):
     dst.write('    auto message=cast_typed_data<{}_message_t>(gMessage);\n'.format(op.message_type.id))
     dst.write('    HandlerLogImpl handler_log(orchestrator);\n')
     dst.write('    auto handler_exit=[&](int code) -> void { orchestrator->application_exit(code); };\n')
-    dst.write('    auto handler_export_key_value=[&](uint32_t key, uint32_t value) -> void { orchestrator->export_key_value(key, value); };\n')
+    dst.write('    auto handler_export_key_value=[&](uint32_t key, uint32_t value) -> void { orchestrator->export_key_value(key, value); };\n')   
+    dst.write("""
+    auto handler_checkpoint=[&](bool preEvent, int level, const char *fmt, ...) -> void {
+        va_list a;
+        va_start(a,fmt);
+        orchestrator->vcheckpoint(preEvent,level,fmt,a);
+        va_end(a);
+    };
+""")
 
     dst.write('    // Begin custom handler\n')
     if op.source_line and op.source_file:
@@ -512,7 +617,29 @@ def render_device_type_as_cpp_fwd(dt,dst, asHeader):
         render_typed_data_as_spec(ip.state, "{}_{}_state_t".format(dt.id,ip.name), "pp:State", dst)
 
 def render_device_type_as_cpp(dt,dst):
+    subs={
+        "indent"                        : "    ",
+        "graphPropertiesStructName"     : "{}_properties_t".format(dt.parent.id),
+        "deviceTypeId"                  : dt.id,
+        "devicePropertiesStructName"    : "{}_properties_t".format(dt.id),
+        "deviceStateStructName"         : "{}_state_t".format(dt.id),
+        "handlerCode"                   : dt.ready_to_send_handler,
+        "inputCount"                    : len(dt.inputs),
+        "outputCount"                   : len(dt.outputs)
+    }
+    if dt.ready_to_send_source_line and dt.ready_to_send_source_file:
+        subs["preProcLinePragma"]= '#line {} "{}"\n'.format(dt.ready_to_send_source_line-1,dt.ready_to_send_source_file)
+    else:
+        subst["preProcLinePragma"]="// No line/file information for handler"
+
+    subs["deviceGlobalConstants"]=emit_device_global_constants(dt,subs,"    ")
+    subs["deviceLocalConstants"]=emit_device_local_constants(dt,subs, "    ")
+    
+    
     dst.write("namespace ns_{}{{\n".format(dt.id));
+    
+    dst.write(subs["deviceGlobalConstants"])
+    dst.write(subs["deviceLocalConstants"])
 
     if dt.shared_code:
         for i in dt.shared_code:
@@ -550,24 +677,6 @@ def render_device_type_as_cpp(dt,dst):
     dst.write('}))\n')
     dst.write("  {}\n")
 
-    subs={
-        "indent"                        : "    ",
-        "graphPropertiesStructName"     : "{}_properties_t".format(dt.parent.id),
-        "deviceTypeId"                  : dt.id,
-        "devicePropertiesStructName"    : "{}_properties_t".format(dt.id),
-        "deviceStateStructName"         : "{}_state_t".format(dt.id),
-        "handlerCode"                   : dt.ready_to_send_handler,
-        "inputCount"                    : len(dt.inputs),
-        "outputCount"                   : len(dt.outputs)
-    }
-    if dt.ready_to_send_source_line and dt.ready_to_send_source_file:
-        subs["preProcLinePragma"]= '#line {} "{}"\n'.format(dt.ready_to_send_source_line-1,dt.ready_to_send_source_file)
-    else:
-        subst["preProcLinePragma"]="// No line/file information for handler"
-
-    subs["deviceGlobalConstants"]=emit_device_global_constants(dt,subs,"    ")
-    subs["deviceLocalConstants"]=emit_device_local_constants(dt,subs, "    ")
-
     dst.write(
 """
   virtual uint32_t calcReadyToSend(
@@ -581,9 +690,6 @@ def render_device_type_as_cpp(dt,dst):
     auto deviceState=cast_typed_properties<{deviceStateStructName}>(gDeviceState);
     HandlerLogImpl handler_log(orchestrator);
     // Note: no handler_exit or handler_export_key_value in rts, as it should be side effect free
-
-    {deviceGlobalConstants}
-    {deviceLocalConstants}
 
     uint32_t fReadyToSend=0;
     uint32_t *readyToSend=&fReadyToSend;
@@ -619,6 +725,9 @@ def render_graph_as_cpp(graph,dst, destPath, asHeader=False):
     dst.write('#include "rapidjson/document.h"\n')
 
     render_typed_data_as_spec(gt.properties, "{}_properties_t".format(gt.id),"pp:Properties",dst,asHeader)
+    
+    dst.write("#undef assert")
+    dst.write("#define assert handler_assert\n")
 
     dst.write("/////////////////////////////////\n")
     dst.write("// FWD\n")

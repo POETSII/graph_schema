@@ -1,4 +1,4 @@
-#!/usr/bin/python3
+#!/usr/env python3
 
 raise RuntimeError("Not debugged or tested yet.")
 

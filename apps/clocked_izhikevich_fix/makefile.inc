@@ -26,9 +26,6 @@ demos/clocked_izhikevich_fix/clocked_izhikevich_fix_$1.gif : demos/clocked_izhik
 $(eval $(call softswitch_instance_template,clocked_izhikevich_fix_$1,demos/clocked_izhikevich_fix/clocked_izhikevich_fix_$1.xml,1))
 $(eval $(call softswitch_instance_template,clocked_izhikevich_fix_$1,demos/clocked_izhikevich_fix/clocked_izhikevich_fix_$1.xml,4))
 $(eval $(call softswitch_instance_template,clocked_izhikevich_fix_$1,demos/clocked_izhikevich_fix/clocked_izhikevich_fix_$1.xml,16))
-$(eval $(call softswitch_instance_template,clocked_izhikevich_fix_$1,demos/clocked_izhikevich_fix/clocked_izhikevich_fix_$1.xml,64))
-$(eval $(call softswitch_instance_template,clocked_izhikevich_fix_$1,demos/clocked_izhikevich_fix/clocked_izhikevich_fix_$1.xml,256))
-$(eval $(call softswitch_instance_template,clocked_izhikevich_fix_$1,demos/clocked_izhikevich_fix/clocked_izhikevich_fix_$1.xml,1024))
 	
 ALL_clocked_izhikevich_fix_DEMOS += demos/clocked_izhikevich_fix/clocked_izhikevich_fix_$1.gif
 	
