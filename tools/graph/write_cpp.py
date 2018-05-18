@@ -129,20 +129,21 @@ def render_typed_data_load_v4_tuple(proto,dst,prefix,indent):
         elif isinstance(type,ArrayTypedDataSpec):
             dst.write('{}  assert(n.IsArray());\n')
             if isinstance(type.type,ScalarTypedDataSpec):
+                etype=type.type.type
                 for i in range(0,type.length):
-                    if type.type=="int64_t" or type.type=="int32_t" or type.type=="int16_t" or type.type=="int8_t" or type.type=="char":
+                    if etype=="int64_t" or etype=="int32_t" or etype=="int16_t" or etype=="int8_t" or etype=="char":
                         dst.write('{}  assert(n[{}].IsInt());\n'.format(indent,i))
                         dst.write('{}  {}{}[{}]=n[{}].GetInt();\n'.format(indent, prefix, elt.name,i,i))
 
-                    elif type.type=="uint64_t" or type.type=="uint32_t" or type.type=="uint16_t" or type.type=="uint8_t":
+                    elif etype=="uint64_t" or etype=="uint32_t" or etype=="uint16_t" or etype=="uint8_t":
                         dst.write('{}  assert(n[{}].IsUint());\n'.format(indent,i))
                         dst.write('{}  {}{}[{}]=n[{}].GetUint();\n'.format(indent, prefix,elt.name,i,i))
 
-                    elif type.type=="float" or type.type=="double":
+                    elif etype=="float" or etype=="double":
                         dst.write('{}  assert(n[{}].IsDouble());\n'.format(indent,i))
                         dst.write('{}  {}{}[{}]=n[{}].GetDouble();\n'.format(indent, prefix,elt.name,i,i))
                     else:
-                        raise RuntimeError("Unknown scalar data type.")
+                        raise RuntimeError("Unknown scalar data type {}.".format(etype))
             elif isinstance(type.type,ArrayTypedDataSpec):
                 etype=type.type
                 if not isinstance(type.type,ScalarTypedDataSpec):

@@ -177,6 +177,7 @@ class ArrayTypedDataSpec(TypedDataSpec):
     def __init__(self,name,length,type):
         TypedDataSpec.__init__(self,name)
         self.type=type
+        assert length>0, "Lengths must be greater than 0, as per PIP0007
         self.length=length
 
     def __eq__(self, o):
