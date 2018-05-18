@@ -34,7 +34,7 @@ def print_statistics(dst, baseName, unit, data):
 
 
 # The alignment to pad to for the next cache line
-_cache_line_size=64
+_cache_line_size=32
 
 # This compacts properties and state down into BLOBs, and
 # makes things faster to compile.
@@ -256,7 +256,7 @@ class BLOBHolder:
             self.segments.append( (offset,length,"__pad__") )
     
     # Returns the offset
-    def add(self,name, payload, align=64): #TODO: this is highly wasteful
+    def add(self,name, payload, align=4): 
         self.pad(align) # Always align to 32-bit boundary
         assert isinstance(payload,bytearray)
         assert name not in self.offsets
@@ -652,8 +652,7 @@ def render_graph_instance_as_thread_context(
             0, // rtsFlags
             false, // rtc
             0,  // prev
-            0,   // next
-            {{0}} // pad init
+            0   // next
         }}
         """.format(**diProps))
     dst.write("};\n")
@@ -940,8 +939,7 @@ def render_graph_instance_as_softswitch(gi,dst,num_threads,device_to_thread):
             {},  // pointersAreRelative
             0, // hostBuffer
             0, // hbuf_head
-            0, // hbuf_tail
-            {{0}} // init pad
+            0 // hbuf_tail
         }}\n""".format(ti,graphPropertiesBinding,ti,ti,pointersAreRelative))
         if ti+1<num_threads:
             dst.write(",\n")
