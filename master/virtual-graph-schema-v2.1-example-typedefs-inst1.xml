@@ -1,0 +1,17 @@
+<?xml version="1.0"?>
+<Graphs xmlns="https://poets-project.org/schemas/virtual-graph-schema-v2">
+  <GraphTypeReference
+        id="dt10_graph_schema_typedefs"
+        src="virtual-graph-schema-v2.1-example-typedefs.xml"
+  />
+    
+  <GraphInstance id="inst1" graphTypeId="dt10_graph_schema_typedefs">
+    <DeviceInstances>
+      <DevI id="x" type="dev">
+        <P>"s1":1</P>
+      </DevI>
+    </DeviceInstances>
+    <EdgeInstances>
+    </EdgeInstances>
+  </GraphInstance>
+</Graphs>

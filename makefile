@@ -94,6 +94,8 @@ build-virtual-schema-v1 : derived/virtual-graph-schema-v1.rng derived/virtual-gr
 
 build-virtual-schema-v2 : derived/virtual-graph-schema-v2.rng derived/virtual-graph-schema-v2.xsd
 
+build-virtual-schema-v2.1 : derived/virtual-graph-schema-v2.1.rng derived/virtual-graph-schema-v2.1.xsd
+
 regenerate-random :
 	python3.4 tools/create_random_graph.py 1 > test/virtual/random1.xml
 	python3.4 tools/create_random_graph.py 2 > test/virtual/random2.xml
@@ -101,9 +103,9 @@ regenerate-random :
 	python3.4 tools/create_random_graph.py 8 > test/virtual/random4.xml
 
 
-%.checked : %.xml $(JING) master/virtual-graph-schema-v2.rnc derived/virtual-graph-schema-v2.xsd
-	java -jar $(JING) -c master/virtual-graph-schema-v2.rnc $*.xml
-	java -jar $(JING) derived/virtual-graph-schema-v2.xsd $*.xml
+%.checked : %.xml $(JING) master/virtual-graph-schema-v2.1.rnc derived/virtual-graph-schema-v2.1.xsd
+	java -jar $(JING) -c master/virtual-graph-schema-v2.1.rnc $*.xml
+	java -jar $(JING) derived/virtual-graph-schema-v2.1.xsd $*.xml
 	touch $@
 
 validate-virtual/% : output/%.checked
@@ -163,7 +165,7 @@ endif
 
 providers/$1.graph.cpp providers/$1.graph.hpp : $$($1_src_xml) $(JING)
 	mkdir -p providers
-	java -jar $(JING) -c master/virtual-graph-schema-v2.rnc $$($1_src_xml)
+	java -jar $(JING) -c master/virtual-graph-schema-v2.1.rnc $$($1_src_xml)
 	$$(PYTHON) tools/render_graph_as_cpp.py $$($1_src_xml) providers/$1.graph.cpp
 	$$(PYTHON) tools/render_graph_as_cpp.py --header < $$($1_src_xml) > providers/$1.graph.hpp
 
@@ -212,8 +214,8 @@ include apps/firefly_sync/makefile.inc
 include apps/amg/makefile.inc
 include apps/apsp/makefile.inc
 
-include apps/firefly_sync/makefile.inc
-include apps/firefly_nosync/makefile.inc
+#include apps/firefly_sync/makefile.inc
+#include apps/firefly_nosync/makefile.inc
 
 # Non-default
 include apps/nursery/airfoil/airfoil.inc

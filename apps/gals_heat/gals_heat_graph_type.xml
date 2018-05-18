@@ -1,5 +1,5 @@
 <?xml version="1.0"?>
-<Graphs xmlns="https://poets-project.org/schemas/virtual-graph-schema-v2">
+<Graphs xmlns="https://poets-project.org/schemas/virtual-graph-schema-v2" formatMinorVersion="1">
   <GraphType id="gals_heat" >
 	<Documentation><![CDATA[
     Locally synchronous heat.
@@ -33,6 +33,15 @@
 			"location.dimension" : 2
 		</MetaData>
 
+		<Types>
+			<TypeDef id="update_t">
+				<Tuple name="_">
+					<Scalar type="uint32_t" name="t" />
+					<Scalar type="float" name="v" />
+				</Tuple>
+			</TypeDef>
+		</Types>
+
 	<Properties>
       <Scalar type="uint32_t" name="maxTime" default="65" />
 			<Scalar type="uint32_t" name="exportDeltaMask" default="15">
@@ -57,8 +66,7 @@
 
       <MessageType id="update">
 				<Message>
-					<Scalar type="uint32_t" name="t" />
-					<Scalar type="float" name="v" />
+					<Scalar type="update_t" name="v" />
 				</Message>
       </MessageType>
     </MessageTypes>
@@ -118,15 +126,15 @@
 
 		<InputPin name="in" messageTypeId="update">
 		  <OnReceive><![CDATA[
-			handler_log(3, "m=(t=%d,v=%.4f) tNow=%d, sNow=%d, aNow=%.4f, sNext=%d, aNext=%f", message->t, message->v, deviceState->t, deviceState->cs, deviceState->ns);
+			handler_log(3, "m=(t=%d,v=%.4f) tNow=%d, sNow=%d, aNow=%.4f, sNext=%d, aNext=%f", message->v.t, message->v.v, deviceState->t, deviceState->cs, deviceState->ns);
 		  
-			if(message->t==deviceState->t){
+			if(message->v.t==deviceState->t){
 				deviceState->cs++;
 		  }else{
 				deviceState->ns++;
 
 				assert(
-					(deviceState->t + deviceProperties->dt == message->t) // Either it is one step ahead
+					(deviceState->t + deviceProperties->dt == message->v.t) // Either it is one step ahead
 					||
 					(deviceState->t == graphProperties->maxTime+1)  // Or we are idle and don't care
 				);
@@ -146,8 +154,8 @@
 			deviceState->cs = deviceState->ns;
 			deviceState->ns = 0;
 
-			message->t = deviceState->t;
-			message->v = deviceState->v;
+			message->v.t = deviceState->t;
+			message->v.v = deviceState->v;
 		  ]]></OnSend>
 		</OutputPin>
 
@@ -221,16 +229,16 @@
 			</Properties>
 
 		  <OnReceive><![CDATA[
-			handler_log(3, "m=(t=%d,v=%.4f) tNow=%d, sNow=%d, aNow=%.4f, sNext=%d, aNext=%f", message->t, message->v, deviceState->t, deviceState->cs, deviceState->ca, deviceState->ns, deviceState->na);
-		  if(message->t==deviceState->t){
-				deviceState->ca += edgeProperties->w * message->v;
+			handler_log(3, "m=(t=%d,v=%.4f) tNow=%d, sNow=%d, aNow=%.4f, sNext=%d, aNext=%f", message->v.t, message->v.v, deviceState->t, deviceState->cs, deviceState->ca, deviceState->ns, deviceState->na);
+		  if(message->v.t==deviceState->t){
+				deviceState->ca += edgeProperties->w * message->v.v;
 				deviceState->cs++;
 		  }else{
-				deviceState->na += edgeProperties->w * message->v;
+				deviceState->na += edgeProperties->w * message->v.v;
 				deviceState->ns++;
 
 				assert(
-					(deviceState->t + deviceProperties->dt == message->t) // Either it is one step ahead
+					(deviceState->t + deviceProperties->dt == message->v.t) // Either it is one step ahead
 					||
 					(deviceState->t == graphProperties->maxTime+1)  // Or we are idle and don't care
 				);
@@ -266,8 +274,8 @@
 			deviceState->na=0;
 			deviceState->ns=0;
 
-			message->t=deviceState->t;
-			message->v=deviceState->ca;
+			message->v.t=deviceState->t;
+			message->v.v=deviceState->ca;
 
 			// It is possible that all our neighbours are ahead and have broadcast, so
 			// we could immediately be ready to go.

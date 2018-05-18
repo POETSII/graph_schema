@@ -37,7 +37,10 @@ def save_typed_data_spec(dt):
     elif isinstance(dt,ScalarTypedDataSpec):
         n=etree.Element(toNS("p:Scalar"))
         n.attrib["name"]=dt.name
-        n.attrib["type"]=dt.type
+        if isinstance(dt.type,Typedef):
+            n.attrib["type"]=dt.type.id
+        else:
+            n.attrib["type"]=dt.type
 
         if dt.default is not None and dt.default is not 0:
             n.attrib["default"]=str(dt.default)
@@ -108,6 +111,14 @@ def save_metadata(node,childTagNameWithNS,value):
     r.text=text
     return r
 
+def save_type_def(parent,td):
+    n=etree.SubElement(parent,toNS("p:TypeDef"))
+
+    n.attrib["id"]=td.id
+    s=save_typed_data_spec(td.type)
+    n.append(s)
+
+    return n
 
 def save_message_type(parent,mt):
     n=etree.SubElement(parent,toNS("p:MessageType"))
@@ -122,7 +133,7 @@ def save_message_type(parent,mt):
 def save_device_type(parent,dt):
     n=etree.SubElement(parent,toNS("p:DeviceType"))
 
-    n.attrib["id"]=dt.id
+    n.attrib["id"]=dt.id    
     save_typed_struct_spec(n, toNS("p:Properties"), dt.properties)
     save_typed_struct_spec(n, toNS("p:State"), dt.state)
     save_metadata(n, toNS("p:MetaData"), dt.metadata)
@@ -200,6 +211,11 @@ def save_edge_instance(parent, ei):
 def save_graph_type(parent, graph):    
     gn = etree.SubElement(parent,toNS("p:GraphType"))
     gn.attrib["id"]=graph.id
+    
+    tdn=etree.Element(toNS("p:Types"))
+    gn.append(tdn)
+    for td in graph.typedefs_by_index:
+        save_type_def(tdn,td)
 
     save_typed_struct_spec(gn, toNS("p:Properties"), graph.properties)
 

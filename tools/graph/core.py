@@ -8,9 +8,15 @@ class TypedDataSpec(object):
     def __init__(self,name):
         self.name=name
 
+    def visit_subtypes(self,visitor):
+        pass
 
 class ScalarTypedDataSpec(TypedDataSpec):
+    
+    _primitives=set(["int32_t","uint32_t","int16_t","uint16_t","int8_t","uint8_t","float","double"])
+    
     def _check_value(self,value):
+        assert not isinstance(self.type,Typedef)
         if self.type=="int32_t":
             res=int(value)
             assert(-2**31 <= res < 2**31)
@@ -39,15 +45,25 @@ class ScalarTypedDataSpec(TypedDataSpec):
 
     def __init__(self,name,type,default=None):
         TypedDataSpec.__init__(self,name)
+        assert isinstance(type,Typedef) or (type in ScalarTypedDataSpec._primitives), "Didn't understand type parameter {}".format(type)
         self.type=type
         if default is not None:
             self.default=self._check_value(default)
+        elif isinstance(self.type,Typedef):
+            self.default=self.type.create_default()
         else:
             self.default=0
+            
+    def visit_subtypes(self,visitor):
+        if isinstance(self.type,Typedef):
+            visitor(self.type)
 
     def is_refinement_compatible(self,inst):
         if inst is None:
             return True
+        if isinstance(self.type,Typedef):
+            return self.type.is_refinement_compatible(inst)
+        
         try:
             self._check_value(inst)
         except:
@@ -60,8 +76,9 @@ class ScalarTypedDataSpec(TypedDataSpec):
     def expand(self,inst):
         if inst is None:
             return self.create_default()
-        else:
-            return self._check_value(inst)
+        if isinstance(self.type,Typedef):
+            return self.type.expand(inst)
+        return self._check_value(inst)
             
     def contract(self,inst):
         if inst is not None:
@@ -70,12 +87,14 @@ class ScalarTypedDataSpec(TypedDataSpec):
                 return inst
         return None
             
-            
     def __eq__(self, o):
         return isinstance(o, ScalarTypedDataSpec) and self.name==o.name and self.type==o.type and self.default==o.default
 
     def __str__(self):
-        return "{}:{}={}".format(self.type,self.name,self.default)
+        if isinstance(self.type,Typedef):
+            return "{}:{}={}".format(self.type,self.name,self.default)
+        else:
+            return "{}:{}={}".format(self.type,self.name,self.default)
 
 class TupleTypedDataSpec(TypedDataSpec):
     def __init__(self,name,elements):
@@ -107,6 +126,9 @@ class TupleTypedDataSpec(TypedDataSpec):
             acc=acc+str(self._elts_by_index[i])
             acc=acc+"\n"
         return acc+"]"
+        
+    def visit_subtypes(self,visitor):
+        map(visitor, self._elts_by_index)
 
     def create_default(self):
         return { e.name:e.create_default() for e in self._elts_by_index  }
@@ -165,6 +187,9 @@ class ArrayTypedDataSpec(TypedDataSpec):
 
     def create_default(self):
         return [self.type.create_default() for i in range(self.length)]
+
+    def visit_subtypes(self,visitor):
+        visitor(self.type)
 
     def expand(self,inst):
         if inst is None:
@@ -225,8 +250,34 @@ def is_refinement_compatible(proto,inst):
     return proto.is_refinement_compatible(inst)
 
 
+class Typedef(TypedDataSpec):
+    def __init__(self,id,type):
+        TypedDataSpec.__init__(self,id)
+        self.id=id
+        assert(isinstance(type,TypedDataSpec))
+        self.type=type
+
+    def is_refinement_compatible(self,inst):
+        sys.stderr.write(" is_refinement_compatible( {} , {} )\n".format(self,inst))
+        return self.type.is_refinement_compatible(inst)
+    
+    def create_default(self):
+        return self.type.create_default()
+
+    def expand(self,inst):
+        return self.type.expand(inst)
+        
+    def contract(self,inst):
+        return self.contract(inst)
+            
+    def __eq__(self, o):
+        return isinstance(o, Typedef) and self.id==o.id
+
+    def __str__(self):
+        return "{}[{}]".format(self.id,self.type)
+
 class MessageType(object):
-    def __init__(self,parent,id,message,metadata=None):
+    def __init__(self,parent,id,message,metadata=None,cTypeName=None):
         assert (message is None) or isinstance(message,TypedDataSpec)
         self.id=id
         self.parent=parent
@@ -311,7 +362,30 @@ class GraphType(object):
         self.metadata=metadata
         self.shared_code=shared_code
         self.device_types={}
+        self.typedefs_by_index=[]
+        self.typedefs={}
         self.message_types={}
+        
+    def _validate_type(self,type):
+        """Walk through the types and check that any typedefs have already been added to the graphtype."""
+        if isinstance(type,Typedef):
+            if (type.id not in self.typedefs):
+                raise GraphDescriptionError("Typedef {} not added to graph type. Knowns are {}".format(type.id,self.typedefs.values()))
+            if (self.typedefs[type.id]!=type):
+                raise GraphDescriptionError("Typedef has wrong identity.")
+            # If it's in the graph, we don't need to validate it's contained type again
+        else:
+            type.visit_subtypes( lambda t: self._validate_type(t) )
+            
+        
+    def add_typedef(self,typedef):
+        assert(isinstance(typedef,Typedef))
+        if typedef.id in self.typedefs:
+            raise GraphDescriptionError("typedef already exists.")
+        self._validate_type(typedef.type)
+        self.typedefs_by_index.append(typedef)
+        self.typedefs[typedef.id]=typedef
+        
 
     def add_message_type(self,message_type):
         if message_type.id in self.message_types:

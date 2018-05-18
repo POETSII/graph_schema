@@ -14,7 +14,12 @@ y=(1:h)*dy;
 xx=repmat(x,h,1);
 yy=repmat(y',1,w);
 
-u=sin(xx)+cos(yy*2)    ;
+#u=sin(xx)+cos(yy*2)    ;
+u=zeros(w,h);
+u(w/2,h/2)=4;
+u(w/2+1,h/2)=4;
+u(w/2,h/2+1)=4;
+u(w/2+1,h/2+1)=4;
 v=zeros(w,h);
 
 imshow(u,[0,+2]);
@@ -27,8 +32,11 @@ for i=1:1000
     v = v + (L+R+U+D)/4-u;
     v=v*0.99;
     u=u + v;
+
+    mm=min(min(u))
+    mmx=max(max(u))
     
-    imshow(u,[0,+2]);
+    imshow(u,[mm,mmx]);
     drawnow();
     
 end

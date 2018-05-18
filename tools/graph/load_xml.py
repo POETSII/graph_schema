@@ -67,30 +67,36 @@ def get_child_text(node,name):
     return (text,line)
 
 
-def load_typed_data_spec(dt):
+def load_typed_data_spec(dt, namedTypes={}):
     name=get_attrib(dt,"name")
 
     tag=deNS(dt.tag)
     if tag=="p:Tuple":
         elts=[]
         for eltNode in dt.findall("p:*",ns): # Anything from this namespace must be a member
-            elt=load_typed_data_spec(eltNode)
+            elt=load_typed_data_spec(eltNode, namedTypes)
             elts.append(elt)
         return TupleTypedDataSpec(name,elts)
     elif tag=="p:Array":
         length=int(get_attrib(dt,"length"))
         type=get_attrib_optional(dt, "type")
         if type:
-            type=ScalarTypedDataSpec("_",type)
+            if type in namedTypes:
+                type=namedTypes[type]
+            else:
+                type=ScalarTypedDataSpec("_",type)
         else:
             subs=dt.findall("p:*",ns) # Anything from this namespace must be the sub-type
             if len(subs)!=1:
                 raise RuntimeError("If there is no type attribute, there should be exactly one sub-type element.")
-            type=load_typed_data_spec(subs[0])
+            type=load_typed_data_spec(subs[0], namedTypes)
         return ArrayTypedDataSpec(name,length,type)
     elif tag=="p:Scalar":
         type=get_attrib(dt, "type")
         default=get_attrib_optional(dt, "default")
+        sys.stderr.write("namedTypes={}\n".format(namedTypes))
+        if type in namedTypes:
+            type=namedTypes[type]
         return ScalarTypedDataSpec(name,type,default)
     else:
         raise XMLSyntaxError("Unknown data type '{}'.".format(tag), dt)
@@ -103,10 +109,10 @@ def load_typed_data_instance(dt,spec):
     return spec.expand(value)
 
 
-def load_struct_spec(name, members):
+def load_struct_spec(name, members,namedTypes):
     elts=[]
     for eltNode in members.findall("p:*",ns): # Anything from this namespace must be a member
-        elt=load_typed_data_spec(eltNode)
+        elt=load_typed_data_spec(eltNode,namedTypes)
         elts.append(elt)
     return TupleTypedDataSpec(name, elts)
 
@@ -131,14 +137,29 @@ def load_metadata(parent, name):
 
     return metadata
 
+def load_type_def(parent,td, namedTypes):
+    id=get_attrib(td,"id")
+    try:
+        typeNode=td.find("p:*",ns)
+        if typeNode is None:
+            raise XMLSyntaxError("Missing sub-child to give actual type.")
+            
+        type=load_typed_data_spec(typeNode, namedTypes)
+        
+        return Typedef(id,type)
+    except XMLSyntaxError:
+            raise
+    except Exception as e:
+        raise XMLSyntaxError("Error while parsing type def {}".format(id),td,e)
 
-def load_message_type(parent,dt):
+
+def load_message_type(parent,dt, namedTypes):
     id=get_attrib(dt,"id")
     try:
         message=None
         messageNode=dt.find("p:Message",ns)
         if messageNode is not None:
-            message=load_struct_spec(id+"_message", messageNode)
+            message=load_struct_spec(id+"_message", messageNode, namedTypes)
 
         metadata=load_metadata(dt, "p:MetaData")
 
@@ -155,12 +176,12 @@ def load_device_type(graph,dtNode,sourceFile):
     state=None
     stateNode=dtNode.find("p:State",ns)
     if stateNode is not None:
-        state=load_struct_spec(id+"_state", stateNode)
+        state=load_struct_spec(id+"_state", stateNode,graph.typedefs)
 
     properties=None
     propertiesNode=dtNode.find("p:Properties",ns)
     if propertiesNode is not None:
-        properties=load_struct_spec(id+"_properties", propertiesNode)
+        properties=load_struct_spec(id+"_properties", propertiesNode,graph.typedefs)
 
     metadata=load_metadata(dtNode,"p:MetaData")
 
@@ -182,7 +203,7 @@ def load_device_type(graph,dtNode,sourceFile):
             state=None
             stateNode=p.find("p:State",ns)
             if stateNode is not None:
-                state=load_struct_spec(id+"_state", stateNode)
+                state=load_struct_spec(id+"_state", stateNode,graph.typedefs)
         except Exception as e:
             raise XMLSyntaxError("Error while parsing state of pin {} : {}".format(id,e),p,e)
 
@@ -190,7 +211,7 @@ def load_device_type(graph,dtNode,sourceFile):
             properties=None
             propertiesNode=p.find("p:Properties",ns)
             if propertiesNode is not None:
-                properties=load_struct_spec(id+"_properties", propertiesNode)
+                properties=load_struct_spec(id+"_properties", propertiesNode,graph.typedefs)
         except Exception as e:
             raise XMLSyntaxError("Error while parsing properties of pin {} : {}".format(id,e),p,e)
 
@@ -221,11 +242,19 @@ def load_device_type(graph,dtNode,sourceFile):
 def load_graph_type(graphNode, sourcePath):
     id=get_attrib(graphNode,"id")
     sys.stderr.write("  Loading graph type {}\n".format(id))
+    
+    namedTypes={}
+    namedTypesByIndex=[]
+    for etNode in graphNode.findall("p:Types/p:TypeDef",ns):
+        sys.stderr.write("  Loading type defs, current={}\n".format(namedTypes))
+        td=load_type_def(graphNode,etNode, namedTypes)
+        namedTypes[td.id]=td
+        namedTypesByIndex.append(td)
 
     properties=None
     propertiesNode=graphNode.find("p:Properties",ns)
     if propertiesNode is not None:
-        properties=load_struct_spec(id+"_properties", propertiesNode)
+        properties=load_struct_spec(id+"_properties", propertiesNode, namedTypes)
 
     metadata=load_metadata(graphNode,"p:MetaData")
 
@@ -234,9 +263,12 @@ def load_graph_type(graphNode, sourcePath):
         shared_code.append(n.text)
 
     graphType=GraphType(id,properties,metadata,shared_code)
+    
+    for nt in namedTypesByIndex:
+        graphType.add_typedef(nt)
 
     for etNode in graphNode.findall("p:MessageTypes/p:*",ns):
-        et=load_message_type(graphType,etNode)
+        et=load_message_type(graphType,etNode, graphType.typedefs)
         graphType.add_message_type(et)
 
     for dtNode in graphNode.findall("p:DeviceTypes/p:*",ns):
@@ -291,7 +323,7 @@ def load_device_instance(graph,diNode):
             assert spec is not None, "Can't have properties value for device with no properties spec"
 
             value=json.loads("{"+n.text+"}")
-            assert(spec.is_refinement_compatible(value))
+            assert spec.is_refinement_compatible(value), "Spec = {}, value= {}".format(spec,value)
             properties=spec.expand(value)
         elif n.tag==_ns_M:
             assert not metadata

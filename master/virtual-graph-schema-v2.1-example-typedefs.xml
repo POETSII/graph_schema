@@ -1,0 +1,88 @@
+<?xml version="1.0"?>
+<Graphs xmlns="https://poets-project.org/schemas/virtual-graph-schema-v2" formatMinorVersion="1">
+  <GraphType id="dt10_graph_schema_typedefs">
+    <Types>
+      <TypeDef id="t1">
+        <Scalar name="_" type="uint32_t" />
+      </TypeDef>
+
+      <TypeDef id="t2">
+        <Tuple name="_">
+          <Scalar name="a" type="uint32_t" />
+          <Scalar name="b" type="float" />
+        </Tuple>
+      </TypeDef>
+
+      <TypeDef id="t3">
+        <Array name="_" type="int8_t" length="3" />
+      </TypeDef>
+
+      <TypeDef id="t4">
+        <Array name="_" type="t2" length="3" />
+      </TypeDef>
+    </Types>
+
+    <SharedCode><![CDATA[[
+    static_assert( std::is_same<uint32_t,t1>::value, "Oh dear.");
+    static_assert( std::is_same<float,t2::a>::value, "Oh dear.");
+    static_assert( std::is_same<uint32_t,t2::b>::value, "Oh dear.");
+    static_assert( sizeof(t2)==8, "Oh dear.");
+    static_assert( sizeof(t3)==3, "Oh dear.");
+    static_assert( sizeof(t2)/sizeof(t2[0])==8, "Oh dear.");
+    static_assert( sizeof(t2)==24, "Oh dear.");
+    ]]></SharedCode>
+    
+    <MessageTypes>
+        <MessageType id="m1">
+            <Message>
+              <Scalar type="t1" name="value" />
+            </Message>
+        </MessageType>        
+
+        <MessageType id="m2">
+            <Message>
+              <Scalar type="t2" name="value" />
+            </Message>
+        </MessageType>        
+
+        <MessageType id="m3">
+            <Message>
+              <Scalar type="t3" name="value" />
+            </Message>
+        </MessageType>        
+
+        <MessageType id="m4">
+            <Message>
+              <Scalar type="t4" name="value" />
+            </Message>
+        </MessageType>        
+    </MessageTypes>
+    
+    <DeviceTypes>
+      <DeviceType id="dev">
+          
+          <Properties>
+            <Scalar type="t1" name="s1" />
+          </Properties>
+          
+          <State>
+            <Array type="t2" name="s2" length="3" />
+          </State>
+
+          <ReadyToSend>
+            // Nothing
+          </ReadyToSend>
+          
+          <InputPin name="i" messageTypeId="m1">
+            <OnReceive><![CDATA[
+            t1 *pProperties=deviceProperties;
+            t2 *pState=deviceState;
+
+            t1 *mv=&message->value;
+            ]]></OnReceive>
+          </InputPin>
+      </DeviceType>
+    </DeviceTypes>
+    
+  </GraphType>
+</Graphs>
