@@ -45,8 +45,16 @@ def make_input_pin_properties(ip):
     else:
         preProc = "// No line/file information for handler"
     
+    # names smaller than this get optimised by the compiler, breaking sending string addrs to host
+    name = ip.name
+    if len(ip.name) <= 4:
+        spaces=' '
+        for i in range(4 - len(ip.name)):
+            spaces = spaces + ' ' 
+        name = ip.name + spaces 
+
     return add_properties(make_device_type_properties(ip.parent),{
-        "INPUT_PORT_NAME" : ip.name,
+        "INPUT_PORT_NAME" : name,
         "INPUT_PORT_INDEX" : ip.parent.inputs_by_index.index(ip),
         "INPUT_PORT_FULL_ID" : "{}_{}_{}".format(ip.parent.parent.id,ip.parent.id,ip.name),
         "INPUT_PORT_PROPERTIES_T" : "{}_{}_{}_properties_t".format(ip.parent.parent.id,ip.parent.id,ip.name),
@@ -63,8 +71,16 @@ def make_output_pin_properties(op):
     else:
         preProc = "// No line/file information for handler"
     
+    # names smaller than this get optimised by the compiler, breaking sending string addrs to host
+    name = op.name
+    if len(op.name) <= 4:
+        spaces=' '
+        for i in range(4 - len(op.name)):
+            spaces = spaces + ' ' 
+        name = op.name + spaces 
+
     return add_properties(make_device_type_properties(op.parent),{
-        "OUTPUT_PORT_NAME" : op.name,
+        "OUTPUT_PORT_NAME" : name,
         "OUTPUT_PORT_INDEX" : op.parent.outputs_by_index.index(op),
         "OUTPUT_PORT_FULL_ID" : "{}_{}_{}".format(op.parent.parent.id,op.parent.id,op.name),
         "OUTPUT_PORT_MESSAGE_T" : "{}_{}_message_t".format(op.parent.parent.id,op.message_type.id),
