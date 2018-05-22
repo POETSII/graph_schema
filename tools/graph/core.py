@@ -7,6 +7,7 @@ class GraphDescriptionError(Exception):
 class TypedDataSpec(object):
     def __init__(self,name):
         self.name=name
+        self.cTypeName=None
 
     def visit_subtypes(self,visitor):
         pass
@@ -47,12 +48,17 @@ class ScalarTypedDataSpec(TypedDataSpec):
         TypedDataSpec.__init__(self,name)
         assert isinstance(type,Typedef) or (type in ScalarTypedDataSpec._primitives), "Didn't understand type parameter {}".format(type)
         self.type=type
-        if default is not None:
+        if isinstance(self.type,Typedef):
+            self.default=self.type.expand(default)
+        elif default is not None:
             self.default=self._check_value(default)
-        elif isinstance(self.type,Typedef):
-            self.default=self.type.create_default()
         else:
             self.default=0
+        if isinstance(self.default,dict):
+            self.default=frozenset(self.default) # make it hashable
+        if isinstance(self.default,list):
+            self.default=tuple(self.default) # make it hashable
+        self._hash = hash(self.name) ^ hash(self.type) ^ hash(self.default)
             
     def visit_subtypes(self,visitor):
         if isinstance(self.type,Typedef):
@@ -89,6 +95,9 @@ class ScalarTypedDataSpec(TypedDataSpec):
             
     def __eq__(self, o):
         return isinstance(o, ScalarTypedDataSpec) and self.name==o.name and self.type==o.type and self.default==o.default
+        
+    def __hash__(self):
+        return self._hash
 
     def __str__(self):
         if isinstance(self.type,Typedef):
@@ -101,11 +110,13 @@ class TupleTypedDataSpec(TypedDataSpec):
         TypedDataSpec.__init__(self,name)
         self._elts_by_name={}
         self._elts_by_index=[]
+        self._hash = hash(self.name)
         for e in elements:
             if e.name in self._elts_by_name:
                 raise GraphDescriptionError("Tuple element name appears twice.")
             self._elts_by_name[e.name]=e
             self._elts_by_index.append(e)
+            self._hash = self._hash ^ hash(e)
 
     @property
     def elements_by_name(self):
@@ -117,6 +128,9 @@ class TupleTypedDataSpec(TypedDataSpec):
 
     def __eq__(self, o):
         return isinstance(o, TupleTypedDataSpec) and self.name==o.name and self._elts_by_index==o._elts_by_index
+
+    def __hash__(self):
+        return self._hash
 
     def __str__(self):
         acc="Tuple:{}[\n".format(self.name)
@@ -177,11 +191,15 @@ class ArrayTypedDataSpec(TypedDataSpec):
     def __init__(self,name,length,type):
         TypedDataSpec.__init__(self,name)
         self.type=type
-        assert length>0, "Lengths must be greater than 0, as per PIP0007
+        assert length>0, "Lengths must be greater than 0, as per PIP0007"
         self.length=length
+        self._hash=hash(name) ^ hash(type) + length
 
     def __eq__(self, o):
         return isinstance(o, ArrayTypedDataSpec) and self.name==o.name and self.length==o.length and self.type==o.type
+
+    def __hash__(self):
+        return self._hash
 
     def __repr__(self):
         return "Array:{}[{}*{}]\n".format(self.name,self.type,self.length)
@@ -257,6 +275,7 @@ class Typedef(TypedDataSpec):
         self.id=id
         assert(isinstance(type,TypedDataSpec))
         self.type=type
+        self._hash=hash(id) + 19937*hash(type)
 
     def is_refinement_compatible(self,inst):
         sys.stderr.write(" is_refinement_compatible( {} , {} )\n".format(self,inst))
@@ -273,6 +292,9 @@ class Typedef(TypedDataSpec):
             
     def __eq__(self, o):
         return isinstance(o, Typedef) and self.id==o.id
+
+    def __hash__(self):
+        return self._hash
 
     def __str__(self):
         return "{}[{}]".format(self.id,self.type)

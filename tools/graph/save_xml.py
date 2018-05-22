@@ -43,7 +43,7 @@ def save_typed_data_spec(dt):
             n.attrib["type"]=dt.type
 
         if dt.default is not None and dt.default is not 0:
-            n.attrib["default"]=str(dt.default)
+            n.attrib["default"]=json.dumps(dt.default) # Need json for typedef'd structs and arrays
     elif isinstance(dt,ArrayTypedDataSpec):
         n=etree.Element(toNS("p:Array"))
         n.attrib["name"]=dt.name

@@ -94,6 +94,9 @@ def load_typed_data_spec(dt, namedTypes={}):
     elif tag=="p:Scalar":
         type=get_attrib(dt, "type")
         default=get_attrib_optional(dt, "default")
+        if default:
+            sys.stderr.write("  default='{}', converting to json\n".format(default))
+            default=json.loads(default) # needed for typedef'd structs
         sys.stderr.write("namedTypes={}\n".format(namedTypes))
         if type in namedTypes:
             type=namedTypes[type]
