@@ -19,6 +19,7 @@ def make_device_type_properties(dt):
         preProc = '#line {} "{}"\n'.format(dt.ready_to_send_source_line-1,dt.ready_to_send_source_file) 
     else:
         preProc = "// No line/file information for handler"
+
     return add_properties(make_graph_type_properties(dt.parent),{
         "DEVICE_TYPE_ID" : dt.id,
         "DEVICE_TYPE_FULL_ID" : "{}_{}".format(dt.parent.id,dt.id),

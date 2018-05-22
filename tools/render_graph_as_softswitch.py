@@ -606,9 +606,18 @@ def render_graph_instance_as_thread_context(
             first=False
         else:
             dst.write(",")
+
+        # names smaller than this get optimised by the compiler, breaking sending string addrs to host
+        name = di.id 
+        if len(di.id) <= 4:
+            spaces=' '
+            for i in range(4 - len(di.id)):
+                spaces = spaces + ' '
+            name = spaces + di.id
+
         diProps={
             "DEVICE_TYPE_FULL_ID" : props[di.device_type]["DEVICE_TYPE_FULL_ID"],
-            "DEVICE_INSTANCE_ID" : di.id,
+            "DEVICE_INSTANCE_ID" : name, 
             "DEVICE_INSTANCE_THREAD_OFFSET" : thread_to_devices[thread_index].index(di),
             "DEVICE_INSTANCE_PROPERTIES" : 0,
             "DEVICE_INSTANCE_STATE" : 0,
