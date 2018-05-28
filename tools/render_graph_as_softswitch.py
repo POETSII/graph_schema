@@ -755,7 +755,7 @@ def render_device_instance_inputs(devices_to_thread, di, dst, edges_in, globalPr
             first = False
         else:
             dst.write(",")
-        if ip.properties == None and ip.state == None:
+        if (ip.properties == None and ip.state == None) or (len(edges_in[di][ip]) == 0):
             dst.write("  {{0,0}} // {}\n".format(ip.name))
         else:
             dst.write("  {{ {}, {}_{}_bindings }}\n // {}\n".format(len(edges_in[di][ip]), di.id, ip.name, ip.name))
