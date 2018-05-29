@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 from graph.load_xml import load_graph_types_and_instances
 from graph.write_cpp import render_graph_as_cpp
 

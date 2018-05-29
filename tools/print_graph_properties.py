@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 from graph.load_xml import load_graph
 import sys
 import os

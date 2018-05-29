@@ -1,4 +1,4 @@
-#!/usr/bin/python3
+#!/usr/env python3
 
 import pyamg
 import numpy as np

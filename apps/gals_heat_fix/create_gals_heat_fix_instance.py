@@ -1,7 +1,9 @@
+#!/usr/bin/env python3
+
 from graph.core import *
 
 from graph.load_xml import load_graph_types_and_instances
-from graph.save_xml import save_graph
+from graph.save_xml_stream import save_graph
 
 import sys
 import os
@@ -62,7 +64,7 @@ exitNodeType=graphType.device_types["exit_node"]
 
 instName="heat_{}_{}".format(n,n)
 
-properties={}
+properties={"exportDeltaMask":exportDeltaMask,"maxTime":maxTime}
 
 res=GraphInstance(instName, graphType, properties)
 

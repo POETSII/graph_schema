@@ -26,6 +26,12 @@ include "virtual-graph-schema-v0.rnc"
 # included, as it is assumed that it will be available by looking
 # up the relevant id.
 #
+# The event log can also contain check-point information for devices.
+# These represent known states through which a device should pass, so
+# that a sequential or reference version can generate expected pre- or
+# post-event states. During execution the corresponding events are
+# tagged, then the event log can be checked against the expected states.
+#
 # Here begins the actual grammar itself
 grammar {
 
@@ -44,6 +50,16 @@ grammar {
     ### There is no requirement that this actually makes sense,
     ### as it may just be an estimate.
     attribute elapsed { xsd:float }
+    
+    ### A tag applied to a particular event, which will match up with a
+    ### known reference checkpoint state. This tag applies to the state
+    ### before the event happens.
+    attribute preTag { text } ?,
+    
+    ### A tag applied to a particular event, which will match up with a
+    ### known reference checkpoint state. This tag applies to the state
+    ### before the event happens.
+    attribute postTag { text } ?
   ),
 
   device_event = (

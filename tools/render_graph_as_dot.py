@@ -1,9 +1,12 @@
+#!/usr/bin/env python3
+
 from graph.load_xml import load_graph
 from graph.snapshots import extractSnapshotInstances
 import sys
 import os
 import argparse
 import re
+import math
 
 parser=argparse.ArgumentParser("Render a graph to dot.")
 parser.add_argument('graph', metavar="G", default="-", nargs="?")

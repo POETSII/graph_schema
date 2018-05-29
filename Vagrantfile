@@ -1,5 +1,8 @@
+
 # -*- mode: ruby -*-
 # vi: set ft=ruby :
+
+require 'etc'
 
 # All Vagrant configuration is done below. The "2" in Vagrant.configure
 # configures the configuration version (we support older styles for
@@ -21,8 +24,8 @@ Vagrant.configure(2) do |config|
 
   # Create a forwarded port mapping which allows access to a specific port
   # within the machine from a port on the host machine. In the example below,
-  # accessing "localhost:8080" will access port 80 on the guest machine.
-  # config.vm.network "forwarded_port", guest: 80, host: 8080
+  # accessing "localhost:8080" will access port 8000 on the guest machine.
+  config.vm.network "forwarded_port", guest: 80, host: 8080
   
   config.ssh.forward_agent = true
   
@@ -54,14 +57,25 @@ Vagrant.configure(2) do |config|
   #   # Display the VirtualBox GUI when booting the machine
   #   vb.gui = true
   #
-  #   # Customize the amount of memory on the VM:
-     vb.memory = "6000"
-  end
-
-
-  config.vm.provider "virtualbox" do |v|
+  #  
+  
+    vcpu = Etc.nprocessors > 4 ? 4 : ( Etc.nprocessors > 1 ? Etc.nprocessors - 1 : 1 )
+    
+    vb.cpus = vcpu
+  
+   # Customize the amount of memory on the VM:
+   # 1  hcpu -> 1 vcpu : 6GB
+   # 2  hcpu -> 1 vcpu : 6GB
+   # 3  hcpu -> 2 vcpu : 8GB
+   # 4  hcpu -> 3 vcpu : 10GB
+   # 5+ hcpu -> 4 vcpu : 12GB
+    vb.memory = 4000 + vcpu * 2000     
+  
     # If clock drifts more than 500ms, then force it (instead of smooth adjust)
-    v.customize ["guestproperty","set", :id, "/VirtualBox/GuestAdd/VBoxService/--timesync-set-threshold", "500"]
+    vb.customize ["guestproperty","set", :id, "/VirtualBox/GuestAdd/VBoxService/--timesync-set-threshold", "500"]
+
+    # Turn off audio, so that VM doesn't keep machine awake
+    vb.customize ["modifyvm", :id, "--audio", "none"]
   end
 
 
@@ -88,11 +102,14 @@ Vagrant.configure(2) do |config|
      sudo apt-get install -y emacs-nox screen
 
      # Algebraic multigrid, plus others
-     sudo apt-get install -y python3-pip python3-numpy python3-scipy
+     sudo apt-get install -y python3-pip python3-numpy python3-scipy ujson svgwrite
      sudo pip3 install pyamg
 
      # Creating meshes
-     sudo apt-get install -y octave octave-msh octave-geometry
+     sudo apt-get install -y octave octave-msh octave-geometry hdf5-tools
+     # Fix a bug in geometry package for svg.
+     # Note that sed is _not_ using extended regular expressions (no "-r")
+     sudo sed -i -e 's/,{0},/,"{0}",/g' -e 's/,{1},/,"{1}",/g'  /usr/share/octave/packages/geometry-2.1.0/io/@svg/parseSVGData.py
      
      # Used to support generation of documentation from schema
      sudo apt-get install -y xsltproc ant libsaxon-java docbook docbook-xsl-ns pandoc

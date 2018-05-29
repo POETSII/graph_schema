@@ -11,6 +11,7 @@
 #include <cassert>
 #include <type_traits>
 
+#define RAPIDJSON_HAS_STDSTRING 1
 #include "rapidjson/document.h"
 
 #include "typed_data_spec.hpp"
@@ -146,7 +147,7 @@ public:
 
   template<class TO>
   DataPtr(DataPtr<TO> &&o)
-    : m_p(o.m_p)
+    : m_p((T*)o.m_p)
   {
     o.m_p=0;
   }
@@ -202,6 +203,16 @@ public:
   {
     release();
   }
+  
+  DataPtr clone() const
+  {
+    if(!m_p)
+      return DataPtr();
+    typed_data_t *p=(typed_data_t*)malloc(m_p->_total_size_bytes);
+    memcpy(p, m_p, m_p->_total_size_bytes);
+    p->_ref_count=0;
+    return DataPtr((T*)p);
+  }
 
   const uint8_t *payloadPtr() const
   {
@@ -239,16 +250,20 @@ public:
     if(!o.m_p){
       return false;
     }
+    if(payloadSize() != o.payloadSize()){
+      return payloadSize() < o.payloadSize();
+    }
     // otherwise we need a byte-wise compare
-    assert(payloadSize()==o.payloadSize());
     return memcmp(payloadPtr(), o.payloadPtr(), payloadSize()) < 0;
   }
 
   bool operator == (const DataPtr &o) const
   {
     if(m_p == o.m_p)
-      return false;
+      return true;
     if(!m_p || !o.m_p)
+      return false;
+    if(payloadSize()!=o.payloadSize())
       return false;
     return 0==memcmp(payloadPtr(), o.payloadPtr(), payloadSize());
   }
@@ -278,7 +293,7 @@ namespace std
 template<class T>
 DataPtr<T> make_data_ptr()
 {
-  return DataPtr<T>(new T);
+  return DataPtr<T>((T*)malloc(sizeof(T)));
 }
 
 typedef DataPtr<typed_data_t> TypedDataPtr;
@@ -363,6 +378,7 @@ public:
 
   virtual const std::string &getName() const=0;
   virtual unsigned getIndex() const=0;
+  virtual bool isApplication() const=0;
 
   virtual const MessageTypePtr &getMessageType() const=0;
 
@@ -406,6 +422,24 @@ public:
   // where sequence is a sequence number for that device instance
   // running from zero upwards
   virtual void export_key_value(uint32_t key, uint32_t value) =0;
+  
+  /*! Log the state of the currently sending/receiving device the
+    current event, and associate with the given string tag. The id should
+    be unique for any check-point on the calling device.
+  
+    \param preEvent If true, then log the state before the event. Otherwise log after
+  
+    \param level Used to establish different levels of checkpointing.
+  
+    \param tagFmt format string used to tag the event
+  
+    It is legal to call handler_checkpoint multiple times within a handler,
+    as long as the id is different. For example, you might want to call with
+    both pre and post event checkpoints.
+    
+  */
+  virtual void vcheckpoint(bool preEvent, int level, const char *tagFmt, va_list tagArgs) =0;
+  
   
   // Mark the application as complete. As soon as any device calls this,
   // the whole graph is considered complete. If multiple devices call
@@ -461,6 +495,10 @@ public:
 
   virtual const TypedDataSpecPtr &getPropertiesSpec() const=0;
   virtual const TypedDataSpecPtr &getStateSpec() const=0;
+
+  virtual const std::string &getReadyToSendCode() const=0;
+
+  virtual const std::string &getSharedCode() const=0;
 
   virtual unsigned getInputCount() const=0;
   virtual const InputPinPtr &getInput(unsigned index) const=0;
