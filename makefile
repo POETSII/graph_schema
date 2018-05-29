@@ -167,7 +167,7 @@ endef
 
 SOFTSWITCH_DIR = ../toy_softswitch
 
-ALL_SOFTSWITCH = 
+ALL_SOFTSWITCH =
 
 define softswitch_instance_template
 # $1 = name
@@ -195,6 +195,10 @@ include apps/storm/makefile.inc
 
 include apps/amg/makefile.inc
 include apps/apsp/makefile.inc
+
+include apps/fantasi/makefile.inc
+include apps/fantasi_td/makefile.inc
+include apps/ring-example/makefile.inc
 
 include tools/partitioner.inc
 
