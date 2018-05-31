@@ -1,34 +1,35 @@
 from graph.core import *
+from graph.cpp_type_map import CppTypeMap
 
 import sys
 
 registrationStatements=[]
 
-def render_typed_data_as_decl(proto,dst,indent=""):
-    if proto is None:
-        pass
-    elif isinstance(proto,ScalarTypedDataSpec):
-        if isinstance(proto.type,Typedef):
-            dst.write("{}{} {};\n".format(indent, proto.type.id, proto.name))
-        else:
-            dst.write("{}{} {};\n".format(indent, proto.type, proto.name))
-    elif isinstance(proto,TupleTypedDataSpec):
-        dst.write("{}struct {{\n".format(indent))
-        for elt in proto.elements_by_index:
-            render_typed_data_as_decl(elt,dst,indent+"  ")
-        dst.write("{}}} {};\n".format(indent,proto.name));
-    elif isinstance(proto,ArrayTypedDataSpec):
-        if isinstance(proto.type,ScalarTypedDataSpec):
-            dst.write("{}{} {}[{}];\n".format(indent, proto.type.type, proto.name, proto.length));
-        elif isinstance(proto.type,ArrayTypedDataSpec):
-            etype=proto.type
-            if not isinstance(etype.type,ScalarTypedDataSpec):
-                raise RuntimeError("Haven't implemented arrays of arrays of non-scalars yet...")
-            dst.write("{}{} {}[{}][{}];\n".format(indent, etype.type.type, proto.name, proto.length, etype.length))
-        else:
-            raise RuntimeError("Haven't implemented arrays of non-scalars yet.")
-    else:
-        raise RuntimeError("Unknown data type {}.".format(type(proto)))
+#~ def render_typed_data_as_decl(proto,dst,indent=""):
+    #~ if proto is None:
+        #~ pass
+    #~ elif isinstance(proto,ScalarTypedDataSpec):
+        #~ if isinstance(proto.type,Typedef):
+            #~ dst.write("{}{} {};\n".format(indent, proto.type.id, proto.name))
+        #~ else:
+            #~ dst.write("{}{} {};\n".format(indent, proto.type, proto.name))
+    #~ elif isinstance(proto,TupleTypedDataSpec):
+        #~ dst.write("{}struct {{\n".format(indent))
+        #~ for elt in proto.elements_by_index:
+            #~ render_typed_data_as_decl(elt,dst,indent+"  ")
+        #~ dst.write("{}}} {};\n".format(indent,proto.name));
+    #~ elif isinstance(proto,ArrayTypedDataSpec):
+        #~ if isinstance(proto.type,ScalarTypedDataSpec):
+            #~ dst.write("{}{} {}[{}];\n".format(indent, proto.type.type, proto.name, proto.length));
+        #~ elif isinstance(proto.type,ArrayTypedDataSpec):
+            #~ etype=proto.type
+            #~ if not isinstance(etype.type,ScalarTypedDataSpec):
+                #~ raise RuntimeError("Haven't implemented arrays of arrays of non-scalars yet...")
+            #~ dst.write("{}{} {}[{}][{}];\n".format(indent, etype.type.type, proto.name, proto.length, etype.length))
+        #~ else:
+            #~ raise RuntimeError("Haven't implemented arrays of non-scalars yet.")
+    #~ else:
+        #~ raise RuntimeError("Unknown data type {}.".format(type(proto)))
 
 
 def render_typed_data_init(proto,dst,prefix):
@@ -290,16 +291,17 @@ def render_typed_data_as_elements(proto, dst, prefix):
 
 
 def render_typed_data_as_spec(proto,name,elt_name,dst,asHeader=False):
-    dst.write("#pragma pack(push,1)\n")
-    dst.write("struct {} : typed_data_t{{\n".format(name))
-    if proto:
-        assert isinstance(proto, TupleTypedDataSpec)
-        for elt in proto.elements_by_index:
-            render_typed_data_as_decl(elt,dst,"  ")
-    else:
-        dst.write("  //empty\n")
-    dst.write("};\n")
-    dst.write("#pragma pack(pop)\n")
+    # This is now handled by CppTypeMap emissions
+    #~ dst.write("#pragma pack(push,1)\n")
+    #~ dst.write("struct {} : typed_data_t{{\n".format(name))
+    #~ if proto:
+        #~ assert isinstance(proto, TupleTypedDataSpec)
+        #~ for elt in proto.elements_by_index:
+            #~ render_typed_data_as_decl(elt,dst,"  ")
+    #~ else:
+        #~ dst.write("  //empty\n")
+    #~ dst.write("};\n")
+    #~ dst.write("#pragma pack(pop)\n")
     if asHeader:
         return
 
@@ -438,7 +440,7 @@ def emit_output_pin_local_constants(dt,subs,indent=""):
 
 
 
-def render_input_pin_as_cpp(ip,dst):
+def render_input_pin_as_cpp(ip,dst,typeMap):
     dt=ip.parent
     gt=dt.parent
     mt=ip.message_type
@@ -448,17 +450,17 @@ def render_input_pin_as_cpp(ip,dst):
             break
 
     subs={
-        "graphPropertiesStructName"     : "{}_properties_t".format(dt.parent.id),
+        "graphPropertiesStructName"     : typeMap[gt.properties],
         "deviceTypeId"                  : dt.id,
-        "devicePropertiesStructName"    : "{}_properties_t".format(dt.id),
-        "deviceStateStructName"         : "{}_state_t".format(dt.id),
+        "devicePropertiesStructName"    : typeMap[dt.properties],
+        "deviceStateStructName"         : typeMap[dt.state],
         "messageTypeId"                 : mt.id,
         "isApplication"                 : "true" if ip.is_application else "false",
-        "messageStructName"             : "{}_message_t".format(mt.id),
+        "messageStructName"             : typeMap[mt.message],
         "pinName"                      : ip.name,
         "pinIndex"                     : index,
-        "pinPropertiesStructName"       : "{}_{}_properties_t".format(dt.id,ip.name),
-        "pinStateStructName"            : "{}_{}_state_t".format(dt.id,ip.name),
+        "pinPropertiesStructName"       : typeMap[ip.properties],
+        "pinStateStructName"            : typeMap[ip.state],
         "handlerCode"                   : ip.receive_handler,
         "inputCount"                    : len(dt.inputs),
         "outputCount"                   : len(dt.outputs),
@@ -540,7 +542,7 @@ InputPinPtr {deviceTypeId}_{pinName}_Spec_get(){{
     #    end of render_input_pin_as_cpp
     return None
 
-def render_output_pin_as_cpp(op,dst):
+def render_output_pin_as_cpp(op,dst,typeMap):
     dt=op.parent
     graph=dt.parent
     for index in range(len(dt.outputs_by_index)):
@@ -551,17 +553,15 @@ def render_output_pin_as_cpp(op,dst):
 
 
     subs={
-        "graphPropertiesStructName"     : "{}_properties_t".format(dt.parent.id),
+        "graphPropertiesTypeName"     : typeMap[graph.properties],
         "deviceTypeId"                  : dt.id,
-        "devicePropertiesStructName"    : "{}_properties_t".format(dt.id),
-        "deviceStateStructName"         : "{}_state_t".format(dt.id),
+        "devicePropertiesTypeName"    : typeMap[dt.properties],
+        "deviceStateTypeName"         : typeMap[dt.state],
         "messageTypeId"                 : mt.id,
-        "messageStructName"             : "{}_message_t".format(mt.id),
+        "messageTypeName"             : typeMap[dt.message],
         "isApplication"                 : "true" if op.is_application else "false",
         "pinName"                      : op.name,
         "pinIndex"                     : index,
-        "pinPropertiesStructName"       : "{}_{}_properties_t".format(dt.id,op.name),
-        "pinStateStructName"            : "{}_{}_state_t".format(dt.id,op.name),
         "handlerCode"                   : op.send_handler,
         "inputCount"                    : len(dt.inputs),
         "outputCount"                   : len(dt.outputs),
@@ -590,13 +590,13 @@ def render_output_pin_as_cpp(op,dst):
 		      typed_data_t *gDeviceState,
 		      typed_data_t *gMessage,
 		      bool *doSend
-		      ) const override {""")
-    dst.write('    {pinLocalConstants}\n'.format(**subs));
+		      ) const override {
+                   {pinLocalConstants}
 
-    dst.write('    auto graphProperties=cast_typed_properties<{}_properties_t>(gGraphProperties);\n'.format( graph.id ))
-    dst.write('    auto deviceProperties=cast_typed_properties<{}_properties_t>(gDeviceProperties);\n'.format( dt.id ))
-    dst.write('    auto deviceState=cast_typed_data<{}_state_t>(gDeviceState);\n'.format( dt.id ))
-    dst.write('    auto message=cast_typed_data<{}_message_t>(gMessage);\n'.format(op.message_type.id))
+                    auto graphProperties=cast_typed_properties<{graphPropertiesTypeName}>(gGraphProperties);
+                    auto deviceProperties=cast_typed_properties<{devicePropertiesTypeName}>(gDeviceProperties);
+                    auto deviceState=cast_typed_data<{devicePropertiesStateName}>(gDeviceState);
+                    auto message=cast_typed_data<{}_message_t>(gMessage);\n'.format(op.message_type.id))
     dst.write('    HandlerLogImpl handler_log(orchestrator);\n')
     dst.write('    auto handler_exit=[&](int code) -> void { orchestrator->application_exit(code); };\n')
     dst.write('    auto handler_export_key_value=[&](uint32_t key, uint32_t value) -> void { orchestrator->export_key_value(key, value); };\n')   
@@ -761,6 +761,8 @@ def render_device_type_as_cpp(dt,dst):
 
 def render_graph_as_cpp(graph,dst, destPath, asHeader=False):
     gt=graph
+    
+    typeMap=CppTypeMap(graph)
 
     if asHeader:
         dst.write('#ifndef {}_header\n'.format(gt.id))
@@ -768,6 +770,9 @@ def render_graph_as_cpp(graph,dst, destPath, asHeader=False):
 
     dst.write('#include "graph.hpp"\n')
     dst.write('#include "rapidjson/document.h"\n')
+    
+    if asHeader:
+        dst.write(typeMap.defs) # Inject all the true type defs
     
     for td in graph.typedefs_by_index:
         render_typedef_as_cpp(td,dst)
