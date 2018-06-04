@@ -203,7 +203,7 @@ public:
   {
     release();
   }
-  
+
   DataPtr clone() const
   {
     if(!m_p)
@@ -313,7 +313,7 @@ class TypedDataSpec
 public:
   virtual ~TypedDataSpec()
   {}
-  
+
   //! Gets the detailed type of the data spec
   /*! For very lightweight implementations this may not be available
   */
@@ -364,7 +364,7 @@ public:
   virtual const std::string &getId() const=0;
 
   virtual const TypedDataSpecPtr &getMessageSpec() const=0;
-  
+
   virtual rapidjson::Document &getMetadata() =0;
 };
 
@@ -416,31 +416,31 @@ public:
 
   // Log a handler message with the given log level
   virtual void vlog(unsigned level, const char *msg, va_list args) =0;
-  
+
   // Export a key value pair from the application. This will be made
   // available in some way as (deviceInstId,sequence,key,value)
   // where sequence is a sequence number for that device instance
   // running from zero upwards
   virtual void export_key_value(uint32_t key, uint32_t value) =0;
-  
+
   /*! Log the state of the currently sending/receiving device the
     current event, and associate with the given string tag. The id should
     be unique for any check-point on the calling device.
-  
+
     \param preEvent If true, then log the state before the event. Otherwise log after
-  
+
     \param level Used to establish different levels of checkpointing.
-  
+
     \param tagFmt format string used to tag the event
-  
+
     It is legal to call handler_checkpoint multiple times within a handler,
     as long as the id is different. For example, you might want to call with
     both pre and post event checkpoints.
-    
+
   */
   virtual void vcheckpoint(bool preEvent, int level, const char *tagFmt, va_list tagArgs) =0;
-  
-  
+
+
   // Mark the application as complete. As soon as any device calls this,
   // the whole graph is considered complete. If multiple devices call
   // exit, then the run-time can non-determinstically choose any one of

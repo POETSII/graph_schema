@@ -114,7 +114,7 @@ public:
     , m_payloadSize(elt->getPayloadSize())
     , m_totalSize(elt->getPayloadSize()+sizeof(typed_data_t))
   {}
-    
+
   //! Gets the detailed type of the data spec
   /*! For very lightweight implementations this may not be available
   */
@@ -136,21 +136,21 @@ public:
     typed_data_t *p=(typed_data_t*)malloc(m_totalSize);
     p->_ref_count=0;
     p->_total_size_bytes=m_totalSize;
-    
+
     m_type->createBinaryDefault(((char*)p)+sizeof(typed_data_t), m_payloadSize);
-    
+
     return TypedDataPtr(p);
   }
 
   virtual TypedDataPtr load(xmlpp::Element *elt) const override
   {
     TypedDataPtr res=create();
-    if(elt){ 
+    if(elt){
       std::string text="{"+elt->get_child_text()->get_content()+"}";
       rapidjson::Document document;
       document.Parse(text.c_str());
       assert(document.IsObject());
-    
+
       m_type->JSONToBinary(document, (char*)res.payloadPtr(), m_payloadSize);
     }
     return res;
@@ -169,14 +169,14 @@ public:
     rapidjson::StringBuffer buffer;
     rapidjson::PrettyWriter<rapidjson::StringBuffer> writer(buffer);
     v.Accept(writer);
-    return std::string(buffer.GetString());    
+    return std::string(buffer.GetString());
   }
 
   virtual void addDataHash(const TypedDataPtr &data, POETSHash &hash) const
   {
     throw std::runtime_error("addDataHash - Not implemented for dynamic types yet.");
   }
-  
+
 };
 
 class InputPinImpl
@@ -217,7 +217,7 @@ protected:
     m_metadata.SetObject();
   }
 public:
-  
+
   virtual const DeviceTypePtr &getDeviceType() const override
   {
     if(!m_deviceType)
@@ -233,7 +233,7 @@ public:
 
   virtual const MessageTypePtr &getMessageType() const override
   { return m_messageType; }
-  
+
   virtual bool isApplication() const override
   { return m_isApplication; }
 
@@ -242,7 +242,7 @@ public:
 
   virtual const TypedDataSpecPtr &getStateSpec() const override
   { return m_stateType; }
-  
+
   virtual const std::string &getHandlerCode() const override
   { return m_code; }
 
@@ -291,7 +291,7 @@ public:
 
   virtual const MessageTypePtr &getMessageType() const override
   { return m_messageType; }
-  
+
   virtual bool isApplication() const override
   { return m_isApplication; }
 
@@ -316,7 +316,7 @@ public:
     , m_message(message)
   {
     m_metadata.SetObject();
-  }  
+  }
 
   virtual const std::string &getId() const override
   { return m_id; }
@@ -547,7 +547,7 @@ public:
     , m_onApplicationExit(onApplicationExit)
     , m_onCheckpoint(onCheckpoint)
   {}
-  
+
   static void onCheckpointDefault(const char *,uint32_t,bool,const char *)
   {
     // Do nothing
@@ -572,7 +572,7 @@ public:
       fprintf(m_dst, "\n");
     }
   }
-  
+
   virtual void vcheckpoint(bool preEvent, int level, const char *fmt, va_list args) override
   {
     char buffer[256]={0};
@@ -582,12 +582,12 @@ public:
     }
     m_onCheckpoint(m_device, preEvent, level, buffer);
   }
-  
+
   virtual void export_key_value(uint32_t key, uint32_t value) override
   {
     m_onExportKeyValue(m_device, key, value);
   }
-  
+
   virtual void application_exit(int code)
   {
     m_onApplicationExit(m_device, code);
@@ -774,7 +774,7 @@ public:
   {
     fprintf(stderr, "Loading provider '%s'\n", path.c_str());
     void *lib=dlopen(path.c_str(), RTLD_NOW|RTLD_LOCAL);
-    if(lib==0)  
+    if(lib==0)
       throw std::runtime_error("Couldn't load provider '"+path+" + '"+dlerror()+"'");
 
     // Mangled name of the export. TODO : A bit fragile.
@@ -799,7 +799,7 @@ public:
     auto it=m_graphs.find(id);
     if(it==m_graphs.end()){
       throw unknown_graph_type_error(id);
-      
+
     }
     return it->second;
   }
