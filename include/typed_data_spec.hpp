@@ -16,7 +16,7 @@
 
 class TypedDataSpecElement
 {
-private:    
+private:
     std::string m_name;
     const char *m_internedName;
 
@@ -40,16 +40,16 @@ protected:
     {
         static_assert( CHAR_BIT==8, "This assumes that we can use char for type punning, and that char is a byte...");
     }
-    
+
     void setBinaryDefault(const std::vector<char> &binaryDefault)
     {
         std::cerr<<"binaryDefault.size() = "<<binaryDefault.size()<<"\n";
-        
+
         assert(!m_defaultSet);
         m_defaultSet=true;
-        
+
         m_binaryDefault=binaryDefault;
-        
+
         auto def=binaryToJSON(&m_binaryDefault[0], m_binaryDefault.size(), m_jsonDefault.GetAllocator());
         m_jsonDefault.Swap(def);
 
@@ -57,7 +57,7 @@ protected:
 public:
   virtual ~TypedDataSpecElement()
   {}
-  
+
   const std::string &getName() const
   { return m_name; }
 
@@ -65,14 +65,14 @@ public:
     //! Get a constant string that can be used within JSON without allocation
     rapidjson::Value getNameValue() const
     { return rapidjson::Value(rapidjson::StringRef(m_internedName)); }
-  
+
   size_t getPayloadSize() const
   { return m_binaryDefault.size(); }
-  
+
   void createBinaryDefault(char *pBinary, unsigned cbBinary) const
   {
     if(cbBinary!=m_binaryDefault.size()){
-        
+
         std::stringstream tmp;
         tmp<<"createBinaryDefault - incorrect binary size of "<<cbBinary<<", expected "<<m_binaryDefault.size();
         throw std::runtime_error(tmp.str());
@@ -80,25 +80,41 @@ public:
     std::memcpy(pBinary, &m_binaryDefault[0], m_binaryDefault.size());
   }
 
+  void createBinaryRandom(char *pBinary, unsigned cbBinary) const
+  {//Generates random numbers for every byte of the payload, and add this to the message.
+    if (cbBinary!=m_binaryDefault.size()){
+        std::stringstream tmp;
+        tmp<<"createBinaryDefault - incorrect binary size of "<<cbBinary<<", expected "<<m_binaryDefault.size();
+        throw std::runtime_error(tmp.str());
+    }
+    std::vector<char> m_binaryRandom;
+    m_binaryRandom.resize(m_binaryDefault.size());
+    for (unsigned i = 0; i < m_binaryDefault.size(); i++)
+    {
+        m_binaryRandom[i] = rand() % 256;
+    }
+    std::memcpy(pBinary, &m_binaryRandom[0], m_binaryDefault.size());
+  }
+
   //! Returns a fully populated JSON value, including all members (include zeros)
   rapidjson::Value getJSONDefault(rapidjson::Document::AllocatorType &alloc) const
   {
     return rapidjson::Value(m_jsonDefault, alloc); // create a copy
   }
-  
+
   virtual rapidjson::Value binaryToJSON(const char *pBinary, unsigned cbBinary, rapidjson::Document::AllocatorType& alloc) const=0;
-  
+
     virtual void JSONToBinary(const rapidjson::Value &value, char *pBinary, unsigned cbBinary, bool alreadyDefaulted=false) const=0;
-  
+
   virtual bool isTuple() const
   { return false; }
-  
+
   virtual bool isScalar() const
   { return false; }
-  
+
   virtual bool isArray() const
   { return false; }
-  
+
   virtual bool isUnion() const
   { return false; }
 };
@@ -115,53 +131,53 @@ public:
         ScalarType_width_32  = 0x2,
         ScalarType_width_64  = 0x3,
         ScalarType_width_mask  = 0xF,
-        
+
         ScalarType_kind_unsigned = 0x10,
         ScalarType_kind_signed  = 0x20,
         ScalarType_kind_float   = 0x30,
         ScalarType_kind_char   = 0x40,
         ScalarType_kind_mask   = 0xF0,
-        
+
         ScalarType_uint8_t    =ScalarType_width_8 | ScalarType_kind_unsigned,
         ScalarType_uint16_t    =ScalarType_width_16 | ScalarType_kind_unsigned,
         ScalarType_uint32_t    =ScalarType_width_32 | ScalarType_kind_unsigned,
         ScalarType_uint64_t    =ScalarType_width_64 | ScalarType_kind_unsigned,
-        
+
         ScalarType_int8_t    =ScalarType_width_8 | ScalarType_kind_signed,
         ScalarType_int16_t    =ScalarType_width_16 | ScalarType_kind_signed,
         ScalarType_int32_t    =ScalarType_width_32 | ScalarType_kind_signed,
         ScalarType_int64_t    =ScalarType_width_64 | ScalarType_kind_signed,
-        
+
         ScalarType_half    =ScalarType_width_16 | ScalarType_kind_float,
         ScalarType_float    =ScalarType_width_32 | ScalarType_kind_float,
         ScalarType_double    =ScalarType_width_64 | ScalarType_kind_float,
-        
+
         ScalarType_char    =ScalarType_width_8 | ScalarType_kind_char
     };
-    
+
     static ScalarType typeNameToScalarType(const std::string &name)
     {
         if(name=="char") return ScalarType_char;
-        
+
         if(name=="uint8_t") return ScalarType_uint8_t;
         if(name=="uint16_t") return ScalarType_uint16_t;
         if(name=="uint32_t") return ScalarType_uint32_t;
         if(name=="uint64_t") return ScalarType_uint64_t;
-        
+
         if(name=="int8_t") return ScalarType_int8_t;
         if(name=="int16_t") return ScalarType_int16_t;
         if(name=="int32_t") return ScalarType_int32_t;
         if(name=="int64_t") return ScalarType_int64_t;
-        
+
         if(name=="half") return ScalarType_half;
         if(name=="float") return ScalarType_float;
         if(name=="double") return ScalarType_double;
-        
+
         throw std::runtime_error("toScalarType - unknown type '"+name+"'");
     }
-    
+
     static unsigned scalarTypeWidthBytes(ScalarType st)
-    {   
+    {
         switch(st & ScalarType_width_mask){
         case ScalarType_width_8: return 1;
         case ScalarType_width_16: return 2;
@@ -170,7 +186,7 @@ public:
         default: assert(0); throw std::runtime_error("Unknown width."); return INT_MAX;
         }
     }
-private:  
+private:
     ScalarType m_type;
     std::string m_typeString;
     std::string m_defaultString;
@@ -182,7 +198,7 @@ private:
         T val=*(const T*)pBinary;
         return rapidjson::Value(val);
     }
-    
+
     template<class T>
     void JSONToBinaryImpl(const rapidjson::Value &value, char *pBinary, unsigned cbBinary) const
     {
@@ -190,21 +206,21 @@ private:
         double v = value.GetDouble();
         *((T*)pBinary) = v;
     }
-    
+
     void JSONToBinaryImplU64(const rapidjson::Value &value, char *pBinary, unsigned cbBinary) const
     {
         assert(cbBinary == scalarTypeWidthBytes(m_type));
         uint64_t v = value.GetUint64();
         *((uint64_t*)pBinary) = v;
     }
-    
+
     void JSONToBinaryImplI64(const rapidjson::Value &value, char *pBinary, unsigned cbBinary) const
     {
         assert(cbBinary == scalarTypeWidthBytes(m_type));
         int64_t v = value.GetInt64();
         *((int64_t*)pBinary) = v;
     }
-    
+
 public:
     TypedDataSpecElementScalar(const std::string &name, const std::string &typeName, std::string defaultValue=std::string())
         : TypedDataSpecElement(name)
@@ -225,37 +241,37 @@ public:
 
     virtual ~TypedDataSpecElementScalar()
     {}
-    
+
     virtual bool isScalar() const
     { return true; }
-    
+
     virtual rapidjson::Value binaryToJSON(const char *pBinary, unsigned cbBinary, rapidjson::Document::AllocatorType&) const override
     {
         if(cbBinary!=scalarTypeWidthBytes(m_type)){
             throw std::runtime_error("binaryToJSON - Wrong binary size for element.");
         }
-        
+
         switch(m_type){
         case ScalarType_uint8_t: return binaryToJSONImpl<uint8_t>(pBinary, cbBinary);
         case ScalarType_uint16_t: return binaryToJSONImpl<uint16_t>(pBinary, cbBinary);
         case ScalarType_uint32_t: return binaryToJSONImpl<uint32_t>(pBinary, cbBinary);
         case ScalarType_uint64_t: return binaryToJSONImpl<uint64_t>(pBinary, cbBinary);
-            
+
         case ScalarType_int8_t: return binaryToJSONImpl<int8_t>(pBinary, cbBinary);
         case ScalarType_int16_t: return binaryToJSONImpl<int16_t>(pBinary, cbBinary);
         case ScalarType_int32_t: return binaryToJSONImpl<int32_t>(pBinary, cbBinary);
         case ScalarType_int64_t: return binaryToJSONImpl<int64_t>(pBinary, cbBinary);
-            
+
         case ScalarType_half: throw std::runtime_error("Half not implemented yet.");
         case ScalarType_float: return binaryToJSONImpl<float>(pBinary, cbBinary);
         case ScalarType_double: return binaryToJSONImpl<double>(pBinary, cbBinary);
-        
+
         case ScalarType_char: return binaryToJSONImpl<char>(pBinary, cbBinary);
 
         default: throw std::runtime_error("Unknown or not implemented type.");
         }
     }
-  
+
     virtual void JSONToBinary(const rapidjson::Value &value, char *pBinary, unsigned cbBinary, bool alreadyDefaulted=false) const override
     {
         if(cbBinary!=scalarTypeWidthBytes(m_type)){
@@ -265,28 +281,28 @@ public:
         if(!alreadyDefaulted){
             createBinaryDefault(pBinary, cbBinary);
         }
-        
+
         switch(m_type){
         case ScalarType_uint8_t:  JSONToBinaryImpl<uint8_t>(value, pBinary, cbBinary); break;
         case ScalarType_uint16_t:  JSONToBinaryImpl<uint16_t>(value, pBinary, cbBinary); break;
         case ScalarType_uint32_t:  JSONToBinaryImpl<uint32_t>(value, pBinary, cbBinary); break;
         case ScalarType_uint64_t:  JSONToBinaryImplU64(value, pBinary, cbBinary); break;
-        
+
         case ScalarType_int8_t:  JSONToBinaryImpl<int8_t>(value, pBinary, cbBinary); break;
         case ScalarType_int16_t:  JSONToBinaryImpl<int16_t>(value, pBinary, cbBinary); break;
         case ScalarType_int32_t:  JSONToBinaryImpl<int32_t>(value, pBinary, cbBinary); break;
         case ScalarType_int64_t:  JSONToBinaryImplI64(value, pBinary, cbBinary); break;
-            
+
         case ScalarType_half:  throw std::runtime_error("JSONtoBinary - half not implemented yet."); break;
         case ScalarType_float:  JSONToBinaryImpl<float>(value, pBinary, cbBinary); break;
         case ScalarType_double:  JSONToBinaryImpl<double>(value, pBinary, cbBinary); break;
-        
+
         case ScalarType_char:  JSONToBinaryImpl<char>(value, pBinary, cbBinary); break;
-            
+
         default: throw std::runtime_error("JSONToBinary - Unknown scalar type.");
         }
     }
-    
+
     const std::string &getTypeName() const
     { return m_typeString; }
 };
@@ -295,7 +311,7 @@ typedef std::shared_ptr<TypedDataSpecElementScalar> TypedDataSpecElementScalarPt
 class TypedDataSpecElementTuple
   : public TypedDataSpecElement
 {
-private:    
+private:
     typedef std::vector<TypedDataSpecElementPtr> elements_by_index_t;
     typedef std::map<std::string,std::pair<TypedDataSpecElementPtr,unsigned> > elements_and_offsets_by_name_t;
 
@@ -319,20 +335,20 @@ public:
         , m_sizeBytes(0)
     {
         std::vector<char> tmp;
-        
+
         while(begin!=end){
             unsigned cb=(*begin)->getPayloadSize();
-            
+
             add(*begin);
 
             unsigned off=tmp.size();
             tmp.resize(off+cb);
             (*begin)->createBinaryDefault(&tmp[off], cb);
-            
+
             off+=cb;
             ++begin;
         }
-        
+
         setBinaryDefault(tmp);
     }
 
@@ -340,7 +356,7 @@ public:
 
     virtual bool isTuple() const override
     { return true; }
-        
+
     virtual void JSONToBinary(const rapidjson::Value &value, char *pBinary, unsigned cbBinary, bool alreadyDefaulted=false) const override
     {
         if(cbBinary != getPayloadSize() ){
@@ -366,29 +382,29 @@ public:
             ++it;
         }
     }
-    
+
     virtual rapidjson::Value binaryToJSON(const char *pBinary, unsigned cbBinary, rapidjson::Document::AllocatorType &alloc) const override
     {
         rapidjson::Value res(rapidjson::kObjectType);
-        
+
         unsigned off=0;
         for(const auto &e : m_elementsByIndex)
         {
             auto val=e->binaryToJSON(pBinary+off, e->getPayloadSize(), alloc);
             res.AddMember(e->getNameValue(), val, alloc);
-            
+
             off += e->getPayloadSize();
         }
-        
+
         return res;
     }
-    
+
     unsigned size() const
     { return m_elementsByIndex.size(); }
-    
+
     const_iterator begin() const
     { return m_elementsByIndex.begin(); }
-    
+
     const_iterator end() const
     { return m_elementsByIndex.end(); }
 };
@@ -408,26 +424,26 @@ public:
         , m_eltType(type)
     {
         unsigned size=count*type->getPayloadSize();
-        
+
         std::vector<char> tmp(size, 0);
         if(!defaultValue.empty()){
             rapidjson::Document doc;
             doc.Parse(defaultValue.c_str());
             JSONToBinary(doc, &tmp[0], size, true);
         }
-        
+
         setBinaryDefault(tmp);
     }
-    
+
     virtual bool isArray() const override
     { return true; }
-    
+
     virtual void JSONToBinary(const rapidjson::Value &value, char *pBinary, unsigned cbBinary, bool alreadyDefaulted=false) const override
     {
         if(cbBinary != getPayloadSize() ){
             throw std::runtime_error("JSONToBinary - Invalid binary size.");
         }
-        
+
         if(!value.IsArray()){
             throw std::runtime_error("JSONToBinary - initialiser for array should be array.");
         }
@@ -435,7 +451,7 @@ public:
         if(!alreadyDefaulted){
             createBinaryDefault(pBinary, cbBinary);
         }
-        
+
         unsigned off=0;
         unsigned cb=m_eltType->getPayloadSize();
         for(unsigned i=0; i<m_eltCount; i++){
@@ -443,28 +459,28 @@ public:
             off+=cb;
         }
     }
-    
+
     virtual rapidjson::Value binaryToJSON(const char *pBinary, unsigned cbBinary, rapidjson::Document::AllocatorType &alloc) const override
     {
         rapidjson::Value res(rapidjson::kArrayType);
         res.Reserve(m_eltCount, alloc);
-        
+
         unsigned off=0;
         unsigned cb=m_eltType->getPayloadSize();
         for(unsigned i=0; i<m_eltCount; i++)
         {
             auto val=m_eltType->binaryToJSON(pBinary+off, cb, alloc);
             res.PushBack(val, alloc);
-            
+
             off += cb;
         }
-        
+
         return res;
     }
-    
+
     unsigned getElementCount() const
     { return m_eltCount; }
-    
+
     TypedDataSpecElementPtr getElementType() const
     { return m_eltType; }
 };
@@ -474,7 +490,7 @@ typedef std::shared_ptr<TypedDataSpecElementArray> TypedDataSpecElementArrayPtr;
 class TypedDataSpecElementUnion
   : public TypedDataSpecElement
 {
-private:    
+private:
     typedef std::vector<TypedDataSpecElementPtr> elements_by_index_t;
     typedef std::map<std::string,TypedDataSpecElementPtr> elements_by_name_t;
 
@@ -510,22 +526,22 @@ public:
 
     virtual size_t getPayloadSize() const override
     { return m_sizeBytes; }
-    
+
     virtual bool isTuple() const override
     { return true; }
-    
+
     unsigned count() const
     { return m_elementsByIndex.size(); }
-    
+
     TypedDataSpecElementPtr getElement(unsigned index) const
     { return m_elementsByIndex.at(index); }
-    
+
     TypedDataSpecElementPtr getElement(const std::string &name) const
     { return m_elementsByIndex.at(name); }
-    
+
     const_iterator begin() const
     { return m_elementsByIndex.begin(); }
-    
+
     const_iterator end() const
     { return m_elementsByIndex.end(); }
 };
