@@ -13,13 +13,14 @@
 #include <cstring>
 #include <cstdlib>
 
-static unsigned  logLevel=2;
+static unsigned logLevel=2;
+static unsigned messageInit;
 
 void write_application_output(unsigned m_epoch, const char *devId, const OutputPin *pin, const TypedDataPtr &data)
 {
   assert(pin->isApplication());
   std::stringstream acc;
-  
+
 	//ndjson
   //std::cout<<"{\"epoch\":\""<<m_epoch<<"\",\"dev\":\""<<devId<<"\",\"pin\":\""<<pin->getName()<<"\",\"msg\":";
   //std::cout<<pin->getMessageType()->getMessageSpec()->toJSON(data);
@@ -77,6 +78,8 @@ struct EpochSim
     std::vector<std::vector<output> > outputs;
     std::vector<std::vector<input> > inputs;
 
+    std::pair<MessageTypePtr, TypedDataPtr> prev_message;
+
     bool anyReady() const
     {
       return readyToSend!=0;
@@ -88,23 +91,23 @@ struct EpochSim
   TypedDataPtr m_graphProperties;
   std::vector<device> m_devices;
   std::shared_ptr<LogWriter> m_log;
-  
+
   std::unordered_map<const char *,unsigned> m_deviceIdToIndex;
   std::vector<std::tuple<const char*,unsigned,uint32_t,uint32_t> > m_keyValueEvents;
-  
+
   std::function<void (const char*,uint32_t,uint32_t)> m_onExportKeyValue;
-  
+
   std::function<void (const char*,bool,int,const char *)> m_onCheckpoint;
-  
+
   int m_checkpointLevel=0;
   std::vector<std::pair<bool,std::string> > m_checkpointKeys;
-  
+
   bool m_deviceExitCalled=false;
   bool m_deviceExitCode=0;
   std::function<void (const char*,int)> m_onDeviceExit;
 
   uint64_t m_unq;
-  
+
   uint64_t nextSeqUnq()
   {
     return ++m_unq;
@@ -208,17 +211,17 @@ struct EpochSim
       }
       unsigned index=it->second;
       unsigned seq=m_devices[index].keyValueSeq++;
-      
+
       m_keyValueEvents.emplace_back(id, seq, key, value);
     };
-    
+
     m_onDeviceExit=[&](const char *id, int code) ->void
     {
       m_deviceExitCalled=true;
       m_deviceExitCode=code;
       fprintf(stderr, "  device '%s' called application_exit(%d)\n", id, code);
     };
-    
+
     if(!m_log){
       m_onCheckpoint=[this](const char *id, bool preEvent, int level, const char *key)
       {};
@@ -230,7 +233,7 @@ struct EpochSim
         }
       };
     }
-    
+
     for(auto &dev : m_devices){
       ReceiveOrchestratorServicesImpl receiveServices{logLevel, stderr, dev.name, "__init__", m_onExportKeyValue, m_onDeviceExit, m_onCheckpoint  };
       auto init=dev.type->getInput("__init__");
@@ -242,7 +245,7 @@ struct EpochSim
         init->onReceive(&receiveServices, m_graphProperties.get(), dev.properties.get(), dev.state.get(), 0, 0, 0);
       }
       dev.readyToSend = dev.type->calcReadyToSend(&receiveServices, m_graphProperties.get(), dev.properties.get(), dev.state.get());
-      
+
       if(m_log){
         // Try to avoid allocation, while gauranteeing m_checkpointKeys is left in empty() state
         std::vector<std::pair<bool,std::string> > tags;
@@ -267,6 +270,38 @@ struct EpochSim
 
   double m_statsSends=0;
   unsigned m_epoch=0;
+
+//Generate either a zero initialised message, or a random message based on
+//messageInit, set as an argument.
+  TypedDataPtr getMessage(MessageTypePtr m)
+  {
+    TypedDataPtr res;
+    unsigned r = 2;//Init at 2 incase the message is not to be randomly zero or random.
+    if (messageInit == 2)
+    {// If the initialisation is to be randomly zero or random, generate a random value for this.
+      r = rand() % 2;
+    }
+
+    if (messageInit == 0 || r == 0)
+    {//Zero initialised message
+      res = m->getMessageSpec()->create();
+    } else if (messageInit == 1 || r == 1)
+    {//Random message
+      auto empty = m->getMessageSpec()->create();
+      unsigned int size = ((int*) empty.get())[1];
+
+      typed_data_t *p=(typed_data_t*)malloc(size);
+      p->_ref_count=0;
+      p->_total_size_bytes=size;
+
+      auto tup = m->getMessageSpec()->getTupleElement();
+      tup->createBinaryRandom(((char*)p)+sizeof(typed_data_t), size-8);
+      res = TypedDataPtr(p);
+    }
+
+    return res;
+
+  }
 
   template<class TRng>
   bool step(TRng &rng, double probSend,bool capturePreEventState)
@@ -347,10 +382,10 @@ struct EpochSim
       m_statsSends++;
 
       const OutputPinPtr &output=src.type->getOutput(sel);
-      TypedDataPtr message(output->getMessageType()->getMessageSpec()->create());
-      
-      std::string idSend;      
-      
+      TypedDataPtr message(getMessage(output->getMessageType()));
+
+      std::string idSend;
+
       bool doSend=true;
       {
         #ifndef NDEBUG
@@ -369,7 +404,7 @@ struct EpochSim
         }catch(provider_assertion_error &e){
           fprintf(stderr, "Caught handler exception during send. devId=%s, devType=%s, outPin=%s.", src.name, src.type->getId().c_str(), output->getName().c_str());
           fprintf(stderr, "  %s\n", e.what());
-          
+
           if(capturePreEventState){
             fprintf(stderr, "  preSendState = %s\n", src.type->getStateSpec()->toJSON(prevState).c_str());
           }
@@ -378,13 +413,12 @@ struct EpochSim
         }
 
         src.readyToSend = src.type->calcReadyToSend(&sendServices, m_graphProperties.get(), src.properties.get(), src.state.get());
-        
-        
+
         if(m_log){
           // Try to avoid allocation, while gauranteeing m_checkpointKeys is left in empty() state
           std::vector<std::pair<bool,std::string> > tags;
           std::swap(tags, m_checkpointKeys);
-        
+
           auto id=nextSeqUnq();
           auto idStr=std::to_string(id);
           idSend=idStr;
@@ -418,7 +452,6 @@ struct EpochSim
       }
 
       sent=true;
-      
       if(output->isApplication()){
         write_application_output(m_epoch, src.name, output.get(), message);
       }else{
@@ -444,24 +477,24 @@ struct EpochSim
           }catch(provider_assertion_error &e){
             fprintf(stderr, "Caught handler exception during Receive. devId=%s, dstDevType=%s, dstPin=%s.\n", dst.name, dst.type->getId().c_str(), pin->getName().c_str());
             fprintf(stderr, "  %s\n", e.what());
-            
+
             fprintf(stderr, "     message = %s\n", pin->getMessageType()->getMessageSpec()->toJSON(message).c_str());
             if(capturePreEventState){
               fprintf(stderr, "  preRecvState = %s\n", dst.type->getStateSpec()->toJSON(prevState).c_str());
             }
             fprintf(stderr, "     currState = %s\n", dst.type->getStateSpec()->toJSON(dst.state).c_str());
-            
+
             throw;
           }
           dst.readyToSend = dst.type->calcReadyToSend(&receiveServices, m_graphProperties.get(), dst.properties.get(), dst.state.get());
-          
+
           if(m_log){
             std::vector<std::pair<bool,std::string> > tags;
             std::swap(tags, m_checkpointKeys);
-            
+
             auto id=nextSeqUnq();
             auto idStr=std::to_string(id);
-            
+
             m_log->onRecvEvent(
               idStr.c_str(),
               m_epoch,
@@ -477,12 +510,11 @@ struct EpochSim
               idSend.c_str()
             );
           }
-        
+
           anyReady = anyReady || dst.anyReady();
         }
       }
     }
-
     ++m_epoch;
     return sent || anyReady;
   }
@@ -502,6 +534,7 @@ void usage()
   fprintf(stderr, "  --prob-send probability\n");
   fprintf(stderr, "  --key-value destFile\n");
   fprintf(stderr, "  --accurate-assertions : Capture device state before send/recv in case of assertions.\n");
+  fprintf(stderr, "  --message-init n: 0 (default) - Zero initialise all messages, 1 - All messages are randomly inisitalised, 2 - Randomly zero or random inisitalise\n");
   exit(1);
 }
 
@@ -528,18 +561,18 @@ void onsignal_close_resources (int)
 
 int main(int argc, char *argv[])
 {
-  
-    
-  
+
+
+
   try{
 
     std::string srcFilePath="-";
 
     std::string snapshotSinkName;
     unsigned snapshotDelta=0;
-    
+
     std::string logSinkName;
-    
+
     std::string checkpointName;
 
     unsigned statsDelta=1;
@@ -548,11 +581,11 @@ int main(int argc, char *argv[])
 
     //double probSend=0.9;
     double probSend=1.0;
-    
+
     bool enableAccurateAssertions=false;
 
     std::string keyValueName;
-    
+
     int ia=1;
     while(ia < argc){
       if(!strcmp("--help",argv[ia])){
@@ -610,6 +643,16 @@ int main(int argc, char *argv[])
       }else if(!strcmp("--accurate-assertions",argv[ia])){
         enableAccurateAssertions=true;
         ia+=1;
+      }else if(!strcmp("--message-init",argv[ia])){
+        if(ia+1 >= argc){
+          fprintf(stderr, "Missing argument to --message-init\n");
+          usage();
+        }
+        messageInit=strtoul(argv[ia+1], 0, 0);
+        ia+=2;
+        if (messageInit > 2) {
+          fprintf(stderr, "Argument for --message-init is too large. Defaulting to 0\n");
+        }
       }else{
         srcFilePath=argv[ia];
         ia++;
@@ -617,7 +660,7 @@ int main(int argc, char *argv[])
     }
 
     RegistryImpl registry;
-    
+
     xmlpp::DomParser parser;
 
     filepath srcPath(current_path());
@@ -639,13 +682,13 @@ int main(int argc, char *argv[])
     if(logLevel>1){
       fprintf(stderr, "Parsed XML\n");
     }
-    
+
     atexit(atexit_close_resources);
     signal(SIGABRT, onsignal_close_resources);
     signal(SIGINT, onsignal_close_resources);
 
     EpochSim graph;
-    
+
     if(!logSinkName.empty()){
       graph.m_log.reset(new LogWriterToFile(logSinkName.c_str()));
       g_pLog=graph.m_log;
@@ -659,7 +702,7 @@ int main(int argc, char *argv[])
             exit(1);
         }
     }
-    
+
     loadGraph(&registry, srcPath, parser.get_document()->get_root_node(), &graph);
     if(logLevel>1){
       fprintf(stderr, "Loaded\n");
@@ -680,7 +723,7 @@ int main(int argc, char *argv[])
     int nextStats=0;
     int nextSnapshot=snapshotDelta ? snapshotDelta-1 : -1;
     int snapshotSequenceNum=1;
-    
+
     bool capturePreEventState=enableAccurateAssertions || !checkpointName.empty();
 
     for(int i=0; i<maxSteps; i++){
@@ -719,7 +762,7 @@ int main(int argc, char *argv[])
         }
         fflush(keyValueDst);
     }
-    
+
     close_resources();
   }catch(std::exception &e){
     close_resources();

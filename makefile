@@ -180,7 +180,7 @@ endef
 
 SOFTSWITCH_DIR = ../toy_softswitch
 
-ALL_SOFTSWITCH = 
+ALL_SOFTSWITCH =
 
 define softswitch_instance_template
 # $1 = name
