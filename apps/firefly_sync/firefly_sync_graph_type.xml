@@ -93,6 +93,12 @@
 				]]></OnSend>
 		</OutputPin>
 
+                <InputPin name="force_flash" messageTypeId="flash" application="true">
+                     <OnReceive><![CDATA[
+                                deviceState->t = deviceProperties->period - 2; // move it close to flashing
+                     ]]></OnReceive>
+                </InputPin>
+
 		<OutputPin name="flash_log" messageTypeId="flash" application="true">
 			<OnSend><![CDATA[
 				deviceState->rdy_to_log=0;	
@@ -143,4 +149,3 @@
 
 	</DeviceTypes>
 </GraphType>
-</Graphs>
