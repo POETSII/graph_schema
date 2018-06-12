@@ -1,0 +1,47 @@
+<?xml version="1.0"?>
+<Graphs xmlns="https://poets-project.org/schemas/virtual-graph-schema-v2" formatMinorVersion="2">
+  <GraphType id="sf306_graph_schema_externals">
+    
+    <MessageTypes>
+        <MessageType id="extern_in" />
+        <MessageType id="extern_out" />
+    </MessageTypes>
+    
+    <DeviceTypes>
+      <DeviceType id="dev">
+          <State>
+            <Scalar type="uint32_t" name="i" />
+            <Scalar type="uint8_t" name="rts" />
+          </State>
+
+          <ReadyToSend><![CDATA[
+             *readyToSend=0
+             if(deviceState->rts) {
+                *readyToSend=RTS_FLAG_devout; 
+             }
+          ]]></ReadyToSend>
+          
+          <InputPin name="devin" messageTypeId="extern_in">
+            <OnReceive><![CDATA[
+               deviceState->i++;
+               deviceState->rts=1:
+            ]]></OnReceive>
+          </InputPin>
+
+          <OutputPin name="devout" messageTypeId="extern_out">
+            <OnSend><![CDATA[
+              // Nothing
+              deviceState->rts = 0;
+            ]]></OnSend>
+         </OutputPin>
+      </DeviceType>
+
+      <ExternalType id="extern_dev">
+         <InputPin name="to_extern" messageTypeId="extern_out"/>
+         <OutputPin name="to_device" messageTypeId="extern_in"/>
+      </ExternalType>
+
+    </DeviceTypes>
+    
+  </GraphType>
+</Graphs>

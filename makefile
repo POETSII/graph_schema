@@ -103,9 +103,9 @@ regenerate-random :
 	python3.4 tools/create_random_graph.py 8 > test/virtual/random4.xml
 
 
-%.checked : %.xml $(JING) master/virtual-graph-schema-v2.1.rnc derived/virtual-graph-schema-v2.1.xsd
-	java -jar $(JING) -c master/virtual-graph-schema-v2.1.rnc $*.xml
-	java -jar $(JING) derived/virtual-graph-schema-v2.1.xsd $*.xml
+%.checked : %.xml $(JING) master/virtual-graph-schema-v2.2.rnc derived/virtual-graph-schema-v2.2.xsd
+	java -jar $(JING) -c master/virtual-graph-schema-v2.2.rnc $*.xml
+	java -jar $(JING) derived/virtual-graph-schema-v2.2.xsd $*.xml
 	touch $@
 
 validate-virtual/% : output/%.checked
