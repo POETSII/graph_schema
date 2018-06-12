@@ -596,7 +596,7 @@ def render_output_pin_as_cpp(op,dst,typeMap):
                     auto graphProperties=cast_typed_properties<{graphPropertiesTypeName}>(gGraphProperties);
                     auto deviceProperties=cast_typed_properties<{devicePropertiesTypeName}>(gDeviceProperties);
                     auto deviceState=cast_typed_data<{devicePropertiesStateName}>(gDeviceState);
-                    auto message=cast_typed_data<{}_message_t>(gMessage);\n'.format(op.message_type.id))
+                    auto message=cast_typed_data<{}_message_t>(gMessage);\n'.format(op.message_type.id)""")
     dst.write('    HandlerLogImpl handler_log(orchestrator);\n')
     dst.write('    auto handler_exit=[&](int code) -> void { orchestrator->application_exit(code); };\n')
     dst.write('    auto handler_export_key_value=[&](uint32_t key, uint32_t value) -> void { orchestrator->export_key_value(key, value); };\n')   

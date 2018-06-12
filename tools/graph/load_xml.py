@@ -16,6 +16,10 @@ _ns_M="{{{}}}M".format(ns["p"])
 _ns_DevI="{{{}}}DevI".format(ns["p"])
 _ns_EdgeI="{{{}}}EdgeI".format(ns["p"])
 
+# Precalculate for parsing of the device types (DeviceType | ExternalType )
+_ns_DeviceType="{{{}}}DeviceType".format(ns["p"])
+_ns_ExternalType="{{{}}}ExternalType".format(ns["p"])
+
 def deNS(t):
     tt=t.replace("{"+ns["p"]+"}","p:")
     #print("{} -> {}".format(t,tt))
@@ -172,6 +176,49 @@ def load_message_type(parent,dt, namedTypes):
     except Exception as e:
         raise XMLSyntaxError("Error while parsing message {}".format(id),dt,e)
 
+def load_external_type(graph,dtNode,sourceFile):
+    id=get_attrib(dtNode,"id")
+    state=None
+    properties=None
+    metadata=load_metadata(dtNode, "p:MetaData")
+    shared_code=[]
+    dt=DeviceType(graph,id,properties,state,metadata,shared_code)
+
+    for p in dtNode.findall("p:InputPin", ns):
+        name=get_attrib(p,"name")
+        message_type_id=get_attrib(p,"messageTypeId")
+        if message_type_id not in graph.message_types:
+            raise XMLSyntaxError("Unknown messageTypeId {}".format(message_type_id),p)
+        message_type=graph.message_types[message_type_id]
+        state=None # pins of ExternalType cannot have any state, properties, or handlers
+        properties=None
+        handler=None
+        is_application=False #na to external devices (they are all application pins)
+        sourceLine=0
+
+        pinMetadata=load_metadata(p,"p:MetaData")
+        dt.add_input(name,message_type,is_application,properties,state,pinMetadata, handler,sourceFile,sourceLine)
+        sys.stderr.write("      Added external input {}\n".format(name))
+
+    for p in dtNode.findall("p:OutputPin", ns):
+        name=get_attrib(p,"name")
+        message_type_id=get_attrib(p,"messageTypeId")
+        if message_type_id not in graph.message_types:
+            raise XMLSyntaxError("Unknown messageTypeId {}".format(message_type_id),p)
+        message_type=graph.message_types[message_type_id]
+        is_application=False #na to external devices (they are all application pins)
+        handler=None
+        sourceLine=0
+
+        pinMetadata=load_metadata(p,"p:MetaData")
+        dt.add_output(name,message_type,is_application,pinMetadata,handler,sourceFile,sourceLine)
+        sys.stderr.write("      Added external output {}\n".format(name))
+
+    dt.ready_to_send_handler=None
+    dt.ready_to_send_source_line=0
+    dt.ready_to_send_source_file=None
+
+    return dt
 
 def load_device_type(graph,dtNode,sourceFile):
     id=get_attrib(dtNode,"id")
@@ -275,9 +322,14 @@ def load_graph_type(graphNode, sourcePath):
         graphType.add_message_type(et)
 
     for dtNode in graphNode.findall("p:DeviceTypes/p:*",ns):
-        dt=load_device_type(graphType,dtNode, sourcePath)
-        graphType.add_device_type(dt)
-        sys.stderr.write("    Added device type {}\n".format(dt.id))
+        if dtNode.tag == _ns_DeviceType:
+            dt=load_device_type(graphType,dtNode, sourcePath)
+            graphType.add_device_type(dt)
+            sys.stderr.write("    Added device type {}\n".format(dt.id))
+        elif dtNode.tag == _ns_ExternalType:
+            et=load_external_type(graphType,dtNode,sourcePath)
+            graphType.add_external_type(et)
+            sys.stderr.write("    Added external device type {}\n".format(et.id))
 
     return graphType
 
