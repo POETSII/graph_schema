@@ -10,10 +10,11 @@ import json
 
 ns={"p":"https://poets-project.org/schemas/virtual-graph-schema-v2"}
 
-# Precalculate, as these are on inner loop for DevI and EdgeI
+# Precalculate, as these are on inner loop for (DevI|ExtI) and EdgeI
 _ns_P="{{{}}}P".format(ns["p"])
 _ns_M="{{{}}}M".format(ns["p"])
 _ns_DevI="{{{}}}DevI".format(ns["p"])
+_ns_ExtI="{{{}}}ExtI".format(ns["p"])
 _ns_EdgeI="{{{}}}EdgeI".format(ns["p"])
 
 # Precalculate for parsing of the device types (DeviceType | ExternalType )
@@ -452,9 +453,12 @@ def load_graph_instance(graphTypes, graphNode):
     disNode=graphNode.findall("p:DeviceInstances",ns)
     assert(len(disNode)==1)
     for diNode in disNode[0]:
-        assert diNode.tag==_ns_DevI
-        di=load_device_instance(graph,diNode)
-        graph.add_device_instance(di)
+        assert (diNode.tag==_ns_DevI) or (diNode.tag==_ns_ExtI)
+        if diNode.tag==_ns_DevI:
+            di=load_device_instance(graph,diNode)
+            graph.add_device_instance(di)
+        elif diNode.tag==_ns_ExtI:
+            print("We've got a external instance here!")
 
     eisNode=graphNode.findall("p:EdgeInstances",ns)
     assert(len(eisNode)==1)
