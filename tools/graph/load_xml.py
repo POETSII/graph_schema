@@ -193,7 +193,7 @@ def load_external_type(graph,dtNode,sourceFile):
         message_type=graph.message_types[message_type_id]
         state=None # pins of ExternalType cannot have any state, properties, or handlers
         properties=None
-        handler=None
+        handler=''
         is_application=False #na to external devices (they are all application pins)
         sourceLine=0
 
@@ -208,14 +208,14 @@ def load_external_type(graph,dtNode,sourceFile):
             raise XMLSyntaxError("Unknown messageTypeId {}".format(message_type_id),p)
         message_type=graph.message_types[message_type_id]
         is_application=False #na to external devices (they are all application pins)
-        handler=None
+        handler=''
         sourceLine=0
 
         pinMetadata=load_metadata(p,"p:MetaData")
         dt.add_output(name,message_type,is_application,pinMetadata,handler,sourceFile,sourceLine)
         sys.stderr.write("      Added external output {}\n".format(name))
 
-    dt.ready_to_send_handler=None
+    dt.ready_to_send_handler=''
     dt.ready_to_send_source_line=0
     dt.ready_to_send_source_file=None
 
