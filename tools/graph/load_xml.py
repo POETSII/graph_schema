@@ -183,7 +183,7 @@ def load_external_type(graph,dtNode,sourceFile):
     properties=None
     metadata=load_metadata(dtNode, "p:MetaData")
     shared_code=[]
-    dt=DeviceType(graph,id,properties,state,metadata,shared_code)
+    dt=DeviceType(graph,id,properties,state,metadata,shared_code, True)
 
     for p in dtNode.findall("p:InputPin", ns):
         name=get_attrib(p,"name")
@@ -240,7 +240,7 @@ def load_device_type(graph,dtNode,sourceFile):
     for s in dtNode.findall("p:SharedCode",ns):
         shared_code.append(s.text)
 
-    dt=DeviceType(graph,id,properties,state,metadata,shared_code)
+    dt=DeviceType(graph,id,properties,state,metadata,shared_code,False)
 
     for p in dtNode.findall("p:InputPin",ns):
         name=get_attrib(p,"name")
@@ -329,7 +329,7 @@ def load_graph_type(graphNode, sourcePath):
             sys.stderr.write("    Added device type {}\n".format(dt.id))
         elif dtNode.tag == _ns_ExternalType:
             et=load_external_type(graphType,dtNode,sourcePath)
-            graphType.add_external_type(et)
+            graphType.add_device_type(et)
             sys.stderr.write("    Added external device type {}\n".format(et.id))
 
     return graphType
@@ -355,6 +355,23 @@ def load_graph_type_reference(graphNode,basePath):
     else:
         return GraphTypeReference(id)
 
+def load_external_instance(graph, eiNode):
+    id=get_attrib(eiNode,"id")
+    external_type_id=get_attrib(eiNode,"type")
+    if external_type_id not in graph.graph_type.device_types:
+        raise XMLSyntaxError("Unknown external type id {}, known devices = [{}]".format(external_type_id, [d.di for d in graph.graph_type.deivce_types.keys()]), eiNode)
+    external_type=graph.graph_type.device_types[external_type_id]
+    properties=None # external devices cannot have any properties
+    metadata=None
+
+    for n in eiNode: # walk over children rather than using find. Better performance
+        if n.tag == _ns_M: 
+            assert not metadata
+            metadata=json.loads("{"+n.text+"}")
+        else:
+            assert "Unknown tag type in EdgeI"
+    
+    return DeviceInstance(graph,id,external_type,properties,metadata)
 
 def load_device_instance(graph,diNode):
     id=get_attrib(diNode,"id")
@@ -458,6 +475,8 @@ def load_graph_instance(graphTypes, graphNode):
             di=load_device_instance(graph,diNode)
             graph.add_device_instance(di)
         elif diNode.tag==_ns_ExtI:
+            ei=load_external_instance(graph,diNode)
+            graph.add_device_instance(ei)
             print("We've got a external instance here!")
 
     eisNode=graphNode.findall("p:EdgeInstances",ns)

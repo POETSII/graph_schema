@@ -333,7 +333,7 @@ class OutputPin(Pin):
 
 
 class DeviceType(object):
-    def __init__(self,parent,id,properties,state,metadata=None,shared_code=[]):
+    def __init__(self,parent,id,properties,state,metadata=None,shared_code=[], isExternal=False):
         assert (state is None) or isinstance(state,TypedDataSpec)
         assert (properties is None) or isinstance(properties,TypedDataSpec)
         self.id=id
@@ -348,6 +348,7 @@ class DeviceType(object):
         self.metadata=metadata
         self.shared_code=shared_code
         self.ready_to_send_handler="" # Hrmm, this was missing as an explicit member, but is used by load/save
+        self.isExternal=isExternal
 
     def add_input(self,name,message_type,is_application,properties,state,metadata,receive_handler,source_file=None,source_line={}):
         assert (state is None) or isinstance(state,TypedDataSpec)
@@ -385,7 +386,6 @@ class GraphType(object):
         self.metadata=metadata
         self.shared_code=shared_code
         self.device_types={}
-        self.external_types={}
         self.typedefs_by_index=[]
         self.typedefs={}
         self.message_types={}
@@ -529,19 +529,24 @@ class GraphInstance:
     def _validate_device_type(self,dt):
         for p in dt.pins.values():
             if p.message_type.id not in self.graph_type.message_types:
-                raise GraphDescriptionError("DeviceType uses an message type that is uknown.")
+                raise GraphDescriptionError("DeviceType uses a message type that is uknown.")
             if p.message_type != self.graph_type.message_types[p.message_type.id]:
-                raise GraphDescriptionError("DeviceType uses an message type object that is not part of this graph.")
+                raise GraphDescriptionError("DeviceType uses a message type object that is not part of this graph.")
 
     def _validate_device_instance(self,di):
-        if di.device_type.id not in self.graph_type.device_types:
-            raise GraphDescriptionError("DeviceInstance refers to unknown device type.")
-        if di.device_type != self.graph_type.device_types[di.device_type.id]:
-            raise GraphDescriptionError("DeviceInstance refers to a device tye object that is not part of this graph.")
+        if not di.device_type.isExternal:
+            if di.device_type.id not in self.graph_type.device_types:
+                raise GraphDescriptionError("DeviceInstance refers to unknown device type.")
+            if di.device_type != self.graph_type.device_types[di.device_type.id]:
+                raise GraphDescriptionError("DeviceInstance refers to a device type object that is not part of this graph.")
+        else:
+            if di.device_type.id not in self.graph_type.device_types:
+                raise GraphDescriptionError("DeviceInstance refers to unknown external device type.")
+            if di.device_type != self.graph_type.device_types[di.device_type.id]:
+                raise GraphDescriptionError("DeviceInstance refers to an external device type object that is not part of this graph.")
 
         if not is_refinement_compatible(di.device_type.properties,di.properties):
             raise GraphDescriptionError("DeviceInstance properties don't match device type.")
-
 
     def _validate_edge_instance(self,ei):
         pass
