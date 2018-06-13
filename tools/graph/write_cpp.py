@@ -370,7 +370,7 @@ def render_typed_data_as_spec(proto,name,elt_name,dst,asHeader=False):
         for elt in proto.elements_by_index:
             render_typed_data_add_hash(elt, dst, "src->")
     dst.write('  }\n')
-    
+
     dst.write("};\n")
     dst.write("TypedDataSpecPtr {}_Spec_get(){{\n".format(name))
     dst.write("  static TypedDataSpecPtr singleton(new {}_Spec);\n".format(name))

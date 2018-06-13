@@ -300,12 +300,13 @@ class Typedef(TypedDataSpec):
         return "{}[{}]".format(self.id,self.type)
 
 class MessageType(object):
-    def __init__(self,parent,id,message,metadata=None,cTypeName=None):
+    def __init__(self,parent,id,message,metadata=None,cTypeName=None,numid=0):
         assert (message is None) or isinstance(message,TypedDataSpec)
         self.id=id
         self.parent=parent
         self.message=message
         self.metadata=metadata
+        self.numid=numid
 
 
 class Pin(object):

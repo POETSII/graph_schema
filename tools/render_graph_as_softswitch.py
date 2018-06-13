@@ -256,7 +256,7 @@ class BLOBHolder:
             self.segments.append( (offset,length,"__pad__") )
     
     # Returns the offset
-    def add(self,name, payload, align=4):
+    def add(self,name, payload, align=4): 
         self.pad(align) # Always align to 32-bit boundary
         assert isinstance(payload,bytearray)
         assert name not in self.offsets
@@ -287,6 +287,39 @@ class BLOBHolder:
         dst.write("  // trailing byte\n")
         dst.write("  0\n")
         dst.write("};\n\n")
+
+#enumerate all message types in the graph and assign a unique numerical ID to the message type
+def assign_unique_ident_for_each_message_type(gt):
+    numid = 0
+    for mt in gt.message_types.values():
+        mt.numid = numid
+        numid=numid+1
+
+# creates a list of message types and a unique id that is consistent between the threads and the
+# executive. This can then be used to cast the host message at the executive end so that the
+# message matches the structure defined in the xml.
+# TODO: we only need these for the application pins, currently it dumps all message types
+def output_unique_ident_for_each_message_type(gt, dst):
+    for mt in gt.message_types.values():
+        dst.write("""{},{}\n""".format(mt.id, mt.numid)) 
+
+# creates a list of the device_instance application pins and their corrosponding address in the 
+# POETS system (sf306: essentially I believe this is acting as a temporary nameserver for the executive)
+def output_device_instance_addresses(gi,device_to_thread, thread_to_devices, dst): 
+    # format deviceName_inAppPinName, thread addr, dev addr, pinIndex
+    for d in gi.device_instances.values(): # iterate through all devices
+        deviceName = d.id
+        threadId = device_to_thread[d.id]
+        for ip in d.device_type.inputs.values():
+            if ip.is_application == True: #application input pin, so we print the addr 
+                deviceOffset = thread_to_devices[threadId].index(d.id)
+                pinIndex = ip.parent.inputs_by_index.index(ip)
+                dst.write("""{}_{},in,{},{},{}\n""".format(deviceName, ip.name,threadId,deviceOffset, pinIndex)) 
+        for op in d.device_type.outputs.values():
+            if op.is_application == True: #application output pin, so we print the addr
+                deviceOffset = thread_to_devices[threadId].index(d.id)
+                pinIndex = op.parent.outputs_by_index.index(op)
+                dst.write("""{}_{},out,{},{},{}\n""".format(deviceName, op.name,threadId,deviceOffset, pinIndex)) 
 
 def render_graph_type_as_softswitch_decls(gt,dst):
     gtProps=make_graph_type_properties(gt)
@@ -474,7 +507,8 @@ def render_device_type_as_softswitch_defs(dt,dst,dtProps):
                 (send_handler_t){OUTPUT_PORT_FULL_ID}_send_handler,
                 sizeof(packet_t)+sizeof({OUTPUT_PORT_MESSAGE_T}),
                 "{OUTPUT_PORT_NAME}",
-                {IS_APPLICATION}
+                {IS_APPLICATION},
+                {MESSAGETYPE_NUMID}
             }}
             """.format(**make_output_pin_properties(op)))
     dst.write("};\n");
@@ -573,9 +607,18 @@ def render_graph_instance_as_thread_context(
             first=False
         else:
             dst.write(",")
+
+        # names smaller than this get optimised by the compiler, breaking sending string addrs to host
+        name = di.id 
+        if len(di.id) <= 4:
+            spaces=' '
+            for i in range(4 - len(di.id)):
+                spaces = spaces + ' '
+            name = spaces + di.id
+
         diProps={
             "DEVICE_TYPE_FULL_ID" : props[di.device_type]["DEVICE_TYPE_FULL_ID"],
-            "DEVICE_INSTANCE_ID" : di.id,
+            "DEVICE_INSTANCE_ID" : name, 
             "DEVICE_INSTANCE_THREAD_OFFSET" : thread_to_devices[thread_index].index(di),
             "DEVICE_INSTANCE_PROPERTIES" : 0,
             "DEVICE_INSTANCE_STATE" : 0,
@@ -620,8 +663,8 @@ def render_graph_instance_as_thread_context(
             0, // rtsFlags
             false, // rtc
             0,  // prev
-            0,   // next
-            {DEVICE_INSTANCE_IS_EXTERNAL} // is it an external device?
+            0   // next
+            //{DEVICE_INSTANCE_IS_EXTERNAL} // is it an external device?
         }}
         """.format(**diProps))
     dst.write("};\n")
@@ -715,7 +758,7 @@ def render_device_instance_inputs(devices_to_thread, di, dst, edges_in, globalPr
             first = False
         else:
             dst.write(",")
-        if ip.properties == None and ip.state == None:
+        if (ip.properties == None and ip.state == None) or (len(edges_in[di][ip]) == 0):
             dst.write("  {{0,0}} // {}\n".format(ip.name))
         else:
             dst.write("  {{ {}, {}_{}_bindings }}\n // {}\n".format(len(edges_in[di][ip]), di.id, ip.name, ip.name))
@@ -902,9 +945,13 @@ def render_graph_instance_as_softswitch(gi,dst,num_threads,device_to_thread):
             3,  // softLogLevel
             3,  // hardLogLevel
             0,  // currentDevice
-            0,  // currentMode
-            0,   // currentHandler
-            {}  // pointersAreRelative
+            0,  // currentHandlerType
+            0,   // currentPin
+            0, // currentSize
+            {},  // pointersAreRelative
+            0, // hostBuffer
+            0, // hbuf_head
+            0 // hbuf_tail
         }}\n""".format(ti,graphPropertiesBinding,ti,ti,pointersAreRelative))
         if ti+1<num_threads:
             dst.write(",\n")
@@ -937,6 +984,8 @@ parser.add_argument('--log-level', dest="logLevel", help='logging level (INFO,ER
 parser.add_argument('--placement-seed', dest="placementSeed", help="Choose a specific random placement", default=None)
 parser.add_argument('--destination-ordering', dest="destinationOrdering", help="Should messages be send 'furthest-first', 'random', 'nearest-first'", default="random")
 parser.add_argument('--measure', help="Destination for measured properties", default="tinsel.render_softswitch.csv")
+parser.add_argument('--message-types', help="a file that prints the message types and their enumerated values. This is used to decode messages at the executive", default="messages.csv")
+parser.add_argument('--app-pins-addr-map', help="a file that gives the address map of the input pins, used by the executive to send messages to devices", default="appPinInMap.csv")
 
 args = parser.parse_args()
 
@@ -990,7 +1039,6 @@ destCppPath=os.path.abspath("{}/{}_vtables.cpp".format(destPrefix,graph.id))
 destCpp=open(destCppPath,"wt")
 sys.stderr.write("Using absolute path '{}' for source pre-processor directives\n".format(destCppPath))
 
-    
 class OutputWithPreProcLineNum:
     def __init__(self,dest,destPath):
         self.dest=dest
@@ -1008,6 +1056,10 @@ class OutputWithPreProcLineNum:
                     self.dest.write(line+"\n")
                 self.lineNum+=1
     
+# Get a unique id for each message type which will be sent in the message header so that the executive can decode it
+assign_unique_ident_for_each_message_type(graph)
+destMessageTypeID=open(args.message_types, "w+")
+output_unique_ident_for_each_message_type(graph, destMessageTypeID)
 
 render_graph_type_as_softswitch_decls(graph, OutputWithPreProcLineNum(destHpp, destHppPath))
 render_graph_type_as_softswitch_defs(graph, OutputWithPreProcLineNum(destCpp, destCppPath))
@@ -1056,4 +1108,18 @@ if(len(instances)>0):
     destInstPath=os.path.abspath("{}/{}_{}_inst.cpp".format(destPrefix,graph.id,inst.id))
     destInst=open(destInstPath,"wt")
         
+    # create a mapping from threads to devices
+    thread_to_devices=[[] for i in range(hwThreads)]
+    for d in inst.device_instances.values():
+        if d.id not in device_to_thread:
+            logging.error("device {}  not in mapping".format(d.id))
+        t=device_to_thread[d.id]
+        assert(t>=0 and t<hwThreads)
+        thread_to_devices[t].append(d.id)
+
+
+    # dump the device name -> address mappings into a file for sending messages from the executive
+    deviceAddrMap=open(args.app_pins_addr_map,"w+")
+    output_device_instance_addresses(inst, device_to_thread, thread_to_devices, deviceAddrMap) 
+
     render_graph_instance_as_softswitch(inst,destInst,hwThreads,device_to_thread)

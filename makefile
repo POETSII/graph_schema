@@ -182,7 +182,7 @@ endef
 
 SOFTSWITCH_DIR = ../toy_softswitch
 
-ALL_SOFTSWITCH = 
+ALL_SOFTSWITCH =
 
 define softswitch_instance_template
 # $1 = name
@@ -214,8 +214,10 @@ include apps/firefly_sync/makefile.inc
 include apps/amg/makefile.inc
 include apps/apsp/makefile.inc
 
-#include apps/firefly_sync/makefile.inc
+include apps/firefly_sync/makefile.inc
 #include apps/firefly_nosync/makefile.inc
+
+include apps/gals_heat_float/makefile.inc
 
 # Non-default
 include apps/nursery/airfoil/airfoil.inc
