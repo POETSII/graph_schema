@@ -579,7 +579,8 @@ def render_graph_instance_as_thread_context(
             "DEVICE_INSTANCE_THREAD_OFFSET" : thread_to_devices[thread_index].index(di),
             "DEVICE_INSTANCE_PROPERTIES" : 0,
             "DEVICE_INSTANCE_STATE" : 0,
-            "DEVICE_INSTANCE_TARGETS" : "{}_targets".format(di.id)
+            "DEVICE_INSTANCE_TARGETS" : "{}_targets".format(di.id),
+            "DEVICE_INSTANCE_IS_EXTERNAL" : props[di.device_type]["DEVICE_TYPE_IS_EXTERNAL"]
         }   
         if di.device_type.properties:
             if not _use_BLOB:
@@ -619,7 +620,8 @@ def render_graph_instance_as_thread_context(
             0, // rtsFlags
             false, // rtc
             0,  // prev
-            0   // next
+            0,   // next
+            {DEVICE_INSTANCE_IS_EXTERNAL} // is it an external device?
         }}
         """.format(**diProps))
     dst.write("};\n")

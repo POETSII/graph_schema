@@ -28,7 +28,8 @@ def make_device_type_properties(dt):
         "DEVICE_TYPE_INPUT_COUNT" : len(dt.inputs),
         "DEVICE_TYPE_OUTPUT_COUNT" : len(dt.outputs),
         "DEVICE_TYPE_RTS_HANDLER" : dt.ready_to_send_handler,
-        "DEVICE_TYPE_RTS_HANDLER_SOURCE_LOCATION" : preProc
+        "DEVICE_TYPE_RTS_HANDLER_SOURCE_LOCATION" : preProc,
+        "DEVICE_TYPE_IS_EXTERNAL" : 1 if dt.isExternal else 0
         
     })
     
