@@ -663,8 +663,8 @@ def render_graph_instance_as_thread_context(
             0, // rtsFlags
             false, // rtc
             0,  // prev
-            0   // next
-            //{DEVICE_INSTANCE_IS_EXTERNAL} // is it an external device?
+            0,   // next
+            {DEVICE_INSTANCE_IS_EXTERNAL} // is it an external device?
         }}
         """.format(**diProps))
     dst.write("};\n")

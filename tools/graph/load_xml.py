@@ -477,7 +477,6 @@ def load_graph_instance(graphTypes, graphNode):
         elif diNode.tag==_ns_ExtI:
             ei=load_external_instance(graph,diNode)
             graph.add_device_instance(ei)
-            print("We've got a external instance here!")
 
     eisNode=graphNode.findall("p:EdgeInstances",ns)
     assert(len(eisNode)==1)
