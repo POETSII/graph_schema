@@ -1039,6 +1039,7 @@ parser.add_argument('--destination-ordering', dest="destinationOrdering", help="
 parser.add_argument('--measure', help="Destination for measured properties", default="tinsel.render_softswitch.csv")
 parser.add_argument('--message-types', help="a file that prints the message types and their enumerated values. This is used to decode messages at the executive", default="messages.csv")
 parser.add_argument('--app-pins-addr-map', help="a file that gives the address map of the input pins, used by the executive to send messages to devices", default="appPinInMap.csv")
+parser.add_argument('--externals', help="if set true we are using the externals UserI/O other wise we are using application pins for I/O", type=bool, default=False)
 
 args = parser.parse_args()
 
@@ -1059,6 +1060,7 @@ elif args.destinationOrdering=="random":
     sort_edges_by_distance=0
 else:
     assert False, "Didn't understand destination-ordering={}".format(args.destinationOrdering)
+
 
 measure_file=open(args.measure, "wt")
 
@@ -1173,7 +1175,9 @@ if(len(instances)>0):
 
     # dump the device name -> address mappings into a file for sending messages from the executive
     deviceAddrMap=open(args.app_pins_addr_map,"w+")
-    #output_device_instance_addresses(inst, device_to_thread, thread_to_devices, deviceAddrMap) 
-    output_device_pins_addr_connected_to_an_external(inst, device_to_thread, thread_to_devices, deviceAddrMap)
+    if args.externals:
+        output_device_pins_addr_connected_to_an_external(inst, device_to_thread, thread_to_devices, deviceAddrMap)
+    else:
+        output_device_instance_addresses(inst, device_to_thread, thread_to_devices, deviceAddrMap) 
 
     render_graph_instance_as_softswitch(inst,destInst,hwThreads,device_to_thread)
