@@ -303,6 +303,54 @@ def output_unique_ident_for_each_message_type(gt, dst):
     for mt in gt.message_types.values():
         dst.write("""{},{}\n""".format(mt.id, mt.numid)) 
 
+#creates a list of the device pins that are connected to an external device which the external application can either
+#receive from or send to. (sf306: essentially acting as a temporary nameserver for externals)
+def output_device_pins_addr_connected_to_an_external(gi, device_to_thread, thread_to_devices, dst):
+    # iterate through all edge instances
+    # If one of the devices is an external then output <device:pin, addr, external_name:pin>
+    for ei in gi.edge_instances.values():
+        if ei.dst_device.device_type.isExternal: # the destination of this edge is an external
+             # user_o 
+             assert(not ei.src_device.device_type.isExternal) #externals cannot be connected together?
+
+             # name of pin connected to external
+             dev_connected_2_ext=ei.src_device.id
+             dev_connected_2_ext_pin=ei.src_pin.name
+
+             # name of the pin of the external
+             ext_connected_2_dev=ei.dst_device.id
+             ext_connected_2_dev_pin=ei.dst_pin.name
+
+             # address of pin connected to external
+             thread_id = device_to_thread[ei.src_device.id]
+             device_offset = thread_to_devices[thread_id].index(ei.src_device.id)
+             pin_index = ei.src_pin.parent.outputs_by_index.index(ei.src_pin)
+
+             # render the mapping to be printed
+             dst.write("""{}_{},out,{},{},{},{}_{}\n""".format(dev_connected_2_ext, dev_connected_2_ext_pin, thread_id, device_offset, pin_index, ext_connected_2_dev, ext_connected_2_dev_pin))
+
+        elif ei.src_device.device_type.isExternal: # the source of this edge is an external 
+             # user_i
+             assert(not ei.dst_device.device_type.isExternal) #externals cannot be connected together?
+
+             # name of pin connected to external
+             dev_connected_2_ext=ei.dst_device.id
+             dev_connected_2_ext_pin=ei.dst_pin.name
+
+             # name of the pin of the external
+             ext_connected_2_dev=ei.src_device.id
+             ext_connected_2_dev_pin=ei.src_pin.name
+
+             # address of pin connected to external
+             thread_id = device_to_thread[ei.dst_device.id]
+             device_offset = thread_to_devices[thread_id].index(ei.dst_device.id)
+             curr_pin = ei.dst_pin.parent.pins[ei.dst_pin.name]
+             pin_index = ei.dst_pin.parent.inputs_by_index.index(curr_pin)
+
+             # render the mapping to be printed
+             dst.write("""{}_{},in,{},{},{},{}_{}\n""".format(dev_connected_2_ext, dev_connected_2_ext_pin, thread_id, device_offset, pin_index, ext_connected_2_dev, ext_connected_2_dev_pin))
+
+
 # creates a list of the device_instance application pins and their corrosponding address in the 
 # POETS system (sf306: essentially I believe this is acting as a temporary nameserver for the executive)
 def output_device_instance_addresses(gi,device_to_thread, thread_to_devices, dst): 
@@ -1097,7 +1145,7 @@ if(len(instances)>0):
         logging.info("Contracting from {} logical to {} physical using {}".format(nThreads,hwThreads,args.contraction))
         assert nThreads<hwThreads
         if args.contraction=="dense":
-            logicalToPhysical=[i for i in range(nThreads)]
+            logicalToPhysica=[i for i in range(nThreads)]
         elif args.contraction=="sparse":
             scale=hwThreads/nThreads
             logicalToPhysical=[ math.floor(i*scale) for i in range(nThreads)]
@@ -1125,6 +1173,7 @@ if(len(instances)>0):
 
     # dump the device name -> address mappings into a file for sending messages from the executive
     deviceAddrMap=open(args.app_pins_addr_map,"w+")
-    output_device_instance_addresses(inst, device_to_thread, thread_to_devices, deviceAddrMap) 
+    #output_device_instance_addresses(inst, device_to_thread, thread_to_devices, deviceAddrMap) 
+    output_device_pins_addr_connected_to_an_external(inst, device_to_thread, thread_to_devices, deviceAddrMap)
 
     render_graph_instance_as_softswitch(inst,destInst,hwThreads,device_to_thread)
