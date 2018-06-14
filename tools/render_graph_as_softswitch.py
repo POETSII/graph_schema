@@ -823,14 +823,19 @@ def render_device_instance_outputs(devices_to_thread, di, dst, edges_out, global
             else:
                 addressesSource = "(address_t*)({})".format(offset)
 
+        if di.device_type.isExternal:
+            isExternal = "1" # The destination is an external
+        else:
+            isExternal = "0"
+
         if not _use_BLOB:
             if first:
                 first = False
             else:
                 dst.write(",")
-            dst.write("{{ {}, {} }} // {}\n".format(len(edges_out[di][op]), addressesSource, op.name))
+            dst.write("{{ {}, {}, {} }} // {}\n".format(len(edges_out[di][op]), addressesSource, isExternal, op.name))
         else:
-            globalOutputPinTargets.add(addressesName, (len(edges_out[di][op]), addressesSource))
+            globalOutputPinTargets.add(addressesName, (len(edges_out[di][op]), addressesSource, isExternal))
     if not _use_BLOB:
         dst.write("};\n")  # End of output pin targets
 
@@ -843,8 +848,8 @@ def render_graph_instance_as_softswitch(gi,dst,num_threads,device_to_thread):
     globalState=BLOBHolder()
     globalState.add("__nudge__", bytearray([0]*4))
     
-    globalOutputPinTargets=StructHolder("OutputPinTargets", 2);
-    globalOutputPinTargets.add("__nudge__", (0,0))
+    globalOutputPinTargets=StructHolder("OutputPinTargets", 3);
+    globalOutputPinTargets.add("__nudge__", (0,0,0))
     
     props={
         gi.graph_type:make_graph_type_properties(gi.graph_type)
