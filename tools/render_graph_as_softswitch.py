@@ -327,7 +327,7 @@ def output_device_pins_addr_connected_to_an_external(gi, device_to_thread, threa
              pin_index = ei.src_pin.parent.outputs_by_index.index(ei.src_pin)
 
              # render the mapping to be printed
-             dst.write("""{}_{},out,{},{},{},{}_{}\n""".format(dev_connected_2_ext, dev_connected_2_ext_pin, thread_id, device_offset, pin_index, ext_connected_2_dev, ext_connected_2_dev_pin))
+             dst.write("""{}:{},out,{},{},{},{}:{}\n""".format(dev_connected_2_ext, dev_connected_2_ext_pin, thread_id, device_offset, pin_index, ext_connected_2_dev, ext_connected_2_dev_pin))
 
         elif ei.src_device.device_type.isExternal: # the source of this edge is an external 
              # user_i
@@ -348,7 +348,7 @@ def output_device_pins_addr_connected_to_an_external(gi, device_to_thread, threa
              pin_index = ei.dst_pin.parent.inputs_by_index.index(curr_pin)
 
              # render the mapping to be printed
-             dst.write("""{}_{},in,{},{},{},{}_{}\n""".format(dev_connected_2_ext, dev_connected_2_ext_pin, thread_id, device_offset, pin_index, ext_connected_2_dev, ext_connected_2_dev_pin))
+             dst.write("""{}:{},in,{},{},{},{}:{}\n""".format(dev_connected_2_ext, dev_connected_2_ext_pin, thread_id, device_offset, pin_index, ext_connected_2_dev, ext_connected_2_dev_pin))
 
 
 # creates a list of the device_instance application pins and their corrosponding address in the 
