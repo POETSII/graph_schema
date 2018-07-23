@@ -4,20 +4,20 @@ import sys
 import io
 
 class CppTypeMap(object):
-    
+
     def emit(self,pattern, *args):
         self._defsBuffer.write(pattern.format(*args)+"\n")
-    
+
     def visit(self, t:TypedDataSpec, thisName:str, parent:str):
         if t is None:
             # Note: this is a point of ambiguity in spec. Traditionally it is an empty struct
             assert thisName, "Only expected for a named thing like message, state, or properties"
             self.emit("typedef _empty_struct_t {};", thisName)
             return
-        
+
         if t in self.cTypeNames:
             return
-        
+
         if isinstance(t, Typedef):
             name=t.id
             self.visit(t.type, None, name)
@@ -43,51 +43,51 @@ class CppTypeMap(object):
             self.emit("typedef {} {}[{}];", self.cTypeNames[t.type], name, t.length)
         else:
             raise RuntimeError("TYpe {} isn't supported.".format(type(t)))
-    
+
         self.cTypeNames[t]=name
-    
+
     def __init__(self, gt:GraphType):
-        # Maps 
+        # Maps
         self.cTypeNames={} # Map[TypedDataSpec,str]
         self._defsBuffer=io.StringIO()
-        
+
         emit=self.emit
-        
+
         emit("#include <cstdint>")
         emit("")
-        emit("struct _empty_struct_t {};")
-        
+        emit("struct _empty_struct_t {{}};")
+
         for td in gt.typedefs_by_index:
             self.visit(td,None,None)
-            
+
         self.visit(gt.properties, "{}_properties_t".format(gt.id), None)
-        
+
         for mt in gt.message_types.values():
             emit("// Message type {}", mt.id)
             self.visit(mt.message, "{}_{}_message_t".format(gt.id,mt.id), None)
             emit("")
-            
-        
+
+
         for dt in gt.device_types.values():
             emit("// Device type {}", dt.id)
             self.visit(dt.properties, "{}_{}_properties_t".format(gt.id,dt.id), None)
             emit("")
             self.visit(dt.state, "{}_{}_state_t".format(gt.id,dt.id), None)
             emit("")
-            
+
             for ip in dt.inputs_by_index:
                 emit("//   Input {} of {}", mt.id, dt.id)
                 self.visit(ip.properties, "{}_{}_{}_properties_t".format(gt.id,dt.id,ip.name), None)
                 emit("")
                 self.visit(ip.state, "{}_{}_{}_state_t".format(gt.id,dt.id,ip.name), None)
                 emit("")
-            
+
             emit("")
-        
+
         self.defs=self._defsBuffer.getvalue()
         self._defsBuffer.close()
         self._defsBuffer=None
-            
+
     def get_c_type_ref(self, td:TypedDataSpec):
         """Maps a given typed data spec to a C type that represents it."""
         return self.cTypeNames[td]
