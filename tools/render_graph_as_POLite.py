@@ -16,6 +16,51 @@ import statistics
 
 import argparse
 
+
+#-----------------------------------------------------------
+# returns the single message type for this POLite compatible XML
+def getMessageType(graph):
+    for mt in graph.message_types.values():
+        if not mt.id == "__init__":
+            return mt    
+
+#-----------------------------------------------------------
+# returns the single device type for this POLite compatible XML
+def getDeviceType(graph):
+    for dt in graph.device_types.values():
+        return dt
+
+#-----------------------------------------------------------
+# renders the Cpp file for the POLite executable
+def renderCpp(dst, graph):
+    dst.write("""
+    #include <tinsel.h>
+    #include <POLite.h>
+    #include "{}.h"
+
+    int main()
+    {{
+    """.format(graph.id))
+ 
+    dt = getDeviceType(graph)
+    mt = getMessageType(graph)
+
+    dst.write("""
+         // Point thread structure at base of thread's heap
+         PThread<{},{}>*thread = (Pthread<{},{}>*) tinselHeapBase();
+        
+         // invoke interpreter
+         thread->run();
+    """.format(dt.id,mt.id,dt.id,mt.id))
+
+    dst.write("""
+      return 0;
+    }
+    """)
+
+#-----------------------------------------------------------
+
+#-----------------------------------------------------------
 # returns true if we have a POLite compatible subset of the XML -- otherwise returns false
 def polite_compatible_xml_subset(gt):
     compatible=True
@@ -42,12 +87,14 @@ def polite_compatible_xml_subset(gt):
             compatible=False
 
     return compatible
+#-----------------------------------------------------------
 
 # Command line arguments, keeping it simple for the time being.
 parser = argparse.ArgumentParser(description='Render graph as POLite.')
 parser.add_argument('source', type=str, help='source file (xml graph instance)')
 parser.add_argument('--dest', help="Directory to write the output to.", default=".")
-parser.add_argument('--threads', help="number of logical threads to use", type=int, default=3072)
+parser.add_argument('--threads', help="number of logical threads to use (Not currently configurable)", type=int, default=3072)
+parser.add_argument('--output', help="name of the executable binary that runs on the POETS hardware", type=str, default="out")
 
 args = parser.parse_args()
 
@@ -76,3 +123,38 @@ for g in types.values():
 
 if not polite_compatible_xml_subset(graph):
     raise RuntimeError("This graph type contains features not currently supported by this backend.")
+
+
+# ---------------------------------------------------------------------------
+# Start rendering POLite output 
+# ---------------------------------------------------------------------------
+destPrefix=args.dest
+
+# ----------------------------------------------
+# Render header file for tinsel executable 
+# ----------------------------------------------
+destHPath=os.path.abspath("{}/{}.h".format(destPrefix,graph.id))
+destH=open(destHPath, "wt")
+sys.stderr.write("Using absolute path '{}' for rendered POLite header file\n".format(destHPath))
+
+# ----------------------------------------------
+# Render source file for tinsel executable 
+# ----------------------------------------------
+destCppPath=os.path.abspath("{}/{}.cpp".format(destPrefix,graph.id))
+destCpp=open(destCppPath, "wt")
+sys.stderr.write("Using absolute path '{}' for rendered POLite source file\n".format(destCppPath))
+renderCpp(destCpp,graph)
+
+# ----------------------------------------------
+# Render host executable 
+# ----------------------------------------------
+destHostCppPath=os.path.abspath("{}/{}_host.cpp".format(destPrefix,graph.id))
+destHostCpp=open(destHostCppPath, "wt")
+sys.stderr.write("Using absolute path '{}' for rendered POLite host program source file\n".format(destHostCppPath))
+
+# ----------------------------------------------
+# Render Makefile 
+# ----------------------------------------------
+destMakefilePath=os.path.abspath("{}/Makefile".format(destPrefix))
+destMakefile=open(destMakefilePath, "wt")
+sys.stderr.write("Using absolute path '{}' for rendered Makefile\n".format(destMakefilePath))
