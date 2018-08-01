@@ -18,6 +18,24 @@ import argparse
 
 
 #-----------------------------------------------------------
+# For rendering types.. adapted from render_graph_as_softswitch
+def render_typed_data(td,dst,indent,name=None):
+    if name==None:
+        name=td.name
+    assert(name!="_")
+    if isinstance(td,ScalarTypedDataSpec):
+        dst.write("{0}{1} {2} /*indent={0},type={1},name={2}*/".format(indent, td.type, name))
+    elif isinstance(td,TupleTypedDataSpec):
+        for e in td.elements_by_index:
+            render_typed_data(e,dst,indent+"  ")
+            dst.write(";\n")
+    elif isinstance(td,ArrayTypedDataSpec):
+        render_typed_data(td.type,dst,indent,name="")
+        dst.write("{}[{}] /*{}*/".format(name, td.length,name))
+    else:
+        raise RuntimeError("Unknown data type {}".format(td));
+
+#-----------------------------------------------------------
 # returns the single message type for this POLite compatible XML
 def getMessageType(graph):
     for mt in graph.message_types.values():
@@ -58,6 +76,87 @@ def renderCpp(dst, graph):
     }
     """)
 
+#-----------------------------------------------------------
+
+#-----------------------------------------------------------
+# renders the header file for the POLite executable
+def renderHeader(dst, graph):
+    mt = getMessageType(graph)
+    dt = getDeviceType(graph)
+    # start with a header guard and include
+    dst.write("""
+    #ifndef _{}_H_
+    #define _{}_H_
+
+    #include <POLite.h>
+    """.format(graph.id, graph.id))
+
+    # ----------------------------------------------------
+    # instantiate the message type
+    mtProps = make_message_type_properties(mt)
+    dst.write("""
+    struct {} : PMessage {{
+       // message params here
+    """.format(mt.id))
+    render_typed_data(mt.message, dst, " ", mtProps['MESSAGE_TYPE_T'])
+    
+    dst.write("""
+    }};
+  
+    """)
+    # ----------------------------------------------------
+
+    # ----------------------------------------------------
+    # instantiate the device type
+    dtProps=make_device_type_properties(dt)
+    dst.write("""
+    struct {} : PDevice {{
+    // properties 
+    """.format(dt.id))
+    # instantiate the device properties
+    render_typed_data(dt.properties, dst, " ", dtProps["DEVICE_TYPE_PROPERTIES_T"])
+    dst.write("// state\n")
+    # instantiate the device state 
+    render_typed_data(dt.state, dst, " ", dtProps["DEVICE_TYPE_STATE_T"])
+
+    # build the init handler
+    dst.write("""
+
+    // Called once by POLite at the start of execution
+    void init() {
+    """)
+    for ip in dt.inputs.values():
+        if ip.name == "__init__": 
+            dst.write(ip.receive_handler)
+    dst.write("\n    }\n")
+
+    # build the send handler
+    dst.write("""
+    // Send handler
+    inline void send({}* msg) {{
+    """.format(mt.id))
+    for op in dt.outputs.values():
+        dst.write(op.send_handler)
+    dst.write("}\n")
+
+    # build the receive handler
+    dst.write("""
+    // recv handler
+    inline void recv({}* msg) {{
+    """.format(mt.id))
+    for ip in dt.inputs.values():
+        if ip.name != "__init__":
+            dst.write(ip.receive_handler)
+    dst.write("}\n")
+
+    dst.write("""
+    };
+    """)
+    # ----------------------------------------------------
+
+    dst.write("""
+    #endif /* _{}_H_ */
+    """.format(graph.id))
 #-----------------------------------------------------------
 
 #-----------------------------------------------------------
@@ -136,6 +235,7 @@ destPrefix=args.dest
 destHPath=os.path.abspath("{}/{}.h".format(destPrefix,graph.id))
 destH=open(destHPath, "wt")
 sys.stderr.write("Using absolute path '{}' for rendered POLite header file\n".format(destHPath))
+renderHeader(destH, graph)
 
 # ----------------------------------------------
 # Render source file for tinsel executable 
