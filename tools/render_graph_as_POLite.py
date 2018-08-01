@@ -127,7 +127,9 @@ def renderHeader(dst, graph):
     """)
     for ip in dt.inputs.values():
         if ip.name == "__init__": 
-            dst.write(ip.receive_handler)
+            init_handler = ip.receive_handler.replace("deviceState->", "")
+            init_handler.replace("deviceProperties->", "")
+            dst.write(init_handler)
     dst.write("\n    }\n")
 
     # build the send handler
@@ -136,7 +138,10 @@ def renderHeader(dst, graph):
     inline void send({}* msg) {{
     """.format(mt.id))
     for op in dt.outputs.values():
-        dst.write(op.send_handler)
+        send_handler = op.send_handler.replace("deviceState->","")
+        send_handler = send_handler.replace("deviceProperties->","")
+        send_handler = send_handler.replace("message->","msg->")
+        dst.write(send_handler)
     dst.write("}\n")
 
     # build the receive handler
@@ -146,7 +151,10 @@ def renderHeader(dst, graph):
     """.format(mt.id))
     for ip in dt.inputs.values():
         if ip.name != "__init__":
-            dst.write(ip.receive_handler)
+            recv_handler = ip.receive_handler.replace("deviceState->","")
+            recv_handler = recv_handler.replace("deviceProperties->","")
+            recv_handler = recv_handler.replace("message->", "msg->")
+            dst.write(recv_handler)
     dst.write("}\n")
 
     dst.write("""
