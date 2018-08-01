@@ -88,13 +88,18 @@ def renderHeader(dst, graph):
     #ifndef _{}_H_
     #define _{}_H_
 
-    #include <POLite.h>
+    #include <POLite.h>\n
     """.format(graph.id, graph.id))
+
+    # --------------------------------------------------
+    # define the output pin send flags
+    for op in dt.outputs.values(): 
+        dst.write("#define RTS_FLAG_{} 1".format(op.name))
 
     # ----------------------------------------------------
     # instantiate the message type
     mtProps = make_message_type_properties(mt)
-    dst.write("""
+    dst.write("""\n
     struct {} : PMessage {{
        // message params here
     """.format(mt.id))
@@ -119,6 +124,20 @@ def renderHeader(dst, graph):
     # instantiate the device state 
     render_typed_data(dt.state, dst, " ", dtProps["DEVICE_TYPE_STATE_T"])
 
+
+    # build the rtsHandler
+    dst.write("""
+
+    // the ready to send handler 
+    void rtsHandler() {
+    """)
+    readytosend_handler = dt.ready_to_send_handler.replace("deviceState->", "")
+    readytosend_handler = readytosend_handler.replace("deviceProperties->", "")
+    readytosend_handler = readytosend_handler.replace("*readyToSend", "readyToSend")
+    dst.write(readytosend_handler)
+    dst.write("\n\t}\n")
+  
+
     # build the init handler
     dst.write("""
 
@@ -130,7 +149,9 @@ def renderHeader(dst, graph):
             init_handler = ip.receive_handler.replace("deviceState->", "")
             init_handler.replace("deviceProperties->", "")
             dst.write(init_handler)
-    dst.write("\n    }\n")
+    dst.write("""
+               rtsHandler();    
+             }\n""")
 
     # build the send handler
     dst.write("""
@@ -142,7 +163,9 @@ def renderHeader(dst, graph):
         send_handler = send_handler.replace("deviceProperties->","")
         send_handler = send_handler.replace("message->","msg->")
         dst.write(send_handler)
-    dst.write("}\n")
+    dst.write("""
+               rtsHandler();    
+             }\n""")
 
     # build the receive handler
     dst.write("""
@@ -155,7 +178,9 @@ def renderHeader(dst, graph):
             recv_handler = recv_handler.replace("deviceProperties->","")
             recv_handler = recv_handler.replace("message->", "msg->")
             dst.write(recv_handler)
-    dst.write("}\n")
+    dst.write("""
+               rtsHandler();   
+             }\n""")
 
     dst.write("""
     };
