@@ -19,18 +19,18 @@ import argparse
 
 #-----------------------------------------------------------
 # For rendering types.. adapted from render_graph_as_softswitch
-def render_typed_data(td,dst,indent,name=None):
+def render_typed_data(td,dst,indent,prefix, name=None):
     if name==None:
         name=td.name
     assert(name!="_")
     if isinstance(td,ScalarTypedDataSpec):
-        dst.write("{0}{1} {2} /*indent={0},type={1},name={2}*/".format(indent, td.type, name))
+        dst.write("{0}{1}{2} {3} /*indent={0},type={2},name={3}*/".format(indent, prefix, td.type, name))
     elif isinstance(td,TupleTypedDataSpec):
         for e in td.elements_by_index:
-            render_typed_data(e,dst,indent+"  ")
+            render_typed_data(e,dst,indent+"  ", prefix)
             dst.write(";\n")
     elif isinstance(td,ArrayTypedDataSpec):
-        render_typed_data(td.type,dst,indent,name="")
+        render_typed_data(td.type,dst,indent,prefix,name="")
         dst.write("{}[{}] /*{}*/".format(name, td.length,name))
     else:
         raise RuntimeError("Unknown data type {}".format(td));
@@ -91,7 +91,7 @@ def renderPropertiesHeader(dst, graph, inst):
     dst.write("""
     typedef struct _{}_properties {{
     """.format(dt.id))
-    render_typed_data(dt.properties, dst, " ", dtProps["DEVICE_TYPE_PROPERTIES_T"])
+    render_typed_data(dt.properties, dst, " ","", dtProps["DEVICE_TYPE_PROPERTIES_T"])
     dst.write("""}} {}_properties_t; 
     \n""".format(dt.id))
 
@@ -123,7 +123,7 @@ def renderHeader(dst, graph):
     #define _{0}_H_
 
     #include <POLite.h>
-    #include "{0}_properties.h"\n
+    //#include "{0}_properties.h"\n
     """.format(graph.id))
 
     # --------------------------------------------------
@@ -138,7 +138,7 @@ def renderHeader(dst, graph):
     struct {} : PMessage {{
        // message params here
     """.format(mt.id))
-    render_typed_data(mt.message, dst, " ", mtProps['MESSAGE_TYPE_T'])
+    render_typed_data(mt.message, dst, " ","", mtProps['MESSAGE_TYPE_T'])
     
     dst.write("""
     }};
@@ -157,13 +157,13 @@ def renderHeader(dst, graph):
     // properties 
     """.format(dt.id, mt.id))
     # instantiate the device properties
-    #render_typed_data(dt.properties, dst, " ", dtProps["DEVICE_TYPE_PROPERTIES_T"])
-    dst.write("""
-    {}_properties_t *deviceProperties;
-    """.format(dt.id))
-    dst.write("// state\n")
+    render_typed_data(dt.properties, dst, " ", "__props_", dtProps["DEVICE_TYPE_PROPERTIES_T"])
+    #dst.write("""
+    #{}_properties_t *deviceProperties;
+    #""".format(dt.id))
+    dst.write("    // state\n")
     # instantiate the device state 
-    render_typed_data(dt.state, dst, " ", dtProps["DEVICE_TYPE_STATE_T"])
+    render_typed_data(dt.state, dst, " ", "__state_", dtProps["DEVICE_TYPE_STATE_T"])
 
 
     # build the rtsHandler
@@ -176,8 +176,8 @@ def renderHeader(dst, graph):
             readyToSend = 1;
        } else { 
     """)
-    readytosend_handler = dt.ready_to_send_handler.replace("deviceState->", "")
-    #readytosend_handler = readytosend_handler.replace("deviceProperties->", "")
+    readytosend_handler = dt.ready_to_send_handler.replace("deviceState->", "__state_")
+    readytosend_handler = readytosend_handler.replace("deviceProperties->", "__props_")
     readytosend_handler = readytosend_handler.replace("*readyToSend", "readyToSend")
     dst.write(readytosend_handler)
     dst.write("\n\t}\n\t}\n")
@@ -190,13 +190,13 @@ def renderHeader(dst, graph):
     void init() {
         multicast_progress=0;
     """)
-    dst.write(""" 
-    deviceProperties = &{}_properties[thisDeviceId()]; 
-    """.format(dt.id)) # getting a pointer to the properties 
+    #dst.write(""" 
+    #deviceProperties = &{}_properties[thisDeviceId()]; 
+    #""".format(dt.id)) # getting a pointer to the properties 
     for ip in dt.inputs.values():
         if ip.name == "__init__": 
-            init_handler = ip.receive_handler.replace("deviceState->", "")
-            #init_handler.replace("deviceProperties->", "")
+            init_handler = ip.receive_handler.replace("deviceState->", "__state_")
+            init_handler = init_handler.replace("deviceProperties->", "__props_")
             dst.write(init_handler)
     dst.write("""
                rtsHandler();    
@@ -214,8 +214,8 @@ def renderHeader(dst, graph):
           multicast_progress=0;
     """.format(mt.id))
     for op in dt.outputs.values(): # There should only be one of these
-        send_handler = op.send_handler.replace("deviceState->","")
-        #send_handler = send_handler.replace("deviceProperties->","")
+        send_handler = op.send_handler.replace("deviceState->","__state_")
+        send_handler = send_handler.replace("deviceProperties->","__props_")
         send_handler = send_handler.replace("message->","msg->")
         dst.write(send_handler)
     dst.write("""
@@ -233,8 +233,8 @@ def renderHeader(dst, graph):
     """.format(mt.id))
     for ip in dt.inputs.values():
         if ip.name != "__init__":
-            recv_handler = ip.receive_handler.replace("deviceState->","")
-            #recv_handler = recv_handler.replace("deviceProperties->","")
+            recv_handler = ip.receive_handler.replace("deviceState->","__state_")
+            recv_handler = recv_handler.replace("deviceProperties->","__props_")
             recv_handler = recv_handler.replace("message->", "msg->")
             dst.write(recv_handler)
     dst.write("""
@@ -249,6 +249,95 @@ def renderHeader(dst, graph):
     dst.write("""
     #endif /* _{}_H_ */
     """.format(graph.id))
+#-----------------------------------------------------------
+
+
+#-----------------------------------------------------------
+# renders the Cpp host file
+def renderHostCpp(dst,graph,inst):
+    dt = getDeviceType(graph)
+    mt = getMessageType(graph)
+    total_dev_i = len(inst.device_instances)
+
+    # all the include files
+    dst.write("""
+    #include <stdio.h>
+    #include <stdlib.h>
+    #include <stdint.h>
+    #include <sys/time.h>
+    #include <Hostlink.h>
+    #include <POLite.h>
+    #include "{}.h"\n
+    """.format(graph.id))
+
+    #the main function
+    dst.write("""
+    int main()
+    {{
+
+      // Connection to tinsel machine
+      HostLink hostLink;
+
+      // Create POETS graph
+      PGraph<{0}, {1}> graph;
+
+    """.format(dt.id, mt.id, total_dev_i))
+
+    # instantiate the devices
+    dst.write("  // Create the device instances\n") 
+    for di in inst.device_instances.values():
+        dst.write("      PDeviceId {}_devI = graph.newDevice();\n".format(di.id)) 
+    dst.write("\n")
+
+    # instantiate the edges
+    dst.write("  // Create the edge instances\n")
+    for ei in inst.edge_instances.values():
+        edge_src = ei.src_device
+        edge_dst = ei.dst_device
+        dst.write("     graph.addEdge({},{});\n".format(edge_src.id, edge_dst.id)) 
+
+    # place the graph
+    dst.write("    graph.map();\n")
+
+    # setup the device properties
+    for di in inst.device_instances.values():
+        dst.write("  // properties for devI={}\n".format(di.id))
+        if di.properties:
+            for key, value in di.properties.items():
+                dst.write("    graph.devices[{}]->__props_{}={};\n".format(di.id, key, value))
+
+    # end of the main function
+    dst.write("""
+    
+    // Write graph does to tinsel machine via hostlink
+    graph.write(&hostLink);
+
+    // Load code and trigger execution
+    hostLink.boot("code.v", "data.v");
+
+    // Get start time
+    struct timeval start, finish, diff;
+    gettimeofday(&start, NULL);
+
+    // Trigger execution
+    hostLink.go();
+
+    // Wait for handler_exit
+    uint32_t resp[4];
+    hostLink.recv(resp);
+    
+    // Get finish time
+    gettimeofday(&finish, NULL);
+
+    // Display time
+    timersub(&finish, &start, &diff);
+    double duration = (double) diff.tv_sec + (double) diff.tv_usec / 1000000.0;
+    printf("Time = %lf\\n", duration);
+
+    return 0;
+    }
+    """)
+
 #-----------------------------------------------------------
 
 #-----------------------------------------------------------
@@ -361,6 +450,7 @@ renderCpp(destCpp,graph)
 destHostCppPath=os.path.abspath("{}/{}_host.cpp".format(destPrefix,graph.id))
 destHostCpp=open(destHostCppPath, "wt")
 sys.stderr.write("Using absolute path '{}' for rendered POLite host program source file\n".format(destHostCppPath))
+renderHostCpp(destHostCpp,graph,inst)
 
 # ----------------------------------------------
 # Render Makefile 
