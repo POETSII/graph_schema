@@ -79,6 +79,40 @@ def renderCpp(dst, graph):
 #-----------------------------------------------------------
 
 #-----------------------------------------------------------
+# render the properties header file
+def renderPropertiesHeader(dst, graph, inst):
+    # get the device type and it's properties 
+    dt = getDeviceType(graph)
+    dtProps=make_device_type_properties(dt)
+
+    # create a struct type for holding the device type properties (this should probably be const)
+    dst.write("#ifndef _DEV_PROPERTIES_H\n")
+    dst.write("#define _DEV_PROPERTIES_H\n")
+    dst.write("""
+    typedef struct {}_properties {{
+    """.format(dt.id))
+    render_typed_data(dt.properties, dst, " ", dtProps["DEVICE_TYPE_PROPERTIES_T"])
+    dst.write("""}} {}_properties_t; 
+    \n""".format(dt.id))
+
+    # build an array of the properties type. Each entry in the array corrosponds to a device instance
+    # get the number of device instances in the graph
+    total_dev_i = len(inst.device_instances)
+    dst.write("    {}_properties_t[{}] = {{\n".format(dt.id,total_dev_i))
+    for i,di in enumerate(inst.device_instances.values()):
+        dst.write("{\n")
+        if di.properties:
+            for key, value in di.properties.items():
+                dst.write("\t{},//{}\n".format(value, key))
+        if i == total_dev_i-1: 
+            dst.write("}\n")
+        else:
+            dst.write("},\n")
+    dst.write("    }}; /* {}_properties_t */\n\n".format(dt.id)) 
+
+    dst.write("#endif /*_DEV_PROPERTIES_H */")
+
+#-----------------------------------------------------------
 # renders the header file for the POLite executable
 def renderHeader(dst, graph):
     mt = getMessageType(graph)
@@ -116,8 +150,11 @@ def renderHeader(dst, graph):
     dtProps=make_device_type_properties(dt)
     dst.write("""
     struct {} : PDevice {{
+    // internal
+    uint32_t multicast_progress; // tracks how far through the broadcast we are
+    {} multicast_msg; // keep track of the last message for multicasting
     // properties 
-    """.format(dt.id))
+    """.format(dt.id, mt.id))
     # instantiate the device properties
     render_typed_data(dt.properties, dst, " ", dtProps["DEVICE_TYPE_PROPERTIES_T"])
     dst.write("// state\n")
@@ -130,12 +167,16 @@ def renderHeader(dst, graph):
 
     // the ready to send handler 
     void rtsHandler() {
+       // if we are done with a multicast then we can do a regular send
+       if(multicast_progress < fanOut) {
+            readyToSend = 1;
+       } else { 
     """)
     readytosend_handler = dt.ready_to_send_handler.replace("deviceState->", "")
     readytosend_handler = readytosend_handler.replace("deviceProperties->", "")
     readytosend_handler = readytosend_handler.replace("*readyToSend", "readyToSend")
     dst.write(readytosend_handler)
-    dst.write("\n\t}\n")
+    dst.write("\n\t}\n\t}\n")
   
 
     # build the init handler
@@ -143,6 +184,7 @@ def renderHeader(dst, graph):
 
     // Called once by POLite at the start of execution
     void init() {
+        multicast_progress=0;
     """)
     for ip in dt.inputs.values():
         if ip.name == "__init__": 
@@ -157,15 +199,25 @@ def renderHeader(dst, graph):
     dst.write("""
     // Send handler
     inline void send({}* msg) {{
+        if(multicast_progress < fanOut) {{
+            msg = &multicast_msg;
+            dest = outEdge(multicast_progress);
+            multicast_progress++; 
+        }} else {{
+          multicast_progress=0;
     """.format(mt.id))
-    for op in dt.outputs.values():
+    for op in dt.outputs.values(): # There should only be one of these
         send_handler = op.send_handler.replace("deviceState->","")
         send_handler = send_handler.replace("deviceProperties->","")
         send_handler = send_handler.replace("message->","msg->")
         dst.write(send_handler)
     dst.write("""
-               rtsHandler();    
-             }\n""")
+                   multicast_msg = *msg; // copy the message
+                   dest = outEdge(multicast_progress);
+                   multicast_progress++;
+               }
+        rtsHandler();    
+        }\n""")
 
     # build the receive handler
     dst.write("""
@@ -253,6 +305,16 @@ for g in types.values():
     graph=g
     break
 
+# Currently there has to be exactly 1 graph instance in the XML for it to be rendered
+assert(len(instances)==1)
+
+inst=None
+for g in instances.values():
+    inst = g
+    break
+
+assert(inst.graph_type.id==graph.id)
+
 if not polite_compatible_xml_subset(graph):
     raise RuntimeError("This graph type contains features not currently supported by this backend.")
 
@@ -269,6 +331,14 @@ destHPath=os.path.abspath("{}/{}.h".format(destPrefix,graph.id))
 destH=open(destHPath, "wt")
 sys.stderr.write("Using absolute path '{}' for rendered POLite header file\n".format(destHPath))
 renderHeader(destH, graph)
+
+# ----------------------------------------------
+# Render header file for device properties 
+# ----------------------------------------------
+destHPropPath=os.path.abspath("{}/{}_properties.h".format(destPrefix, graph.id))
+destProp=open(destHPropPath, "wt")
+sys.stderr.write("Using absolute path '{}' for header file containing device properites\n".format(destHPropPath))
+renderPropertiesHeader(destProp,graph,inst)
 
 # ----------------------------------------------
 # Render source file for tinsel executable 
