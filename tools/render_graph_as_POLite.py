@@ -24,7 +24,7 @@ def render_typed_data(td,dst,indent,prefix, name=None):
         name=td.name
     assert(name!="_")
     if isinstance(td,ScalarTypedDataSpec):
-        dst.write("{0}{1}{2} {3} /*indent={0},type={2},name={3}*/".format(indent, prefix, td.type, name))
+        dst.write("{0}{2} {1}{3} /*indent={0},type={2},name={3}*/".format(indent, prefix, td.type, name))
     elif isinstance(td,TupleTypedDataSpec):
         for e in td.elements_by_index:
             render_typed_data(e,dst,indent+"  ", prefix)
@@ -65,7 +65,7 @@ def renderCpp(dst, graph):
 
     dst.write("""
          // Point thread structure at base of thread's heap
-         PThread<{},{}>*thread = (Pthread<{},{}>*) tinselHeapBase();
+         PThread<{},{}>*thread = (PThread<{},{}>*) tinselHeapBase();
         
          // invoke interpreter
          thread->run();
@@ -141,7 +141,7 @@ def renderHeader(dst, graph):
     render_typed_data(mt.message, dst, " ","", mtProps['MESSAGE_TYPE_T'])
     
     dst.write("""
-    }};
+    };
   
     """)
     # ----------------------------------------------------
@@ -164,7 +164,14 @@ def renderHeader(dst, graph):
     dst.write("    // state\n")
     # instantiate the device state 
     render_typed_data(dt.state, dst, " ", "__state_", dtProps["DEVICE_TYPE_STATE_T"])
-
+    
+    # build the handler_exit function call
+    dst.write("""
+    void handler_exit(int code) {
+      dest = hostDeviceId(); // get the host Id
+      readyToSend = 1; // send a message to it (at the moment all messages to the host cause termination
+    }\n
+    """)
 
     # build the rtsHandler
     dst.write("""
@@ -455,6 +462,6 @@ renderHostCpp(destHostCpp,graph,inst)
 # ----------------------------------------------
 # Render Makefile 
 # ----------------------------------------------
-destMakefilePath=os.path.abspath("{}/Makefile".format(destPrefix))
-destMakefile=open(destMakefilePath, "wt")
-sys.stderr.write("Using absolute path '{}' for rendered Makefile\n".format(destMakefilePath))
+#destMakefilePath=os.path.abspath("{}/Makefile".format(destPrefix))
+#destMakefile=open(destMakefilePath, "wt")
+#sys.stderr.write("Using absolute path '{}' for rendered Makefile\n".format(destMakefilePath))

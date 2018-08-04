@@ -3,9 +3,6 @@
     <GraphType id="ro">
         <Documentation>TODO</Documentation>
         <MetaData>&quot;native_dimension&quot;:2</MetaData>
-        <Properties>
-           <Scalar name="iterations" type="uint32_t" default="10000"/>
-        </Properties>
 
         <MessageTypes>
 
@@ -36,6 +33,7 @@
                     <Scalar name="id" type="uint32_t"/>
                     <Scalar name="hasStartToken" type="uint8_t" default="0"/>
                     <Scalar name="noOfTokens" type="uint32_t" default="1"/>
+                    <Scalar name="iterations" type="uint32_t" default="10000"/>
                 </Properties>
 
                 <ReadyToSend>
@@ -85,9 +83,9 @@
 
                             // starting node propagate a fixed number of messages
 
-                            //handler_log(2, "Cycle %d of %d", deviceState->counter, graphProperties->iterations);
+                            //handler_log(2, "Cycle %d of %d", deviceState->counter, deviceProperties->iterations);
 
-                            if (deviceState->counter < graphProperties->iterations) {
+                            if (deviceState->counter < deviceProperties->iterations) {
                                 deviceState->rts = 1; // queue next message
                             } else {
                                 //handler_log(2, "Finish %d", deviceState->counter);
@@ -128,9 +126,6 @@
         </DeviceTypes>
     </GraphType>
 <GraphInstance id="ro_inst" graphTypeId="ro">
-<Properties>
-	"iterations":1000000
-</Properties>
 <DeviceInstances>
 	<DevI id="n0" type="node">
 		<P>"id": 0, "hasStartToken": 1, "noOfTokens":100 </P>
