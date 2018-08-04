@@ -153,7 +153,7 @@ def renderHeader(dst, graph):
     struct {} : PDevice {{
     // internal
     uint32_t multicast_progress; // tracks how far through the broadcast we are
-    {} multicast_msg; // keep track of the last message for multicasting
+    //{} multicast_msg; // keep track of the last message for multicasting
     // properties 
     """.format(dt.id, mt.id))
     # instantiate the device properties
@@ -214,7 +214,7 @@ def renderHeader(dst, graph):
     // Send handler
     inline void send({}* msg) {{
         if(multicast_progress < fanOut) {{
-            msg = &multicast_msg;
+            //msg = &multicast_msg;
             dest = outEdge(multicast_progress);
             multicast_progress++; 
         }} else {{
@@ -226,7 +226,7 @@ def renderHeader(dst, graph):
         send_handler = send_handler.replace("message->","msg->")
         dst.write(send_handler)
     dst.write("""
-                   multicast_msg = *msg; // copy the message
+                   //multicast_msg = *msg; // copy the message
                    dest = outEdge(multicast_progress);
                    multicast_progress++;
                }
@@ -272,7 +272,7 @@ def renderHostCpp(dst,graph,inst):
     #include <stdlib.h>
     #include <stdint.h>
     #include <sys/time.h>
-    #include <Hostlink.h>
+    #include <HostLink.h>
     #include <POLite.h>
     #include "{}.h"\n
     """.format(graph.id))

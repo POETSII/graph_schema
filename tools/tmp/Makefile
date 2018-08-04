@@ -1,5 +1,6 @@
 # Tinsel root
 TINSEL_ROOT=/home/sf306/poets-ecosystem/submodules/tinsel
+HL=$(TINSEL_ROOT)/hostlink
 
 ifndef QUARTUS_ROOTDIR
   $(error Please set QUARTUS_ROOTDIR)

@@ -3,7 +3,7 @@
 # Load config parameters
 while read -r EXPORT; do
   eval $EXPORT
-done <<< `python ../../../config.py envs`
+done <<< `python /home/sf306/poets-ecosystem/submodules/tinsel/config.py envs`
 
 # Compute space available for instructions
 MaxInstrBytes=$((4 * 2**$LogInstrsPerCore - $MaxBootImageBytes))
