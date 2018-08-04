@@ -89,7 +89,7 @@ def renderPropertiesHeader(dst, graph, inst):
     dst.write("#ifndef _DEV_PROPERTIES_H\n")
     dst.write("#define _DEV_PROPERTIES_H\n")
     dst.write("""
-    typedef struct {}_properties {{
+    typedef struct _{}_properties {{
     """.format(dt.id))
     render_typed_data(dt.properties, dst, " ", dtProps["DEVICE_TYPE_PROPERTIES_T"])
     dst.write("""}} {}_properties_t; 
@@ -98,7 +98,7 @@ def renderPropertiesHeader(dst, graph, inst):
     # build an array of the properties type. Each entry in the array corrosponds to a device instance
     # get the number of device instances in the graph
     total_dev_i = len(inst.device_instances)
-    dst.write("    {}_properties_t[{}] = {{\n".format(dt.id,total_dev_i))
+    dst.write("    {0}_properties_t {0}_properties[{1}] = {{\n".format(dt.id,total_dev_i))
     for i,di in enumerate(inst.device_instances.values()):
         dst.write("{\n")
         if di.properties:
@@ -119,11 +119,12 @@ def renderHeader(dst, graph):
     dt = getDeviceType(graph)
     # start with a header guard and include
     dst.write("""
-    #ifndef _{}_H_
-    #define _{}_H_
+    #ifndef _{0}_H_
+    #define _{0}_H_
 
-    #include <POLite.h>\n
-    """.format(graph.id, graph.id))
+    #include <POLite.h>
+    #include "{0}_properties.h"\n
+    """.format(graph.id))
 
     # --------------------------------------------------
     # define the output pin send flags
@@ -156,7 +157,10 @@ def renderHeader(dst, graph):
     // properties 
     """.format(dt.id, mt.id))
     # instantiate the device properties
-    render_typed_data(dt.properties, dst, " ", dtProps["DEVICE_TYPE_PROPERTIES_T"])
+    #render_typed_data(dt.properties, dst, " ", dtProps["DEVICE_TYPE_PROPERTIES_T"])
+    dst.write("""
+    {}_properties_t *deviceProperties;
+    """.format(dt.id))
     dst.write("// state\n")
     # instantiate the device state 
     render_typed_data(dt.state, dst, " ", dtProps["DEVICE_TYPE_STATE_T"])
@@ -173,7 +177,7 @@ def renderHeader(dst, graph):
        } else { 
     """)
     readytosend_handler = dt.ready_to_send_handler.replace("deviceState->", "")
-    readytosend_handler = readytosend_handler.replace("deviceProperties->", "")
+    #readytosend_handler = readytosend_handler.replace("deviceProperties->", "")
     readytosend_handler = readytosend_handler.replace("*readyToSend", "readyToSend")
     dst.write(readytosend_handler)
     dst.write("\n\t}\n\t}\n")
@@ -186,10 +190,13 @@ def renderHeader(dst, graph):
     void init() {
         multicast_progress=0;
     """)
+    dst.write(""" 
+    deviceProperties = &{}_properties[thisDeviceId()]; 
+    """.format(dt.id)) # getting a pointer to the properties 
     for ip in dt.inputs.values():
         if ip.name == "__init__": 
             init_handler = ip.receive_handler.replace("deviceState->", "")
-            init_handler.replace("deviceProperties->", "")
+            #init_handler.replace("deviceProperties->", "")
             dst.write(init_handler)
     dst.write("""
                rtsHandler();    
@@ -208,7 +215,7 @@ def renderHeader(dst, graph):
     """.format(mt.id))
     for op in dt.outputs.values(): # There should only be one of these
         send_handler = op.send_handler.replace("deviceState->","")
-        send_handler = send_handler.replace("deviceProperties->","")
+        #send_handler = send_handler.replace("deviceProperties->","")
         send_handler = send_handler.replace("message->","msg->")
         dst.write(send_handler)
     dst.write("""
@@ -227,7 +234,7 @@ def renderHeader(dst, graph):
     for ip in dt.inputs.values():
         if ip.name != "__init__":
             recv_handler = ip.receive_handler.replace("deviceState->","")
-            recv_handler = recv_handler.replace("deviceProperties->","")
+            #recv_handler = recv_handler.replace("deviceProperties->","")
             recv_handler = recv_handler.replace("message->", "msg->")
             dst.write(recv_handler)
     dst.write("""
