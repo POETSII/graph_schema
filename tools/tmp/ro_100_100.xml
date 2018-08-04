@@ -1,0 +1,539 @@
+<?xml version="1.0"?>
+<Graphs xmlns="https://poets-project.org/schemas/virtual-graph-schema-v2">
+    <GraphType id="ro">
+        <Documentation>TODO</Documentation>
+        <MetaData>&quot;native_dimension&quot;:2</MetaData>
+        <Properties>
+           <Scalar name="iterations" type="uint32_t" default="10000"/>
+        </Properties>
+
+        <MessageTypes>
+
+            <MessageType id="__init__">
+                <Documentation>Initialize state</Documentation>
+            </MessageType>
+
+            <MessageType id="toggle">
+                <Message>
+                </Message>
+                <Documentation>Trigger next node to toggle state</Documentation>
+            </MessageType>
+
+        </MessageTypes>
+
+        <DeviceTypes>
+            <DeviceType id="node">
+
+                <State>
+                    <Scalar name="state" type="uint32_t"/>
+                    <Scalar name="counter" type="uint32_t"/>
+                    <Scalar name="rts" type="uint32_t"/>
+                    <Scalar name="sentStartToken" type="uint8_t"/>
+                    <Scalar name="receivedTokens" type="uint32_t"/>
+                </State>
+
+                <Properties>
+                    <Scalar name="id" type="uint32_t"/>
+                    <Scalar name="hasStartToken" type="uint8_t" default="0"/>
+                    <Scalar name="noOfTokens" type="uint32_t" default="1"/>
+                </Properties>
+
+                <ReadyToSend>
+                    <![CDATA[
+                    *readyToSend = deviceState->rts;
+                    if (deviceState->sentStartToken == 0 || deviceState->receivedTokens > 0)
+                    {
+                        *readyToSend = RTS_FLAG_out;
+                    }
+                    ]]>
+                </ReadyToSend>
+
+                <InputPin messageTypeId="__init__" name="__init__">
+                    <OnReceive>
+                        <![CDATA[
+
+                        deviceState->state = 0;
+                        deviceState->counter = 0;
+                        deviceState->receivedTokens = 0;
+                        deviceState->rts = deviceProperties->hasStartToken;
+
+                        //if (deviceProperties->id == 0) {
+                        //    handler_log(2, "Start");
+                        //    deviceState->rts = 1;
+                        //}
+                        ]]>
+                    </OnReceive>
+                </InputPin>
+
+                <InputPin messageTypeId="toggle" name="in">
+                    <OnReceive>
+                        <![CDATA[
+
+                        deviceState->receivedTokens++;
+
+                        // Toggle state:
+                        deviceState->state = 1 - deviceState->state;
+
+                        // Increment counter:
+                        (deviceState->counter)++;
+
+                        // Queue message for delivery if either:
+                        //   A. node is not root (id != 1)
+                        //   B. (node is root but) total messages delivered are less than a certain constant
+
+                        if (deviceProperties->id == 0) {
+
+                            // starting node propagate a fixed number of messages
+
+                            //handler_log(2, "Cycle %d of %d", deviceState->counter, graphProperties->iterations);
+
+                            if (deviceState->counter < graphProperties->iterations) {
+                                deviceState->rts = 1; // queue next message
+                            } else {
+                                //handler_log(2, "Finish %d", deviceState->counter);
+                                handler_exit(0);
+                            }
+
+                        } else {
+
+                            // non-starting nodes always propagate incoming messages
+
+                            deviceState->rts = 1;
+
+                        }
+
+                        ]]>
+                    </OnReceive>
+                </InputPin>
+
+                <OutputPin messageTypeId="toggle" name="out">
+                    <OnSend>
+                        <![CDATA[
+
+                        deviceState->rts = 0;
+
+                        if (deviceState->sentStartToken == 0) {
+                            deviceState->sentStartToken = 1;
+                        } else
+                        {
+                            deviceState->receivedTokens--;
+                        }
+
+                        ]]>
+                    </OnSend>
+                </OutputPin>
+
+            </DeviceType>
+
+        </DeviceTypes>
+    </GraphType>
+<GraphInstance id="ro_inst" graphTypeId="ro">
+<Properties>
+	"iterations":1000000
+</Properties>
+<DeviceInstances>
+	<DevI id="n0" type="node">
+		<P>"id": 0, "hasStartToken": 1, "noOfTokens":100 </P>
+	</DevI>
+	<DevI id="n1" type="node">
+		<P>"id": 1, "hasStartToken": 1, "noOfTokens":100 </P>
+	</DevI>
+	<DevI id="n2" type="node">
+		<P>"id": 2, "hasStartToken": 1, "noOfTokens":100 </P>
+	</DevI>
+	<DevI id="n3" type="node">
+		<P>"id": 3, "hasStartToken": 1, "noOfTokens":100 </P>
+	</DevI>
+	<DevI id="n4" type="node">
+		<P>"id": 4, "hasStartToken": 1, "noOfTokens":100 </P>
+	</DevI>
+	<DevI id="n5" type="node">
+		<P>"id": 5, "hasStartToken": 1, "noOfTokens":100 </P>
+	</DevI>
+	<DevI id="n6" type="node">
+		<P>"id": 6, "hasStartToken": 1, "noOfTokens":100 </P>
+	</DevI>
+	<DevI id="n7" type="node">
+		<P>"id": 7, "hasStartToken": 1, "noOfTokens":100 </P>
+	</DevI>
+	<DevI id="n8" type="node">
+		<P>"id": 8, "hasStartToken": 1, "noOfTokens":100 </P>
+	</DevI>
+	<DevI id="n9" type="node">
+		<P>"id": 9, "hasStartToken": 1, "noOfTokens":100 </P>
+	</DevI>
+	<DevI id="n10" type="node">
+		<P>"id": 10, "hasStartToken": 1, "noOfTokens":100 </P>
+	</DevI>
+	<DevI id="n11" type="node">
+		<P>"id": 11, "hasStartToken": 1, "noOfTokens":100 </P>
+	</DevI>
+	<DevI id="n12" type="node">
+		<P>"id": 12, "hasStartToken": 1, "noOfTokens":100 </P>
+	</DevI>
+	<DevI id="n13" type="node">
+		<P>"id": 13, "hasStartToken": 1, "noOfTokens":100 </P>
+	</DevI>
+	<DevI id="n14" type="node">
+		<P>"id": 14, "hasStartToken": 1, "noOfTokens":100 </P>
+	</DevI>
+	<DevI id="n15" type="node">
+		<P>"id": 15, "hasStartToken": 1, "noOfTokens":100 </P>
+	</DevI>
+	<DevI id="n16" type="node">
+		<P>"id": 16, "hasStartToken": 1, "noOfTokens":100 </P>
+	</DevI>
+	<DevI id="n17" type="node">
+		<P>"id": 17, "hasStartToken": 1, "noOfTokens":100 </P>
+	</DevI>
+	<DevI id="n18" type="node">
+		<P>"id": 18, "hasStartToken": 1, "noOfTokens":100 </P>
+	</DevI>
+	<DevI id="n19" type="node">
+		<P>"id": 19, "hasStartToken": 1, "noOfTokens":100 </P>
+	</DevI>
+	<DevI id="n20" type="node">
+		<P>"id": 20, "hasStartToken": 1, "noOfTokens":100 </P>
+	</DevI>
+	<DevI id="n21" type="node">
+		<P>"id": 21, "hasStartToken": 1, "noOfTokens":100 </P>
+	</DevI>
+	<DevI id="n22" type="node">
+		<P>"id": 22, "hasStartToken": 1, "noOfTokens":100 </P>
+	</DevI>
+	<DevI id="n23" type="node">
+		<P>"id": 23, "hasStartToken": 1, "noOfTokens":100 </P>
+	</DevI>
+	<DevI id="n24" type="node">
+		<P>"id": 24, "hasStartToken": 1, "noOfTokens":100 </P>
+	</DevI>
+	<DevI id="n25" type="node">
+		<P>"id": 25, "hasStartToken": 1, "noOfTokens":100 </P>
+	</DevI>
+	<DevI id="n26" type="node">
+		<P>"id": 26, "hasStartToken": 1, "noOfTokens":100 </P>
+	</DevI>
+	<DevI id="n27" type="node">
+		<P>"id": 27, "hasStartToken": 1, "noOfTokens":100 </P>
+	</DevI>
+	<DevI id="n28" type="node">
+		<P>"id": 28, "hasStartToken": 1, "noOfTokens":100 </P>
+	</DevI>
+	<DevI id="n29" type="node">
+		<P>"id": 29, "hasStartToken": 1, "noOfTokens":100 </P>
+	</DevI>
+	<DevI id="n30" type="node">
+		<P>"id": 30, "hasStartToken": 1, "noOfTokens":100 </P>
+	</DevI>
+	<DevI id="n31" type="node">
+		<P>"id": 31, "hasStartToken": 1, "noOfTokens":100 </P>
+	</DevI>
+	<DevI id="n32" type="node">
+		<P>"id": 32, "hasStartToken": 1, "noOfTokens":100 </P>
+	</DevI>
+	<DevI id="n33" type="node">
+		<P>"id": 33, "hasStartToken": 1, "noOfTokens":100 </P>
+	</DevI>
+	<DevI id="n34" type="node">
+		<P>"id": 34, "hasStartToken": 1, "noOfTokens":100 </P>
+	</DevI>
+	<DevI id="n35" type="node">
+		<P>"id": 35, "hasStartToken": 1, "noOfTokens":100 </P>
+	</DevI>
+	<DevI id="n36" type="node">
+		<P>"id": 36, "hasStartToken": 1, "noOfTokens":100 </P>
+	</DevI>
+	<DevI id="n37" type="node">
+		<P>"id": 37, "hasStartToken": 1, "noOfTokens":100 </P>
+	</DevI>
+	<DevI id="n38" type="node">
+		<P>"id": 38, "hasStartToken": 1, "noOfTokens":100 </P>
+	</DevI>
+	<DevI id="n39" type="node">
+		<P>"id": 39, "hasStartToken": 1, "noOfTokens":100 </P>
+	</DevI>
+	<DevI id="n40" type="node">
+		<P>"id": 40, "hasStartToken": 1, "noOfTokens":100 </P>
+	</DevI>
+	<DevI id="n41" type="node">
+		<P>"id": 41, "hasStartToken": 1, "noOfTokens":100 </P>
+	</DevI>
+	<DevI id="n42" type="node">
+		<P>"id": 42, "hasStartToken": 1, "noOfTokens":100 </P>
+	</DevI>
+	<DevI id="n43" type="node">
+		<P>"id": 43, "hasStartToken": 1, "noOfTokens":100 </P>
+	</DevI>
+	<DevI id="n44" type="node">
+		<P>"id": 44, "hasStartToken": 1, "noOfTokens":100 </P>
+	</DevI>
+	<DevI id="n45" type="node">
+		<P>"id": 45, "hasStartToken": 1, "noOfTokens":100 </P>
+	</DevI>
+	<DevI id="n46" type="node">
+		<P>"id": 46, "hasStartToken": 1, "noOfTokens":100 </P>
+	</DevI>
+	<DevI id="n47" type="node">
+		<P>"id": 47, "hasStartToken": 1, "noOfTokens":100 </P>
+	</DevI>
+	<DevI id="n48" type="node">
+		<P>"id": 48, "hasStartToken": 1, "noOfTokens":100 </P>
+	</DevI>
+	<DevI id="n49" type="node">
+		<P>"id": 49, "hasStartToken": 1, "noOfTokens":100 </P>
+	</DevI>
+	<DevI id="n50" type="node">
+		<P>"id": 50, "hasStartToken": 1, "noOfTokens":100 </P>
+	</DevI>
+	<DevI id="n51" type="node">
+		<P>"id": 51, "hasStartToken": 1, "noOfTokens":100 </P>
+	</DevI>
+	<DevI id="n52" type="node">
+		<P>"id": 52, "hasStartToken": 1, "noOfTokens":100 </P>
+	</DevI>
+	<DevI id="n53" type="node">
+		<P>"id": 53, "hasStartToken": 1, "noOfTokens":100 </P>
+	</DevI>
+	<DevI id="n54" type="node">
+		<P>"id": 54, "hasStartToken": 1, "noOfTokens":100 </P>
+	</DevI>
+	<DevI id="n55" type="node">
+		<P>"id": 55, "hasStartToken": 1, "noOfTokens":100 </P>
+	</DevI>
+	<DevI id="n56" type="node">
+		<P>"id": 56, "hasStartToken": 1, "noOfTokens":100 </P>
+	</DevI>
+	<DevI id="n57" type="node">
+		<P>"id": 57, "hasStartToken": 1, "noOfTokens":100 </P>
+	</DevI>
+	<DevI id="n58" type="node">
+		<P>"id": 58, "hasStartToken": 1, "noOfTokens":100 </P>
+	</DevI>
+	<DevI id="n59" type="node">
+		<P>"id": 59, "hasStartToken": 1, "noOfTokens":100 </P>
+	</DevI>
+	<DevI id="n60" type="node">
+		<P>"id": 60, "hasStartToken": 1, "noOfTokens":100 </P>
+	</DevI>
+	<DevI id="n61" type="node">
+		<P>"id": 61, "hasStartToken": 1, "noOfTokens":100 </P>
+	</DevI>
+	<DevI id="n62" type="node">
+		<P>"id": 62, "hasStartToken": 1, "noOfTokens":100 </P>
+	</DevI>
+	<DevI id="n63" type="node">
+		<P>"id": 63, "hasStartToken": 1, "noOfTokens":100 </P>
+	</DevI>
+	<DevI id="n64" type="node">
+		<P>"id": 64, "hasStartToken": 1, "noOfTokens":100 </P>
+	</DevI>
+	<DevI id="n65" type="node">
+		<P>"id": 65, "hasStartToken": 1, "noOfTokens":100 </P>
+	</DevI>
+	<DevI id="n66" type="node">
+		<P>"id": 66, "hasStartToken": 1, "noOfTokens":100 </P>
+	</DevI>
+	<DevI id="n67" type="node">
+		<P>"id": 67, "hasStartToken": 1, "noOfTokens":100 </P>
+	</DevI>
+	<DevI id="n68" type="node">
+		<P>"id": 68, "hasStartToken": 1, "noOfTokens":100 </P>
+	</DevI>
+	<DevI id="n69" type="node">
+		<P>"id": 69, "hasStartToken": 1, "noOfTokens":100 </P>
+	</DevI>
+	<DevI id="n70" type="node">
+		<P>"id": 70, "hasStartToken": 1, "noOfTokens":100 </P>
+	</DevI>
+	<DevI id="n71" type="node">
+		<P>"id": 71, "hasStartToken": 1, "noOfTokens":100 </P>
+	</DevI>
+	<DevI id="n72" type="node">
+		<P>"id": 72, "hasStartToken": 1, "noOfTokens":100 </P>
+	</DevI>
+	<DevI id="n73" type="node">
+		<P>"id": 73, "hasStartToken": 1, "noOfTokens":100 </P>
+	</DevI>
+	<DevI id="n74" type="node">
+		<P>"id": 74, "hasStartToken": 1, "noOfTokens":100 </P>
+	</DevI>
+	<DevI id="n75" type="node">
+		<P>"id": 75, "hasStartToken": 1, "noOfTokens":100 </P>
+	</DevI>
+	<DevI id="n76" type="node">
+		<P>"id": 76, "hasStartToken": 1, "noOfTokens":100 </P>
+	</DevI>
+	<DevI id="n77" type="node">
+		<P>"id": 77, "hasStartToken": 1, "noOfTokens":100 </P>
+	</DevI>
+	<DevI id="n78" type="node">
+		<P>"id": 78, "hasStartToken": 1, "noOfTokens":100 </P>
+	</DevI>
+	<DevI id="n79" type="node">
+		<P>"id": 79, "hasStartToken": 1, "noOfTokens":100 </P>
+	</DevI>
+	<DevI id="n80" type="node">
+		<P>"id": 80, "hasStartToken": 1, "noOfTokens":100 </P>
+	</DevI>
+	<DevI id="n81" type="node">
+		<P>"id": 81, "hasStartToken": 1, "noOfTokens":100 </P>
+	</DevI>
+	<DevI id="n82" type="node">
+		<P>"id": 82, "hasStartToken": 1, "noOfTokens":100 </P>
+	</DevI>
+	<DevI id="n83" type="node">
+		<P>"id": 83, "hasStartToken": 1, "noOfTokens":100 </P>
+	</DevI>
+	<DevI id="n84" type="node">
+		<P>"id": 84, "hasStartToken": 1, "noOfTokens":100 </P>
+	</DevI>
+	<DevI id="n85" type="node">
+		<P>"id": 85, "hasStartToken": 1, "noOfTokens":100 </P>
+	</DevI>
+	<DevI id="n86" type="node">
+		<P>"id": 86, "hasStartToken": 1, "noOfTokens":100 </P>
+	</DevI>
+	<DevI id="n87" type="node">
+		<P>"id": 87, "hasStartToken": 1, "noOfTokens":100 </P>
+	</DevI>
+	<DevI id="n88" type="node">
+		<P>"id": 88, "hasStartToken": 1, "noOfTokens":100 </P>
+	</DevI>
+	<DevI id="n89" type="node">
+		<P>"id": 89, "hasStartToken": 1, "noOfTokens":100 </P>
+	</DevI>
+	<DevI id="n90" type="node">
+		<P>"id": 90, "hasStartToken": 1, "noOfTokens":100 </P>
+	</DevI>
+	<DevI id="n91" type="node">
+		<P>"id": 91, "hasStartToken": 1, "noOfTokens":100 </P>
+	</DevI>
+	<DevI id="n92" type="node">
+		<P>"id": 92, "hasStartToken": 1, "noOfTokens":100 </P>
+	</DevI>
+	<DevI id="n93" type="node">
+		<P>"id": 93, "hasStartToken": 1, "noOfTokens":100 </P>
+	</DevI>
+	<DevI id="n94" type="node">
+		<P>"id": 94, "hasStartToken": 1, "noOfTokens":100 </P>
+	</DevI>
+	<DevI id="n95" type="node">
+		<P>"id": 95, "hasStartToken": 1, "noOfTokens":100 </P>
+	</DevI>
+	<DevI id="n96" type="node">
+		<P>"id": 96, "hasStartToken": 1, "noOfTokens":100 </P>
+	</DevI>
+	<DevI id="n97" type="node">
+		<P>"id": 97, "hasStartToken": 1, "noOfTokens":100 </P>
+	</DevI>
+	<DevI id="n98" type="node">
+		<P>"id": 98, "hasStartToken": 1, "noOfTokens":100 </P>
+	</DevI>
+	<DevI id="n99" type="node">
+		<P>"id": 99, "hasStartToken": 1, "noOfTokens":100 </P>
+	</DevI>
+</DeviceInstances>
+<EdgeInstances>
+	<EdgeI path="n0:in-n1:out"/>
+	<EdgeI path="n1:in-n2:out"/>
+	<EdgeI path="n2:in-n3:out"/>
+	<EdgeI path="n3:in-n4:out"/>
+	<EdgeI path="n4:in-n5:out"/>
+	<EdgeI path="n5:in-n6:out"/>
+	<EdgeI path="n6:in-n7:out"/>
+	<EdgeI path="n7:in-n8:out"/>
+	<EdgeI path="n8:in-n9:out"/>
+	<EdgeI path="n9:in-n10:out"/>
+	<EdgeI path="n10:in-n11:out"/>
+	<EdgeI path="n11:in-n12:out"/>
+	<EdgeI path="n12:in-n13:out"/>
+	<EdgeI path="n13:in-n14:out"/>
+	<EdgeI path="n14:in-n15:out"/>
+	<EdgeI path="n15:in-n16:out"/>
+	<EdgeI path="n16:in-n17:out"/>
+	<EdgeI path="n17:in-n18:out"/>
+	<EdgeI path="n18:in-n19:out"/>
+	<EdgeI path="n19:in-n20:out"/>
+	<EdgeI path="n20:in-n21:out"/>
+	<EdgeI path="n21:in-n22:out"/>
+	<EdgeI path="n22:in-n23:out"/>
+	<EdgeI path="n23:in-n24:out"/>
+	<EdgeI path="n24:in-n25:out"/>
+	<EdgeI path="n25:in-n26:out"/>
+	<EdgeI path="n26:in-n27:out"/>
+	<EdgeI path="n27:in-n28:out"/>
+	<EdgeI path="n28:in-n29:out"/>
+	<EdgeI path="n29:in-n30:out"/>
+	<EdgeI path="n30:in-n31:out"/>
+	<EdgeI path="n31:in-n32:out"/>
+	<EdgeI path="n32:in-n33:out"/>
+	<EdgeI path="n33:in-n34:out"/>
+	<EdgeI path="n34:in-n35:out"/>
+	<EdgeI path="n35:in-n36:out"/>
+	<EdgeI path="n36:in-n37:out"/>
+	<EdgeI path="n37:in-n38:out"/>
+	<EdgeI path="n38:in-n39:out"/>
+	<EdgeI path="n39:in-n40:out"/>
+	<EdgeI path="n40:in-n41:out"/>
+	<EdgeI path="n41:in-n42:out"/>
+	<EdgeI path="n42:in-n43:out"/>
+	<EdgeI path="n43:in-n44:out"/>
+	<EdgeI path="n44:in-n45:out"/>
+	<EdgeI path="n45:in-n46:out"/>
+	<EdgeI path="n46:in-n47:out"/>
+	<EdgeI path="n47:in-n48:out"/>
+	<EdgeI path="n48:in-n49:out"/>
+	<EdgeI path="n49:in-n50:out"/>
+	<EdgeI path="n50:in-n51:out"/>
+	<EdgeI path="n51:in-n52:out"/>
+	<EdgeI path="n52:in-n53:out"/>
+	<EdgeI path="n53:in-n54:out"/>
+	<EdgeI path="n54:in-n55:out"/>
+	<EdgeI path="n55:in-n56:out"/>
+	<EdgeI path="n56:in-n57:out"/>
+	<EdgeI path="n57:in-n58:out"/>
+	<EdgeI path="n58:in-n59:out"/>
+	<EdgeI path="n59:in-n60:out"/>
+	<EdgeI path="n60:in-n61:out"/>
+	<EdgeI path="n61:in-n62:out"/>
+	<EdgeI path="n62:in-n63:out"/>
+	<EdgeI path="n63:in-n64:out"/>
+	<EdgeI path="n64:in-n65:out"/>
+	<EdgeI path="n65:in-n66:out"/>
+	<EdgeI path="n66:in-n67:out"/>
+	<EdgeI path="n67:in-n68:out"/>
+	<EdgeI path="n68:in-n69:out"/>
+	<EdgeI path="n69:in-n70:out"/>
+	<EdgeI path="n70:in-n71:out"/>
+	<EdgeI path="n71:in-n72:out"/>
+	<EdgeI path="n72:in-n73:out"/>
+	<EdgeI path="n73:in-n74:out"/>
+	<EdgeI path="n74:in-n75:out"/>
+	<EdgeI path="n75:in-n76:out"/>
+	<EdgeI path="n76:in-n77:out"/>
+	<EdgeI path="n77:in-n78:out"/>
+	<EdgeI path="n78:in-n79:out"/>
+	<EdgeI path="n79:in-n80:out"/>
+	<EdgeI path="n80:in-n81:out"/>
+	<EdgeI path="n81:in-n82:out"/>
+	<EdgeI path="n82:in-n83:out"/>
+	<EdgeI path="n83:in-n84:out"/>
+	<EdgeI path="n84:in-n85:out"/>
+	<EdgeI path="n85:in-n86:out"/>
+	<EdgeI path="n86:in-n87:out"/>
+	<EdgeI path="n87:in-n88:out"/>
+	<EdgeI path="n88:in-n89:out"/>
+	<EdgeI path="n89:in-n90:out"/>
+	<EdgeI path="n90:in-n91:out"/>
+	<EdgeI path="n91:in-n92:out"/>
+	<EdgeI path="n92:in-n93:out"/>
+	<EdgeI path="n93:in-n94:out"/>
+	<EdgeI path="n94:in-n95:out"/>
+	<EdgeI path="n95:in-n96:out"/>
+	<EdgeI path="n96:in-n97:out"/>
+	<EdgeI path="n97:in-n98:out"/>
+	<EdgeI path="n98:in-n99:out"/>
+	<EdgeI path="n99:in-n0:out"/>
+</EdgeInstances>
+</GraphInstance>
+</Graphs>
