@@ -301,7 +301,7 @@ def renderHostCpp(dst,graph,inst):
     for ei in inst.edge_instances.values():
         edge_src = ei.src_device
         edge_dst = ei.dst_device
-        dst.write("     graph.addEdge({},{});\n".format(edge_src.id, edge_dst.id)) 
+        dst.write("     graph.addEdge({}_devI,{}_devI);\n".format(edge_src.id, edge_dst.id)) 
 
     # place the graph
     dst.write("    graph.map();\n")
@@ -311,7 +311,7 @@ def renderHostCpp(dst,graph,inst):
         dst.write("  // properties for devI={}\n".format(di.id))
         if di.properties:
             for key, value in di.properties.items():
-                dst.write("    graph.devices[{}]->__props_{}={};\n".format(di.id, key, value))
+                dst.write("    graph.devices[{}_devI]->__props_{}={};\n".format(di.id, key, value))
 
     # end of the main function
     dst.write("""
