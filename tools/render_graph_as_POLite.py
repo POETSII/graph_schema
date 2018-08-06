@@ -153,6 +153,7 @@ def renderHeader(dst, graph):
     struct __devicetype_{} : PDevice {{
     // internal
     uint32_t multicast_progress; // tracks how far through the broadcast we are
+    uint8_t __internal_exit; // when set this indicates that this device has called handler_exit
     __messagetype_{} multicast_msg; // keep track of the last message for multicasting
     bool *doSend; // stub for send cancelation
     // properties 
@@ -175,7 +176,8 @@ def renderHeader(dst, graph):
     # build the handler_exit function call
     dst.write("""
     void handler_exit(int code) {
-      dest = hostDeviceId(); // get the host Id
+      //dest = hostDeviceId(); // get the host Id
+      __internal_exit = 1; // we want to exit
       readyToSend = 1; // send a message to it (at the moment all messages to the host cause termination
     }\n
     """)
@@ -204,6 +206,7 @@ def renderHeader(dst, graph):
     // Called once by POLite at the start of execution
     void init() {
         multicast_progress=fanOut;
+        __internal_exit=0;
     """)
     #dst.write(""" 
     #deviceProperties = &{}_properties[thisDeviceId()]; 
@@ -222,6 +225,9 @@ def renderHeader(dst, graph):
     dst.write("""
     // Send handler
     inline void send(__messagetype_{}* msg) {{
+      if(__internal_exit) {{
+        dest = hostDeviceId(); // get the host Id
+      }} else {{
         if(multicast_progress < fanOut) {{
             msg = &multicast_msg; // copy the message
             dest = outEdge(multicast_progress);
@@ -241,6 +247,7 @@ def renderHeader(dst, graph):
                    multicast_progress++;
                }
         rtsHandler();    
+       }
         }\n""")
 
     # build the receive handler
