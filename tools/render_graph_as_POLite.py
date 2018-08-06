@@ -195,7 +195,7 @@ def renderHeader(dst, graph):
 
     // Called once by POLite at the start of execution
     void init() {
-        multicast_progress=0;
+        multicast_progress=fanOut;
     """)
     #dst.write(""" 
     #deviceProperties = &{}_properties[thisDeviceId()]; 
@@ -347,6 +347,62 @@ def renderHostCpp(dst,graph,inst):
 
 #-----------------------------------------------------------
 
+
+#-----------------------------------------------------------
+# renders the makefile that is used to build the POLite project
+def renderMakefile(dst, graph):
+   dst.write("""
+# Tinsel root
+TINSEL_ROOT=/home/sf306/poets-ecosystem/submodules/tinsel
+HL=$(TINSEL_ROOT)/hostlink
+
+ifndef QUARTUS_ROOTDIR
+\t$(error Please set QUARTUS_ROOTDIR)
+endif
+
+include $(TINSEL_ROOT)/globals.mk
+
+# local compiler flags
+CFLAGS = $(RV_CFLAGS) -O2 -I $(INC)
+LDFLAGS = -melf32lriscv -G 0
+
+.PHONY: all
+all: code.v data.v run
+
+code.v: {0}.elf
+\tcheckelf.sh {0}.elf
+\t$(RV_OBJCOPY) -O verilog --only-section=.text {0}.elf code.v
+
+data.v: {0}.elf
+\t$(RV_OBJCOPY) -O verilog --remove-section=.text \\
+\t\t--set-section-flags .bss=alloc,load,contents {0}.elf data.v
+
+{0}.elf: {0}.cpp {0}.h link.ld $(INC)/config.h $(INC)/tinsel.h entry.o $(LIB)/lib.o
+\t$(RV_CPPC) $(CFLAGS) -Wall -c -DTINSEL -o {0}.o {0}.cpp
+\t$(RV_LD) $(LDFLAGS) -T link.ld -o {0}.elf entry.o {0}.o $(LIB)/lib.o
+
+entry.o:
+\t$(RV_CPPC) $(CFLAGS) -Wall -c -o entry.o entry.S
+
+$(LIB)/lib.o:
+\tmake -C $(LIB)
+
+link.ld: genld.sh
+\t./genld.sh > link.ld
+
+$(INC)/config.h: $(TINSEL_ROOT)/config.py
+\tmake -C $(LIB)
+
+$(HL)/%.o:
+\tmake -C $(HL)
+
+run: {0}_host.cpp $(HL)/*.o
+\tg++ -O2 -I $(INC) -I $(HL) -o run {0}_host.cpp $(HL)/*.o -ljtag_atlantic -ljtag_client -L $(QUARTUS_ROOTDIR)/linux64/ -Wl,-rpath,$(QUARTUS_ROOTDIR)/linux64 -lmetis
+
+clean:
+\trm -f *.o *.elf link.ld *.v run sim
+   """.format(graph.id)) 
+
 #-----------------------------------------------------------
 # returns true if we have a POLite compatible subset of the XML -- otherwise returns false
 def polite_compatible_xml_subset(gt):
@@ -462,6 +518,7 @@ renderHostCpp(destHostCpp,graph,inst)
 # ----------------------------------------------
 # Render Makefile 
 # ----------------------------------------------
-#destMakefilePath=os.path.abspath("{}/Makefile".format(destPrefix))
-#destMakefile=open(destMakefilePath, "wt")
-#sys.stderr.write("Using absolute path '{}' for rendered Makefile\n".format(destMakefilePath))
+destMakefilePath=os.path.abspath("{}/Makefile".format(destPrefix))
+destMakefile=open(destMakefilePath, "wt")
+sys.stderr.write("Using absolute path '{}' for rendered Makefile\n".format(destMakefilePath))
+renderMakefile(destMakefile, graph)
