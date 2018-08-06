@@ -326,8 +326,8 @@ def renderHostCpp(dst,graph,inst):
         # instantiate the graph properties
         dst.write("  \t//graph properties\n".format(di.id))
         if inst.properties:
-            for key, values in inst.properties.items():
-                dst.write("    graph.devices[{}_devI]->__graph_props_{}={};\n".format(di.id, key, value))
+            for gip_key, gip_value in inst.properties.items():
+                dst.write("    graph.devices[{}_devI]->__graph_props_{}={};\n".format(di.id, gip_key, gip_value))
 
     # end of the main function
     dst.write("""
