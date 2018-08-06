@@ -149,7 +149,6 @@ def renderHeader(dst, graph):
 
     # ----------------------------------------------------
     # instantiate the device type
-    dtProps=make_device_type_properties(dt)
     dst.write("""
     struct __devicetype_{} : PDevice {{
     // internal
@@ -159,10 +158,13 @@ def renderHeader(dst, graph):
     // properties 
     """.format(dt.id, mt.id))
     # instantiate the device properties
-    render_typed_data(dt.properties, dst, " ", "__props_", dtProps["DEVICE_TYPE_PROPERTIES_T"])
+    if dt.properties:
+        dtProps=make_device_type_properties(dt)
+        render_typed_data(dt.properties, dst, " ", "__props_", dtProps["DEVICE_TYPE_PROPERTIES_T"])
     # instantiate the graph properties
-    gtProps=make_graph_type_properties(graph)
-    render_typed_data(graph.properties, dst, "", "__graph_props_", gtProps["GRAPH_TYPE_PROPERTIES_T"]) 
+    if graph.properties:
+        gtProps=make_graph_type_properties(graph)
+        render_typed_data(graph.properties, dst, "", "__graph_props_", gtProps["GRAPH_TYPE_PROPERTIES_T"]) 
     #dst.write("""
     #{}_properties_t *deviceProperties;
     #""".format(dt.id))
