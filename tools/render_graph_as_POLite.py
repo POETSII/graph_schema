@@ -153,7 +153,7 @@ def renderHeader(dst, graph):
     struct __devicetype_{} : PDevice {{
     // internal
     uint32_t multicast_progress; // tracks how far through the broadcast we are
-    //{} multicast_msg; // keep track of the last message for multicasting
+    __messagetype_{} multicast_msg; // keep track of the last message for multicasting
     bool *doSend; // stub for send cancelation
     // properties 
     """.format(dt.id, mt.id))
@@ -223,7 +223,7 @@ def renderHeader(dst, graph):
     // Send handler
     inline void send(__messagetype_{}* msg) {{
         if(multicast_progress < fanOut) {{
-            //msg = &multicast_msg;
+            msg = &multicast_msg; // copy the message
             dest = outEdge(multicast_progress);
             multicast_progress++; 
         }} else {{
@@ -236,7 +236,7 @@ def renderHeader(dst, graph):
         send_handler = send_handler.replace("message->","msg->")
         dst.write(send_handler)
     dst.write("""
-                   //multicast_msg = *msg; // copy the message
+                   multicast_msg = *msg; // copy the message
                    dest = outEdge(multicast_progress);
                    multicast_progress++;
                }
