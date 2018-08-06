@@ -155,6 +155,7 @@ def renderHeader(dst, graph):
     // internal
     uint32_t multicast_progress; // tracks how far through the broadcast we are
     //{} multicast_msg; // keep track of the last message for multicasting
+    bool *doSend; // stub for send cancelation
     // properties 
     """.format(dt.id, mt.id))
     # instantiate the device properties
