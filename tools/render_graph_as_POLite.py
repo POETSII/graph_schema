@@ -129,7 +129,8 @@ def renderHeader(dst, graph):
     # --------------------------------------------------
     # define the output pin send flags
     for op in dt.outputs.values(): 
-        dst.write("#define RTS_FLAG_{} 1".format(op.name))
+        dst.write("#define RTS_FLAG_{} 1\n".format(op.name))
+        dst.write("#define OUTPUT_FLAG_{}_{} 1\n".format(dt.id,op.name))
 
     # ----------------------------------------------------
     # instantiate the message type
