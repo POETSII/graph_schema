@@ -158,6 +158,9 @@ def renderHeader(dst, graph):
     """.format(dt.id, mt.id))
     # instantiate the device properties
     render_typed_data(dt.properties, dst, " ", "__props_", dtProps["DEVICE_TYPE_PROPERTIES_T"])
+    # instantiate the graph properties
+    gtProps=make_graph_type_properties(graph)
+    render_typed_data(graph.properties, dst, "", "__graph_props_", gtProps["GRAPH_TYPE_PROPERTIES_T"]) 
     #dst.write("""
     #{}_properties_t *deviceProperties;
     #""".format(dt.id))
@@ -185,6 +188,7 @@ def renderHeader(dst, graph):
     """)
     readytosend_handler = dt.ready_to_send_handler.replace("deviceState->", "__state_")
     readytosend_handler = readytosend_handler.replace("deviceProperties->", "__props_")
+    readytosend_handler = readytosend_handler.replace("graphProperties->", "__graph_props_")
     readytosend_handler = readytosend_handler.replace("*readyToSend", "readyToSend")
     dst.write(readytosend_handler)
     dst.write("\n\t}\n\t}\n")
@@ -204,6 +208,7 @@ def renderHeader(dst, graph):
         if ip.name == "__init__": 
             init_handler = ip.receive_handler.replace("deviceState->", "__state_")
             init_handler = init_handler.replace("deviceProperties->", "__props_")
+            init_handler = init_handler.replace("graphProperties->", "__graph_props_")
             dst.write(init_handler)
     dst.write("""
                rtsHandler();    
@@ -223,6 +228,7 @@ def renderHeader(dst, graph):
     for op in dt.outputs.values(): # There should only be one of these
         send_handler = op.send_handler.replace("deviceState->","__state_")
         send_handler = send_handler.replace("deviceProperties->","__props_")
+        send_handler = send_handler.replace("graphProperties->","__graph_props_")
         send_handler = send_handler.replace("message->","msg->")
         dst.write(send_handler)
     dst.write("""
@@ -242,6 +248,7 @@ def renderHeader(dst, graph):
         if ip.name != "__init__":
             recv_handler = ip.receive_handler.replace("deviceState->","__state_")
             recv_handler = recv_handler.replace("deviceProperties->","__props_")
+            recv_handler = recv_handler.replace("graphProperties->","__graph_props_")
             recv_handler = recv_handler.replace("message->", "msg->")
             dst.write(recv_handler)
     dst.write("""
@@ -312,6 +319,11 @@ def renderHostCpp(dst,graph,inst):
         if di.properties:
             for key, value in di.properties.items():
                 dst.write("    graph.devices[{}_devI]->__props_{}={};\n".format(di.id, key, value))
+        # instantiate the graph properties
+        dst.write("  \t//graph properties\n".format(di.id))
+        if inst.properties:
+            for key, values in inst.properties.items():
+                dst.write("    graph.devices[{}_devI]->__graph_props_{}={};\n".format(di.id, key, value))
 
     # end of the main function
     dst.write("""
