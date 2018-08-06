@@ -65,7 +65,7 @@ def renderCpp(dst, graph):
 
     dst.write("""
          // Point thread structure at base of thread's heap
-         PThread<{},{}>*thread = (PThread<{},{}>*) tinselHeapBase();
+         PThread<__devicetype_{},__messagetype_{}>*thread = (PThread<__devicetype_{},__messagetype_{}>*) tinselHeapBase();
         
          // invoke interpreter
          thread->run();
@@ -89,16 +89,16 @@ def renderPropertiesHeader(dst, graph, inst):
     dst.write("#ifndef _DEV_PROPERTIES_H\n")
     dst.write("#define _DEV_PROPERTIES_H\n")
     dst.write("""
-    typedef struct _{}_properties {{
+    typedef struct __devicetype_{}_properties {{
     """.format(dt.id))
     render_typed_data(dt.properties, dst, " ","", dtProps["DEVICE_TYPE_PROPERTIES_T"])
-    dst.write("""}} {}_properties_t; 
+    dst.write("""}} __devicetype_{}_properties_t; 
     \n""".format(dt.id))
 
     # build an array of the properties type. Each entry in the array corrosponds to a device instance
     # get the number of device instances in the graph
     total_dev_i = len(inst.device_instances)
-    dst.write("    {0}_properties_t {0}_properties[{1}] = {{\n".format(dt.id,total_dev_i))
+    dst.write("    __devicetype_{0}_properties_t __devicetype_{0}_properties[{1}] = {{\n".format(dt.id,total_dev_i))
     for i,di in enumerate(inst.device_instances.values()):
         dst.write("{\n")
         if di.properties:
@@ -108,7 +108,7 @@ def renderPropertiesHeader(dst, graph, inst):
             dst.write("}\n")
         else:
             dst.write("},\n")
-    dst.write("    }}; /* {}_properties_t */\n\n".format(dt.id)) 
+    dst.write("    }}; /* __devicetype_{}_properties_t */\n\n".format(dt.id)) 
 
     dst.write("#endif /*_DEV_PROPERTIES_H */")
 
@@ -130,13 +130,13 @@ def renderHeader(dst, graph):
     # define the output pin send flags
     for op in dt.outputs.values(): 
         dst.write("#define RTS_FLAG_{} 1\n".format(op.name))
-        dst.write("#define OUTPUT_FLAG_{}_{} 1\n".format(dt.id,op.name))
+        dst.write("    #define OUTPUT_FLAG_{}_{} 1\n".format(dt.id,op.name))
 
     # ----------------------------------------------------
     # instantiate the message type
     mtProps = make_message_type_properties(mt)
     dst.write("""\n
-    struct {} : PMessage {{
+    struct __messagetype_{} : PMessage {{
        // message params here
     """.format(mt.id))
     render_typed_data(mt.message, dst, " ","", mtProps['MESSAGE_TYPE_T'])
@@ -151,7 +151,7 @@ def renderHeader(dst, graph):
     # instantiate the device type
     dtProps=make_device_type_properties(dt)
     dst.write("""
-    struct {} : PDevice {{
+    struct __devicetype_{} : PDevice {{
     // internal
     uint32_t multicast_progress; // tracks how far through the broadcast we are
     //{} multicast_msg; // keep track of the last message for multicasting
@@ -219,7 +219,7 @@ def renderHeader(dst, graph):
     # build the send handler
     dst.write("""
     // Send handler
-    inline void send({}* msg) {{
+    inline void send(__messagetype_{}* msg) {{
         if(multicast_progress < fanOut) {{
             //msg = &multicast_msg;
             dest = outEdge(multicast_progress);
@@ -244,7 +244,7 @@ def renderHeader(dst, graph):
     # build the receive handler
     dst.write("""
     // recv handler
-    inline void recv({}* msg) {{
+    inline void recv(__messagetype_{}* msg) {{
     """.format(mt.id))
     for ip in dt.inputs.values():
         if ip.name != "__init__":
@@ -295,7 +295,7 @@ def renderHostCpp(dst,graph,inst):
       HostLink hostLink;
 
       // Create POETS graph
-      PGraph<{0}, {1}> graph;
+      PGraph<__devicetype_{0}, __messagetype_{1}> graph;
 
     """.format(dt.id, mt.id, total_dev_i))
 
