@@ -8,8 +8,10 @@ import sys
 
 try:
     import ujson as json
+    is_ujson=True
 except:
     import json
+    is_ujson=False
 
 ns={"p":"https://poets-project.org/schemas/virtual-graph-schema-v2"}
 
@@ -86,12 +88,18 @@ def save_graph(graph,dst):
         dst.write(' <GraphInstance id="{}" graphTypeId="{}">\n'.format(graph.id,graph.graph_type.id))
         if graph.properties:
             dst.write('   <Properties>\n')
-            dst.write(json.dumps(graph.properties,indent=2)[1:-1])
+            if is_ujson:
+                dst.write(json.dumps(graph.properties)[1:-1])
+            else:
+                dst.write(json.dumps(graph.properties,indent=2)[1:-1])
             dst.write('\n')
             dst.write('   </Properties>\n')
         if graph.metadata:
             dst.write('   <MetaData>\n')
-            dst.write(json.dumps(graph.metadata,indent=2)[1:-1])
+            if is_ujson:
+                dst.write(json.dumps(graph.metadata)[1:-1])
+            else:
+                dst.write(json.dumps(graph.metadata,indent=2)[1:-1])
             dst.write('\n')
             dst.write('   </MetaData>\n')
         dst.write('  <DeviceInstances>\n')
