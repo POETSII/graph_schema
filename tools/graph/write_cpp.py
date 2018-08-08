@@ -103,7 +103,7 @@ def render_typed_data_load_v4_tuple(proto,dst,prefix,indent):
             elif elt.type=="float" or elt.type=="double":
                 dst.write('{}  {}{}=n.GetDouble();\n'.format(indent, prefix, elt.name))
             else:
-                raise RuntimeError("Unknown scalar data type.")
+                raise RuntimeError("Unknown scalar data type : "+elt.type)
         elif isinstance(elt,TupleTypedDataSpec):
             render_typed_data_load_v4_tuple(elt,dst,prefix+elt.name+".",indent+"    ")
         elif isinstance(elt,ArrayTypedDataSpec):
@@ -227,13 +227,13 @@ def render_typed_data_save(proto, dst, prefix, indent):
         else:
             raise RuntimeError("Haven't implemented non-scalar arrays yet.")
     elif isinstance(proto,TupleTypedDataSpec):
-        dst.write('{}if(sep){ dst<<","; } sep=true;\n'.format(indent))
+        dst.write('{}if(sep){{ dst<<","; }} sep=true;\n'.format(indent))
         dst.write('{}{{ bool sep=false;\n'.format(indent))
-        dst.write('{}dst<<"\\"{}\\"":{{"'.format(indent,proto.name))
+        dst.write('{}dst<<"\\"{}\\":{{";\n'.format(indent,proto.name))
         for elt in proto.elements_by_index:
-            render_typed_data_save(elt, dst, prefix+"."+proto.name, indent+"  ")
-        dst.write('{}dst<<"}}"'.format(indent))
-        dst.write('{}}}'.format(indent))
+            render_typed_data_save(elt, dst, prefix+proto.name+".", indent+"  ")
+        dst.write('{}dst<<"}}"\n;'.format(indent))
+        dst.write('{}}}\n'.format(indent))
     else:
         assert False, "Unknown data-type"
 
