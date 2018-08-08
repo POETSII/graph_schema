@@ -33,14 +33,14 @@
 			"location.dimension" : 2
 		</MetaData>
 
-		<Types>
+		<!--<Types>
 			<TypeDef id="update_t">
 				<Tuple name="_">
 					<Scalar type="uint32_t" name="t" />
 					<Scalar type="float" name="v" />
 				</Tuple>
 			</TypeDef>
-		</Types>
+		</Types>-->
 
 	<Properties>
       <Scalar type="uint32_t" name="maxTime" default="65" />
@@ -66,7 +66,11 @@
 
       <MessageType id="update">
 				<Message>
-					<Scalar type="update_t" name="v" />
+					<!--<Scalar type="update_t" name="v" />-->
+					<Tuple name="v">
+						<Scalar type="uint32_t" name="t" />
+						<Scalar type="float" name="v" />
+					</Tuple>
 				</Message>
       </MessageType>
     </MessageTypes>

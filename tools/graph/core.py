@@ -12,6 +12,29 @@ class TypedDataSpec(object):
     def visit_subtypes(self,visitor):
         pass
 
+
+# https://stackoverflow.com/a/48725499
+class frozendict(dict):
+    def __init__(self, *args, **kwargs):
+        self._hash = None
+        super(frozendict, self).__init__(*args, **kwargs)
+
+    def __hash__(self):
+        if self._hash is None:
+            self._hash = hash(tuple(sorted(self.items())))  # iteritems() on py2
+        return self._hash
+
+    def _immutable(self, *args, **kws):
+        raise TypeError('cannot change object - object is immutable')
+
+    __setitem__ = _immutable
+    __delitem__ = _immutable
+    pop = _immutable
+    popitem = _immutable
+    clear = _immutable
+    update = _immutable
+    setdefault = _immutable
+
 class ScalarTypedDataSpec(TypedDataSpec):
     
     _primitives=set(["int32_t","uint32_t","int16_t","uint16_t","int8_t","uint8_t","float","double"])
@@ -55,7 +78,8 @@ class ScalarTypedDataSpec(TypedDataSpec):
         else:
             self.default=0
         if isinstance(self.default,dict):
-            self.default=frozenset(self.default) # make it hashable
+            #self.default=frozenset(self.default) # make it hashable
+            self.default=frozendict(self.default)
         if isinstance(self.default,list):
             self.default=tuple(self.default) # make it hashable
         self._hash = hash(self.name) ^ hash(self.type) ^ hash(self.default)

@@ -47,14 +47,15 @@ firefly_sync_FILTERS_TIME = \
 firefly_sync_FILTERS_VALUE = \
   --bind-dev "cell" "state" "v" "color" "heat(-20000000, +20000000, value)"
 
+# DT10 : I don't think these are actually active. Delete all of this?
 
-$(eval $(call firefly_sync_instance_template,4,1,100,$(firefly_sync_FILTERS_VALUE)))
-$(eval $(call firefly_sync_instance_template,9,1,100,$(firefly_sync_FILTERS_VALUE)))
-$(eval $(call firefly_sync_instance_template,16,1,100,$(firefly_sync_FILTERS_TIME)))
-$(eval $(call firefly_sync_instance_template,32,10,10000,$(firefly_sync_FILTERS_VALUE)))
+#$(eval $(call firefly_sync_instance_template,4,1,100,$(firefly_sync_FILTERS_VALUE)))
+#$(eval $(call firefly_sync_instance_template,9,1,100,$(firefly_sync_FILTERS_VALUE)))
+#$(eval $(call firefly_sync_instance_template,16,1,100,$(firefly_sync_FILTERS_TIME)))
+#$(eval $(call firefly_sync_instance_template,32,10,10000,$(firefly_sync_FILTERS_VALUE)))
 
 # Needs to be manually rendered with graph_to_field
-#$(eval $(call firefly_sync_instance_template,128,200,50000,$(firefly_sync_FILTERS_VALUE)))
+##$(eval $(call firefly_sync_instance_template,128,200,50000,$(firefly_sync_FILTERS_VALUE)))
 
 
 firefly_sync_tests : $(ALL_firefly_sync_TESTS)
