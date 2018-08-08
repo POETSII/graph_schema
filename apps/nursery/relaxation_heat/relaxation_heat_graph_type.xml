@@ -24,6 +24,44 @@
 		Each device broadcasts their colour with their heat, so the heat will always
 		get routed to a unique position in the array.
 
+    Termination:
+    - Each cell has a nextVersion and currVerson
+    - When any cell receives an update, it takes self.nextVersion=max(self.nextVersion,msg.version)
+    - When a cell sends a message it does:
+       - if abs_diff(self.nextHeat,self.currHeat) <= 3 : self.currVersion=self.nextVersion
+       - else: self.currVersion=self.nextVersion+1
+    
+    Eventually everyone converges on the same version, though convergence speed depends
+    on the diameter of the graph.
+
+    Each cell also sends updates upwards through a network which tracks:
+    - The largest known version
+    - How many cells are at the largest known version
+
+    The pair is then reduced upwards using the function:
+      (largest,count) = (max(largestA,largestB), largestA==largestB ? countA+countB : max(countA,countB)
+
+    At the top-level you can guess that termination has happened when count==len(cells). It isn't
+    certain though, because n-1 cells could be at version v, with one cell at version v-1... but
+    then not, it has to go to version v+1...
+
+    Is it possible for all cells to be at version v, but for there to be messages in flight that
+    would cause one cell to update to version v+1?... Yes.
+
+    Ok, so we broadcast up to the root:
+    - version, count=1, sent, received
+    and the collectors reduce to:
+    if( versionA < versionB ) {
+       (versionB, countB, sentB, receivedB)
+    else if( versionA > versionB ){
+       (versionA, countA, sentA, receivedA)
+    else
+       (versionA, countA+countB, sendA+sentB, receivedA+receivedB)
+
+    termination is detected at the root when:
+       count==len(cells) && sent==received
+
+
 
     ]]></Documentation>
 	
@@ -53,7 +91,19 @@
         <Message>
          <Scalar type="uint32_t" name="version" />
 			   <Scalar type="uint8_t" name="colour" />
-         <Scalar type="uint8_t" name="temperature" />
+         <Scalar type="int8_t" name="temperature" />
+        </Message>
+			</MessageType>
+
+      <MessageType id="step">
+        <Message>
+          <Scalar type="uint32_t" name="cycle" /><!-- For sanity checking -->
+        </Message>
+			</MessageType>
+
+      <MessageType id="tick">
+        <Message>
+         <Scalar type="int8_t" name="flip" /><!-- -1 or +1 -->
         </Message>
 			</MessageType>
 
@@ -63,19 +113,20 @@
 
       <DeviceType id="cell">
         <Properties>
-          <Scalar type="int32_t" name="initial" default="127" />
+          <Scalar type="int8_t" name="initial" />
           
-          <Scalar type="int32_t" name="boundary" />
+          <Scalar type="int8_t" name="boundary" />
           <Scalar type="uint8_t" name="colour"/>
         </Properties>
 
         <State>
-          <Scalar name="version" type="uint32_t" />
+          <Scalar name="currVersion" type="uint32_t" />
+          <Scalar name="nextVersion" type="uint32_t" />
 
-          <Scalar name="currHeat" type="uint8_t" />
-          <Scalar name="nextHeat" type="uint8_t" />
+          <Scalar name="currHeat" type="int8_t" />
+          <Scalar name="nextHeat" type="int8_t" />
 
-          <Array name="nhood" type="uint8_t" length="4" />
+          <Array name="nhood" type="int8_t" length="4" />
         </State>
 
 		<ReadyToSend><![CDATA[
@@ -87,15 +138,24 @@
 
 		<InputPin name="__init__" messageTypeId="__init__">
 		  <OnReceive><![CDATA[
-		  deviceState->version=0;
-      for(unsigned i=0; i<4; i++){
-         deviceState->nhood[i]=127;
+      self->currHeat=0;
+      if(deviceProperties->boundary){
+         self->nextHeat=deviceProperties->initial;
       }
 
-      deviceState->currHeat=deviceProperties->initial;
-      deviceState->nextHeat=deviceState->currHeat+128; // Trigger a share
+      self.currVersion=0;
+      self.nextVersion=1;
 		  ]]></OnReceive>
 		</InputPin>
+
+    <InputPin name="tick" messageTypeId="tick">
+      <OnReceive><![CDATA[
+      // If we get a tick, then boundary conditions are set
+      if(deviceProperties->boundary){
+        deviceState->nextHeat = message->flip * deviceState->initial;
+      }
+      ]]></OnReceive>
+    </InputPin>
 
 		<InputPin name="share_in" messageTypeId="share">
 		  <OnReceive><![CDATA[
@@ -107,7 +167,8 @@
           sum += deviceState->nhood[i];
         }
 
-        deviceState->nextHeat = sum/4;
+        deviceState->nextHeat = (sum+2)/4;
+        deviceState->nextVersion=std::max(deviceState->nextVersion, message->version);
       }
 		  ]]></OnReceive>
 		</InputPin>
@@ -127,6 +188,71 @@
 
 
 	</DeviceType>
+
+  <DeviceType id="root">
+    <Properties>
+      <Scalar type="int32_t" name="round" default="0" />
+      
+    </Properties>
+
+    <State>
+      <Scalar name="version" type="uint32_t" />
+
+      <Scalar name="currHeat" type="uint8_t" />
+      <Scalar name="nextHeat" type="uint8_t" />
+
+      <Array name="nhood" type="uint8_t" length="4" />
+    </State>
+
+    <ReadyToSend><![CDATA[
+      *readyToSend		= 0;
+      if( abs_diff(deviceState->currHeat,deviceState->nextHeat) > 3 ){
+        *readyToSend=RTS_FLAG_share_out;
+      }
+    ]]></ReadyToSend>
+
+    <InputPin name="__init__" messageTypeId="__init__">
+    <OnReceive><![CDATA[
+    deviceState->version=0;
+    for(unsigned i=0; i<4; i++){
+      deviceState->nhood[i]=127;
+    }
+
+    deviceState->currHeat=deviceProperties->initial;
+    deviceState->nextHeat=deviceState->currHeat+128; // Trigger a share
+    ]]></OnReceive>
+    </InputPin>
+
+    <InputPin name="share_in" messageTypeId="share">
+    <OnReceive><![CDATA[
+    if( !deviceProperties->boundary ){
+    deviceState->nhood[message->colour] = message->temperature;
+
+    int32_t sum=0;
+    for(unsigned i=0; i<4; i++){
+      sum += deviceState->nhood[i];
+    }
+
+    deviceState->nextHeat = sum/4;
+    }
+    ]]></OnReceive>
+    </InputPin>
+
+    <OutputPin name="share_out" messageTypeId="share">
+    <OnSend><![CDATA[
+    assert(deviceState->nextHeat != deviceState->currHeat);
+    ++deviceState->version;
+
+    message->version=deviceState->version;
+    message->colour=deviceProperties->colour;
+    message->temperature=deviceState->nextHeat;
+
+    deviceState->currHeat=deviceState->nextHeat;
+    ]]></OnSend>
+    </OutputPin>
+
+
+  </DeviceType>
 
     </DeviceTypes>
   </GraphType>
