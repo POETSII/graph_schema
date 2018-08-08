@@ -208,7 +208,6 @@ include apps/gals_heat/makefile.inc
 include apps/gals_heat_fix/makefile.inc
 #include apps/gals_heat_fix_noedge/makefile.inc
 include apps/storm/makefile.inc
-include apps/halo_exchange/makefile.inc
 include apps/firefly_sync/makefile.inc
 
 include apps/amg/makefile.inc
