@@ -196,19 +196,23 @@
     </Properties>
 
     <State>
-      <Scalar name="version" type="uint32_t" />
+      <Scalar name="currVersion" type="uint32_t" />
+
+      <Scalar name="headVersion" type="uint32_t" />
+      <Scalar name="headSent" type="uint32_t" />
+      <Scalar name="headReceived" type="uint32_t" />
+      
+      <Array name="nhood" type="uint8_t" length="4" />
 
       <Scalar name="currHeat" type="uint8_t" />
       <Scalar name="nextHeat" type="uint8_t" />
 
-      <Array name="nhood" type="uint8_t" length="4" />
+      <Scalar name="rts" type="uint8_t" />
+      
     </State>
 
     <ReadyToSend><![CDATA[
-      *readyToSend		= 0;
-      if( abs_diff(deviceState->currHeat,deviceState->nextHeat) > 3 ){
-        *readyToSend=RTS_FLAG_share_out;
-      }
+      *readyToSend = deviceState->rts;
     ]]></ReadyToSend>
 
     <InputPin name="__init__" messageTypeId="__init__">
@@ -218,8 +222,15 @@
       deviceState->nhood[i]=127;
     }
 
-    deviceState->currHeat=deviceProperties->initial;
-    deviceState->nextHeat=deviceState->currHeat+128; // Trigger a share
+    deviceState->currHead=deviceProperties->initial;
+
+    deviceState->headVersion=1;
+    deviceState->headSent=0;
+    deviceState->headReceived=0;
+
+    deviceState->nextHeat=deviceState->currHeat+128;
+
+    deviceState->rts=RTS_FLAG_share_out;
     ]]></OnReceive>
     </InputPin>
 
@@ -234,6 +245,10 @@
     }
 
     deviceState->nextHeat = sum/4;
+
+    if(abs_diff(deviceState->nextHeat,deviceState->currHeat) > 3){
+       deviceState->rts=RTS_FLAG_share_out;
+    }
     }
     ]]></OnReceive>
     </InputPin>
