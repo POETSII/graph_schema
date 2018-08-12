@@ -198,13 +198,15 @@ def render_typed_data_save(proto, dst, prefix, indent):
     elif isinstance(proto,ArrayTypedDataSpec):
         if isinstance(proto.type,ScalarTypedDataSpec):
             dst.write('{}if(sep){{ dst<<","; }}; dst<<"\\"{}\\":[";'.format(indent,proto.name))
-            for i in range(proto.length):
-                if i>0:
-                    dst.write('{}  dst<<",";\n'.format(indent))
-                if proto.type.type=="float" or proto.type.type=="double":
-                    dst.write('{}  dst<<float_to_string({}{}[{}]);\n'.format(indent, prefix, proto.name, i))
-                else:
-                    dst.write('{}  dst<<{}{}[{}];\n'.format(indent, prefix, proto.name, i))
+            dst.write("{}for(int ii=0; ii<{}; ii++){{ ".format(indent,proto.length))
+            dst.write('{}  if(ii>0){{ dst<<","; }}\n'.format(indent))
+            if proto.type.type=="float" or proto.type.type=="double":
+                dst.write('{}  dst<<float_to_string({}{}[ii]);\n'.format(indent, prefix, proto.name))
+            elif proto.type.type=="uint64_t":
+                dst.write('{}  dst<<(uint64_t)({}{}[ii]);\n'.format(indent, prefix, proto.name))
+            else:
+                dst.write('{}  dst<<(int64_t)({}{}[ii]);\n'.format(indent, prefix, proto.name))
+            dst.write("{}}}".format(indent)); # End of for loop
             dst.write('{}dst<<"]"; sep=true;\n'.format(indent))
         elif isinstance(proto.type,ArrayTypedDataSpec):
             etype=proto.type
@@ -220,8 +222,10 @@ def render_typed_data_save(proto, dst, prefix, indent):
                         dst.write('{}  dst<<",";\n'.format(indent))
                     if proto.type.type=="float" or proto.type.type=="double":
                         dst.write('{}  dst<<float_to_string({}{}[{}][{}]);\n'.format(indent, prefix, proto.name, i,j))
+                    elif proto.type.type=="uint64_t":
+                        dst.write('{}  dst<<(uint64_t)({}{}[{}][{}]);\n'.format(indent, prefix, proto.name, i,j))
                     else:
-                        dst.write('{}  dst<<{}{}[{}][{}];\n'.format(indent, prefix, proto.name, i,j))
+                        dst.write('{}  dst<<(int64_t)({}{}[{}][{}]);\n'.format(indent, prefix, proto.name, i,j))
                 dst.write('{}  dst<<"]";\n'.format(indent))
             dst.write('{}dst<<"]"; sep=true;\n'.format(indent))
         else:
