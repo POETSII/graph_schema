@@ -95,18 +95,15 @@
         </Message>
 			</MessageType>
 
-      <MessageType id="step">
+      <MessageType id="termination">
         <Message>
-          <Scalar type="uint32_t" name="cycle" /><!-- For sanity checking -->
-        </Message>
+          <Scalar type="uint32_t" name="version" /><!-- Which version this is talking about -->
+          <Scalar type="uint32_t" name="count" /><!-- Number of cells at this version -->
+          <Scalar type="uint32_t" name="sent" /><!-- Number of sends performed at this version -->
+          <Scalar type="uint32_t" name="received" /><!-- Number of receives performed at this version -->
+          <Scalar type="uint8_t" name="index" /><!-- Index to tell parent which child this is from -->
+        </Message> 
 			</MessageType>
-
-      <MessageType id="tick">
-        <Message>
-         <Scalar type="int8_t" name="flip" /><!-- -1 or +1 -->
-        </Message>
-			</MessageType>
-
     </MessageTypes>
 
     <DeviceTypes>
@@ -117,45 +114,51 @@
           
           <Scalar type="int8_t" name="boundary" />
           <Scalar type="uint8_t" name="colour"/>
+          <Scalar type="uint8_t" name="termination_index"/> <!-- index to give to termination parent -->
+
+          <Scalar type="uint8_t" name="neighbours"/>
         </Properties>
 
         <State>
           <Scalar name="currVersion" type="uint32_t" />
+
           <Scalar name="nextVersion" type="uint32_t" />
+          <Scalar name="sent" type="uint32_t" />
+          <Scalar name="received" type="uint32_t" />
 
           <Scalar name="currHeat" type="int8_t" />
           <Scalar name="nextHeat" type="int8_t" />
-
+          
           <Array name="nhood" type="int8_t" length="4" />
+
+          <Scalar name="dirty" type="int8_t" /> <!-- The state has updated, but not yet send upwards for termination -->
         </State>
 
 		<ReadyToSend><![CDATA[
 		*readyToSend		= 0;
-		if( abs_diff(deviceState->currHeat,deviceState->nextHeat) > 3 ){
+		if( abs_diff(deviceState->currHeat,deviceState->nextHeat) > 3  || deviceState->currVersion < deviceState->nextVersion ){
        *readyToSend=RTS_FLAG_share_out;
+    }else if(deviceState->dirty){
+      *readyToSend=RTS_FLAG_termination_out;
     }
 		]]></ReadyToSend>
 
 		<InputPin name="__init__" messageTypeId="__init__">
 		  <OnReceive><![CDATA[
-      self->currHeat=0;
+      deviceState->currHeat=0;
       if(deviceProperties->boundary){
-         self->nextHeat=deviceProperties->initial;
+         deviceState->nextHeat=deviceProperties->initial;
       }
 
-      self.currVersion=0;
-      self.nextVersion=1;
+      deviceState->currVersion=0;
+
+      deviceState->nextVersion=1;
+      deviceState->sent=0;
+      deviceState->received=0;
+
+      deviceState->dirty=true;
 		  ]]></OnReceive>
 		</InputPin>
-
-    <InputPin name="tick" messageTypeId="tick">
-      <OnReceive><![CDATA[
-      // If we get a tick, then boundary conditions are set
-      if(deviceProperties->boundary){
-        deviceState->nextHeat = message->flip * deviceState->initial;
-      }
-      ]]></OnReceive>
-    </InputPin>
 
 		<InputPin name="share_in" messageTypeId="share">
 		  <OnReceive><![CDATA[
@@ -168,106 +171,171 @@
         }
 
         deviceState->nextHeat = (sum+2)/4;
-        deviceState->nextVersion=std::max(deviceState->nextVersion, message->version);
+
       }
+      if(deviceState->nextVersion < message->version){
+          deviceState->nextVersion=message->version;
+          deviceState->received=0;
+          deviceState->sent=0;
+      }
+      if(deviceState->nextVersion == message->version){
+        deviceState->received++;        
+      }
+
+      deviceState->dirty=true;
 		  ]]></OnReceive>
 		</InputPin>
 
 		<OutputPin name="share_out" messageTypeId="share">
 		  <OnSend><![CDATA[
-			assert(deviceState->nextHeat != deviceState->currHeat);
-      ++deviceState->version;
+			assert(abs_diff(deviceState->currHeat,deviceState->nextHeat) > 3 || deviceState->currVersion != deviceState->nextVersion );
+      
+      if( abs_diff(deviceState->currHeat,deviceState->nextHeat) > 3 ){
+        deviceState->currHeat=deviceState->nextHeat;      
+        deviceState->nextVersion+=1;
+        deviceState->sent=0;
+        deviceState->received=0;
+      }
 
-      message->version=deviceState->version;
+      assert(deviceState->sent==0);
+
+      deviceState->currVersion=deviceState->nextVersion;
+      deviceState->sent=deviceProperties->neighbours;
+
+      message->version=deviceState->currVersion;
       message->colour=deviceProperties->colour;
       message->temperature=deviceState->nextHeat;
 
-      deviceState->currHeat=deviceState->nextHeat;
+
+
+      deviceState->dirty=true;
+		  ]]></OnSend>
+    </OutputPin>
+
+    <OutputPin name="termination_out" messageTypeId="termination">
+		  <OnSend><![CDATA[
+			assert(deviceState->dirty);
+      assert(abs_diff(deviceState->currHeat,deviceState->nextHeat) <= 3);
+      
+      assert(deviceState->currVersion <= deviceState->currVersion);
+      deviceState->currVersion = deviceState->nextVersion;
+      
+      message->version=deviceState->currVersion;
+      message->sent=deviceState->sent;
+      message->received=deviceState->received;
+      message->count=1;
+      message->index=deviceProperties->termination_index;
+
+      deviceState->currHeat=deviceState->nextHeat;      
+
+      deviceState->dirty=false;
 		  ]]></OnSend>
 		</OutputPin>
-
-
 	</DeviceType>
 
-  <DeviceType id="root">
+  <DeviceType id="merger">
     <Properties>
-      <Scalar type="int32_t" name="round" default="0" />
+      <Scalar type="uint8_t" name="degree" />
+      <Scalar type="uint8_t" name="termination_index" />
       
     </Properties>
 
     <State>
-      <Scalar name="currVersion" type="uint32_t" />
-
-      <Scalar name="headVersion" type="uint32_t" />
-      <Scalar name="headSent" type="uint32_t" />
-      <Scalar name="headReceived" type="uint32_t" />
+      <Scalar name="version" type="uint32_t" />
       
-      <Array name="nhood" type="uint8_t" length="4" />
+      <Array name="count" type="uint32_t" length="4" />
+      <Array name="sent" type="uint32_t" length="4" />
+      <Array name="received" type="uint32_t" length="4" />
 
-      <Scalar name="currHeat" type="uint8_t" />
-      <Scalar name="nextHeat" type="uint8_t" />
-
-      <Scalar name="rts" type="uint8_t" />
-      
+      <Scalar name="dirty" type="uint8_t" />
     </State>
 
     <ReadyToSend><![CDATA[
-      *readyToSend = deviceState->rts;
+      *readyToSend = deviceState->dirty ? RTS_FLAG_termination_out : 0;
     ]]></ReadyToSend>
 
     <InputPin name="__init__" messageTypeId="__init__">
     <OnReceive><![CDATA[
-    deviceState->version=0;
-    for(unsigned i=0; i<4; i++){
-      deviceState->nhood[i]=127;
-    }
+      // Accept all defaults
 
-    deviceState->currHead=deviceProperties->initial;
-
-    deviceState->headVersion=1;
-    deviceState->headSent=0;
-    deviceState->headReceived=0;
-
-    deviceState->nextHeat=deviceState->currHeat+128;
-
-    deviceState->rts=RTS_FLAG_share_out;
+      // Check the degree property doesn't exceed the array size
+      assert( deviceProperties->degree <= sizeof(deviceState->count)/sizeof(deviceState->count[0]) );
     ]]></OnReceive>
     </InputPin>
 
-    <InputPin name="share_in" messageTypeId="share">
-    <OnReceive><![CDATA[
-    if( !deviceProperties->boundary ){
-    deviceState->nhood[message->colour] = message->temperature;
+    <InputPin name="termination_in" messageTypeId="termination">
+      <OnReceive><![CDATA[
+    
+    if(deviceState->version < message->version){
+      deviceState->version=message->version;
+      for(unsigned i=0; i<deviceProperties->degree; i++){
+        deviceState->sent[i]=0;
+        deviceState->received[i]=0;
+        deviceState->count[i]=0;
+      }
+    }
+    if(deviceState->version == message->version){
+      unsigned index=message->index;
+      assert(index<deviceProperties->degree);
+      
+      deviceState->count[index]=message->count;
+      deviceState->received[index]=message->received;
+      deviceState->sent[index]=message->sent;
 
-    int32_t sum=0;
-    for(unsigned i=0; i<4; i++){
-      sum += deviceState->nhood[i];
+      deviceState->dirty=true;
     }
 
-    deviceState->nextHeat = sum/4;
-
-    if(abs_diff(deviceState->nextHeat,deviceState->currHeat) > 3){
-       deviceState->rts=RTS_FLAG_share_out;
-    }
-    }
     ]]></OnReceive>
     </InputPin>
 
-    <OutputPin name="share_out" messageTypeId="share">
+    <OutputPin name="termination_out" messageTypeId="termination">
     <OnSend><![CDATA[
-    assert(deviceState->nextHeat != deviceState->currHeat);
-    ++deviceState->version;
+    assert(deviceState->dirty);
+    
+    // TODO: this could be optimised to only send down when the total count
+    // matches the sum of all cells recursively above this on the tree.
 
     message->version=deviceState->version;
-    message->colour=deviceProperties->colour;
-    message->temperature=deviceState->nextHeat;
+    message->count=0;
+    message->sent=0;
+    message->received=0;
+    message->index=deviceProperties->termination_index;
 
-    deviceState->currHeat=deviceState->nextHeat;
+    for(unsigned i=0; i<deviceProperties->degree; i++){
+      message->count+=deviceState->count[i];
+      message->sent+=deviceState->sent[i];
+      message->received+=deviceState->received[i];
+    }
+
+    deviceState->dirty=false;
     ]]></OnSend>
     </OutputPin>
+  </DeviceType>
 
+  <DeviceType id="root">
+    <Properties>
+      <Scalar type="uint32_t" name="totalCells" />
+    </Properties>
+
+    <ReadyToSend><![CDATA[
+      *readyToSend = 0;
+    ]]></ReadyToSend>
+
+    <InputPin name="termination_in" messageTypeId="termination">
+      <OnReceive><![CDATA[
+      assert(message->index==0); // Root doesn't do any merging
+
+      handler_log(2, "version=%u, count=%u (of %u), sent=%u, received=%u", message->version, message->count, deviceProperties->totalCells, message->sent, message->received);
+
+      if(message->count==deviceProperties->totalCells && message->sent==message->received){
+        handler_exit(0);
+      }
+      ]]></OnReceive>
+    </InputPin>
 
   </DeviceType>
+
+
 
     </DeviceTypes>
   </GraphType>

@@ -11,7 +11,7 @@ struct update_message_t
 };
 
 std::shared_ptr<MessageType> updateMessageType
-    = std::make_shared< MessageTypeHelper<update_message_t> >();
+    = std::make_shared< MessageTypePlain<update_message_t> >();
 
 struct gals_heat_properties_t
 {
@@ -94,7 +94,8 @@ public:
             { updateMessageType }
         )
     {
-
+        /*addReceiveHandler(0, +[](const gals_heat_properties_t *pProperties, gals_heat_state_t *pState, const update_message_t *pMsg){
+        });*/
     }
 };
 

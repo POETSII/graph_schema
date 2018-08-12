@@ -125,6 +125,11 @@ public:
             hash & payload[i];
         }
     }
+
+    virtual bool Equal(const MessageType *o) const
+    {
+        return this==o; // default is very restrictive
+    }
 };
 
 template<class TMsg>
@@ -144,6 +149,20 @@ public:
     virtual void HashPayload(hash_t &hash, const uint8_t *payload) const final
     {
         return HashPayload(hash, (const TMsg *)payload);
+    }
+};
+
+/*! This class wraps a data-type with standard hashing, and is equal
+    to all other data-types wrapping the same type. */
+template<class TMsg>
+class MessageTypePlain final
+    : public MessageTypeHelper<TMsg>
+{
+public:
+    bool Equal(const MessageType *o) const override
+    {
+        // Any instances of this class is the same message type
+        return dynamic_cast<const MessageTypePlain<TMsg> *>(o) !=0;
     }
 };
 
@@ -234,6 +253,22 @@ protected:
     )
         : DeviceType(sizeof(TProp), sizeof(TState), inputPorts, outputPorts)
     {}
+
+    /*
+    Experimental - a bit silly
+
+    template<class TMsg>
+    void addReceiveHandler(unsigned portIndex, void (*onReceive)(const TProp *, TState *, const TMsg *)  )
+    {
+
+    }
+
+    template<class TMsg,class TEdgeProps>
+    void addReceiveHandler(unsigned portIndex, void (*onReceive)(const TProp *, TState *, const TMsg *, const TEdgeProps *)  )
+    {
+
+    }
+    */
 
     virtual uint32_t GetRTS( const TProp *pProperties, const TState *pState) const=0;
 
@@ -445,8 +480,8 @@ struct world_state_t
         auto dstMsgType=dstDev.deviceType->GetInputPorts().at(dst.port);
         auto srcMsgType=srcDev.deviceType->GetOutputPorts().at(src.port);
 
-        if(dstMsgType != srcMsgType){
-            throw std::runtime_error("Message types don't seem to match."); // TODO: equality idea is a bit loose
+        if(!dstMsgType->Equal(srcMsgType.get())){
+            throw std::runtime_error("Message types don't seem to match.");
         }
 
         srcDev.outPorts.at(src.port).second.push_back( std::make_pair(dstDev.inPorts.at(dst.port), dst) );
