@@ -88,6 +88,10 @@
       </MessageType>
 
 			<MessageType id="share">
+        <Documentation>
+        These messages are only shared between cells, and are used to carry updates of
+        version and sometimes hit across the grid.
+        </Documentation>
         <Message>
          <Scalar type="uint32_t" name="version" />
 			   <Scalar type="uint8_t" name="colour" />
@@ -96,6 +100,11 @@
 			</MessageType>
 
       <MessageType id="termination">
+        <Documentation>
+        These do down from the cells towards the root, through a sequence of merge nodes. At each
+        merge the information is aggregated, then at the root node it is possible to tell if termination
+        is achieved.
+        </Documentation>
         <Message>
           <Scalar type="uint32_t" name="version" /><!-- Which version this is talking about -->
           <Scalar type="uint32_t" name="count" /><!-- Number of cells at this version -->
@@ -104,19 +113,39 @@
           <Scalar type="uint8_t" name="index" /><!-- Index to tell parent which child this is from -->
         </Message> 
 			</MessageType>
+
+      <MessageType id="modification">
+        <Documentation>
+        These go up from the root to the cells, and are used to modify a single cell. It is up to
+        the root to make sure that it doesn't have more than one modification in the system at any
+        time.
+        
+        The updates don't use the termination tree, as we want to selectively filter upwards.
+        </Documentation>
+        <Message>
+          <Scalar type="uint16_t" name="x" />
+          <Scalar type="uint16_t" name="y" />
+
+          <Scalar type="int8_t" name="boundary" />
+          <Scalar type="int8_t" name="heat" />
+        </Message> 
+			</MessageType>
     </MessageTypes>
 
     <DeviceTypes>
 
       <DeviceType id="cell">
         <Properties>
-          <Scalar type="int8_t" name="initial" />
-          
-          <Scalar type="int8_t" name="boundary" />
+          <Scalar type="uint16_t" name="x"/>
+          <Scalar type="uint16_t" name="y"/>
+
           <Scalar type="uint8_t" name="colour"/>
           <Scalar type="uint8_t" name="termination_index"/> <!-- index to give to termination parent -->
 
           <Scalar type="uint8_t" name="neighbours"/>
+
+          <Scalar type="int8_t" name="initial_heat" />
+          <Scalar type="int8_t" name="initial_boundary" />
         </Properties>
 
         <State>
@@ -132,6 +161,8 @@
           <Array name="nhood" type="int8_t" length="4" />
 
           <Scalar name="dirty" type="int8_t" /> <!-- The state has updated, but not yet send upwards for termination -->
+
+          <Scalar type="int8_t" name="boundary" /> <!-- This is mutable at run-time -->
         </State>
 
 		<ReadyToSend><![CDATA[
@@ -145,10 +176,9 @@
 
 		<InputPin name="__init__" messageTypeId="__init__">
 		  <OnReceive><![CDATA[
-      deviceState->currHeat=0;
-      if(deviceProperties->boundary){
-         deviceState->nextHeat=deviceProperties->initial;
-      }
+      deviceState->boundary=deviceProperties->initial_boundary;
+
+      deviceState->nextHeat=deviceProperties->initial_heat;
 
       deviceState->currVersion=0;
 
@@ -162,7 +192,7 @@
 
 		<InputPin name="share_in" messageTypeId="share">
 		  <OnReceive><![CDATA[
-      if( !deviceProperties->boundary ){
+      if( !deviceState->boundary ){
         deviceState->nhood[message->colour] = message->temperature;
 
         int32_t sum=0;
@@ -231,6 +261,23 @@
       deviceState->dirty=false;
 		  ]]></OnSend>
 		</OutputPin>
+
+    <InputPin name="modification_in" messageTypeId="modification">
+		  <OnReceive><![CDATA[
+      if(deviceProperties->x == message->x && deviceProperties->y == message->y){
+        handler_log(2, "modification of (%u,%u) -> boundary=%u, initial=%d", message->x, message->y, message->boundary, message->heat);
+
+        deviceState->nextVersion+=1;
+        deviceState->sent=0;
+        deviceState->received=0;
+
+        deviceState->boundary=message->boundary;
+        deviceState->nextHeat=message->heat;
+
+        deviceState->dirty=true;
+      }
+		  ]]></OnReceive>
+		</InputPin>
 	</DeviceType>
 
   <DeviceType id="merger">
@@ -312,13 +359,114 @@
     </OutputPin>
   </DeviceType>
 
-  <DeviceType id="root">
+  <DeviceType id="fanout">
     <Properties>
-      <Scalar type="uint32_t" name="totalCells" />
+      <Scalar type="uint32_t" name="split_val" />  <!-- value < split_val -> left, otherwise right -->
+      <Scalar type="uint32_t" name="split_axis" /> <!-- 0 -> split on x, 1 -> split on y -->
     </Properties>
+
+    <State>
+      <Scalar type="uint16_t" name="x" />
+      <Scalar type="uint16_t" name="y" />
+      <Scalar type="uint8_t" name="heat" />
+      <Scalar type="uint8_t" name="boundary" />
+
+      <Scalar type="uint8_t" name="valid" />
+    </State>
 
     <ReadyToSend><![CDATA[
       *readyToSend = 0;
+      if( deviceState->valid ){
+        uint32_t val = deviceProperties->split_axis==0 ? deviceState->x : deviceState->y;
+        if(val < deviceProperties->split_val){
+          *readyToSend = RTS_FLAG_modification_out_left;
+        }else{
+          *readyToSend = RTS_FLAG_modification_out_right;
+        }
+      }
+    ]]></ReadyToSend>
+
+
+    <InputPin name="modification_in" messageTypeId="modification">
+      <OnReceive><![CDATA[
+      assert(!deviceState->valid);
+
+      deviceState->x=message->x;
+      deviceState->y=message->y;
+      deviceState->heat=message->heat;
+      deviceState->boundary=message->boundary;
+
+      deviceState->valid=1;
+      ]]></OnReceive>
+    </InputPin>
+
+    <OutputPin name="modification_out_left" messageTypeId="modification">
+      <OnSend><![CDATA[
+      message->x=deviceState->x;
+      message->y=deviceState->y;
+      message->boundary=deviceState->boundary;
+      message->heat=deviceState->heat;
+
+      deviceState->valid=0;
+      ]]></OnSend>
+    </OutputPin>
+
+    <OutputPin name="modification_out_right" messageTypeId="modification">
+      <OnSend><![CDATA[
+      message->x=deviceState->x;
+      message->y=deviceState->y;
+      message->boundary=deviceState->boundary;
+      message->heat=deviceState->heat;
+
+      deviceState->valid=0;
+      ]]></OnSend>
+    </OutputPin>
+
+  </DeviceType>
+
+  <DeviceType id="root">
+    <Properties>
+      <Scalar type="uint32_t" name="totalCells" />
+
+      <Scalar type="uint32_t" name="max_steps" />
+
+      <Scalar type="uint32_t" name="width" />
+      <Scalar type="uint32_t" name="height" />
+    </Properties>
+
+    <State>
+      <Scalar type="uint32_t" name="steps" />
+      <Scalar type="uint32_t" name="state" default="76543210" />
+      <Scalar type="uint32_t" name="rts" />
+    </State>
+
+    <SharedCode><![CDATA[
+      uint32_t rand(uint32_t &x)
+      {
+        x=x*1664525+1013904223;
+        return x;
+      }
+
+      unsigned rand_range(uint32_t &state, unsigned maxExclusive)
+      {
+        assert(0 < maxExclusive  &&  maxExclusive < (1<<30) );
+        unsigned pow2=1;
+        while( pow2 <= maxExclusive ){
+          pow2=pow2<<1;
+        }
+
+        unsigned mask=pow2-1;
+        while(1){
+          uint32_t x=rand(state) & mask;
+          if(x < maxExclusive){
+            return x;
+          }
+        }
+      }
+    ]]></SharedCode>
+
+    <ReadyToSend><![CDATA[
+      *readyToSend = deviceState->rts;
     ]]></ReadyToSend>
 
     <InputPin name="termination_in" messageTypeId="termination">
@@ -328,10 +476,28 @@
       handler_log(2, "version=%u, count=%u (of %u), sent=%u, received=%u", message->version, message->count, deviceProperties->totalCells, message->sent, message->received);
 
       if(message->count==deviceProperties->totalCells && message->sent==message->received){
-        handler_exit(0);
+        deviceState->steps++;
+
+        handler_log(1, "steps = %u, max_steps = %u", deviceState->steps, deviceProperties->max_steps);
+        if(deviceState->steps >= deviceProperties->max_steps){
+          handler_exit(0);
+        }else{
+          deviceState->rts=RTS_FLAG_modification_out;
+        }
       }
       ]]></OnReceive>
     </InputPin>
+
+    <OutputPin name="modification_out" messageTypeId="modification">
+      <OnSend><![CDATA[
+      message->x=rand_range(deviceState->state, deviceProperties->width);
+      message->y=rand_range(deviceState->state, deviceProperties->height);
+      message->heat=(rand(deviceState->state)>>25) - (int)(rand(deviceState->state)>>25);
+      message->boundary=1;
+      
+      deviceState->rts=0;
+      ]]></OnSend>
+    </OutputPin>
 
   </DeviceType>
 

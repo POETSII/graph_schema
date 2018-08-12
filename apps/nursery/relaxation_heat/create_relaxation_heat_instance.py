@@ -28,6 +28,8 @@ def cell_colour(x,y):
 
 urand=random.random
 
+max_steps=10
+
 n=16
 if len(sys.argv)>1:
     n=int(sys.argv[1])
@@ -38,6 +40,7 @@ graphType=graphTypes["relaxation_heat"]
 cellType=graphType.device_types["cell"]
 mergerType=graphType.device_types["merger"]
 rootType=graphType.device_types["root"]
+fanoutType=graphType.device_types["fanout"]
 
 instName="rheat_{}_{}".format(n,n)
 
@@ -61,7 +64,7 @@ for x in range(0,n):
             initial=127
         colour=cell_colour(x,y)
         
-        props={ "boundary":boundary, "initial":initial, "colour":colour, "neighbours":0 } # We will update neighbours later
+        props={ "initial_boundary":boundary, "initial_heat":initial, "colour":colour, "neighbours":0, "x":x, "y":y } # We will update neighbours later
         di=DeviceInstance(res,"c_{}_{}".format(x,y), cellType, props, meta)
         nodes[(x,y)]=di
         res.add_device_instance(di)
@@ -108,8 +111,50 @@ while len(to_merge)>1:
     to_merge=to_merge_next
     depth+=1
 
-root=DeviceInstance(res,"root", rootType, {"totalCells":len(nodes)})
+root=DeviceInstance(res,"root", rootType, {"totalCells":len(nodes), "width":n, "height":n, "max_steps":max_steps})
 res.add_device_instance(root)
 res.add_edge_instance(EdgeInstance(res, root,"termination_in",to_merge[0],"termination_out"))
+
+# TODO : use a fanout tree
+if False:
+    for d in nodes.values():
+        res.add_edge_instance(EdgeInstance(res, d,"modification_in",root,"modification_out"))
+else:
+    def recurse_fanout(todo,src,srcPin,xBegin,xEnd,yBegin,yEnd, idx):
+        # Do it directly for small values
+        if len(todo)<=4:
+            for d in todo.values():
+                res.add_edge_instance(EdgeInstance(res, d,"modification_in",src,srcPin))
+            return
+
+        xR=xEnd-xBegin
+        yR=yEnd-yBegin
+
+        if xR >= yR:
+            split_axis=0
+            split_value=(xBegin+xEnd)//2
+            decision=lambda x,y: 0 if x<split_value else 1
+        else:
+            split_axis=1
+            split_value=(yBegin+yEnd)//2
+            decision=lambda x,y: 0 if y<split_value else 1
+
+        left={ (x,y):d for ((x,y),d) in todo.items() if decision(x,y)==0 }
+        right={ (x,y):d for ((x,y),d) in todo.items() if decision(x,y)==1 }
+
+        dev=DeviceInstance(res, "f_{}".format(idx), fanoutType, {"split_axis":split_axis,"split_val":split_value})
+        res.add_device_instance(dev)
+        res.add_edge_instance(EdgeInstance(res, dev,"modification_in", src,srcPin))
+
+        if xR >= yR:
+            recurse_fanout(left, dev, "modification_out_left", xBegin, split_value, yBegin, yEnd, idx*2)
+            recurse_fanout(right, dev,"modification_out_right", split_value, xEnd, yBegin, yEnd, idx*2+1)
+        else:
+            recurse_fanout(left, dev, "modification_out_left",xBegin, xEnd, yBegin, split_value, idx*2)
+            recurse_fanout(right, dev, "modification_out_right",xBegin, xEnd, split_value, yEnd, idx*2+1)
+
+    recurse_fanout(nodes,root,"modification_out", 0, n, 0, n, 1)
+
+    
 
 save_graph(res,sys.stdout)        
