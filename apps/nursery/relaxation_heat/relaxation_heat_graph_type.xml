@@ -136,6 +136,10 @@
 
       <DeviceType id="cell">
         <Properties>
+          <Scalar type="uint32_t" name="multiplier">
+            <Documentation>Used to give the muliplication weight. multiplier/(2**20) is the weight per neighbour </Documentation>
+          </Scalar>
+
           <Scalar type="uint16_t" name="x"/>
           <Scalar type="uint16_t" name="y"/>
 
@@ -167,7 +171,7 @@
 
 		<ReadyToSend><![CDATA[
 		*readyToSend		= 0;
-		if( abs_diff(deviceState->currHeat,deviceState->nextHeat) > 3  || deviceState->currVersion < deviceState->nextVersion ){
+		if( abs_diff(deviceState->currHeat,deviceState->nextHeat) > 1  || deviceState->currVersion < deviceState->nextVersion ){
        *readyToSend=RTS_FLAG_share_out;
     }else if(deviceState->dirty){
       *readyToSend=RTS_FLAG_termination_out;
@@ -200,7 +204,17 @@
           sum += deviceState->nhood[i];
         }
 
-        deviceState->nextHeat = (sum+2)/4;
+        //deviceState->nextHeat = (sum*deviceProperties->multiplier)>>16;  ;
+
+        // Trying this in floating-point to avoid rounding problems
+        float div=deviceProperties->neighbours;
+        float relaxed=sum/div;
+        if(relaxed<-127){
+          relaxed=-127;
+        }else if(relaxed>127){
+          relaxed=127;
+        }
+        deviceState->nextHeat = relaxed;
 
       }
       if(deviceState->nextVersion < message->version){
@@ -218,9 +232,9 @@
 
 		<OutputPin name="share_out" messageTypeId="share">
 		  <OnSend><![CDATA[
-			assert(abs_diff(deviceState->currHeat,deviceState->nextHeat) > 3 || deviceState->currVersion != deviceState->nextVersion );
+			assert(abs_diff(deviceState->currHeat,deviceState->nextHeat) > 1 || deviceState->currVersion != deviceState->nextVersion );
       
-      if( abs_diff(deviceState->currHeat,deviceState->nextHeat) > 3 ){
+      if( abs_diff(deviceState->currHeat,deviceState->nextHeat) > 1 ){
         deviceState->currHeat=deviceState->nextHeat;      
         deviceState->nextVersion+=1;
         deviceState->sent=0;
@@ -245,7 +259,7 @@
     <OutputPin name="termination_out" messageTypeId="termination">
 		  <OnSend><![CDATA[
 			assert(deviceState->dirty);
-      assert(abs_diff(deviceState->currHeat,deviceState->nextHeat) <= 3);
+      assert(abs_diff(deviceState->currHeat,deviceState->nextHeat) <= 1);
       
       assert(deviceState->currVersion <= deviceState->currVersion);
       deviceState->currVersion = deviceState->nextVersion;
@@ -368,7 +382,7 @@
     <State>
       <Scalar type="uint16_t" name="x" />
       <Scalar type="uint16_t" name="y" />
-      <Scalar type="uint8_t" name="heat" />
+      <Scalar type="int8_t" name="heat" />
       <Scalar type="uint8_t" name="boundary" />
 
       <Scalar type="uint8_t" name="valid" />
@@ -492,7 +506,10 @@
       <OnSend><![CDATA[
       message->x=rand_range(deviceState->state, deviceProperties->width);
       message->y=rand_range(deviceState->state, deviceProperties->height);
-      message->heat=(rand(deviceState->state)>>25) - (int)(rand(deviceState->state)>>25);
+      //message->heat=(rand(deviceState->state)>>25) - (int)(rand(deviceState->state)>>25);
+
+      message->heat=(rand(deviceState->state)>>31) ? 127 : -127;
+
       message->boundary=1;
       
       deviceState->rts=0;

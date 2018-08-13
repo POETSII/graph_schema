@@ -84,6 +84,9 @@ for x in range(0,n):
         if x!=n-1:    add_channel(x+1,y,x,y)
         if y!=n-1:    add_channel(x,y+1,x,y)
 
+for d in nodes.values():
+    d.properties["multiplier"]=int( 2**16 / (d.properties["neighbours"]) )
+
 
 ############################################################
 ## Termination tree

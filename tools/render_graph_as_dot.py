@@ -104,7 +104,7 @@ def cycle(val, wrap):
     val=val%wrap
     val=val/(wrap+1)
     
-    return color_to_str( ( math.floor(val*255), 0, 0 ) )
+    return color_to_str( ( 0, math.floor(val*255), 0 ) )
 
 
 def write_graph(dst, graph,devStates=None,edgeStates=None):
