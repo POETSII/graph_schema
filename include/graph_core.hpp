@@ -378,7 +378,6 @@ public:
 
   virtual const std::string &getName() const=0;
   virtual unsigned getIndex() const=0;
-  virtual bool isApplication() const=0;
 
   virtual const MessageTypePtr &getMessageType() const=0;
 
@@ -499,6 +498,8 @@ public:
   virtual const std::string &getReadyToSendCode() const=0;
 
   virtual const std::string &getSharedCode() const=0;
+
+  virtual bool isExternal() const=0;
 
   virtual unsigned getInputCount() const=0;
   virtual const InputPinPtr &getInput(unsigned index) const=0;

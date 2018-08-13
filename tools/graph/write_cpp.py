@@ -428,7 +428,6 @@ def render_input_pin_as_cpp(ip,dst):
         "devicePropertiesStructName"    : "{}_properties_t".format(dt.id),
         "deviceStateStructName"         : "{}_state_t".format(dt.id),
         "messageTypeId"                 : mt.id,
-        "isApplication"                 : "true" if ip.is_application else "false",
         "messageStructName"             : "{}_message_t".format(mt.id),
         "pinName"                      : ip.name,
         "pinIndex"                     : index,
@@ -442,11 +441,13 @@ def render_input_pin_as_cpp(ip,dst):
 
     subs["pinLocalConstants"]=emit_input_pin_local_constants(dt,subs, "    ")
 
+    if ip.receive_handler==None:
+        subs["handlerCode"]='throw std::runtime_error("Attempt to call receive handler on external. {}:{}");'.format(dt.id,ip.name)
 
     if ip.source_line and ip.source_file:
         subs["preProcLinePragma"]= '#line {} "{}"\n'.format(ip.source_line-1,ip.source_file)
     else:
-        subst["preProcLinePragma"]="// No line/file information for handler"
+        subs["preProcLinePragma"]="// No line/file information for handler"
 
     dst.write(
 """
@@ -463,7 +464,6 @@ public:
         "{pinName}",
         {pinIndex},
         {messageTypeId}_Spec_get(),
-        {isApplication},
         {pinPropertiesStructName}_Spec_get(),
         {pinStateStructName}_Spec_get(),
         {deviceTypeId}_{pinName}_handler_code
@@ -532,7 +532,6 @@ def render_output_pin_as_cpp(op,dst):
         "deviceStateStructName"         : "{}_state_t".format(dt.id),
         "messageTypeId"                 : mt.id,
         "messageStructName"             : "{}_message_t".format(mt.id),
-        "isApplication"                 : "true" if op.is_application else "false",
         "pinName"                      : op.name,
         "pinIndex"                     : index,
         "pinPropertiesStructName"       : "{}_{}_properties_t".format(dt.id,op.name),
@@ -545,6 +544,8 @@ def render_output_pin_as_cpp(op,dst):
 
     subs["pinLocalConstants"]=emit_output_pin_local_constants(dt,subs, "    ")
 
+    if op.send_handler==None:
+        subs["handlerCode"]='throw std::runtime_error("Attempt to call send handler on external. {}:{}");'.format(dt.id,op.name)
 
     if op.source_line and op.source_file:
         subs["preProcLinePragma"]= '#line {} "{}"\n'.format(op.source_line-1,op.source_file)
@@ -557,7 +558,7 @@ def render_output_pin_as_cpp(op,dst):
     dst.write('static const char *{}_{}_handler_code=R"CDATA({})CDATA";\n'.format(dt.id, op.name, op.send_handler))
 
     dst.write("class {}_{}_Spec : public OutputPinImpl {{\n".format(dt.id,op.name))
-    dst.write('  public: {}_{}_Spec() : OutputPinImpl({}_Spec_get, "{}", {}, {}_Spec_get(), {}, {}_{}_handler_code) {{}} \n'.format(dt.id,op.name, dt.id, op.name, index, op.message_type.id, "true" if op.is_application else "false", dt.id, op.name))
+    dst.write('  public: {}_{}_Spec() : OutputPinImpl({}_Spec_get, "{}", {}, {}_Spec_get(), {}_{}_handler_code) {{}} \n'.format(dt.id,op.name, dt.id, op.name, index, op.message_type.id, dt.id, op.name))
     dst.write("""    virtual void onSend(
                       OrchestratorServices *orchestrator,
                       const typed_data_t *gGraphProperties,
@@ -627,14 +628,21 @@ def render_device_type_as_cpp(dt,dst):
         "deviceTypeId"                  : dt.id,
         "devicePropertiesStructName"    : "{}_properties_t".format(dt.id),
         "deviceStateStructName"         : "{}_state_t".format(dt.id),
-        "handlerCode"                   : dt.ready_to_send_handler,
         "inputCount"                    : len(dt.inputs),
-        "outputCount"                   : len(dt.outputs)
+        "outputCount"                   : len(dt.outputs),
+        "isExternal"                    : dt.isExternal
     }
+
+    if dt.isExternal:
+        subs["handlerCode"]='throw std::runtime_error("Attempt to check ready-to-send on an external of type {}.");'.format(dt.id)
+    else:
+        subs["handlerCode"]=dt.ready_to_send_handler
+
+
     if dt.ready_to_send_source_line and dt.ready_to_send_source_file:
         subs["preProcLinePragma"]= '#line {} "{}"\n'.format(dt.ready_to_send_source_line-1,dt.ready_to_send_source_file)
     else:
-        subst["preProcLinePragma"]="// No line/file information for handler"
+        subs["preProcLinePragma"]="// No line/file information for handler"
 
     subs["deviceGlobalConstants"]=emit_device_global_constants(dt,subs,"    ")
     subs["deviceLocalConstants"]=emit_device_local_constants(dt,subs, "    ")
@@ -645,9 +653,10 @@ def render_device_type_as_cpp(dt,dst):
     dst.write(subs["deviceGlobalConstants"])
     dst.write(subs["deviceLocalConstants"])
 
-    if dt.shared_code:
-        for i in dt.shared_code:
-            dst.write(i)
+    if not dt.isExternal:
+        if dt.shared_code:
+            for i in dt.shared_code:
+                dst.write(i)
 
     dst.write("DeviceTypePtr {}_Spec_get();\n".format(dt.id))
 
@@ -678,7 +687,7 @@ def render_device_type_as_cpp(dt,dst):
         else:
             dst.write(',')
         dst.write('{}_{}_Spec_get()'.format(dt.id,o.name))
-    dst.write('}))\n')
+    dst.write('}}),{})\n'.format("true" if dt.isExternal else "false"))
     dst.write("  {}\n")
 
     dst.write(

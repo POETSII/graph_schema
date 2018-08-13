@@ -334,26 +334,25 @@ class MessageType(object):
 
 
 class Pin(object):
-    def __init__(self,parent,name,message_type,is_application,metadata,source_file,source_line):
+    def __init__(self,parent,name,message_type,metadata,source_file,source_line):
         self.parent=parent
         self.name=name
         self.message_type=message_type
-        self.is_application=is_application
         self.metadata=metadata
         self.source_file=source_file
         self.source_line=source_line
 
 
 class InputPin(Pin):
-    def __init__(self,parent,name,message_type,is_application,properties,state,metadata,receive_handler,source_file=None,source_line=None):
-        Pin.__init__(self,parent,name,message_type,is_application,metadata,source_file,source_line)
+    def __init__(self,parent,name,message_type,properties,state,metadata,receive_handler,source_file=None,source_line=None):
+        Pin.__init__(self,parent,name,message_type,metadata,source_file,source_line)
         self.properties=properties
         self.state=state
         self.receive_handler=receive_handler
 
 class OutputPin(Pin):
-    def __init__(self,parent,name,message_type,is_application,metadata,send_handler,source_file,source_line):
-        Pin.__init__(self,parent,name,message_type,is_application,metadata,source_file,source_line)
+    def __init__(self,parent,name,message_type,metadata,send_handler,source_file,source_line):
+        Pin.__init__(self,parent,name,message_type,metadata,source_file,source_line)
         self.send_handler=send_handler
 
 
@@ -361,6 +360,10 @@ class DeviceType(object):
     def __init__(self,parent,id,properties,state,metadata=None,shared_code=[], isExternal=False):
         assert (state is None) or isinstance(state,TypedDataSpec)
         assert (properties is None) or isinstance(properties,TypedDataSpec)
+
+        if isExternal:
+            assert len(shared_code)==0
+
         self.id=id
         self.parent=parent
         self.state=state
@@ -375,7 +378,7 @@ class DeviceType(object):
         self.ready_to_send_handler="" # Hrmm, this was missing as an explicit member, but is used by load/save
         self.isExternal=isExternal
 
-    def add_input(self,name,message_type,is_application,properties,state,metadata,receive_handler,source_file=None,source_line={}):
+    def add_input(self,name,message_type,properties,state,metadata,receive_handler,source_file=None,source_line={}):
         assert (state is None) or isinstance(state,TypedDataSpec)
         assert (properties is None) or isinstance(properties,TypedDataSpec)
         if name in self.pins:
@@ -384,19 +387,25 @@ class DeviceType(object):
             raise GraphDescriptionError("Unregistered message type {} on pin {} of device type {}".format(message_type.id,name,self.id))
         if message_type != self.parent.message_types[message_type.id]:
             raise GraphDescriptionError("Incorrect message type object {} on pin {} of device type {}".format(message_type.id,name,self.id))
-        p=InputPin(self, name, self.parent.message_types[message_type.id], is_application, properties, state, metadata, receive_handler, source_file, source_line)
+        p=InputPin(self, name, self.parent.message_types[message_type.id], properties, state, metadata, receive_handler, source_file, source_line)
+        if self.isExternal:
+            assert receive_handler=="" or receive_handler==None
+            send_handler=None
         self.inputs[name]=p
         self.inputs_by_index.append(p)
         self.pins[name]=p
 
-    def add_output(self,name,message_type,is_application, metadata,send_handler,source_file=None,source_line=None):
+    def add_output(self,name,message_type, metadata,send_handler,source_file=None,source_line=None):
         if name in self.pins:
             raise GraphDescriptionError("Duplicate pin {} on device type {}".format(name,self.id))
         if message_type.id not in self.parent.message_types:
             raise GraphDescriptionError("Unregistered message type {} on pin {} of device type {}".format(message_type.id,name,self.id))
         if message_type != self.parent.message_types[message_type.id]:
             raise GraphDescriptionError("Incorrect message type object {} on pin {} of device type {}".format(message_type.id,name,self.id))
-        p=OutputPin(self, name, self.parent.message_types[message_type.id], is_application, metadata, send_handler, source_file, source_line)
+        if self.isExternal:
+            assert send_handler=="" or send_handler==None
+            send_handler=None
+        p=OutputPin(self, name, self.parent.message_types[message_type.id], metadata, send_handler, source_file, source_line)
         self.outputs[name]=p
         self.outputs_by_index.append(p)
         self.pins[name]=p
@@ -443,7 +452,7 @@ class GraphType(object):
 
     def add_device_type(self,device_type):
         if device_type.id in self.device_types:
-            raise GraphDescriptionError("Device type already exists.")
+            raise GraphDescriptionError("Device type '{}' already exists.".format(device_type.id))
         self.device_types[device_type.id]=device_type
 
 class GraphTypeReference(object):
@@ -516,11 +525,6 @@ class EdgeInstance(object):
         if __debug__ and (not is_refinement_compatible(dst_pin.properties,properties)):
             raise GraphDescriptionError("Properties are not compatible: proto={}, value={}.".format(dst_pin.properties, properties))
             
-        if __debug__ and dst_pin.is_application:
-            raise GraphDescriptionError("Attempt to connect edge instance to application input pin")
-        if __debug__ and src_pin.is_application:
-            raise GraphDescriptionError("Attempt to connect edge instance to application output pin")
-
         self.id = "{}:{}-{}:{}".format(dst_device.id,dst_pin.name,src_device.id,src_pin.name)
 
         self.dst_device=dst_device

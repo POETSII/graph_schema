@@ -147,8 +147,6 @@ def save_device_type(parent,dt):
         pn=etree.SubElement(n,toNS("p:InputPin"))
         pn.attrib["name"]=p.name
         pn.attrib["messageTypeId"]=p.message_type.id
-        if p.is_application:
-            pn.attrib["application"]="true"
         if(p.properties):
             save_typed_struct_spec(pn, toNS("p:Properties"), p.properties)
         if(p.state):
@@ -165,8 +163,6 @@ def save_device_type(parent,dt):
         pn=etree.SubElement(n,toNS("OutputPin"))
         pn.attrib["name"]=p.name
         pn.attrib["messageTypeId"]=p.message_type.id
-        if p.is_application:
-            pn.attrib["application"]="true"
 
         save_metadata(pn, "p:MetaData", p.metadata)
 

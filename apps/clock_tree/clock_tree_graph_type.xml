@@ -75,7 +75,7 @@
 		  ]]></OnSend>
 		</OutputPin>
 
-		<OutputPin name="output" messageTypeId="output" application="true">
+		<OutputPin name="output" messageTypeId="output" >
 		<OnSend><![CDATA[
 		handler_log(1, "export = %u", deviceState->cycle);
 		handler_export_key_value(0, deviceState->cycle);
@@ -91,6 +91,10 @@
 		</InputPin>
 
       </DeviceType>
+
+	<ExternalType id="output_listener">
+		<InputPin name="on_root_output" messageTypeId="output" />
+	</ExternalType>
 	
 	<DeviceType id="branch">
 	  <Properties>

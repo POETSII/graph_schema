@@ -16,20 +16,6 @@
 static unsigned logLevel=2;
 static unsigned messageInit;
 
-void write_application_output(unsigned m_epoch, const char *devId, const OutputPin *pin, const TypedDataPtr &data)
-{
-  assert(pin->isApplication());
-  std::stringstream acc;
-
-	//ndjson
-  //std::cout<<"{\"epoch\":\""<<m_epoch<<"\",\"dev\":\""<<devId<<"\",\"pin\":\""<<pin->getName()<<"\",\"msg\":";
-  //std::cout<<pin->getMessageType()->getMessageSpec()->toJSON(data);
-  //std::cout<<"}"<<std::endl;
-
-	//csv
-	std::cout<<m_epoch<<","<<devId<<","<<pin->getName()<<std::endl;
-}
-
 struct EpochSim
   : public GraphLoadEvents
 {
@@ -452,67 +438,64 @@ struct EpochSim
       }
 
       sent=true;
-      if(output->isApplication()){
-        write_application_output(m_epoch, src.name, output.get(), message);
-      }else{
-        for(auto &out : src.outputs[sel]){
-          auto &dst=m_devices[out.dstDevice];
-          auto &in=dst.inputs[out.dstPinIndex];
-          auto &slot=in[out.dstPinSlot];
+      
+      for(auto &out : src.outputs[sel]){
+        auto &dst=m_devices[out.dstDevice];
+        auto &in=dst.inputs[out.dstPinIndex];
+        auto &slot=in[out.dstPinSlot];
 
-          slot.firings++;
+        slot.firings++;
 
-          if(logLevel>3){
-            fprintf(stderr, "    sending to device %d = %s\n", dst.index, dst.id.c_str());
-          }
-
-          const auto &pin=dst.type->getInput(out.dstPinIndex);
-
-          if(capturePreEventState){
-            prevState=dst.state.clone();
-          }
-          receiveServices.setDevice(out.dstDeviceId, out.dstInputName);
-          try{
-            pin->onReceive(&receiveServices, m_graphProperties.get(), dst.properties.get(), dst.state.get(), slot.properties.get(), slot.state.get(), message.get());
-          }catch(provider_assertion_error &e){
-            fprintf(stderr, "Caught handler exception during Receive. devId=%s, dstDevType=%s, dstPin=%s.\n", dst.name, dst.type->getId().c_str(), pin->getName().c_str());
-            fprintf(stderr, "  %s\n", e.what());
-
-            fprintf(stderr, "     message = %s\n", pin->getMessageType()->getMessageSpec()->toJSON(message).c_str());
-            if(capturePreEventState){
-              fprintf(stderr, "  preRecvState = %s\n", dst.type->getStateSpec()->toJSON(prevState).c_str());
-            }
-            fprintf(stderr, "     currState = %s\n", dst.type->getStateSpec()->toJSON(dst.state).c_str());
-
-            throw;
-          }
-          dst.readyToSend = dst.type->calcReadyToSend(&receiveServices, m_graphProperties.get(), dst.properties.get(), dst.state.get());
-
-          if(m_log){
-            std::vector<std::pair<bool,std::string> > tags;
-            std::swap(tags, m_checkpointKeys);
-
-            auto id=nextSeqUnq();
-            auto idStr=std::to_string(id);
-
-            m_log->onRecvEvent(
-              idStr.c_str(),
-              m_epoch,
-              0.0,
-              std::move(tags),
-              dst.type,
-              dst.name,
-              dst.readyToSend,
-              id,
-              std::vector<std::string>(),
-              dst.state,
-              pin,
-              idSend.c_str()
-            );
-          }
-
-          anyReady = anyReady || dst.anyReady();
+        if(logLevel>3){
+          fprintf(stderr, "    sending to device %d = %s\n", dst.index, dst.id.c_str());
         }
+
+        const auto &pin=dst.type->getInput(out.dstPinIndex);
+
+        if(capturePreEventState){
+          prevState=dst.state.clone();
+        }
+        receiveServices.setDevice(out.dstDeviceId, out.dstInputName);
+        try{
+          pin->onReceive(&receiveServices, m_graphProperties.get(), dst.properties.get(), dst.state.get(), slot.properties.get(), slot.state.get(), message.get());
+        }catch(provider_assertion_error &e){
+          fprintf(stderr, "Caught handler exception during Receive. devId=%s, dstDevType=%s, dstPin=%s.\n", dst.name, dst.type->getId().c_str(), pin->getName().c_str());
+          fprintf(stderr, "  %s\n", e.what());
+
+          fprintf(stderr, "     message = %s\n", pin->getMessageType()->getMessageSpec()->toJSON(message).c_str());
+          if(capturePreEventState){
+            fprintf(stderr, "  preRecvState = %s\n", dst.type->getStateSpec()->toJSON(prevState).c_str());
+          }
+          fprintf(stderr, "     currState = %s\n", dst.type->getStateSpec()->toJSON(dst.state).c_str());
+
+          throw;
+        }
+        dst.readyToSend = dst.type->calcReadyToSend(&receiveServices, m_graphProperties.get(), dst.properties.get(), dst.state.get());
+
+        if(m_log){
+          std::vector<std::pair<bool,std::string> > tags;
+          std::swap(tags, m_checkpointKeys);
+
+          auto id=nextSeqUnq();
+          auto idStr=std::to_string(id);
+
+          m_log->onRecvEvent(
+            idStr.c_str(),
+            m_epoch,
+            0.0,
+            std::move(tags),
+            dst.type,
+            dst.name,
+            dst.readyToSend,
+            id,
+            std::vector<std::string>(),
+            dst.state,
+            pin,
+            idSend.c_str()
+          );
+        }
+
+        anyReady = anyReady || dst.anyReady();
       }
     }
     ++m_epoch;

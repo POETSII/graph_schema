@@ -188,7 +188,6 @@ private:
   std::string m_name;
   unsigned m_index;
   MessageTypePtr m_messageType;
-  bool m_isApplication;
   TypedDataSpecPtr m_propertiesType;
   TypedDataSpecPtr m_stateType;
   std::string m_code;
@@ -200,7 +199,6 @@ protected:
     const std::string &name,
     unsigned index,
     MessageTypePtr messageType,
-    bool isApplication,
     TypedDataSpecPtr propertiesType,
     TypedDataSpecPtr stateType,
     const std::string &code
@@ -209,7 +207,6 @@ protected:
     , m_name(name)
     , m_index(index)
     , m_messageType(messageType)
-    , m_isApplication(isApplication)
     , m_propertiesType(propertiesType)
     , m_stateType(stateType)
     , m_code(code)
@@ -234,9 +231,6 @@ public:
   virtual const MessageTypePtr &getMessageType() const override
   { return m_messageType; }
 
-  virtual bool isApplication() const override
-  { return m_isApplication; }
-
   virtual const TypedDataSpecPtr &getPropertiesSpec() const override
   { return m_propertiesType; }
 
@@ -260,17 +254,15 @@ private:
   std::string m_name;
   unsigned m_index;
   MessageTypePtr m_messageType;
-  bool m_isApplication;
   std::string m_code;
 
   rapidjson::Document m_metadata;
 protected:
-  OutputPinImpl(std::function<DeviceTypePtr ()> deviceTypeSrc, const std::string &name, unsigned index, MessageTypePtr messageType, bool isApplication, const std::string &code)
+  OutputPinImpl(std::function<DeviceTypePtr ()> deviceTypeSrc, const std::string &name, unsigned index, MessageTypePtr messageType, const std::string &code)
     : m_deviceTypeSrc(deviceTypeSrc)
     , m_name(name)
     , m_index(index)
     , m_messageType(messageType)
-    , m_isApplication(isApplication)
     , m_code(code)
   {
     m_metadata.SetObject();
@@ -291,9 +283,6 @@ public:
 
   virtual const MessageTypePtr &getMessageType() const override
   { return m_messageType; }
-
-  virtual bool isApplication() const override
-  { return m_isApplication; }
 
   virtual const std::string &getHandlerCode() const override
   { return m_code; }
@@ -342,6 +331,8 @@ private:
   std::string m_readyToSendCode;
   std::string m_sharedCode;
 
+  bool m_isExternal;
+
   std::vector<InputPinPtr> m_inputsByIndex;
   std::map<std::string,InputPinPtr> m_inputsByName;
 
@@ -351,7 +342,7 @@ private:
   rapidjson::Document m_metadata;
 
 protected:
-  DeviceTypeImpl(const std::string &id, TypedDataSpecPtr properties, TypedDataSpecPtr state, const std::vector<InputPinPtr> &inputs, const std::vector<OutputPinPtr> &outputs)
+  DeviceTypeImpl(const std::string &id, TypedDataSpecPtr properties, TypedDataSpecPtr state, const std::vector<InputPinPtr> &inputs, const std::vector<OutputPinPtr> &outputs, bool isExternal)
     : m_id(id)
     , m_properties(properties)
     , m_state(state)
@@ -376,6 +367,9 @@ public:
 
   virtual const TypedDataSpecPtr &getStateSpec() const override
   { return m_state; }
+
+  virtual bool isExternal() const override
+  { return m_isExternal; }
 
   virtual const std::string &getReadyToSendCode() const override
   { return m_readyToSendCode; }

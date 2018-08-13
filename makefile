@@ -165,7 +165,7 @@ endif
 
 providers/$1.graph.cpp providers/$1.graph.hpp : $$($1_src_xml) $(JING)
 	mkdir -p providers
-	java -jar $(JING) -c master/virtual-graph-schema-v2.1.rnc $$($1_src_xml)
+	java -jar $(JING) -c master/virtual-graph-schema-v2.2.rnc $$($1_src_xml)
 	$$(PYTHON) tools/render_graph_as_cpp.py $$($1_src_xml) providers/$1.graph.cpp
 	$$(PYTHON) tools/render_graph_as_cpp.py --header < $$($1_src_xml) > providers/$1.graph.hpp
 
