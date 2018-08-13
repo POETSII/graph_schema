@@ -446,11 +446,6 @@ class GraphType(object):
             raise GraphDescriptionError("Device type already exists.")
         self.device_types[device_type.id]=device_type
 
-    def add_external_type(self, external_type):
-        if external_type.id in self.external_types:
-            raise GraphDescriptionError("External device type already exists.")
-        self.external_types[external_type.id]=external_type
-
 class GraphTypeReference(object):
     def __init__(self,id,src=None):
         self.id=id
