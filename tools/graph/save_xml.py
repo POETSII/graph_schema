@@ -131,7 +131,10 @@ def save_message_type(parent,mt):
 
 
 def save_device_type(parent,dt):
-    n=etree.SubElement(parent,toNS("p:DeviceType"))
+    if dt.isExternal:
+        n=etree.SubElement(parent,toNS("p:ExternalType"))
+    else:
+        n=etree.SubElement(parent,toNS("p:DeviceType"))
 
     n.attrib["id"]=dt.id    
     save_typed_struct_spec(n, toNS("p:Properties"), dt.properties)
@@ -154,10 +157,10 @@ def save_device_type(parent,dt):
 
         save_metadata(pn, toNS("p:MetaData"), p.metadata)
 
-        h=etree.Element(toNS("p:OnReceive"))
-        h.text = etree.CDATA(p.receive_handler)
-        #h.txt = p.received_handler
-        pn.append(h)
+        if not dt.isExternal:
+            h=etree.Element(toNS("p:OnReceive"))
+            h.text = etree.CDATA(p.receive_handler)
+            pn.append(h)
 
     for p in dt.outputs_by_index:
         pn=etree.SubElement(n,toNS("OutputPin"))
@@ -166,14 +169,15 @@ def save_device_type(parent,dt):
 
         save_metadata(pn, "p:MetaData", p.metadata)
 
-        h=etree.Element(toNS("p:OnSend"))
-        h.text = etree.CDATA(p.send_handler)
-        #h.text = p.send_handler
-        pn.append(h)
+        if not dt.isExternal:
+            h=etree.Element(toNS("p:OnSend"))
+            h.text = etree.CDATA(p.send_handler)
+            pn.append(h)
 
-    pn=etree.Element(toNS("ReadyToSend"))
-    pn.text=etree.CDATA(dt.ready_to_send_handler)
-    n.append(pn)
+    if not dt.isExternal:
+        pn=etree.Element(toNS("ReadyToSend"))
+        pn.text=etree.CDATA(dt.ready_to_send_handler)
+        n.append(pn)
 
     return n
 

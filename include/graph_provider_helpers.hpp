@@ -413,6 +413,7 @@ protected:
     : m_id(id)
     , m_properties(properties)
     , m_state(state)
+    , m_isExternal(isExternal)
     , m_inputsByIndex(inputs)
     , m_outputsByIndex(outputs)
   {
@@ -514,23 +515,24 @@ public:
   virtual const std::string &getSharedCode() const override
   { return m_base->getSharedCode(); }
 
-  virtual unsigned getInputCount() const override
-  { return m_base->getInputCount(); }
+  virtual unsigned getInputCount() const override final
+  { return getInputs().size(); }
 
-  virtual const InputPinPtr &getInput(unsigned index) const override
-  { return m_base->getInput(index); }
+  virtual const InputPinPtr &getInput(unsigned index) const override final
+  { return getInputs().at(index); }
+
+    virtual unsigned getOutputCount() const override final
+  { return getOutputs().size(); }
+
+  virtual const OutputPinPtr &getOutput(unsigned index) const override final
+  { return m_base->getOutput(index); }
+
 
   virtual InputPinPtr getInput(const std::string &name) const override
   { return m_base->getInput(name); }
 
   virtual const std::vector<InputPinPtr> &getInputs() const override
   { return m_base->getInputs(); }
-
-  virtual unsigned getOutputCount() const override
-  { return m_base->getOutputCount(); }
-
-  virtual const OutputPinPtr &getOutput(unsigned index) const override
-  { return m_base->getOutput(index); }
 
   virtual OutputPinPtr getOutput(const std::string &name) const override
   { return m_base->getOutput(name); }

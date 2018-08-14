@@ -2,6 +2,7 @@
 
 #include <libxml++/parsers/domparser.h>
 
+#include <unordered_map>
 #include <iostream>
 #include <fstream>
 #include <memory>
@@ -31,6 +32,9 @@ class ExternalConnection
 private:
   
 public:
+  virtual void addExternalInputType(unsigned dstDev, unsigned dstPort, TypedDataSpecPtr type) =0;
+  virtual void addExternalOutputType(unsigned srcDev, unsigned srcPort, TypedDataSpecPtr type) =0;
+
   virtual bool canWrite() =0;
 
   /* A multi-cast message needs to be expanded on the receiving side, while uni-cast
@@ -46,6 +50,65 @@ public:
   virtual void read(
     external_message_t &msg
   ) =0;
+};
+
+class JSONExternalConnection
+  : public ExternalConnection
+{
+private:
+  std::ostream &m_dst;
+
+  struct keyhash {
+    size_t operator()(const std::pair<unsigned,unsigned> &p) const
+    {
+      return p.first*43112609  + p.second*42643801;
+    }
+  };
+
+  std::unordered_map<std::pair<unsigned,unsigned>, TypedDataSpecPtr, keyhash> m_writeSrcTypes;
+  std::unordered_map<std::pair<unsigned,unsigned>, TypedDataSpecPtr, keyhash> m_readSrcTypes;
+public:
+  JSONExternalConnection(std::ostream &dst)
+    : m_dst(dst)
+  {}
+
+  virtual void addExternalInputType(unsigned dstDev, unsigned dstPort, TypedDataSpecPtr type) override
+  {
+    m_writeSrcTypes[std::make_pair(dstDev,dstPort)]=type;
+  }
+
+  virtual void addExternalOutputType(unsigned srcDev, unsigned srcPort, TypedDataSpecPtr type) override
+  {
+    m_readSrcTypes[std::make_pair(srcDev,srcPort)]=type;
+  }
+
+  bool canWrite() override
+  { return true; }
+
+  virtual void write(
+    const external_message_t &msg
+  ) override
+  {
+    assert(!msg.isMulticast);
+
+    std::pair<unsigned,unsigned> key(msg.dstDev,msg.dstPort);
+    TypedDataSpecPtr srcType=m_writeSrcTypes.at( key );
+    
+    m_dst<<"{";
+    m_dst<<"\"dstDev\"="<<msg.dstDev<<",\"dstPort\"="<<msg.dstPort<<",";
+    m_dst<<"\"srcDev\"="<<msg.srcDev<<",\"srcPort\"="<<msg.srcPort<<",";
+    m_dst<<srcType->toJSON(msg.data);
+    m_dst<<"}";
+    m_dst<<std::endl;
+  }
+
+  virtual bool canRead() override
+  { return false; }
+
+  virtual void read(external_message_t &msg) override
+  {
+    throw std::runtime_error("read not supported yet.");
+  }
 };
 
 
@@ -76,17 +139,6 @@ class ExternalDeviceImpl
 private:
   std::shared_ptr<ExternalConnection> m_pExternal;
   std::vector<TypedDataPtr> m_outputSlots; // Data coming from the outstide to the inside
-
-  uint32_t calcReadyToSend(OrchestratorServices *, const typed_data_t *, const typed_data_t *, const typed_data_t *) const override
-  {
-    uint32_t acc=0;
-    for(unsigned i=0; i<m_outputSlots.size(); i++){
-      if(m_outputSlots[i]){
-        acc |= 1ul<<i;
-      }
-    }
-    return acc;
-  }
   
   struct ExternalInputPinImpl
     : public InputPinDelegate
@@ -124,10 +176,11 @@ private:
   class ExternalOutputPinImpl
     : public OutputPinDelegate
   {
-    ExternalOutputPinImpl(OutputPinPtr pin, ExternalDeviceImpl *device, unsigned index)
+  public:
+    ExternalOutputPinImpl(OutputPinPtr pin, ExternalDeviceImpl *device)
       : OutputPinDelegate(pin)
       , m_device(device)
-      , m_index(index)
+      , m_index(pin->getIndex())
     {}
 
     ExternalDeviceImpl *m_device;
@@ -153,11 +206,66 @@ private:
 
   };
 
+  std::vector<InputPinPtr> m_inputsByIndex;
+  std::map<std::string,std::shared_ptr<ExternalInputPinImpl> > m_inputsByName;
 
+  std::vector<OutputPinPtr > m_outputsByIndex;
+  std::map<std::string,std::shared_ptr<ExternalOutputPinImpl> > m_outputsByName;
 public:
+  ExternalDeviceImpl(
+    std::shared_ptr<ExternalConnection> pExternal, // Where output comes from and goes too
+    DeviceTypePtr externalType                      // "real" type of the external  
+  ) 
+    : DeviceTypeDelegate(externalType)
+    , m_pExternal(pExternal)
+  {
+    for(auto bi : externalType->getInputs()){
+      auto pi=std::make_shared<ExternalInputPinImpl>(bi, this);
+      m_inputsByIndex.push_back(pi);
+      m_inputsByName[bi->getName()]=pi;
+    }
+    for(auto bo : externalType->getOutputs()){
+      auto po=std::make_shared<ExternalOutputPinImpl>(bo, this);
+      m_outputsByIndex.push_back(po);
+      m_outputsByName[bo->getName()]=po;
+    }
+  }
 
+  virtual uint32_t calcReadyToSend(OrchestratorServices *, const typed_data_t *, const typed_data_t *, const typed_data_t *) const override
+  {
+    uint32_t acc=0;
+    for(unsigned i=0; i<m_outputSlots.size(); i++){
+      if(m_outputSlots[i]){
+        acc |= 1ul<<i;
+      }
+    }
+    return acc;
+  }
 
+  virtual InputPinPtr getInput(const std::string &name) const override
+  {
+    auto it=m_inputsByName.find(name);
+    if(it==m_inputsByName.end())
+      return InputPinPtr();
+    return it->second;
+  }
+
+  virtual const std::vector<InputPinPtr> &getInputs() const override
+  { return m_inputsByIndex; }
+
+  virtual OutputPinPtr getOutput(const std::string &name) const override
+  {
+    auto it=m_outputsByName.find(name);
+    if(it==m_outputsByName.end())
+      return OutputPinPtr();
+    return it->second;
+  }
+
+  virtual const std::vector<OutputPinPtr> &getOutputs() const override
+  { return m_outputsByIndex; }
 };
+
+
 
 struct EpochSim
   : public GraphLoadEvents
@@ -237,7 +345,7 @@ struct EpochSim
 
   uint64_t m_unq;
 
-  std::shared_ptr<ExternalConnection> m_pExternalConnection;
+  std::shared_ptr<ExternalConnection> m_pExternalConnection = std::make_shared<JSONExternalConnection>(std::cout);
 
   uint64_t nextSeqUnq()
   {
@@ -259,7 +367,12 @@ struct EpochSim
     d.index=m_devices.size();
     d.id=id;
     d.name=intern(id);
-    d.type=dt;
+    if(dt->isExternal()){
+      d.type=std::make_shared<ExternalDeviceImpl>(m_pExternalConnection, dt);
+    }else{
+      d.type=dt;
+    }
+
     d.properties=deviceProperties;
     d.state=state;
     d.keyValueSeq=0;
@@ -272,6 +385,16 @@ struct EpochSim
     d.inputs.resize(dt->getInputCount());
     m_devices.push_back(d);
     m_deviceIdToIndex[d.name]=d.index;
+
+    if(dt->isExternal()){
+      for(auto ip : dt->getInputs()){
+        m_pExternalConnection->addExternalInputType(d.index, ip->getIndex(), ip->getMessageType()->getMessageSpec());
+      }
+      for(auto op : dt->getOutputs()){
+        m_pExternalConnection->addExternalOutputType(d.index, op->getIndex(), op->getMessageType()->getMessageSpec());
+      }
+    }
+
     return d.index;
   }
 
@@ -290,7 +413,7 @@ struct EpochSim
     }
 
     input i;
-    i.properties=properties;
+    i.properties=props;
     i.state=dstInput->getStateSpec()->create();
     i.firings=0;
     i.id=intern( m_devices.at(dstDevIndex).id + ":" + dstInput->getName() + "-" + m_devices.at(srcDevIndex).id+":"+srcOutput->getName() );
