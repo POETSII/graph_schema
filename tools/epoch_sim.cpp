@@ -16,6 +16,149 @@
 static unsigned logLevel=2;
 static unsigned messageInit;
 
+struct external_message_t
+{
+  bool isMulticast;
+  unsigned dstDev;
+  unsigned dstPort;
+  unsigned srcDev;
+  unsigned srcPort;
+  TypedDataPtr data;
+};
+
+class ExternalConnection
+{
+private:
+  
+public:
+  virtual bool canWrite() =0;
+
+  /* A multi-cast message needs to be expanded on the receiving side, while uni-cast
+  is just one message with a specified destination (dev,port) pair.*/
+  virtual void write(
+    const external_message_t &msg
+  ) =0;
+
+  virtual bool canRead() =0;
+
+  /* A multi-cast messages needs to be fanned out to all devices within the
+    simulation. A single-cast message has already been expanded. */
+  virtual void read(
+    external_message_t &msg
+  ) =0;
+};
+
+
+struct external_edge_properties_t
+  : typed_data_t
+{
+  unsigned dstDev;
+  unsigned dstPort;
+  unsigned srcDev;
+  unsigned srcPort;
+};
+
+TypedDataPtr create_external_edge_properties(unsigned dstDev, unsigned dstPort, unsigned srcDev, unsigned srcPort )
+{
+  auto res=make_data_ptr<external_edge_properties_t>();
+  res->dstDev=dstDev;
+  res->dstPort=dstPort;
+  res->srcDev=srcDev;
+  res->srcPort=srcPort;
+  return res;
+}
+
+/* This is a fake device type, with fiddled send and receive handlers that
+  make them send to or receive from the external channel. */
+class ExternalDeviceImpl
+  : public DeviceTypeDelegate
+{
+private:
+  std::shared_ptr<ExternalConnection> m_pExternal;
+  std::vector<TypedDataPtr> m_outputSlots; // Data coming from the outstide to the inside
+
+  uint32_t calcReadyToSend(OrchestratorServices *, const typed_data_t *, const typed_data_t *, const typed_data_t *) const override
+  {
+    uint32_t acc=0;
+    for(unsigned i=0; i<m_outputSlots.size(); i++){
+      if(m_outputSlots[i]){
+        acc |= 1ul<<i;
+      }
+    }
+    return acc;
+  }
+  
+  struct ExternalInputPinImpl
+    : public InputPinDelegate
+  {
+    ExternalInputPinImpl(InputPinPtr pin, ExternalDeviceImpl *device)
+      : InputPinDelegate(pin)
+      , m_device(device)
+    {}
+
+    ExternalDeviceImpl *m_device;
+
+
+    virtual void onReceive(OrchestratorServices *orchestrator,
+      const typed_data_t *graphProperties,
+      const typed_data_t *deviceProperties,
+      typed_data_t *deviceState,
+      const typed_data_t *edgeProperties,
+      typed_data_t *edgeState,
+      const typed_data_t *message
+      ) const
+      {
+        assert(edgeProperties);
+        auto pEdgeInfo=(const external_edge_properties_t *)edgeProperties;
+
+        external_message_t msg={
+          false, // not multi-cast
+          pEdgeInfo->dstDev, pEdgeInfo->dstPort,
+          pEdgeInfo->srcDev, pEdgeInfo->srcPort,
+          clone(message)
+        };
+        m_device->m_pExternal->write(msg);
+      }
+  };
+
+  class ExternalOutputPinImpl
+    : public OutputPinDelegate
+  {
+    ExternalOutputPinImpl(OutputPinPtr pin, ExternalDeviceImpl *device, unsigned index)
+      : OutputPinDelegate(pin)
+      , m_device(device)
+      , m_index(index)
+    {}
+
+    ExternalDeviceImpl *m_device;
+    unsigned m_index;
+
+    virtual void onSend(OrchestratorServices *orchestrator,
+          const typed_data_t *graphProperties,
+          const typed_data_t *deviceProperties,
+          typed_data_t *deviceState,
+          typed_data_t *message,
+          bool *doSend
+    ) const
+    {
+      TypedDataPtr data=m_device->m_outputSlots[m_index];
+      m_device->m_outputSlots[m_index].release();
+
+      *doSend=false;
+      if(data){
+        data.copy_to(message);
+        *doSend=true;
+      }
+    }
+
+  };
+
+
+public:
+
+
+};
+
 struct EpochSim
   : public GraphLoadEvents
 {
@@ -94,6 +237,8 @@ struct EpochSim
 
   uint64_t m_unq;
 
+  std::shared_ptr<ExternalConnection> m_pExternalConnection;
+
   uint64_t nextSeqUnq()
   {
     return ++m_unq;
@@ -132,6 +277,18 @@ struct EpochSim
 
   void onEdgeInstance(uint64_t gId, uint64_t dstDevIndex, const DeviceTypePtr &dstDevType, const InputPinPtr &dstInput, uint64_t srcDevIndex, const DeviceTypePtr &srcDevType, const OutputPinPtr &srcOutput, const TypedDataPtr &properties, rapidjson::Document &&) override
   {
+    // In principle we support external->external connections!
+    // They just get routed through. Why would this happen though?
+
+    // For an external's input we need to create fake properties
+    TypedDataPtr props(properties);
+    if(dstDevType->isExternal()){
+      // Note that this destroys the original edge properties. However, we are
+      // not the external, so we just don't care! Only the external can do
+      // something meaninful with them.
+      props=create_external_edge_properties(dstDevIndex, dstInput->getIndex(), srcDevIndex, srcOutput->getIndex() );
+    }
+
     input i;
     i.properties=properties;
     i.state=dstInput->getStateSpec()->create();
@@ -140,6 +297,8 @@ struct EpochSim
     auto &slots=m_devices.at(dstDevIndex).inputs.at(dstInput->getIndex());
     unsigned dstPinSlot=slots.size();
     slots.push_back(i);
+
+    // This could be an external's output, but we don't deal with it here
 
     output o;
     o.dstDevice=dstDevIndex;
@@ -332,6 +491,17 @@ struct EpochSim
     uint32_t threshSend=(uint32_t)std::max((double)0xFFFFFFFFul,std::min(0.0,threshSendDbl));
     uint32_t threshRng=rng();
 
+    if(m_pExternalConnection){
+      // Try to drain any messages that are ready
+      while(m_pExternalConnection->canRead()){
+        external_message_t msg;
+        m_pExternalConnection->read(msg);
+
+        fprintf(stderr, "Message!!!\n");
+        exit(1);
+      }
+    }
+
     for(unsigned i=0;i<m_devices.size();i++){
       unsigned index=(i+rot)%m_devices.size();
 
@@ -440,6 +610,7 @@ struct EpochSim
       sent=true;
       
       for(auto &out : src.outputs[sel]){
+        
         auto &dst=m_devices[out.dstDevice];
         auto &in=dst.inputs[out.dstPinIndex];
         auto &slot=in[out.dstPinSlot];

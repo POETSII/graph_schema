@@ -142,29 +142,29 @@ public:
       std::string stateJSON;
       
       if(state){
-	stateJSON=dt->getStateSpec()->toJSON(state);
-	if(stateJSON.size()>0){
-	  assert(stateJSON.size() >= 2);
-	  stateJSON=stateJSON.substr(0,stateJSON.size()-1);
-	  stateJSON=stateJSON.substr(1);
-	}
+        stateJSON=dt->getStateSpec()->toJSON(state);
+        if(stateJSON.size()>0){
+        assert(stateJSON.size() >= 2);
+        stateJSON=stateJSON.substr(0,stateJSON.size()-1);
+        stateJSON=stateJSON.substr(1);
+        }
       }
 
       if(flags==0 && stateJSON.empty())
-	return; // It has no interesting non-default properties or state
+        return; // It has no interesting non-default properties or state
       
       xmlTextWriterStartElementNS(m_dst, NULL, (const xmlChar *)"DevS", NULL);
 
       if(flags!=0){
-	xmlTextWriterWriteFormatAttribute(m_dst, (const xmlChar *)"rts", "%x", flags);
+        xmlTextWriterWriteFormatAttribute(m_dst, (const xmlChar *)"rts", "%x", flags);
       }
 
       xmlTextWriterWriteAttribute(m_dst, (const xmlChar *)"id", (const xmlChar *)id);
 
       if(stateJSON.size()>0 && stateJSON!="{}"){	
-	xmlTextWriterStartElement(m_dst, (const xmlChar *)"S");
-	xmlTextWriterWriteRaw(m_dst, (const xmlChar *)stateJSON.c_str());
-	xmlTextWriterEndElement(m_dst);
+        xmlTextWriterStartElement(m_dst, (const xmlChar *)"S");
+        xmlTextWriterWriteRaw(m_dst, (const xmlChar *)stateJSON.c_str());
+        xmlTextWriterEndElement(m_dst);
       }
 
       xmlTextWriterEndElement(m_dst);
@@ -211,20 +211,20 @@ public:
       }
 
       if(nMessagesInFlight>0){
-	xmlTextWriterStartElement(m_dst, (const xmlChar *)"Q");
-	for(unsigned i=0; i<nMessagesInFlight; i++){
-	  xmlTextWriterStartElement(m_dst, (const xmlChar *)"M");
-	  auto message=pMessagesInFlight[i];
-	  std::string payload=et->getMessageType()->getMessageSpec()->toJSON(message);
-	  if(payload.size()>0){
-	    assert(payload.size() >= 2);
-	    payload=stateJSON.substr(0,payload.size()-1);
-	    payload=payload.substr(1);
-	    xmlTextWriterWriteRaw(m_dst, (const xmlChar *)payload.c_str());
-	  }	  
-	  xmlTextWriterEndElement(m_dst);
-	}
-	xmlTextWriterEndElement(m_dst);
+        xmlTextWriterStartElement(m_dst, (const xmlChar *)"Q");
+        for(unsigned i=0; i<nMessagesInFlight; i++){
+            xmlTextWriterStartElement(m_dst, (const xmlChar *)"M");
+            auto message=pMessagesInFlight[i];
+            std::string payload=et->getMessageType()->getMessageSpec()->toJSON(message);
+            if(payload.size()>0){
+            assert(payload.size() >= 2);
+            payload=stateJSON.substr(0,payload.size()-1);
+            payload=payload.substr(1);
+            xmlTextWriterWriteRaw(m_dst, (const xmlChar *)payload.c_str());
+            }	  
+            xmlTextWriterEndElement(m_dst);
+        }
+        xmlTextWriterEndElement(m_dst);
       }
       
       xmlTextWriterEndElement(m_dst);
