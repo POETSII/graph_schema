@@ -1,6 +1,9 @@
 #include "graph.hpp"
 
 #include <libxml++/parsers/domparser.h>
+#include <libxml++/document.h>
+
+#include "rapidjson/filereadstream.h"
 
 #include <unordered_map>
 #include <iostream>
@@ -13,6 +16,8 @@
 
 #include <cstring>
 #include <cstdlib>
+#include <queue>
+#include <thread>
 
 static unsigned logLevel=2;
 static unsigned messageInit;
@@ -56,7 +61,8 @@ class JSONExternalConnection
   : public ExternalConnection
 {
 private:
-  std::ostream &m_dst;
+  FILE *m_dst;
+  FILE *m_src;
 
   struct keyhash {
     size_t operator()(const std::pair<unsigned,unsigned> &p) const
@@ -67,10 +73,101 @@ private:
 
   std::unordered_map<std::pair<unsigned,unsigned>, TypedDataSpecPtr, keyhash> m_writeSrcTypes;
   std::unordered_map<std::pair<unsigned,unsigned>, TypedDataSpecPtr, keyhash> m_readSrcTypes;
+
+  // Need to get around blocking IO
+  std::thread m_readerThread;
+  bool m_readerThreadRunning;
+
+  std::mutex m_mutex;
+  std::queue<external_message_t> m_readerQueue;
+
 public:
-  JSONExternalConnection(std::ostream &dst)
+  JSONExternalConnection(FILE *dst, FILE *src)
     : m_dst(dst)
-  {}
+    , m_src(src)
+    , m_readerThreadRunning(false)
+  {
+  }
+
+  ~JSONExternalConnection()
+  {
+    // TODO: this is quite unsafe
+    if(m_readerThreadRunning){
+      m_readerThread.join();
+    }
+  }
+
+  void startPump()
+  {
+    assert(!m_readerThreadRunning);
+    m_readerThreadRunning=true;
+
+    m_readerThread=std::thread([&](){
+      auto checkJSON=[](bool cond, const char *msg){
+        if(!cond){
+          fprintf(stderr, "Received bad JSON from external : %s\n", msg);
+          exit(1);
+        }
+      };
+      auto getField=[&](rapidjson::Document &doc, const char *name){
+        checkJSON(doc.HasMember(name), name);
+        checkJSON(doc[name].IsUint(), name);
+        return doc[name].GetUint();
+      };
+
+      xmlpp::Document xmlDoc;
+      xmlpp::Element *xmlElt=xmlDoc.create_root_node("Bleh");
+
+      char readBuffer[4096];
+      rapidjson::FileReadStream is(m_src, readBuffer, sizeof(readBuffer));
+      
+      while(1){
+        rapidjson::Document d;
+        d.ParseStream<rapidjson::kParseStopWhenDoneFlag>(is);
+        if(d.HasParseError()){
+          if(d.GetParseError()==rapidjson::kParseErrorDocumentEmpty){
+            m_readerThreadRunning=false;
+            break; // End of stream
+          }
+          checkJSON(false, "Couldn't parse complete JSON out of stream.");
+        }
+
+        checkJSON(d.IsObject(), "message was not a JSON object." );
+        external_message_t msg;
+        msg.dstDev=getField(d, "dstDev");
+        msg.dstPort=getField(d, "dstPort");
+        msg.srcDev=getField(d, "srcDev");
+        msg.srcPort=getField(d, "srcPort");
+        checkJSON(d.HasMember("payload"), "message has no payload");
+        checkJSON(d["payload"].IsObject(), "payload is not an object");
+
+        auto it=m_readSrcTypes.find(std::make_pair(msg.srcDev,msg.srcPort));
+        checkJSON(it!=m_readSrcTypes.end(), "COuldn't find (srcPort,srcDev) in expected external outputs.");
+        auto type=it->second;
+
+        // TODO: this is insane. We have to construct an XML element just to get
+        // something to pass to the typed data spec...
+        // Which means we have to turn it back into F'ing JSON!
+        // Slow hand-clap for dt10!
+        std::string payloadString;
+        {
+          rapidjson::StringBuffer buffer;
+          rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
+          d["payload"].Accept(writer);
+          payloadString=buffer.GetString();
+        }
+        // WWWWooooooooooooooooooooo!!!!!
+        xmlElt->set_child_text(payloadString);
+        // YYYaaaaaaayyyyy!!!!!
+        msg.data=type->load(xmlElt);
+        
+        {
+          std::lock_guard<std::mutex> lock(m_mutex);
+          m_readerQueue.push(msg);
+        }
+      }
+    });
+  }
 
   virtual void addExternalInputType(unsigned dstDev, unsigned dstPort, TypedDataSpecPtr type) override
   {
@@ -93,13 +190,13 @@ public:
 
     std::pair<unsigned,unsigned> key(msg.dstDev,msg.dstPort);
     TypedDataSpecPtr srcType=m_writeSrcTypes.at( key );
-    
-    m_dst<<"{";
-    m_dst<<"\"dstDev\"="<<msg.dstDev<<",\"dstPort\"="<<msg.dstPort<<",";
-    m_dst<<"\"srcDev\"="<<msg.srcDev<<",\"srcPort\"="<<msg.srcPort<<",";
-    m_dst<<srcType->toJSON(msg.data);
-    m_dst<<"}";
-    m_dst<<std::endl;
+
+    std::string payload=srcType->toJSON(msg.data);
+    fprintf(m_dst,
+      R"({"dstDev"=%u,"dstPort"=%u,"srcPort"=%u,"srcPort"=%u,"payload"=%s}\n)",
+      msg.dstDev,msg.dstPort,msg.srcDev,msg.srcPort,payload.c_str()
+    );
+
   }
 
   virtual bool canRead() override
@@ -345,7 +442,7 @@ struct EpochSim
 
   uint64_t m_unq;
 
-  std::shared_ptr<ExternalConnection> m_pExternalConnection = std::make_shared<JSONExternalConnection>(std::cout);
+  std::shared_ptr<ExternalConnection> m_pExternalConnection = std::make_shared<JSONExternalConnection>(stdin, stdout);
 
   uint64_t nextSeqUnq()
   {
