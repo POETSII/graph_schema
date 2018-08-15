@@ -31,7 +31,6 @@ public:
     const char *srcDevId, unsigned srcDevAddress, const DeviceTypePtr &srcDevType, const OutputPinPtr &srcOutput
   )=0;
 
-
   virtual void startPump()=0;
 
   virtual bool canWrite() =0;
