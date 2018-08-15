@@ -66,7 +66,7 @@ private:
       const typed_data_t *edgeProperties,
       typed_data_t *edgeState,
       const typed_data_t *message
-      ) const
+      ) const override
       {
         m_device->m_onRecv(orchestrator, graphProperties, deviceProperties,
             m_device->m_deviceAddress,
@@ -94,7 +94,7 @@ private:
           typed_data_t *deviceState,
           typed_data_t *message,
           bool *doSend
-    ) const
+    ) const override
     {
       m_device->m_onSend(orchestrator, graphProperties, deviceProperties,
         m_device->m_deviceAddress,

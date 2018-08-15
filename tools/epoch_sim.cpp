@@ -122,7 +122,7 @@ struct EpochSim
 
   uint64_t m_unq;
 
-  std::shared_ptr<ExternalConnection> m_pExternalConnection = std::make_shared<JSONExternalConnection>(stdin, stdout);
+  std::shared_ptr<ExternalConnection> m_pExternalConnection;
 
   DeviceTypePtr createExternalInterceptor(DeviceTypePtr dt, unsigned index)
   {
@@ -464,17 +464,6 @@ struct EpochSim
     uint32_t threshSend=(uint32_t)std::max((double)0xFFFFFFFFul,std::min(0.0,threshSendDbl));
     uint32_t threshRng=rng();
 
-    if(m_pExternalConnection){
-      // Try to drain any messages that are ready
-      while(m_pExternalConnection->canRead()){
-        external_message_t msg;
-        m_pExternalConnection->read(msg);
-
-        fprintf(stderr, "Message!!!\n");
-        exit(1);
-      }
-    }
-
     for(unsigned i=0;i<m_devices.size();i++){
       unsigned index=(i+rot)%m_devices.size();
 
@@ -698,6 +687,9 @@ int main(int argc, char *argv[])
     std::string snapshotSinkName;
     unsigned snapshotDelta=0;
 
+    std::string externalInSpec="";
+    std::string externalOutSpec="-";
+
     std::string logSinkName;
 
     std::string checkpointName;
@@ -767,6 +759,20 @@ int main(int argc, char *argv[])
         }
         keyValueName=argv[ia+1];
         ia+=2;
+      }else if(!strcmp("--external-in",argv[ia])){
+        if(ia+1 >= argc){
+          fprintf(stderr, "Missing argument to --external_in\n");
+          usage();
+        }
+        externalInSpec=argv[ia+1];
+        ia+=2;
+      }else if(!strcmp("--external-out",argv[ia])){
+        if(ia+1 >= argc){
+          fprintf(stderr, "Missing argument to --external-out\n");
+          usage();
+        }
+        externalOutSpec=argv[ia+1];
+        ia+=2;
       }else if(!strcmp("--accurate-assertions",argv[ia])){
         enableAccurateAssertions=true;
         ia+=1;
@@ -783,6 +789,32 @@ int main(int argc, char *argv[])
       }else{
         srcFilePath=argv[ia];
         ia++;
+      }
+    }
+
+    FILE *externalInFile=0;
+    if(externalInSpec!=""){
+      if(externalInSpec=="-"){
+        externalInFile=stdin;
+      }else{
+        externalInFile=fopen(externalInSpec.c_str(),"rb");
+        if(externalInFile==0){
+          fprintf(stderr, "COuldn't open file '%s' for reading as external in.\n", externalInSpec.c_str());
+          exit(1);
+        }
+      }
+    }
+
+    FILE *externalOutFile=stdout;
+    if(externalOutSpec!="-"){
+      if(externalOutSpec==""){
+        externalOutFile=0;
+      }else{
+        externalOutFile=fopen(externalInSpec.c_str(),"wb");
+        if(externalOutFile==0){
+          fprintf(stderr, "COuldn't open file '%s' for writing as external out.\n", externalOutSpec.c_str());
+          exit(1);
+        }
       }
     }
 
@@ -815,6 +847,8 @@ int main(int argc, char *argv[])
     signal(SIGINT, onsignal_close_resources);
 
     EpochSim graph;
+
+    graph.m_pExternalConnection=std::make_shared<JSONExternalConnection>(externalInFile, externalOutFile);
 
     if(!logSinkName.empty()){
       graph.m_log.reset(new LogWriterToFile(logSinkName.c_str()));
@@ -873,7 +907,27 @@ int main(int argc, char *argv[])
       }
 
       if(!running){
-        break;
+        if(graph.m_pExternalConnection->isReadOpen() ){
+          if(logLevel>1){
+            fprintf(stderr, "  Internal events have finished, but external read connection is open.\n");
+          }
+          while( graph.m_pExternalConnection->isReadOpen() & !graph.m_pExternalConnection->canRead()) {
+            usleep(1000);// TODO: horrible
+          }
+          if(graph.m_pExternalConnection->canRead()){
+            if(logLevel>1){
+              fprintf(stderr, "  New event from external unblocked us.\n");
+            }
+            continue;
+          }else{
+            if(logLevel>1){
+              fprintf(stderr, "  External connection closed.\n");
+            }
+            break;
+          }
+        }else{
+          break; // finished
+        }
       }
     }
 

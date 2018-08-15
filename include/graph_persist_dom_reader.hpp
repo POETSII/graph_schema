@@ -547,7 +547,7 @@ void loadGraph(Registry *registry, const filepath &srcPath, xmlpp::Element *pare
 
   events->onBeginDeviceInstances(gId);
 
-  for(auto *nDevice : eDeviceInstances->find("./g:DevI", ns)){
+  for(auto *nDevice : eDeviceInstances->find("./g:DevI|g:ExtI", ns)){
     auto *eDevice=(xmlpp::Element *)nDevice;
 
     std::string id=get_attribute_required(eDevice, "id");
@@ -601,8 +601,17 @@ void loadGraph(Registry *registry, const filepath &srcPath, xmlpp::Element *pare
       dstPinName=get_attribute_required(eEdge, "dstPinName");
     }
 
-    auto &srcDevice=devices.at(srcDeviceId);
-    auto &dstDevice=devices.at(dstDeviceId);
+    auto srcDeviceIt=devices.find(srcDeviceId);
+    if(srcDeviceIt==devices.end()){
+      throw std::runtime_error("No source device called '"+srcDeviceId+"' for edge path '"+path+"'");
+    }
+    auto &srcDevice=srcDeviceIt->second;
+    
+    auto dstDeviceIt=devices.find(dstDeviceId);
+    if(dstDeviceIt==devices.end()){
+      throw std::runtime_error("No source device called '"+dstDeviceId+"' for edge path '"+path+"'");
+    }
+    auto &dstDevice=dstDeviceIt->second;
     
     auto srcPin=srcDevice.second->getOutput(srcPinName);
     auto dstPin=dstDevice.second->getInput(dstPinName);

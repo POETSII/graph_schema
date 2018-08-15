@@ -351,26 +351,11 @@ def load_graph_type_reference(graphNode,basePath):
     else:
         return GraphTypeReference(id)
 
-def load_external_instance(graph, eiNode):
-    id=get_attrib(eiNode,"id")
-    external_type_id=get_attrib(eiNode,"type")
-    if external_type_id not in graph.graph_type.device_types:
-        raise XMLSyntaxError("Unknown external type id {}, known devices = [{}]".format(external_type_id, [d.di for d in graph.graph_type.deivce_types.keys()]), eiNode)
-    external_type=graph.graph_type.device_types[external_type_id]
-    properties=None # external devices cannot have any properties
-    metadata=None
-
-    for n in eiNode: # walk over children rather than using find. Better performance
-        if n.tag == _ns_M: 
-            assert not metadata
-            metadata=json.loads("{"+n.text+"}")
-        else:
-            assert "Unknown tag type in EdgeI"
-    
-    return DeviceInstance(graph,id,external_type,properties,metadata)
 
 def load_device_instance(graph,diNode):
     id=get_attrib(diNode,"id")
+
+    is_external = diNode.tag==_ns_ExtI
 
     device_type_id=get_attrib(diNode,"type")
     if device_type_id not in graph.graph_type.device_types:
@@ -387,6 +372,7 @@ def load_device_instance(graph,diNode):
     for n in diNode: # walk over children rather than using find. Better performance
         if n.tag==_ns_P:
             assert not properties
+            assert not is_external, "Currently externals can't have properties"
             
             spec=device_type.properties
             assert spec is not None, "Can't have properties value for device with no properties spec"
@@ -398,7 +384,7 @@ def load_device_instance(graph,diNode):
             assert not metadata
             metadata=json.loads("{"+n.text+"}")
         else:
-            assert "Unknown tag type in EdgeI"
+            assert "Unknown tag type in DevI"
 
     return DeviceInstance(graph,id,device_type,properties,metadata)
 

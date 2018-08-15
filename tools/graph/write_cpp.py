@@ -544,13 +544,14 @@ def render_output_pin_as_cpp(op,dst):
 
     subs["pinLocalConstants"]=emit_output_pin_local_constants(dt,subs, "    ")
 
+    send_handler=op.send_handler
     if op.send_handler==None:
-        subs["handlerCode"]='throw std::runtime_error("Attempt to call send handler on external. {}:{}");'.format(dt.id,op.name)
+        send_handler='throw std::runtime_error("Attempt to call send handler on external. {}:{}");'.format(dt.id,op.name)
 
     if op.source_line and op.source_file:
         subs["preProcLinePragma"]= '#line {} "{}"\n'.format(op.source_line-1,op.source_file)
     else:
-        subst["preProcLinePragma"]="// No line/file information for handler"
+        subs["preProcLinePragma"]="// No line/file information for handler"
 
 
     #dst.write('MessageTypePtr {}_Spec_get();\n\n'.format(op.message_type.id))
@@ -588,7 +589,7 @@ def render_output_pin_as_cpp(op,dst):
     dst.write('    // Begin custom handler\n')
     if op.source_line and op.source_file:
         dst.write('#line {} "{}"\n'.format(op.source_line,op.source_file))
-    for line in op.send_handler.splitlines():
+    for line in send_handler.splitlines():
         dst.write('    {}\n'.format(line))
     dst.write("__POETS_REVERT_PREPROC_DETOUR__")
     dst.write('    // End custom handler\n')

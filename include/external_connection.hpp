@@ -6,6 +6,7 @@
 #include <libxml++/document.h>
 
 #include "rapidjson/filereadstream.h"
+#include "rapidjson/error/en.h"
 
 
 #include <queue>
@@ -41,6 +42,10 @@ public:
     const external_message_t &msg
   ) =0;
 
+  // Return true if more messages might come down the wire at some point
+  virtual bool isReadOpen() =0;
+
+  //! Return true if there is a message right now, so read could be called
   virtual bool canRead() =0;
 
   /* A multi-cast messages needs to be fanned out to all devices within the
@@ -62,7 +67,7 @@ private:
   std::unordered_map<std::string,unsigned> m_deviceIdToAddress;
 
   // Need to get around blocking IO
-  std::thread m_readerThread;
+  std::thread *m_readerThread;
   bool m_readerThreadRunning;
 
   std::mutex m_mutex;
@@ -80,7 +85,9 @@ public:
   {
     // TODO: this is quite thread unsafe
     if(m_readerThreadRunning){
-      m_readerThread.join();
+        // THis causes a terminate() for obvious reasons when
+        // the main thread shuts normally. Just letting the thing die.
+      //m_readerThread->join();
     }
   }
 
@@ -91,7 +98,7 @@ public:
     if(m_src){
       m_readerThreadRunning=true;
 
-      m_readerThread=std::thread([&](){
+      m_readerThread=new std::thread([&](){
         auto checkJSON=[](bool cond, const char *msg){
           if(!cond){
             fprintf(stderr, "Received bad JSON from external : %s\n", msg);
@@ -118,33 +125,41 @@ public:
               m_readerThreadRunning=false;
               break; // End of stream
             }
+            fprintf(stderr, "Error: %s\n", rapidjson::GetParseError_En(d.GetParseError()));
             checkJSON(false, "Couldn't parse complete JSON out of stream.");
           }
 
           checkJSON(d.IsObject(), "message was not a JSON object." );
           external_message_t msg;
-          std::string dstDevName=getField(d,"dstDev");
-          std::string dstPortName=getField(d,"dstPort");
+          msg.isMulticast=true;
           std::string srcDevName=getField(d,"srcDev");
           std::string srcPortName=getField(d,"srcPort");
+          
+          auto srcIt=m_deviceIdToAddress.find(srcDevName);
+          checkJSON(srcIt!=m_deviceIdToAddress.end(), "Source device is unknown");
+          msg.srcDev=srcIt->second;
+          DeviceTypePtr srcType=m_deviceAddressToIdAndType[msg.srcDev].second;
+          OutputPinPtr srcPort=srcType->getOutput(srcPortName);
+          checkJSON(!!srcPort, "Source port is unknown");
+          msg.srcPort=srcPort->getIndex();
+
+          if(d.HasMember("dstDev")){
+            msg.isMulticast=false;
+            std::string dstDevName=getField(d,"dstDev");
+            std::string dstPortName=getField(d,"dstPort");
+            
+            auto dstIt=m_deviceIdToAddress.find(dstDevName);
+            checkJSON(dstIt!=m_deviceIdToAddress.end(), "Destination device is unknown");
+            msg.dstDev=dstIt->second;
+            DeviceTypePtr dstType=m_deviceAddressToIdAndType[msg.dstDev].second;
+            InputPinPtr dstPort=dstType->getInput(dstPortName);
+            checkJSON(!!dstPort, "Destination port is unknown");
+            msg.dstPort=dstPort->getIndex();
+          }
+
           checkJSON(d.HasMember("payload"), "message has no payload");
           checkJSON(d["payload"].IsObject(), "payload is not an object");
 
-          auto dstIt=m_deviceIdToAddress.find(dstDevName);
-          checkJSON(dstIt!=m_deviceIdToAddress.end(), "Destination port is unknown");
-          msg.dstDev=dstIt->second;
-          DeviceTypePtr dstType=m_deviceAddressToIdAndType[msg.dstDev].second;
-          InputPinPtr dstPort=dstType->getInput(dstPortName);
-          checkJSON(!!dstPort, "Destination port is unknown");
-          msg.dstPort=dstPort->getIndex();
-
-          auto srcIt=m_deviceIdToAddress.find(srcDevName);
-          checkJSON(srcIt!=m_deviceIdToAddress.end(), "Source port is unknown");
-          msg.srcDev=srcIt->second;
-          DeviceTypePtr srcType=m_deviceAddressToIdAndType[msg.srcDev].second;
-          InputPinPtr srcPort=srcType->getInput(srcPortName);
-          checkJSON(!!srcPort, "Source port is unknown");
-          msg.srcPort=srcPort->getIndex();
 
           // TODO: this is insane. We have to construct an XML element just to get
           // something to pass to the typed data spec...
@@ -158,6 +173,8 @@ public:
             payloadString=buffer.GetString();
           }
           // WWWWooooooooooooooooooooo!!!!!
+          assert(payloadString[0]=='{' && payloadString[payloadString.size()-1]=='}');
+          payloadString=payloadString.substr(1, payloadString.size()-2);
           xmlElt->set_child_text(payloadString);
           // YYYaaaaaaayyyyy!!!!!
           msg.data=srcPort->getMessageType()->getMessageSpec()->load(xmlElt);
@@ -211,12 +228,18 @@ public:
     std::string payload=srcPort->getMessageType()->getMessageSpec()->toJSON(msg.data);
     
     fprintf(m_dst,
-      R"({"dstDev":"%s","dstPort":"%s","srcPort":"%s","srcPort":"%s","payload"=%s})",
+      R"({"dstDev":"%s","dstPort":"%s","srcDev":"%s","srcPort":"%s","payload":%s})",
       dstInfo.first.c_str(), dstPort->getName().c_str(),
       srcInfo.first.c_str(), srcPort->getName().c_str(),
       payload.c_str()
     );
     fputc('\n', m_dst);
+  }
+
+  virtual bool isReadOpen() override
+  {
+      std::unique_lock<std::mutex> lock_guard(m_mutex);
+      return !m_readerQueue.empty() || (m_src!=0 && m_readerThreadRunning);
   }
 
   virtual bool canRead() override

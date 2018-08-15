@@ -183,12 +183,17 @@ def save_device_type(parent,dt):
 
 
 _device_instance_tag_type=toNS("p:DevI")
+_external_instance_tag_type=toNS("p:ExtI")
 _device_instance_properties_type=toNS("p:P")
 _device_instance_metadata_type=toNS("p:M")
 
 
 def save_device_instance(parent, di):
-    n=etree.SubElement(parent, _device_instance_tag_type, {"id":di.id,"type":di.device_type.id} )
+    if di.device_type.isExternal:
+        tag_type=_external_instance_tag_type
+    else:
+        tag_type=_device_instance_tag_type
+    n=etree.SubElement(parent, tag_type, {"id":di.id,"type":di.device_type.id} )
 
     save_typed_struct_instance(n, _device_instance_properties_type, di.device_type.properties, di.properties)
     save_metadata(n, _device_instance_metadata_type, di.metadata)

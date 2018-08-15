@@ -221,6 +221,7 @@ include apps/gals_heat_float/makefile.inc
 include apps/nursery/airfoil/airfoil.inc
 include apps/nursery/relaxation_heat/makefile.inc
 
+include test/io/makefile.inc
 
 #TODO : Defunct?
 include tools/partitioner.inc

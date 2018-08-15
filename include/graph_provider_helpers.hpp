@@ -531,7 +531,7 @@ public:
   { return getOutputs().size(); }
 
   virtual const OutputPinPtr &getOutput(unsigned index) const override final
-  { return m_base->getOutput(index); }
+  { return getOutputs().at(index); }
 
 
   virtual InputPinPtr getInput(const std::string &name) const override
