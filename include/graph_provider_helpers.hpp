@@ -257,6 +257,9 @@ protected:
     : m_base(base)
   {  }
 public:
+  InputPinPtr getBase() const
+  { return m_base; }
+
   virtual const DeviceTypePtr &getDeviceType() const override
   { return m_base->getDeviceType(); }
 
@@ -339,6 +342,9 @@ protected:
     : m_base(base)
   {}
 public:
+  OutputPinPtr getBase() const
+  { return m_base; }
+
   virtual const DeviceTypePtr &getDeviceType() const override
   { return m_base->getDeviceType();  }
 

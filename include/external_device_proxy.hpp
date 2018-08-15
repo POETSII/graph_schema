@@ -4,33 +4,50 @@
 #include "graph.hpp"
 #include "external_connection.hpp"
 
-struct external_edge_properties_t
-  : typed_data_t
-{
-  unsigned dstDev;
-  unsigned dstPort;
-  unsigned srcDev;
-  unsigned srcPort;
-};
-
-TypedDataPtr create_external_edge_properties(unsigned dstDev, unsigned dstPort, unsigned srcDev, unsigned srcPort )
-{
-  auto res=make_data_ptr<external_edge_properties_t>();
-  res->dstDev=dstDev;
-  res->dstPort=dstPort;
-  res->srcDev=srcDev;
-  res->srcPort=srcPort;
-  return res;
-}
 
 /* This is a fake device type, with fiddled send and receive handlers that
-  make them send to or receive from the external channel. */
+    can be redirected at load-time.
+    Apart from the send and receive handlers changing, it should look the
+    same as the original.    
+*/
 class ExternalDeviceImpl
   : public DeviceTypeDelegate
 {
+public:
+    typedef std::function<void (
+      OrchestratorServices *orchestrator,
+      const typed_data_t *graphProperties,
+      const typed_data_t *deviceProperties,
+      unsigned recvDeviceAddress,
+      const typed_data_t *edgeProperties,
+      unsigned recvPortIndex,
+      const typed_data_t *message
+    )> on_recv_t;
+
+    typedef std::function<void (
+        OrchestratorServices *orchestrator,
+        const typed_data_t *graphProperties,
+        const typed_data_t *deviceProperties,
+        unsigned sendDeviceAddress, 
+        unsigned sendPortIndex, // This is needed to intelligently dispatch
+        typed_data_t *message,
+        bool *doSend
+    )> on_send_t;
+    
+    typedef std::function<uint32_t (
+        OrchestratorServices *orchestrator,
+        const typed_data_t *graphProperties,
+        const typed_data_t *deviceProperties,
+        unsigned deviceAddress
+    )> on_rts_t;
+
 private:
-  std::shared_ptr<ExternalConnection> m_pExternal;
-  std::vector<TypedDataPtr> m_outputSlots; // Data coming from the outstide to the inside
+    // The address of the device this is a proxy for
+    unsigned m_deviceAddress;
+
+    on_send_t m_onSend;
+    on_recv_t m_onRecv;
+    on_rts_t m_onRTS;
   
   struct ExternalInputPinImpl
     : public InputPinDelegate
@@ -42,7 +59,6 @@ private:
 
     ExternalDeviceImpl *m_device;
 
-
     virtual void onReceive(OrchestratorServices *orchestrator,
       const typed_data_t *graphProperties,
       const typed_data_t *deviceProperties,
@@ -52,16 +68,12 @@ private:
       const typed_data_t *message
       ) const
       {
-        assert(edgeProperties);
-        auto pEdgeInfo=(const external_edge_properties_t *)edgeProperties;
-
-        external_message_t msg={
-          false, // not multi-cast
-          pEdgeInfo->dstDev, pEdgeInfo->dstPort,
-          pEdgeInfo->srcDev, pEdgeInfo->srcPort,
-          clone(message)
-        };
-        m_device->m_pExternal->write(msg);
+        m_device->m_onRecv(orchestrator, graphProperties, deviceProperties,
+            m_device->m_deviceAddress,
+            edgeProperties,
+            getBase()->getIndex(),
+            message
+        );
       }
   };
 
@@ -72,11 +84,9 @@ private:
     ExternalOutputPinImpl(OutputPinPtr pin, ExternalDeviceImpl *device)
       : OutputPinDelegate(pin)
       , m_device(device)
-      , m_index(pin->getIndex())
     {}
 
     ExternalDeviceImpl *m_device;
-    unsigned m_index;
 
     virtual void onSend(OrchestratorServices *orchestrator,
           const typed_data_t *graphProperties,
@@ -86,14 +96,11 @@ private:
           bool *doSend
     ) const
     {
-      TypedDataPtr data=m_device->m_outputSlots[m_index];
-      m_device->m_outputSlots[m_index].release();
-
-      *doSend=false;
-      if(data){
-        data.copy_to(message);
-        *doSend=true;
-      }
+      m_device->m_onSend(orchestrator, graphProperties, deviceProperties,
+        m_device->m_deviceAddress,
+        getBase()->getIndex(),
+        message, doSend
+     );
     }
 
   };
@@ -105,11 +112,17 @@ private:
   std::map<std::string,std::shared_ptr<ExternalOutputPinImpl> > m_outputsByName;
 public:
   ExternalDeviceImpl(
-    std::shared_ptr<ExternalConnection> pExternal, // Where output comes from and goes too
-    DeviceTypePtr externalType                      // "real" type of the external  
+    DeviceTypePtr externalType,                      // "real" type of the external  
+    unsigned deviceAddress,
+    on_send_t onSend,
+    on_recv_t onRecv,
+    on_rts_t onRTS
   ) 
     : DeviceTypeDelegate(externalType)
-    , m_pExternal(pExternal)
+    , m_deviceAddress(deviceAddress)
+    , m_onSend(onSend)
+    , m_onRecv(onRecv)
+    , m_onRTS(onRTS)
   {
     if(!externalType->isExternal()){
       throw std::runtime_error("Attempt to create external device connection over non-external device.");
@@ -127,15 +140,9 @@ public:
     }
   }
 
-  virtual uint32_t calcReadyToSend(OrchestratorServices *, const typed_data_t *, const typed_data_t *, const typed_data_t *) const override
+  virtual uint32_t calcReadyToSend(OrchestratorServices *orchestrator, const typed_data_t *graphProperties, const typed_data_t *deviceProperties, const typed_data_t *deviceState) const override
   {
-    uint32_t acc=0;
-    for(unsigned i=0; i<m_outputSlots.size(); i++){
-      if(m_outputSlots[i]){
-        acc |= 1ul<<i;
-      }
-    }
-    return acc;
+    return m_onRTS(orchestrator, graphProperties, deviceProperties, m_deviceAddress);
   }
 
   virtual InputPinPtr getInput(const std::string &name) const override

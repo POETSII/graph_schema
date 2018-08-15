@@ -21,6 +21,24 @@
 static unsigned logLevel=2;
 static unsigned messageInit;
 
+struct external_edge_properties_t
+  : typed_data_t
+{
+  unsigned dstDev;
+  unsigned dstPort;
+  unsigned srcDev;
+  unsigned srcPort;
+};
+
+TypedDataPtr create_external_edge_properties(unsigned dstDev, unsigned dstPort, unsigned srcDev, unsigned srcPort )
+{
+  auto res=make_data_ptr<external_edge_properties_t>();
+  res->dstDev=dstDev;
+  res->dstPort=dstPort;
+  res->srcDev=srcDev;
+  res->srcPort=srcPort;
+  return res;
+}
 
 
 struct EpochSim
@@ -73,6 +91,9 @@ struct EpochSim
 
     std::pair<MessageTypePtr, TypedDataPtr> prev_message;
 
+    // Only used for externals
+    std::queue<external_message_t> externalSendQueue;
+
     bool anyReady() const
     {
       return readyToSend!=0;
@@ -101,7 +122,62 @@ struct EpochSim
 
   uint64_t m_unq;
 
-  std::shared_ptr<ExternalConnection> m_pExternalConnection = std::make_shared<JSONExternalConnection>(nullptr, stdout);
+  std::shared_ptr<ExternalConnection> m_pExternalConnection = std::make_shared<JSONExternalConnection>(stdin, stdout);
+
+  DeviceTypePtr createExternalInterceptor(DeviceTypePtr dt, unsigned index)
+  {
+    // Create an interceptor device which will send to the external connection
+    auto onSend=[this](OrchestratorServices *orchestrator, const typed_data_t *graphProperties,
+      const typed_data_t *deviceProperties, unsigned deviceAddress,
+      unsigned sendPortIndex,
+      typed_data_t *message, bool *doSend
+    ){
+      auto &dev=this->m_devices.at(deviceAddress);
+      assert(dev.type->isExternal());
+      assert(!dev.externalSendQueue.empty());
+      external_message_t msg=dev.externalSendQueue.front();
+      dev.externalSendQueue.pop();
+
+      assert(msg.srcDev==deviceAddress);
+      assert(msg.srcPort==sendPortIndex);
+      assert(msg.isMulticast); // We can only take multi-cast from this route, as it is treated like any other send
+      msg.data.copy_to(message);
+      *doSend=true;
+    };
+
+    auto onRTS=[this](OrchestratorServices *orchestrator, const typed_data_t *graphProperties,
+      const typed_data_t *deviceProperties, unsigned deviceAddress
+    ) -> uint32_t 
+    {
+      auto &dev=this->m_devices.at(deviceAddress);
+      assert(dev.type->isExternal());
+      if(dev.externalSendQueue.empty()){
+        return 0;
+      }
+      const auto &msg=dev.externalSendQueue.front();
+      assert(msg.srcDev==deviceAddress);
+      assert(msg.srcPort < 32);
+      return 1ul<<msg.srcPort;
+    };
+
+    auto onRecv=[this](OrchestratorServices *orchestrator, const typed_data_t *graphProperties,
+      const typed_data_t *deviceProperties, unsigned deviceAddress,
+      const typed_data_t *edgeProperties, unsigned portIndex,
+      const typed_data_t *message
+    ){
+      auto pEdgeInfo=(const external_edge_properties_t *)edgeProperties;
+
+      external_message_t msg={
+        false, // not multi-cast
+        pEdgeInfo->dstDev, pEdgeInfo->dstPort,
+        pEdgeInfo->srcDev, pEdgeInfo->srcPort,
+        clone(message)
+      };
+      m_pExternalConnection->write(msg);
+    };
+
+    return std::make_shared<ExternalDeviceImpl>(dt,index, onSend,onRecv,onRTS);
+  }
 
   uint64_t nextSeqUnq()
   {
@@ -124,9 +200,7 @@ struct EpochSim
     d.id=id;
     d.name=intern(id);
     if(dt->isExternal()){
-      // Create an interceptor device which will send to the external connection
-      // TODO : this only needs to be created once per device type.
-      d.type=std::make_shared<ExternalDeviceImpl>(m_pExternalConnection, dt);
+      d.type=createExternalInterceptor(dt,d.index);
     }else{
       d.type=dt;
     }
@@ -330,8 +404,28 @@ struct EpochSim
   template<class TRng>
   bool step(TRng &rng, double probSend,bool capturePreEventState)
   {
-    // Within each step every object gets the chance to send a message with probability probSend
+    // Drain the external connection
+    // TODO: Is this too eager?
+    while(m_pExternalConnection->canRead()){
+      external_message_t msg;
+      m_pExternalConnection->read(msg);
 
+      auto &dev=m_devices.at(msg.srcDev);
+      if(!dev.type->isExternal()){
+        throw std::runtime_error("Received message from external connection that wasn't for a valid external device.");
+      }
+      if(dev.type->getOutputCount() <= msg.srcPort){
+        throw std::runtime_error("Received message from external connection for non-existent output port on external.");
+      }
+      if(!msg.isMulticast){
+        throw std::runtime_error("Received message from external connection that is not multi-cast (current limitation of epoch_sim).");
+      }
+
+      dev.externalSendQueue.push(msg);
+      dev.readyToSend=1ul<<msg.srcPort;
+    }
+
+    // Within each step every object gets the chance to send a message with probability probSend
     std::uniform_real_distribution<> udist;
 
     ReceiveOrchestratorServicesImpl receiveServices{logLevel, stderr, 0, 0, m_onExportKeyValue, m_onDeviceExit, m_onCheckpoint};
