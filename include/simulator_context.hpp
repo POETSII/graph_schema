@@ -20,8 +20,33 @@ private:
     std::list<const T*> m_order;
     std::unordered_map<T,typename std::list<const T*>::const_iterator> m_index;
 public:
+    struct const_iterator {
+        typename std::list<const T *>::const_iterator it;
+
+        bool operator==(const const_iterator &o) const
+        { return it==o.it; }
+
+        bool operator!=(const const_iterator &o) const
+        { return it!=o.it; }
+
+        const_iterator &operator++()
+        { ++it; return *this; }
+
+        const T &operator*() const
+        { return **it; }
+    };
+
+    const_iterator begin() const
+    { return const_iterator{m_order.begin()}; }
+
+    const_iterator end() const
+    { return const_iterator{m_order.end()}; }
+
     bool empty() const
     { return m_order.empty(); }
+
+    size_t size() const
+    { return m_order.size(); }
 
     const T &front()
     {
@@ -61,7 +86,7 @@ public:
     void erase(const T &x)
     {
         auto it=m_index.find(x);
-        if(it!=m_index.end()){
+        if(it==m_index.end()){
             return;
         }
 
@@ -80,7 +105,92 @@ public:
         --lit;
         it->second=lit;
     }
+};
 
+template<class T>
+class RandomSelectionSet
+{
+private:
+    std::vector<const T*> m_elements;
+    std::unordered_map<T,unsigned> m_index;
+public:
+    struct const_iterator {
+        typename std::vector<const T *>::const_iterator it;
+
+        bool operator==(const const_iterator &o) const
+        { return it==o.it; }
+
+        bool operator!=(const const_iterator &o) const
+        { return it!=o.it; }
+
+        const_iterator &operator++()
+        { ++it; return *this; }
+
+        const T &operator*() const
+        { return **it; }
+    };
+
+    const_iterator begin() const
+    { return const_iterator{m_elements.begin()}; }
+
+    const_iterator end() const
+    { return const_iterator{m_elements.end()}; }
+
+    void insert(const T &x)
+    {
+        auto it=m_index.find(x);
+        if(it!=m_index.end()) {
+            return;
+        }
+
+        it=m_index.insert(std::make_pair(x,m_elements.size())).first;
+        m_elements.push_back(&it->first);
+    }
+
+    bool empty() const
+    { return m_elements.empty(); }
+
+    bool size() const
+    { return m_elements.size(); }
+
+    template<class TUrng>
+    const T &get_random(TUrng &urng) const {
+        std::uniform_real_distribution<> udist;
+        size_t sel = size_t(floor(udist(urng) * m_elements.size()));
+        assert(sel < m_elements.size());
+        return *m_elements[sel];
+    }
+
+    template<class TUrng>
+    T pop_random(TUrng &urng)
+    {
+        T res=get_random(urng);
+        erase(res);
+        return res;
+    }
+
+    void erase(const T &x)
+    {
+        auto it=m_index.find(x);
+        if(it==m_index.end()){
+            return;
+        }
+
+        // Note that it may be the case that it==itBack
+        auto itBack=m_index.find(*m_elements.back());
+        itBack->second=it->second;
+        m_elements[itBack->second]=&itBack->first;
+        m_elements.resize(m_elements.size()-1);
+        m_index.erase(it);
+
+        /*
+        for(const auto &kv : m_index){
+            assert(kv.first!=x);
+            assert(kv.second<m_elements.size());
+            assert(&kv.first==m_elements[kv.second]);
+        }
+        */
+    }
 };
 
 class StringInterner;
@@ -189,7 +299,8 @@ public:
     pin_index_t max_pin_index = 31;
 
     struct edge_index_range_t{
-        edge_index_t begin;
+        edge_index_t begin;             // [begin,beginExternals) is all internal devices
+        edge_index_t beginExternals;    // [beginExternals,end) is all external devices
         edge_index_t end;
     };
 
@@ -198,10 +309,10 @@ public:
         // There is one of these for every edge, which is the largest overall data-structure
         // in the simulation.
 
-        uint32_t destDeviceAddress : 27;
+        uint32_t destDeviceAddress: 27;
         uint32_t sourceDeviceAddress : 5;
-        uint32_t destDevicePin : 27;
-        uint32_t sourceDevicePin : 5;
+        uint32_t destDevicePin: 27;
+        uint32_t sourceDevicePin: 5;
 
         bool operator==(const routing_tuple_t &o) const
         {
@@ -287,6 +398,7 @@ private:
         OutputPinPtr pin;
         TypedDataPtr defaultMsg;
         edge_index_t beginEdgeIndex;
+        edge_index_t beginExternalIndex;
         edge_index_t endEdgeIndex;
     };
 
@@ -315,13 +427,29 @@ private:
         {}
 
         void export_key_value(uint32_t key, uint32_t value) override
-        { throw std::runtime_error("Not supported."); }
+        {
+            static bool warned=false;
+            if(!warned) {
+                // no-op
+                fprintf(stderr, "handler_export_key_value is not supported by this engine\n");
+                warned=true;
+            }
+        }
 
         void vcheckpoint(bool preEvent, int level, const char *tagFmt, va_list tagArgs) override
-        { throw std::runtime_error("Not supported."); }
+        {
+            static bool warned=false;
+            if(!warned) {
+                // no-op
+                fprintf(stderr, "handler_checkpoint is not supported by this engine\n");
+                warned=true;
+            }
+        }
 
         void application_exit(int code) override
-        { throw std::runtime_error("Not supported."); }
+        {
+            exit(code);
+        }
     };
 
     struct SendServicesHandler
@@ -387,7 +515,7 @@ private:
         }
     };
 
-    int m_logLevel=2;
+    int m_logLevel=6;
 
     TypedDataPtr m_graphProperties;
     std::vector<device_t> m_devices;
@@ -422,6 +550,7 @@ public:
             rapidjson::Document &&metadata
     ) override
     {
+        m_graphProperties=properties;
         return 1;
     }
 
@@ -454,35 +583,42 @@ public:
                     pin,
                     getDefaultMessageForOutputPin(pin->getMessageType()),
                     invalid_edge_index,
+                    invalid_edge_index,
                     invalid_edge_index
             });
         }
 
+        InitServicesHandler services(this, &dev);
+
         InputPinPtr init=dt->getInput("__init__");
-        if(init){
-            InitServicesHandler services(this,&dev);
+        if(init) {
 
             init->onReceive(
-                &services,
-                m_graphProperties.get(),
-                dev.properties.get(),
-                dev.state.get(),
-                nullptr,
-                nullptr,
-                nullptr
-            );
-
-            dev.RTS = dt->calcReadyToSend(
-                &services,
-                m_graphProperties.get(),
-                dev.properties.get(),
-                dev.state.get()
+                    &services,
+                    m_graphProperties.get(),
+                    dev.properties.get(),
+                    dev.state.get(),
+                    nullptr,
+                    nullptr,
+                    nullptr
             );
         }
 
+        if(!dt->isExternal()) {
+            dev.RTS = dt->calcReadyToSend(
+                    &services,
+                    m_graphProperties.get(),
+                    dev.properties.get(),
+                    dev.state.get()
+            );
+        }else{
+            dev.RTS=0;
+        }
+
+
         m_devices.push_back(std::move(dev));
 
-        fprintf(stderr, "Loaded device : %s\n", id.c_str());
+        fprintf(stderr, "Loaded device : %s=%u, numOutputs=%lu, type=%s\n", id.c_str(), address, m_devices.back().outputPins.size(), dt->getId().c_str());
 
         return address;
     }
@@ -498,8 +634,10 @@ public:
     {
         // We improve cache locality and reduce memory a bit by:
         // - Collecting all edges up-front
-        // - Sorting all edges by (srcDevInst,srcPortIndex)
+        // - Sorting all edges by (srcDevInst,srcPortIndex), and internals before externals
         // - Capturing the output list for a pin as [beginOutputIndex,endOutputIndex)
+        // - The point beginExternalIndex marks the break where externals start
+
 
         edge_index_t index=m_edges.size();
 
@@ -512,38 +650,89 @@ public:
         edge.properties=properties;
         edge.state=dstPin->getStateSpec()->create();
 
+        auto &srcDev = m_devices.at(edge.route.sourceDeviceAddress);
+        auto &dstDev = m_devices.at(edge.route.destDeviceAddress);
+        fprintf(stderr, "  Route: %s:%s-%s:%s\n",
+                dstDev.name.c_str(), dstDev.type->getInput(edge.route.destDevicePin)->getName().c_str(),
+                srcDev.name.c_str(), srcDev.type->getOutput(edge.route.sourceDevicePin)->getName().c_str()
+        );
+
         // We do not hook up edges at this point, as we'll want to sort
         // them first to make sure (srcDevInst,srcPortIndex) runs are contiguous
 
-        m_edges.push_back(std::move(edge));
+        m_edges.push_back(edge);
 
-        fprintf(stderr, "Edge : (%s,%s)<-(%s,%s)\n",
-                m_devices[dstDevInst].name.c_str(), dstPin->getName().c_str(),
-                m_devices[srcDevInst].name.c_str(), srcPin->getName().c_str());
     }
 
     //! There will be no more edge instances in the graph.
     void onEndEdgeInstances(uint64_t /*graphToken*/) override
     {
-        std::sort(m_edges.begin(), m_edges.end(),
-            [](const edge_t &a, const edge_t &b){
-                if(a.route.sourceDeviceAddress<b.route.sourceDeviceAddress) return true;
-                if(a.route.sourceDevicePin<b.route.destDevicePin) return true;
-                // We don't care about the rest, because we only need to sort into
-                // equivalence classes
-                return false;
+        /*
+        for(auto & edge : m_edges){
+            auto &srcDev = m_devices.at(edge.route.sourceDeviceAddress);
+            auto &dstDev = m_devices.at(edge.route.destDeviceAddress);
+            fprintf(stderr, "  Route: %s:%s-%s:%s\n",
+                    dstDev.name.c_str(), dstDev.type->getInput(edge.route.destDevicePin)->getName().c_str(),
+                    srcDev.name.c_str(), srcDev.type->getOutput(edge.route.sourceDevicePin)->getName().c_str()
+            );
+        }
+         */
+
+        // We also sort internals before externals, so make a temporary bit-mask
+        std::vector<char> isExternal(m_devices.size());
+        for(unsigned i=0; i<m_devices.size(); i++){
+            isExternal[i]=m_devices[i].type->isExternal();
+        }
+
+        auto cmp=[&](const edge_t &a, const edge_t &b){
+            if(a.route.sourceDeviceAddress<b.route.sourceDeviceAddress) return true;
+            if(a.route.sourceDeviceAddress>b.route.sourceDeviceAddress) return false;
+            if(a.route.sourceDevicePin<b.route.sourceDevicePin) return true;
+            if(a.route.sourceDevicePin>b.route.sourceDevicePin) return false;
+
+            // Internals destinations come before externals
+            if(!isExternal[a.route.destDeviceAddress] && isExternal[b.route.destDeviceAddress]) return true;
+
+            // We don't care about the rest, because we only need to sort into
+            // equivalence classes
+            return false;
+        };
+
+        for(auto &a : m_edges){
+            for(auto &b : m_edges) {
+                bool a_lt_b=cmp(a,b);
+                bool b_lt_a=cmp(b,a);
+                assert(!(a_lt_b && b_lt_a));
             }
-        );
+        }
+
+        std::stable_sort(m_edges.begin(), m_edges.end(), cmp);
 
         for(unsigned index=0; index<m_edges.size(); index++){
             const edge_t &edge=m_edges[index];
             device_t &srcDev=m_devices.at(edge.route.sourceDeviceAddress);
 
+            /*
+            fprintf(stderr, "  Route: %s:%s-%s:%s\n",
+                    dstDev.name.c_str(), dstDev.type->getInput(edge.route.destDevicePin)->getName().c_str(),
+                    srcDev.name.c_str(), srcDev.type->getOutput(edge.route.sourceDevicePin)->getName().c_str()
+                    );
+            */
+
             output_pin_t &srcPin=srcDev.outputPins.at(edge.route.sourceDevicePin);
             if(srcPin.beginEdgeIndex==invalid_edge_index){
                 srcPin.beginEdgeIndex=index;
-                srcPin.endEdgeIndex=index+1;
-            }else{
+                srcPin.beginExternalIndex=index;
+                srcPin.endEdgeIndex=index;
+            }
+
+            if(!isExternal[edge.route.destDeviceAddress]){
+                assert(srcPin.beginExternalIndex==index);
+                assert(srcPin.endEdgeIndex==index);
+                srcPin.beginExternalIndex++;
+                srcPin.endEdgeIndex++;
+            }else {
+                assert(srcPin.beginExternalIndex<=index);
                 assert(srcPin.endEdgeIndex==index);
                 srcPin.endEdgeIndex++;
             }
@@ -597,10 +786,10 @@ public:
         routing_tuple_t *route = nullptr // optional : information about the route
     ) override
     {
-        assert(readyToSend);
-
         auto &edge=m_edges.at(edgeIndex);
         auto &device=m_devices.at(edge.route.destDeviceAddress);
+
+        assert(!device.type->isExternal()); // External deliveries need to be managed... externally
 
         ReceiveServicesHandler services(this, &edge);
         
@@ -620,6 +809,7 @@ public:
             device.properties.get(),
             device.state.get()
         );
+        device.RTS=readyToSend;
 
         if(route){
             *route=edge.route;
@@ -650,6 +840,8 @@ public:
     {
         auto &device=m_devices.at(sourceDev);
 
+        assert(!device.type->isExternal()); // External deliveries need to be managed... externally
+
         assert( device.RTS & (1<<sourcePortIndex) );
 
         auto &pin=device.outputPins.at(sourcePortIndex);
@@ -673,16 +865,22 @@ public:
             device.properties.get(),
             device.state.get()
         );
+        device.RTS=readyToSend;
 
         destinations.begin=pin.beginEdgeIndex;
+        destinations.beginExternals=pin.beginExternalIndex;
         destinations.end=pin.endEdgeIndex;
     }  
 };
 
 
-class InOrderQueueStrategy
+class BasicStrategy
 {
-private:
+public:
+    virtual ~BasicStrategy()
+    {}
+
+protected:
     using device_address_t = SimulationEngine::device_address_t;
     using edge_index_t = SimulationEngine::edge_index_t;
     using edge_index_range_t = SimulationEngine::edge_index_range_t;
@@ -695,70 +893,218 @@ private:
     };
 
     std::shared_ptr<SimulationEngine> m_engine;
-    
-    std::queue<message_t> m_messageQueue;
-    FIFOSet<device_address_t> m_readyQueue;
 
-    void init()
+    double m_probSend=0.5; // The closer this is to 1.0, the more likely to do a send
+    bool m_weightedProbs=true; // If true the probability is scaled by number waiting
+    std::mt19937 m_urng;
+    std::uniform_real_distribution<> m_udist;
+
+    virtual device_address_t pick_ready()=0;
+    virtual void add_ready(device_address_t device)=0;
+    virtual void remove_ready(device_address_t device)=0;
+    virtual void keep_ready(device_address_t device)=0;
+    virtual size_t count_ready() const =0;
+
+    virtual void add_messages(const edge_index_range_t &range, const TypedDataPtr &payload)=0;
+    virtual message_t pop_message()=0;
+    virtual size_t count_messages() const=0;
+
+
+    void step_send()
     {
-        for(device_address_t address=0; address<m_engine->getDeviceCount(); address++){
-            if( m_engine->getDeviceRTS(address) ){
-                m_readyQueue.push_back( address );
-            }
-        }
-    }
+        device_address_t address=pick_ready();
 
-    bool step()
-    {
-        if(!m_readyQueue.empty()){
-            device_address_t address=m_readyQueue.front();
-            // Don't remove just yet
+        uint32_t readyToSend = m_engine->getDeviceRTS(address);
+        unsigned outputPin = __builtin_ctz(readyToSend);
 
-            uint32_t readyToSend=m_engine->getDeviceRTS(address);
-            unsigned outputPin=__builtin_ctz(readyToSend);
-            
-            TypedDataPtr payload;
-            bool doSend=true;
-            edge_index_range_t range;
-            m_engine->executeSend(
+        TypedDataPtr payload;
+        bool doSend = true;
+        edge_index_range_t range;
+        m_engine->executeSend(
                 address,
                 outputPin,
                 payload,
                 doSend,
                 range,
                 readyToSend
-            );
+        );
 
-            if(readyToSend){
-                m_readyQueue.pop_front();
-            }else{
-                m_readyQueue.move_front_to_back();
-            }
+        if(doSend) {
+            // TODO: Currently we just drop external destinations
+            add_messages(range, payload);
+        }
 
-            return true;
-        }else if(!m_messageQueue.empty()){
-            auto msg=m_messageQueue.front();
-            m_messageQueue.pop();
+        if(readyToSend){
+            keep_ready(address);
+        }else{
+            remove_ready(address);
+        }
+    }
 
-            uint32_t readyToSend;
-            routing_tuple_t route;
-            m_engine->executeReceive(
+    void step_recv()
+    {
+        auto msg=pop_message();
+
+        uint32_t readyToSend;
+        routing_tuple_t route;
+        m_engine->executeReceive(
                 msg.edgeIndex,
                 msg.payload,
                 readyToSend,
                 &route
-            );
+        );
 
-            if(readyToSend){
-                m_readyQueue.push_back(route.destDeviceAddress);
-            }
-
-            return true;
-        }else{
-
-            return false;
+        if(readyToSend){
+            add_ready(route.destDeviceAddress);
         }
     }
+public:
+    BasicStrategy(std::shared_ptr<SimulationEngine> engine)
+            : m_engine(engine)
+    {}
+
+    void init()
+    {
+        for(device_address_t address=0; address<m_engine->getDeviceCount(); address++){
+            if( m_engine->getDeviceRTS(address) ){
+                add_ready( address );
+            }
+        }
+    }
+
+    bool step()
+    {
+        auto numMessages=count_messages();
+        auto numReady=count_ready();
+
+        if(numMessages==0 && numReady==0)
+            return false;
+
+        bool doSend;
+        if(m_probSend>=1.0 || (numMessages==0)){
+            doSend=true;
+        }else if(m_probSend<=0.0 || (numReady==0)){
+            doSend=false;
+        }else{
+            double nSend=numReady;
+            double nRecv=numMessages;
+
+            if(m_weightedProbs){
+                nSend *= m_probSend;
+                nRecv *= (1-m_probSend);
+            }
+
+            doSend = m_udist(m_urng) * (nSend+nRecv) >= nRecv;
+        }
+
+        if(doSend){
+            step_send();
+        }else{
+            step_recv();
+        }
+        return true;
+
+    }
+
+};
+
+
+class InOrderQueueStrategy
+        : public BasicStrategy
+{
+private:
+    std::queue<message_t> m_messageQueue;
+    FIFOSet<device_address_t> m_readyQueue;
+protected:
+    device_address_t pick_ready() override
+    { return m_readyQueue.front(); }
+
+    void add_ready(device_address_t device) override
+    { m_readyQueue.push_back(device); }
+
+    void remove_ready(device_address_t device) override
+    { m_readyQueue.erase(device); }
+
+    void keep_ready(device_address_t device) override
+    {
+        assert(device==m_readyQueue.front());
+        m_readyQueue.move_front_to_back();
+    }
+
+    size_t count_ready() const override
+    { return m_readyQueue.size(); }
+
+    void add_messages(const edge_index_range_t &range, const TypedDataPtr &payload) override
+    {
+        for(auto ei=range.begin; ei<range.beginExternals; ei++){
+            m_messageQueue.push(message_t{ei, payload});
+        }
+    }
+
+    message_t pop_message() override
+    {
+        message_t res=m_messageQueue.front();
+        m_messageQueue.pop();
+        return res;
+    }
+
+    size_t count_messages() const override
+    { return m_messageQueue.size(); }
+
+public:
+    InOrderQueueStrategy(std::shared_ptr<SimulationEngine> engine)
+        : BasicStrategy(engine)
+    {}
+};
+
+
+class OutOfOrderStrategy
+        : public BasicStrategy
+{
+private:
+    std::vector<message_t> m_messageSet;
+    RandomSelectionSet<device_address_t> m_readySet;
+
+    device_address_t pick_ready() override
+    { return m_readySet.get_random(m_urng); }
+
+    void add_ready(device_address_t device) override
+    { m_readySet.insert(device); }
+
+    void remove_ready(device_address_t device) override
+    { m_readySet.erase(device); }
+
+    void keep_ready(device_address_t device) override
+    {
+        // Leave in place
+    }
+
+    size_t count_ready() const override
+    { return m_readySet.size(); }
+
+    void add_messages(const edge_index_range_t &range, const TypedDataPtr &payload) override
+    {
+        for(auto ei=range.begin; ei<range.beginExternals; ei++){
+            m_messageSet.push_back(message_t{ei, payload});
+        }
+    }
+
+    message_t pop_message() override
+    {
+        size_t sel=(size_t)(floor(m_udist(m_urng)*m_messageSet.size()));
+        message_t res=m_messageSet[sel];
+        std::swap(m_messageSet[sel], m_messageSet.back());
+        m_messageSet.resize(m_messageSet.size()-1);
+        return res;
+    }
+
+    size_t count_messages() const override
+    { return m_messageSet.size(); }
+
+public:
+    OutOfOrderStrategy(std::shared_ptr<SimulationEngine> engine)
+            : BasicStrategy(engine)
+    {}
 
 };
 

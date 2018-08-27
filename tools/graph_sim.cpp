@@ -14,4 +14,11 @@ int main(int argc, char *argv[])
     auto engine=std::make_shared<SimulationEngineFast>();
 
     loadGraph(&registry, srcPath, parser.get_document()->get_root_node(), engine.get());
+
+    //auto strategy=std::make_shared<InOrderQueueStrategy>(engine);
+    auto strategy=std::make_shared<OutOfOrderStrategy>(engine);
+
+    strategy->init();
+
+    while(strategy->step());
 }
