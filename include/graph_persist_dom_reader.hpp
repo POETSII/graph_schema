@@ -489,6 +489,7 @@ std::map<std::string,GraphTypePtr> loadAllGraphTypes(const filepath &srcPath, xm
   return res;
 }
 
+
 void loadGraph(Registry *registry, const filepath &srcPath, xmlpp::Element *parent, GraphLoadEvents *events)
 {
   xmlpp::Node::PrefixNsMap ns;
@@ -662,7 +663,7 @@ void loadGraph(Registry *registry, const filepath &srcPath, xmlpp::Element *pare
     );
   }
 
-  events->onBeginEdgeInstances(gId);
+  events->onEndEdgeInstances(gId);
 
   events->onEndGraphInstance(gId);
 }
