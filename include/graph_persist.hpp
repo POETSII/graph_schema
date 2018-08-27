@@ -142,6 +142,6 @@ public:
   ) =0;
 };
 
-extern "C" void loadGraph(Registry *registry, const std::string &srcPath, xmlpp::Element *elt, GraphLoadEvents *events);
+extern "C" void loadGraph(Registry *registry, const filepath &srcPath, xmlpp::Element *elt, GraphLoadEvents *events);
 
 #endif
