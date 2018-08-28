@@ -53,6 +53,9 @@ int main(int argc, char *argv[])
 
     std::string strategyName="Random";
 
+    std::mt19937 urng;
+    urng.seed(0);
+
     int ia=1;
     while(ia < argc){
         if(!strcmp("--help",argv[ia])){
@@ -78,6 +81,15 @@ int main(int argc, char *argv[])
             }
             probSend=strtod(argv[ia+1], 0);
             ia+=2;
+        }else if(!strcmp("--random-seed",argv[ia])){
+            std::mt19937::result_type seeds[16];
+            seeds[0]=time(NULL);
+            seeds[1]=getpid();
+            std::random_device rd;
+            std::generate(std::begin(seeds)+2, std::end(seeds), std::ref(rd));
+            std::seed_seq seeder(std::begin(seeds), std::end(seeds));
+            urng.seed(seeder);
+            ia++;
         }else if(!strcmp("--log-events",argv[ia])){
             if(ia+1 >= argc){
                 fprintf(stderr, "Missing two arguments to --log-events destination \n");
@@ -172,12 +184,12 @@ int main(int argc, char *argv[])
         fprintf(stderr, "Don't understand strategy '%s'\n", strategyName.c_str());
     }
 
-    strategy->init();
+    strategy->init(urng);
     fprintf(stderr, "Inited\n");
 
     unsigned long steps=0;
     while(strategy->step() && steps < maxEvents){
-        fprintf(stderr, "Stepped\n");
+        //fprintf(stderr, "Stepped\n");
         ++steps;
     }
 

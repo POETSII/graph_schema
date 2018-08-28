@@ -248,7 +248,7 @@
 
       message->version=deviceState->currVersion;
       message->colour=deviceProperties->colour;
-      message->temperature=deviceState->nextHeat;
+      message->temperature=deviceState->currHeat;
 
 
 
@@ -269,8 +269,6 @@
       message->received=deviceState->received;
       message->count=1;
       message->index=deviceProperties->termination_index;
-
-      deviceState->currHeat=deviceState->nextHeat;      
 
       deviceState->dirty=false;
 		  ]]></OnSend>

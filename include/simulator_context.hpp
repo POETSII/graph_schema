@@ -393,10 +393,10 @@ public:
         // There is one of these for every edge, which is the largest overall data-structure
         // in the simulation.
 
-        uint32_t destDeviceAddress: 27;
-        uint32_t sourceDeviceAddress : 5;
-        uint32_t destDevicePin: 27;
-        uint32_t sourceDevicePin: 5;
+        uint32_t destDeviceAddress;
+        uint32_t sourceDeviceAddress;
+        uint8_t destDevicePin;
+        uint8_t sourceDevicePin;
 
         bool operator==(const routing_tuple_t &o) const
         {
@@ -736,9 +736,11 @@ public:
 
         auto &srcDev = m_devices.at(edge.route.sourceDeviceAddress);
         auto &dstDev = m_devices.at(edge.route.destDeviceAddress);
+        auto dstPinType=dstDev.type->getInput(edge.route.destDevicePin);
+        auto srcPinType=srcDev.type->getOutput(edge.route.sourceDevicePin);
         fprintf(stderr, "  Route: %s:%s-%s:%s\n",
-                dstDev.name.c_str(), dstDev.type->getInput(edge.route.destDevicePin)->getName().c_str(),
-                srcDev.name.c_str(), srcDev.type->getOutput(edge.route.sourceDevicePin)->getName().c_str()
+                dstDev.name.c_str(), dstPinType->getName().c_str(),
+                srcDev.name.c_str(), srcPinType->getName().c_str()
         );
 
         // We do not hook up edges at this point, as we'll want to sort
@@ -1047,8 +1049,14 @@ public:
             : m_engine(engine)
     {}
 
-    void init()
+    template<class TUrng>
+    void init(TUrng &seed)
     {
+        uint32_t seeds[16];
+        std::generate(seeds, seeds+16, std::ref(seed));
+        std::seed_seq seeder(seeds, seeds+16);
+        m_urng.seed(seeder);
+
         for(device_address_t address=0; address<m_engine->getDeviceCount(); address++){
             if( m_engine->getDeviceRTS(address) ){
                 add_ready( address );

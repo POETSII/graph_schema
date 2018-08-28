@@ -1,6 +1,8 @@
 
 
 $(eval $(call provider_rules_template,relaxation_heat,apps/nursery/relaxation_heat/relaxation_heat_graph_type.xml))
+$(eval $(call provider_rules_template,relaxation_heat_noterm,apps/nursery/relaxation_heat/relaxation_heat_noterm_graph_type.xml))
+
 
 define relaxation_heat_instance_template
 # $1 = params
