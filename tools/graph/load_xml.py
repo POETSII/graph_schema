@@ -194,11 +194,10 @@ def load_external_type(graph,dtNode,sourceFile):
         state=None # pins of ExternalType cannot have any state, properties, or handlers
         properties=None
         handler=''
-        is_application=False #na to external devices (they are all application pins)
         sourceLine=0
 
         pinMetadata=load_metadata(p,"p:MetaData")
-        dt.add_input(name,message_type,is_application,properties,state,pinMetadata, handler,sourceFile,sourceLine)
+        dt.add_input(name,message_type,properties,state,pinMetadata, handler,sourceFile,sourceLine)
         sys.stderr.write("      Added external input {}\n".format(name))
 
     for p in dtNode.findall("p:OutputPin", ns):
@@ -207,12 +206,11 @@ def load_external_type(graph,dtNode,sourceFile):
         if message_type_id not in graph.message_types:
             raise XMLSyntaxError("Unknown messageTypeId {}".format(message_type_id),p)
         message_type=graph.message_types[message_type_id]
-        is_application=False #na to external devices (they are all application pins)
         handler=''
         sourceLine=0
 
         pinMetadata=load_metadata(p,"p:MetaData")
-        dt.add_output(name,message_type,is_application,pinMetadata,handler,sourceFile,sourceLine)
+        dt.add_output(name,message_type,pinMetadata,handler,sourceFile,sourceLine)
         sys.stderr.write("      Added external output {}\n".format(name))
 
     dt.ready_to_send_handler=''
@@ -248,7 +246,6 @@ def load_device_type(graph,dtNode,sourceFile):
         if message_type_id not in graph.message_types:
             raise XMLSyntaxError("Unknown messageTypeId {}".format(message_type_id),p)
         message_type=graph.message_types[message_type_id]
-        is_application=get_attrib_optional_bool(p,"application")
 
         try:
             state=None
@@ -269,7 +266,7 @@ def load_device_type(graph,dtNode,sourceFile):
         pinMetadata=load_metadata(p,"p:MetaData")
 
         (handler,sourceLine)=get_child_text(p,"p:OnReceive")
-        dt.add_input(name,message_type,is_application,properties,state,pinMetadata, handler,sourceFile,sourceLine)
+        dt.add_input(name,message_type,properties,state,pinMetadata, handler,sourceFile,sourceLine)
         sys.stderr.write("      Added input {}\n".format(name))
 
     for p in dtNode.findall("p:OutputPin",ns):
@@ -277,11 +274,10 @@ def load_device_type(graph,dtNode,sourceFile):
         message_type_id=get_attrib(p,"messageTypeId")
         if message_type_id not in graph.message_types:
             raise XMLSyntaxError("Unknown messageTypeId {}".format(message_type_id),p)
-        is_application=get_attrib_optional_bool(p,"application")
         message_type=graph.message_types[message_type_id]
         pinMetadata=load_metadata(p,"p:MetaData")
         (handler,sourceLine)=get_child_text(p,"p:OnSend")
-        dt.add_output(name,message_type,is_application,pinMetadata,handler,sourceFile,sourceLine)
+        dt.add_output(name,message_type,pinMetadata,handler,sourceFile,sourceLine)
 
     (handler,sourceLine)=get_child_text(dtNode,"p:ReadyToSend")
     dt.ready_to_send_handler=handler
@@ -355,26 +351,11 @@ def load_graph_type_reference(graphNode,basePath):
     else:
         return GraphTypeReference(id)
 
-def load_external_instance(graph, eiNode):
-    id=get_attrib(eiNode,"id")
-    external_type_id=get_attrib(eiNode,"type")
-    if external_type_id not in graph.graph_type.device_types:
-        raise XMLSyntaxError("Unknown external type id {}, known devices = [{}]".format(external_type_id, [d.di for d in graph.graph_type.deivce_types.keys()]), eiNode)
-    external_type=graph.graph_type.device_types[external_type_id]
-    properties=None # external devices cannot have any properties
-    metadata=None
-
-    for n in eiNode: # walk over children rather than using find. Better performance
-        if n.tag == _ns_M: 
-            assert not metadata
-            metadata=json.loads("{"+n.text+"}")
-        else:
-            assert "Unknown tag type in EdgeI"
-    
-    return DeviceInstance(graph,id,external_type,properties,metadata)
 
 def load_device_instance(graph,diNode):
     id=get_attrib(diNode,"id")
+
+    is_external = diNode.tag==_ns_ExtI
 
     device_type_id=get_attrib(diNode,"type")
     if device_type_id not in graph.graph_type.device_types:
@@ -391,6 +372,7 @@ def load_device_instance(graph,diNode):
     for n in diNode: # walk over children rather than using find. Better performance
         if n.tag==_ns_P:
             assert not properties
+            assert not is_external, "Currently externals can't have properties"
             
             spec=device_type.properties
             assert spec is not None, "Can't have properties value for device with no properties spec"
@@ -402,7 +384,7 @@ def load_device_instance(graph,diNode):
             assert not metadata
             metadata=json.loads("{"+n.text+"}")
         else:
-            assert "Unknown tag type in EdgeI"
+            assert "Unknown tag type in DevI"
 
     return DeviceInstance(graph,id,device_type,properties,metadata)
 

@@ -38,7 +38,10 @@ def write_device_instance(dst,di):
     metadata=di.metadata
     
     if properties or metadata:
-        dst.write('   <DevI id="{}" type="{}">'.format(di.id,di.device_type.id))
+        if di.device_type.isExternal:
+            dst.write('   <ExtI id="{}" type="{}">'.format(di.id,di.device_type.id))
+        else:
+            dst.write('   <DevI id="{}" type="{}">'.format(di.id,di.device_type.id))
         if properties:
             try:
                 properties=json.dumps(properties)
@@ -52,7 +55,10 @@ def write_device_instance(dst,di):
             dst.write('<M>{}</M>'.format(metadata))
         dst.write("</DevI>\n")
     else:
-        dst.write('   <DevI id="{}" type="{}" />\n'.format(di.id,di.device_type.id))
+        if di.device_type.isExternal:
+            dst.write('   <ExtI id="{}" type="{}" />\n'.format(di.id,di.device_type.id))
+        else:
+            dst.write('   <DevI id="{}" type="{}" />\n'.format(di.id,di.device_type.id))
         
 
 

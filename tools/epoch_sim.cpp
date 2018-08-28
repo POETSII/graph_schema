@@ -1,7 +1,12 @@
 #include "graph.hpp"
 
-#include <libxml++/parsers/domparser.h>
+#include "external_connection.hpp"
+#include "external_device_proxy.hpp"
 
+#include <libxml++/parsers/domparser.h>
+#include <libxml++/document.h>
+
+#include <unordered_map>
 #include <iostream>
 #include <fstream>
 #include <memory>
@@ -16,19 +21,25 @@
 static unsigned logLevel=2;
 static unsigned messageInit;
 
-void write_application_output(unsigned m_epoch, const char *devId, const OutputPin *pin, const TypedDataPtr &data)
+struct external_edge_properties_t
+  : typed_data_t
 {
-  assert(pin->isApplication());
-  std::stringstream acc;
+  unsigned dstDev;
+  unsigned dstPort;
+  unsigned srcDev;
+  unsigned srcPort;
+};
 
-	//ndjson
-  //std::cout<<"{\"epoch\":\""<<m_epoch<<"\",\"dev\":\""<<devId<<"\",\"pin\":\""<<pin->getName()<<"\",\"msg\":";
-  //std::cout<<pin->getMessageType()->getMessageSpec()->toJSON(data);
-  //std::cout<<"}"<<std::endl;
-
-	//csv
-	std::cout<<m_epoch<<","<<devId<<","<<pin->getName()<<std::endl;
+TypedDataPtr create_external_edge_properties(unsigned dstDev, unsigned dstPort, unsigned srcDev, unsigned srcPort )
+{
+  auto res=make_data_ptr<external_edge_properties_t>();
+  res->dstDev=dstDev;
+  res->dstPort=dstPort;
+  res->srcDev=srcDev;
+  res->srcPort=srcPort;
+  return res;
 }
+
 
 struct EpochSim
   : public GraphLoadEvents
@@ -80,6 +91,9 @@ struct EpochSim
 
     std::pair<MessageTypePtr, TypedDataPtr> prev_message;
 
+    // Only used for externals
+    std::queue<external_message_t> externalSendQueue;
+
     bool anyReady() const
     {
       return readyToSend!=0;
@@ -108,6 +122,63 @@ struct EpochSim
 
   uint64_t m_unq;
 
+  std::shared_ptr<ExternalConnection> m_pExternalConnection;
+
+  DeviceTypePtr createExternalInterceptor(DeviceTypePtr dt, unsigned index)
+  {
+    // Create an interceptor device which will send to the external connection
+    auto onSend=[this](OrchestratorServices *orchestrator, const typed_data_t *graphProperties,
+      const typed_data_t *deviceProperties, unsigned deviceAddress,
+      unsigned sendPortIndex,
+      typed_data_t *message, bool *doSend
+    ){
+      auto &dev=this->m_devices.at(deviceAddress);
+      assert(dev.type->isExternal());
+      assert(!dev.externalSendQueue.empty());
+      external_message_t msg=dev.externalSendQueue.front();
+      dev.externalSendQueue.pop();
+
+      assert(msg.srcDev==deviceAddress);
+      assert(msg.srcPort==sendPortIndex);
+      assert(msg.isMulticast); // We can only take multi-cast from this route, as it is treated like any other send
+      msg.data.copy_to(message);
+      *doSend=true;
+    };
+
+    auto onRTS=[this](OrchestratorServices *orchestrator, const typed_data_t *graphProperties,
+      const typed_data_t *deviceProperties, unsigned deviceAddress
+    ) -> uint32_t 
+    {
+      auto &dev=this->m_devices.at(deviceAddress);
+      assert(dev.type->isExternal());
+      if(dev.externalSendQueue.empty()){
+        return 0;
+      }
+      const auto &msg=dev.externalSendQueue.front();
+      assert(msg.srcDev==deviceAddress);
+      assert(msg.srcPort < 32);
+      return 1ul<<msg.srcPort;
+    };
+
+    auto onRecv=[this](OrchestratorServices *orchestrator, const typed_data_t *graphProperties,
+      const typed_data_t *deviceProperties, unsigned deviceAddress,
+      const typed_data_t *edgeProperties, unsigned portIndex,
+      const typed_data_t *message
+    ){
+      auto pEdgeInfo=(const external_edge_properties_t *)edgeProperties;
+
+      external_message_t msg={
+        false, // not multi-cast
+        pEdgeInfo->dstDev, pEdgeInfo->dstPort,
+        pEdgeInfo->srcDev, pEdgeInfo->srcPort,
+        clone(message)
+      };
+      m_pExternalConnection->write(msg);
+    };
+
+    return std::make_shared<ExternalDeviceImpl>(dt,index, onSend,onRecv,onRTS);
+  }
+
   uint64_t nextSeqUnq()
   {
     return ++m_unq;
@@ -128,7 +199,12 @@ struct EpochSim
     d.index=m_devices.size();
     d.id=id;
     d.name=intern(id);
-    d.type=dt;
+    if(dt->isExternal()){
+      d.type=createExternalInterceptor(dt,d.index);
+    }else{
+      d.type=dt;
+    }
+
     d.properties=deviceProperties;
     d.state=state;
     d.keyValueSeq=0;
@@ -141,19 +217,34 @@ struct EpochSim
     d.inputs.resize(dt->getInputCount());
     m_devices.push_back(d);
     m_deviceIdToIndex[d.name]=d.index;
+
     return d.index;
   }
 
   void onEdgeInstance(uint64_t gId, uint64_t dstDevIndex, const DeviceTypePtr &dstDevType, const InputPinPtr &dstInput, uint64_t srcDevIndex, const DeviceTypePtr &srcDevType, const OutputPinPtr &srcOutput, const TypedDataPtr &properties, rapidjson::Document &&) override
   {
+    // In principle we support external->external connections!
+    // They just get routed through. Why would this happen though?
+
+    // For an external's input we need to create fake properties
+    TypedDataPtr props(properties);
+    if(dstDevType->isExternal()){
+      // Note that this destroys the original edge properties. However, we are
+      // not the external, so we just don't care! Only the external can do
+      // something meaninful with them.
+      props=create_external_edge_properties(dstDevIndex, dstInput->getIndex(), srcDevIndex, srcOutput->getIndex() );
+    }
+
     input i;
-    i.properties=properties;
+    i.properties=props;
     i.state=dstInput->getStateSpec()->create();
     i.firings=0;
     i.id=intern( m_devices.at(dstDevIndex).id + ":" + dstInput->getName() + "-" + m_devices.at(srcDevIndex).id+":"+srcOutput->getName() );
     auto &slots=m_devices.at(dstDevIndex).inputs.at(dstInput->getIndex());
     unsigned dstPinSlot=slots.size();
     slots.push_back(i);
+
+    // This could be an external's output, but we don't deal with it here
 
     output o;
     o.dstDevice=dstDevIndex;
@@ -163,6 +254,13 @@ struct EpochSim
     o.dstInputName=intern(dstInput->getName());
     m_devices.at(srcDevIndex).outputs.at(srcOutput->getIndex()).push_back(o);
 
+    if(dstDevType->isExternal() || srcDevType->isExternal())
+    {
+      m_pExternalConnection->onExternalEdgeInstance(
+        m_devices[dstDevIndex].name, dstDevIndex, dstDevType, dstInput,
+        m_devices[srcDevIndex].name, srcDevIndex, srcDevType, srcOutput
+      );
+    }
   }
 
 
@@ -306,8 +404,28 @@ struct EpochSim
   template<class TRng>
   bool step(TRng &rng, double probSend,bool capturePreEventState)
   {
-    // Within each step every object gets the chance to send a message with probability probSend
+    // Drain the external connection
+    // TODO: Is this too eager?
+    while(m_pExternalConnection->canRead()){
+      external_message_t msg;
+      m_pExternalConnection->read(msg);
 
+      auto &dev=m_devices.at(msg.srcDev);
+      if(!dev.type->isExternal()){
+        throw std::runtime_error("Received message from external connection that wasn't for a valid external device.");
+      }
+      if(dev.type->getOutputCount() <= msg.srcPort){
+        throw std::runtime_error("Received message from external connection for non-existent output port on external.");
+      }
+      if(!msg.isMulticast){
+        throw std::runtime_error("Received message from external connection that is not multi-cast (current limitation of epoch_sim).");
+      }
+
+      dev.externalSendQueue.push(msg);
+      dev.readyToSend=1ul<<msg.srcPort;
+    }
+
+    // Within each step every object gets the chance to send a message with probability probSend
     std::uniform_real_distribution<> udist;
 
     ReceiveOrchestratorServicesImpl receiveServices{logLevel, stderr, 0, 0, m_onExportKeyValue, m_onDeviceExit, m_onCheckpoint};
@@ -452,67 +570,65 @@ struct EpochSim
       }
 
       sent=true;
-      if(output->isApplication()){
-        write_application_output(m_epoch, src.name, output.get(), message);
-      }else{
-        for(auto &out : src.outputs[sel]){
-          auto &dst=m_devices[out.dstDevice];
-          auto &in=dst.inputs[out.dstPinIndex];
-          auto &slot=in[out.dstPinSlot];
+      
+      for(auto &out : src.outputs[sel]){
+        
+        auto &dst=m_devices[out.dstDevice];
+        auto &in=dst.inputs[out.dstPinIndex];
+        auto &slot=in[out.dstPinSlot];
 
-          slot.firings++;
+        slot.firings++;
 
-          if(logLevel>3){
-            fprintf(stderr, "    sending to device %d = %s\n", dst.index, dst.id.c_str());
-          }
-
-          const auto &pin=dst.type->getInput(out.dstPinIndex);
-
-          if(capturePreEventState){
-            prevState=dst.state.clone();
-          }
-          receiveServices.setDevice(out.dstDeviceId, out.dstInputName);
-          try{
-            pin->onReceive(&receiveServices, m_graphProperties.get(), dst.properties.get(), dst.state.get(), slot.properties.get(), slot.state.get(), message.get());
-          }catch(provider_assertion_error &e){
-            fprintf(stderr, "Caught handler exception during Receive. devId=%s, dstDevType=%s, dstPin=%s.\n", dst.name, dst.type->getId().c_str(), pin->getName().c_str());
-            fprintf(stderr, "  %s\n", e.what());
-
-            fprintf(stderr, "     message = %s\n", pin->getMessageType()->getMessageSpec()->toJSON(message).c_str());
-            if(capturePreEventState){
-              fprintf(stderr, "  preRecvState = %s\n", dst.type->getStateSpec()->toJSON(prevState).c_str());
-            }
-            fprintf(stderr, "     currState = %s\n", dst.type->getStateSpec()->toJSON(dst.state).c_str());
-
-            throw;
-          }
-          dst.readyToSend = dst.type->calcReadyToSend(&receiveServices, m_graphProperties.get(), dst.properties.get(), dst.state.get());
-
-          if(m_log){
-            std::vector<std::pair<bool,std::string> > tags;
-            std::swap(tags, m_checkpointKeys);
-
-            auto id=nextSeqUnq();
-            auto idStr=std::to_string(id);
-
-            m_log->onRecvEvent(
-              idStr.c_str(),
-              m_epoch,
-              0.0,
-              std::move(tags),
-              dst.type,
-              dst.name,
-              dst.readyToSend,
-              id,
-              std::vector<std::string>(),
-              dst.state,
-              pin,
-              idSend.c_str()
-            );
-          }
-
-          anyReady = anyReady || dst.anyReady();
+        if(logLevel>3){
+          fprintf(stderr, "    sending to device %d = %s\n", dst.index, dst.id.c_str());
         }
+
+        const auto &pin=dst.type->getInput(out.dstPinIndex);
+
+        if(capturePreEventState){
+          prevState=dst.state.clone();
+        }
+        receiveServices.setDevice(out.dstDeviceId, out.dstInputName);
+        try{
+          pin->onReceive(&receiveServices, m_graphProperties.get(), dst.properties.get(), dst.state.get(), slot.properties.get(), slot.state.get(), message.get());
+        }catch(provider_assertion_error &e){
+          fprintf(stderr, "Caught handler exception during Receive. devId=%s, dstDevType=%s, dstPin=%s.\n", dst.name, dst.type->getId().c_str(), pin->getName().c_str());
+          fprintf(stderr, "  %s\n", e.what());
+
+          fprintf(stderr, "     message = %s\n", pin->getMessageType()->getMessageSpec()->toJSON(message).c_str());
+          if(capturePreEventState){
+            fprintf(stderr, "  preRecvState = %s\n", dst.type->getStateSpec()->toJSON(prevState).c_str());
+          }
+          fprintf(stderr, "     currState = %s\n", dst.type->getStateSpec()->toJSON(dst.state).c_str());
+
+          throw;
+        }
+        dst.readyToSend = dst.type->calcReadyToSend(&receiveServices, m_graphProperties.get(), dst.properties.get(), dst.state.get());
+
+        if(m_log){
+          std::vector<std::pair<bool,std::string> > tags;
+          std::swap(tags, m_checkpointKeys);
+
+          auto id=nextSeqUnq();
+          auto idStr=std::to_string(id);
+
+          m_log->onRecvEvent(
+            idStr.c_str(),
+            m_epoch,
+            0.0,
+            std::move(tags),
+            dst.type,
+            dst.name,
+            dst.readyToSend,
+            id,
+            std::vector<std::string>(),
+            dst.state,
+            pin,
+            idSend.c_str()
+          );
+        }
+
+        anyReady = anyReady || dst.anyReady();
       }
     }
     ++m_epoch;
@@ -570,6 +686,9 @@ int main(int argc, char *argv[])
 
     std::string snapshotSinkName;
     unsigned snapshotDelta=0;
+
+    std::string externalInSpec="";
+    std::string externalOutSpec="-";
 
     std::string logSinkName;
 
@@ -640,6 +759,20 @@ int main(int argc, char *argv[])
         }
         keyValueName=argv[ia+1];
         ia+=2;
+      }else if(!strcmp("--external-in",argv[ia])){
+        if(ia+1 >= argc){
+          fprintf(stderr, "Missing argument to --external_in\n");
+          usage();
+        }
+        externalInSpec=argv[ia+1];
+        ia+=2;
+      }else if(!strcmp("--external-out",argv[ia])){
+        if(ia+1 >= argc){
+          fprintf(stderr, "Missing argument to --external-out\n");
+          usage();
+        }
+        externalOutSpec=argv[ia+1];
+        ia+=2;
       }else if(!strcmp("--accurate-assertions",argv[ia])){
         enableAccurateAssertions=true;
         ia+=1;
@@ -656,6 +789,32 @@ int main(int argc, char *argv[])
       }else{
         srcFilePath=argv[ia];
         ia++;
+      }
+    }
+
+    FILE *externalInFile=0;
+    if(externalInSpec!=""){
+      if(externalInSpec=="-"){
+        externalInFile=stdin;
+      }else{
+        externalInFile=fopen(externalInSpec.c_str(),"rb");
+        if(externalInFile==0){
+          fprintf(stderr, "COuldn't open file '%s' for reading as external in.\n", externalInSpec.c_str());
+          exit(1);
+        }
+      }
+    }
+
+    FILE *externalOutFile=stdout;
+    if(externalOutSpec!="-"){
+      if(externalOutSpec==""){
+        externalOutFile=0;
+      }else{
+        externalOutFile=fopen(externalInSpec.c_str(),"wb");
+        if(externalOutFile==0){
+          fprintf(stderr, "COuldn't open file '%s' for writing as external out.\n", externalOutSpec.c_str());
+          exit(1);
+        }
       }
     }
 
@@ -689,6 +848,8 @@ int main(int argc, char *argv[])
 
     EpochSim graph;
 
+    graph.m_pExternalConnection=std::make_shared<JSONExternalConnection>(externalInFile, externalOutFile);
+
     if(!logSinkName.empty()){
       graph.m_log.reset(new LogWriterToFile(logSinkName.c_str()));
       g_pLog=graph.m_log;
@@ -717,6 +878,8 @@ int main(int argc, char *argv[])
 
     graph.init();
 
+    graph.m_pExternalConnection->startPump();
+
     if(snapshotWriter){
       graph.writeSnapshot(snapshotWriter.get(), 0.0, 0);
     }
@@ -744,7 +907,27 @@ int main(int argc, char *argv[])
       }
 
       if(!running){
-        break;
+        if(graph.m_pExternalConnection->isReadOpen() ){
+          if(logLevel>1){
+            fprintf(stderr, "  Internal events have finished, but external read connection is open.\n");
+          }
+          while( graph.m_pExternalConnection->isReadOpen() & !graph.m_pExternalConnection->canRead()) {
+            usleep(1000);// TODO: horrible
+          }
+          if(graph.m_pExternalConnection->canRead()){
+            if(logLevel>1){
+              fprintf(stderr, "  New event from external unblocked us.\n");
+            }
+            continue;
+          }else{
+            if(logLevel>1){
+              fprintf(stderr, "  External connection closed.\n");
+            }
+            break;
+          }
+        }else{
+          break; // finished
+        }
       }
     }
 

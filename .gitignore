@@ -24,6 +24,7 @@ instruments*.trace
 /CMakeFiles
 /external/rng-svg
 /pypy-env
+/*.log
 
 /*.xml
 /*.gz
@@ -31,3 +32,7 @@ instruments*.trace
 /*.svg
 /*.dot
 .mypy_cache
+
+a.out
+perf.data
+perf.data.old
