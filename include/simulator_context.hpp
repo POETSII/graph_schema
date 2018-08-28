@@ -12,6 +12,7 @@
 #include <memory>
 #include <algorithm>
 #include <queue>
+#include <stack>
 
 template<class T>
 class FIFOSet
@@ -105,6 +106,89 @@ public:
         --lit;
         it->second=lit;
     }
+};
+
+template<class T>
+class LIFOSet
+{
+private:
+    std::list<const T*> m_order;
+    std::unordered_map<T,typename std::list<const T*>::const_iterator> m_index;
+public:
+    struct const_iterator {
+        typename std::list<const T *>::const_iterator it;
+
+        bool operator==(const const_iterator &o) const
+        { return it==o.it; }
+
+        bool operator!=(const const_iterator &o) const
+        { return it!=o.it; }
+
+        const_iterator &operator++()
+        { ++it; return *this; }
+
+        const T &operator*() const
+        { return **it; }
+    };
+
+    const_iterator begin() const
+    { return const_iterator{m_order.begin()}; }
+
+    const_iterator end() const
+    { return const_iterator{m_order.end()}; }
+
+    bool empty() const
+    { return m_order.empty(); }
+
+    size_t size() const
+    { return m_order.size(); }
+
+    const T &back()
+    {
+        assert(!empty());
+        return *m_order.back();
+    }
+
+    void pop_back()
+    {
+        assert(!empty());
+        const T *pVal=m_order.back();
+        m_order.pop_back();
+        auto it=m_index.find(*pVal);
+        m_index.erase(it);
+    }
+
+    // If x is already present then do nothing
+    void push_back(const T &x)
+    {
+        auto it=m_index.find(x);
+        if(it!=m_index.end()){
+            return;
+        }
+
+        // Reserve space at end of list
+        m_order.push_back(nullptr);
+
+        // Insert into the map with iterator pointing to back of list
+        auto lit=m_order.end();
+        --lit;
+        it=m_index.insert(it,std::make_pair(x, lit ));
+
+        // Update the list with pointer to the key
+        m_order.back() = &it->first;
+    }
+
+    void erase(const T &x)
+    {
+        auto it=m_index.find(x);
+        if(it==m_index.end()){
+            return;
+        }
+
+        m_order.erase(it->second);
+        m_index.erase(it);
+    }
+
 };
 
 template<class T>
@@ -1106,6 +1190,54 @@ public:
             : BasicStrategy(engine)
     {}
 
+};
+
+class ReverseOrderStrategy
+        : public BasicStrategy
+{
+private:
+    std::stack<message_t> m_messageQueue;
+    LIFOSet<device_address_t> m_readyQueue;
+protected:
+    device_address_t pick_ready() override
+    { return m_readyQueue.back(); }
+
+    void add_ready(device_address_t device) override
+    { m_readyQueue.push_back(device); }
+
+    void remove_ready(device_address_t device) override
+    { m_readyQueue.erase(device); }
+
+    void keep_ready(device_address_t device) override
+    {
+        assert(device==m_readyQueue.back());
+        // Do nothing
+    }
+
+    size_t count_ready() const override
+    { return m_readyQueue.size(); }
+
+    void add_messages(const edge_index_range_t &range, const TypedDataPtr &payload) override
+    {
+        for(auto ei=range.begin; ei<range.beginExternals; ei++){
+            m_messageQueue.push(message_t{ei, payload});
+        }
+    }
+
+    message_t pop_message() override
+    {
+        message_t res=m_messageQueue.top();
+        m_messageQueue.pop();
+        return res;
+    }
+
+    size_t count_messages() const override
+    { return m_messageQueue.size(); }
+
+public:
+    ReverseOrderStrategy(std::shared_ptr<SimulationEngine> engine)
+            : BasicStrategy(engine)
+    {}
 };
 
 #endif
