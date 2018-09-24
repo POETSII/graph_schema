@@ -35,6 +35,8 @@ CLOCKED_IZHIKEVICH_FILTERS = \
 
 $(eval $(call clocked_izhikevich_instance_template,8_2_10,100000,$(CLOCKED_IZHIKEVICH_FILTERS)))
 
+$(eval $(call clocked_izhikevich_instance_template,30_10_6,100000,$(CLOCKED_IZHIKEVICH_FILTERS)))
+
 $(eval $(call clocked_izhikevich_instance_template,50_10_60,10000,$(CLOCKED_IZHIKEVICH_FILTERS)))
 $(eval $(call clocked_izhikevich_instance_template,80_20_100,10000,$(CLOCKED_IZHIKEVICH_FILTERS)))
 $(eval $(call clocked_izhikevich_instance_template,200_50_50,10000,$(CLOCKED_IZHIKEVICH_FILTERS)))
