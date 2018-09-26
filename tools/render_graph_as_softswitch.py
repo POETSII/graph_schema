@@ -280,7 +280,7 @@ class BLOBHolder:
 
     def write(self, dst, name):
       """Write blob to `dst` as an array with `name`."""
-      writer = self._declare if self.all_zeros else self._write_with_values
+      writer = self._write_all_zeros if self.all_zeros else self._write_with_values
       writer(dst, name)
 
     # Write the array out as an array of uint8_t called name
@@ -295,11 +295,11 @@ class BLOBHolder:
         dst.write("  0\n")
         dst.write("};\n\n")
 
-    def _declare(self, dst, name):
-        """Write blob array declaration to `dst`."""
+    def _write_all_zeros(self, dst, name):
+        """Declare array with given name and initialize elements to zero."""
         last_offset, last_length, _ = self.segments[-1]
         blob_nbytes = last_offset + last_length + 1
-        dst.write("uint8_t %s[%d]  __attribute__((aligned(%d)));\n" % (name, blob_nbytes, _cache_line_size));
+        dst.write("uint8_t %s[%d]  __attribute__((aligned(%d))) = { 0 };\n" % (name, blob_nbytes, _cache_line_size));
 
 #enumerate all message types in the graph and assign a unique numerical ID to the message type
 def assign_unique_ident_for_each_message_type(gt):
