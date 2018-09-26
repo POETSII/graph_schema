@@ -279,6 +279,9 @@ grammar {
         ## common, but can indicate quite different things within a single graph type.
         ## For example, the `reset` message and `trigger` message are both empty structs,
         ## but should not be connected to each eother.
+        ##
+        ## The ordering of message types has no semantic meaning, but the order should be
+        ## preserved when reading and writing graph types. 
         element MessageType {
 
           ## Must be unique amongst all message types
