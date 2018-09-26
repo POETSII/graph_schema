@@ -145,24 +145,24 @@ int main(int argc, char *argv[])
 
     xmlpp::DomParser parser;
 
-    std::istream *src=&std::cin;
-    std::ifstream srcFile;
     filepath srcPath(current_path());
+    filepath srcFileName("-");
 
     if(argc>1){
-      filepath p(argv[1]);
-      p=absolute(p);
-      fprintf(stderr,"Reading from '%s' ( = '%s' absolute)\n", argv[1], p.c_str());
-      srcFile.open(p.c_str());
-      if(!srcFile.is_open())
-        throw std::runtime_error(std::string("Couldn't open '")+p.native()+"'");
-      src=&srcFile;
-      srcPath=p.parent_path();
+      srcFileName=std::string(argv[1]);
+      if(srcFileName.native()!="-"){      
+        srcFileName=absolute(srcFileName);
+        fprintf(stderr,"Reading from '%s' ( = '%s' absolute)\n", argv[1], srcFileName.c_str());
+        srcPath=srcFileName.parent_path();
+      }
     }
-    
 
     fprintf(stderr, "Parsing XML\n");
-    parser.parse_stream(*src);
+    if(srcFileName.native()=="-"){
+      parser.parse_stream(std::cin);
+    }else{
+      parser.parse_file(srcFileName.native());
+    }
     fprintf(stderr, "Parsed XML\n");
 
     GraphInfo graph;
