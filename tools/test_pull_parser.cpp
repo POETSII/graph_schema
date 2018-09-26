@@ -14,6 +14,8 @@ public:
   TypedDataPtr properties;
   rapidjson::Document metadata;
 
+  bool quiet=false;
+
   struct edge
   {
     uint64_t dstDevice;
@@ -83,7 +85,9 @@ public:
    const TypedDataPtr &properties,
    rapidjson::Document &&metadata
    ) override {
-    fprintf(stderr, "  onDeviceInstance(%s)\n", id.c_str());
+     if(!quiet){
+      fprintf(stderr, "  onDeviceInstance(%s)\n", id.c_str());
+     }
 
     std::vector<output> outputs;
     for(auto &o : dt->getOutputs()){
@@ -119,10 +123,11 @@ public:
     auto &dst=instances.at(dstDevInst);
     auto &src=instances.at(srcDevInst);
 
+  if(!quiet){
     fprintf(stderr, "  onEdgeInstance(%s.%s <- %s.%s)\n",
 	    dst.id.c_str(), dstPin->getName().c_str(),
 	    src.id.c_str(), srcPin->getName().c_str());
-
+  }
 
     edge e{ dstDevInst, srcPin->getIndex(), properties, rapidjson::Document() };
     src.outputs.at(srcPin->getIndex()).edges.emplace_back(std::move(e));
@@ -151,6 +156,9 @@ int main(int argc, char *argv[])
     srcPath=p.parent_path();
 
     GraphInfo graph;
+    if(argc>2){
+      graph.quiet=atoi(argv[2]);
+    }
 
     //loadGraph(&registry, srcPath, parser.get_document()->get_root_node(), &graph);
     loadGraphPull(&registry, p, &graph);

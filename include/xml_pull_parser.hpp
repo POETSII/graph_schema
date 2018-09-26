@@ -464,6 +464,7 @@ public:
         }
         for(auto dt : m_graphType->getDeviceTypes()){
             m_events->onDeviceType(dt);
+            m_deviceTypes[dt->getId()]=dt;
         }
         m_events->onGraphType(m_graphType);
     }
