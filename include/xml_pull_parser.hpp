@@ -24,11 +24,14 @@ namespace pull
 
   rapidjson::Document parseMetadataFromText(const std::string &value)
   {
-    rapidjson::Document doc;
-
-    throw std::runtime_error("Not implemented.");
-
-    return doc;
+    rapidjson::Document document;
+    if(!value.empty()){
+        std::string text="{"+value+"}";
+        
+        document.Parse(text.c_str());
+        assert(document.IsObject());
+    }
+    return document;
   }
 
 class ElementBindings
@@ -38,7 +41,7 @@ public:
     ElementBindings(const ElementBindings &) = delete;
     ElementBindings &operator=(const ElementBindings &) = delete;
 
-  ElementBindings() = default;
+    ElementBindings() = default;
 
     virtual bool parseAsNode() const
     { return false; }
@@ -476,7 +479,7 @@ public:
         }else if(name=="MetaData"){
             return &m_ebGraphMetadata;
         }else if(name=="DeviceInstances"){
-	  if(m_gId!=(uint64_t)-1){
+            if(m_gId!=(uint64_t)-1){
                 throw std::runtime_error("DeviceInstances appeared twice.");
             }
 
@@ -585,6 +588,7 @@ public:
 
   void onAttribute(const Glib::ustring &, const Glib::ustring &)
   {
+      // TODO: this should handle namespaces correctly
     //throw std::runtime_error("Didn't expect attribute here.");
   }
 
@@ -617,6 +621,9 @@ public:
 
 }; // namespace pull
 
+/*
+    TODO: This doesn't handle namespaces properly
+*/
 void loadGraphPull(Registry *registry, const filepath &srcPath, GraphLoadEvents *events)
 {
   pull::ElementBindingsGraphs bindings(srcPath.native(), events, registry);
