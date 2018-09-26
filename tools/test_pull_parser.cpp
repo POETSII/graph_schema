@@ -1,6 +1,6 @@
 #include "graph.hpp"
 
-#include <libxml++/parsers/domparser.h>
+#include "xml_pull_parser.hpp"
 
 #include <iostream>
 #include <fstream>
@@ -129,7 +129,6 @@ public:
 	    src.id.c_str(), srcPin->getName().c_str());
   }
 
-
     edge e{ dstDevInst, srcPin->getIndex(), properties, rapidjson::Document() };
     src.outputs.at(srcPin->getIndex()).edges.emplace_back(std::move(e));
   }
@@ -145,32 +144,24 @@ int main(int argc, char *argv[])
 
     xmlpp::DomParser parser;
 
+    std::istream *src=&std::cin;
+    std::ifstream srcFile;
     filepath srcPath(current_path());
-    filepath srcFileName("-");
+    filepath srcFilePath=srcPath;
 
-    if(argc>1){
-      srcFileName=std::string(argv[1]);
-      if(srcFileName.native()!="-"){      
-        srcFileName=absolute(srcFileName);
-        fprintf(stderr,"Reading from '%s' ( = '%s' absolute)\n", argv[1], srcFileName.c_str());
-        srcPath=srcFileName.parent_path();
-      }
-    }
-
-    fprintf(stderr, "Parsing XML\n");
-    if(srcFileName.native()=="-"){
-      parser.parse_stream(std::cin);
-    }else{
-      parser.parse_file(srcFileName.native());
-    }
-    fprintf(stderr, "Parsed XML\n");
+    filepath p(argv[1]);
+    p=absolute(p);
+    fprintf(stderr,"Reading from '%s' ( = '%s' absolute)\n", argv[1], p.c_str());
+    src=&srcFile;
+    srcPath=p.parent_path();
 
     GraphInfo graph;
     if(argc>2){
       graph.quiet=atoi(argv[2]);
     }
 
-    loadGraph(&registry, srcPath, parser.get_document()->get_root_node(), &graph);
+    //loadGraph(&registry, srcPath, parser.get_document()->get_root_node(), &graph);
+    loadGraphPull(&registry, p, &graph);
 
     fprintf(stderr, "Done\n");
 
