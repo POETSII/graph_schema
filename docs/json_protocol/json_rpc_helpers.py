@@ -121,13 +121,13 @@ class JSONClientProxy:
         self.unq+=1
         return "id"+str(self.unq)
 
-    def call(self, method:str, parameters:JSON) -> JSON:
+    def call(self, method:str, parameters:JSON={}) -> JSON:
         id=self._next_id()
         msg={
             "jsonrpc":"2.0",
             "method":method,
             "id":id,
-            "parameters":parameters
+            "params":parameters
         }
         self.channel.send(msg)
         res=self.channel.recv()
@@ -142,6 +142,9 @@ class JSONClientProxy:
         if "result" not in res:
             raise JSONRPCError("Response did not have error or result.", res)
         return res["result"]
+
+    def close(self):
+        self.channel.close()
 
 class JSONServerStub:
     def __init__(self, channel:JSONRawChannel):
