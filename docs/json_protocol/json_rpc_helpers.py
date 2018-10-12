@@ -47,19 +47,23 @@ class JSONRawChannelOnPipe(JSONRawChannel):
 
     def try_recv(self) -> Optional[JSON]:
         if self._source.poll(): # This will also return true if other end is closed
-            return self._source.recv() # Raise EOFError if the pipe is closed
+            return self.recv()
         else:
             return None
     
     def recv(self) -> JSON:
-        return self._source.recv() # Will raise EOFError at the end of stream
+        msg=self._source.recv() # Will raise EOFError at the end of stream
+        if isinstance(msg,EOFError):
+            raise EOFError
+        return msg
 
     def flush(self):
         pass
 
     def close(self):
-        self._source.close()
+        self._sink.send(EOFError())
         self._sink.close()
+        self._source.close()
 
 class JSONRawChannelOnArrays(JSONRawChannel):
     def __init__(self, input:Union[str,List[JSON]], prob_recv:float=1.0):
@@ -179,17 +183,23 @@ class JSONServerStub:
             if id is not None:
                 res=_error(id, -32000, str(error))
         
-        return res
+        if res:
+            return {"jsonrpc":"2.0", "id":id, "result":res}
 
     def run(self):
         while True:
             try:
+                print("Server blocking")
                 msg=self._channel.recv()
+                print("Server received")
             except EOFError:
+                print("Server timeout")
                 break
             res=self._dispatch(msg)
             if res:
                 self._channel.send(res)
+        print("Server loop done")
+        self._channel.close()
 
 
 class JSONServerPull:
@@ -306,39 +316,7 @@ class JSONServerPull:
 
 import unittest
 
-class TestJSONChannelRawChannelOnStreams(unittest.TestCase):
-    def test_read0(self):
-        chan=JSONRawChannelOnStreams(BytesIO(b''), BytesIO())
-        try:
-            msg=chan.recv()
-            self.assertTrue(False)
-        except EOFError:
-            pass
 
-    def test_read1(self):
-        chan=JSONRawChannelOnStreams(BytesIO(b'{"x":4}'), BytesIO())
-        msg=chan.recv()
-        self.assertIsInstance(msg,dict)
-        self.assertEqual(msg.get("x"), 4)
-        try:
-            msg=chan.recv()
-            self.assertTrue(False)
-        except EOFError:
-            pass
-
-    def test_read2(self):
-        chan=JSONRawChannelOnStreams(BytesIO(b'{"x":4}{}'), BytesIO())
-        msg=chan.recv()
-        self.assertIsInstance(msg,dict)
-        self.assertEqual(msg.get("x"), 4)
-        msg=chan.recv()
-        self.assertIsInstance(msg,dict)
-        self.assertEqual(len(msg), 0)
-        try:
-            msg=chan.recv()
-            self.assertTrue(False)
-        except EOFError:
-            pass
 
 def server_echo_proc(c2s,s2c):
     channel=JSONRawChannelOnPipe(c2s,s2c)
@@ -346,6 +324,7 @@ def server_echo_proc(c2s,s2c):
         print("Server waiting")
         msg=channel.recv()
         if msg==None:
+            print("Server done")
             break
         print("Server recevied {}".format(msg))
         channel.send(msg)
@@ -381,6 +360,7 @@ class TestJSONChannelRawChannelOnPipes(unittest.TestCase):
         chan.send({"x":10})
         got=chan.recv()
         self.assertEqual(got,{"x":10})
+        print("Closing channel")
         chan.close()
 
         server.join()
@@ -397,28 +377,23 @@ class TestJSONServerStub(unittest.TestCase):
                 raise NotImplementedError
 
     def test_read1(self):
-        out=BytesIO()
-        chan=JSONRawChannelOnStreams(BytesIO(b'{"jsonrpc":"2.0","method":"x","id":"f"}'), out)
+        chan=JSONRawChannelOnArrays([{"jsonrpc":"2.0","method":"x","id":"f"}])
         server=TestJSONServerStub.XServer(chan)
         server.run()
-        self.assertEqual(json.loads(out.getvalue()), {"y":1.0})
+        out=chan.output[0]["result"]
+        print(out)
+        self.assertEqual(out, {"y":1.0})
 
     def test_read2(self):
-        out=BytesIO()
-        chan=JSONRawChannelOnStreams(BytesIO(b'{"jsonrpc":"2.0","method":"x","id":"f"}{"jsonrpc":"2.0","method":"x","id":"f"}'), out)
+        chan=JSONRawChannelOnArrays([{"jsonrpc":"2.0","method":"x","id":"f"},{"jsonrpc":"2.0","method":"x","id":"f"}])
         server=TestJSONServerStub.XServer(chan)
         server.run()
-        aa=b'['+out.getvalue().replace(b'}\n{',b'},{')+b']'
-        bb=[{"y":1.0},{"y":1.0}]
-        print(aa)
-        print(bb)
-        self.assertTrue(_json_equal(aa,bb))
+        out=chan.output
+        self.assertTrue(_json_equal(out[0],out[1]))
 
 class TestJSONClientProxy(unittest.TestCase):
     def test_read1(self):
-        request=BytesIO()
-        response=BytesIO(b'{"jsonrpc":"2.0","id":"id1","result":{"x":10}}')
-        chan=JSONRawChannelOnStreams(response, request)
+        chan=JSONRawChannelOnArrays([{"jsonrpc":"2.0","id":"id1","result":{"x":10}}])
         
         proxy=JSONClientProxy(chan)
         result=proxy.call("f1", {"p1":10})
@@ -426,8 +401,10 @@ class TestJSONClientProxy(unittest.TestCase):
 
     def test_read2(self):
         request=BytesIO()
-        response=BytesIO(b'{"jsonrpc":"2.0","id":"id1","result":{"x":10}}{"jsonrpc":"2.0","id":"id2","result":{"g":10}}')
-        chan=JSONRawChannelOnStreams(response, request)
+        chan=JSONRawChannelOnArrays([
+            {"jsonrpc":"2.0","id":"id1","result":{"x":10}},
+            {"jsonrpc":"2.0","id":"id2","result":{"g":10}}
+        ])
         
         proxy=JSONClientProxy(chan)
         result=proxy.call("f1", {"p1":10})
@@ -437,9 +414,9 @@ class TestJSONClientProxy(unittest.TestCase):
         self.assertTrue(_json_equal(result, '{"g":10}'))
 
     def test_error1(self):
-        request=BytesIO()
-        response=BytesIO(b'{"jsonrpc":"2.0","id":"id1","error":{"code":-32000,"message":"wibble"}}')
-        chan=JSONRawChannelOnStreams(response, request)
+        chan=JSONRawChannelOnArrays([
+            {"jsonrpc":"2.0","id":"id1","error":{"code":-32000,"message":"wibble"}}
+        ])
         
         proxy=JSONClientProxy(chan)
         try:
@@ -453,15 +430,15 @@ class TestJSONClientProxy(unittest.TestCase):
 
 class TestJSONServerPull(unittest.TestCase):
     def test_read1(self):
-        out=BytesIO()
-        chan=JSONRawChannelOnStreams(BytesIO(b'{"jsonrpc":"2.0","method":"x","id":"f"}'), out)
+        chan=JSONRawChannelOnArrays([{"jsonrpc":"2.0","method":"x","id":"f"}])
         server=JSONServerPull(chan)
         (method,id,params)=server.begin()
         self.assertEqual(method,"x")
         self.assertEqual(id,"f")
-        self.assertEqual(params,None)
+        self.assertEqual(params,{})
         server.complete(id, {"y":1.0})
-        result=json.loads(out.getvalue()).get("result")
+        out =chan.output
+        result=out[0]["result"]
         assertJSONEqual(self,result, {"y":1.0})
 
 if __name__ == '__main__':

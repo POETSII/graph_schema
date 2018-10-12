@@ -3,6 +3,7 @@ import string
 import json
 import queue
 import threading
+from io import StringIO, BytesIO
 
 # No recursive type support, this should be enough
 JSONObject = Dict[str,any]
@@ -144,7 +145,7 @@ class JSONSourceOnBufferedStream:
         finally:
             self._running=False
 
-    def __init__(self, source:TextIO):
+    def __init__(self, source:StringIO):
         self._source=source
         self._queue=queue.Queue()
         self._thread=threading.Thread(target=_worker, args=(self,))
