@@ -64,7 +64,10 @@ class TestStates(unittest.TestCase):
         ev=TestStates.EventsDump()
         ev.to_send += [msg1,msg2,msg3]
         dc=DownwardConnection(connection)
-        while dc.do_events(ev):
+        try:
+            while dc.do_events(ev):
+                pass
+        except EOFError:
             pass
         
         self.assertEqual(len(channel.output), 10)

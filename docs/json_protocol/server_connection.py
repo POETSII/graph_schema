@@ -48,6 +48,24 @@ class DownwardConnectionEvents:
     def on_halt(self, connection:"DownwardConnection", code:int, message:Optional[str]):
         raise NotImplementedError
 
+    ##########################################
+    ## Helpers for implementors
+
+    def require(self, cond:bool, msg:str, *args):
+        if not cond:
+            raise JSONRPCError(msg.format(*args))
+
+    def requireParameterEqual(self, a, b, name:str):
+        if a != b:
+            raise JSONRPCError("Parameter {} should equal '{}', but got '{}'".format(name, a, b))
+
+    def requireParameterWildcardOrEqual(self, ref, got, name:str):
+        if ref and ref!="*" and ref !=got:
+            raise JSONRPCError("Parameter {} should be a wildcard or equal '{}', but got '{}'".format(name, ref, got))
+
+    def requireParameterNone(self, a, name:str):
+        if a != None:
+            raise JSONRPCError("Parameter {} should be empty or not present, but got '{}'".format(name, a))
 
 class DownwardConnection:
     
@@ -176,6 +194,7 @@ class DownwardConnection:
                     self._connection.complete(id, { "events" : events_to_json_objects(events) })   
                     if contains_halt(events):
                         self._state=ConnectionState.FINISHED
+                        print("HALT_REQUESTED -> FINISHED")
                         for (prev_id,_) in self._pending_polls:
                             self._connection.complete(id, {"events":[]} )
                 else:

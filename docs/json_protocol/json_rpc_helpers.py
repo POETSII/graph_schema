@@ -1,11 +1,14 @@
 from typing import *
-from io import BytesIO
+from io import BytesIO, StringIO
 import json
 import multiprocessing
 import multiprocessing.connection
 import threading
 import queue
 import random
+import socket
+import re
+import io
 
 # No recursive type support, this should be enough
 JSONObject = Dict[str,any]
@@ -101,6 +104,69 @@ class JSONRawChannelOnArrays(JSONRawChannel):
     @property
     def output(self):
         return self._output
+
+class JSONRawChannelOnStreams(JSONRawChannel):
+    def _pull_thread(src:io.TextIOBase, dst:queue.Queue):
+        try:
+            # Adapted from https://stackoverflow.com/a/50384432
+            NOT_WHITESPACE = re.compile(r'[^\s]')
+            decoder=json.JSONDecoder()
+
+            acc=""
+            for line in src:
+                acc+=line
+                acc=acc.lstrip()
+                #print("acc = "+acc)
+
+                while True:
+                    try:
+                        (obj,pos)=decoder.raw_decode(acc)
+                        dst.put(obj)
+                        acc=acc[pos:]
+                    except json.JSONDecodeError:
+                        break
+
+            # Nothing more from stream, acc should be empty
+            acc=acc.strip()
+            assert acc=="", "Ended up with JSON fragment: '{}'".format(acc)
+
+            dst.put(EOFError())
+        except Exception as e:
+            dst.put(e)
+
+    def __init__(self, src:io.TextIOBase, sink:io.TextIOBase):
+        self._src=src
+        self._sink=sink
+
+        self._queue=queue.Queue()
+        self._worker=threading.Thread(target=  JSONRawChannelOnStreams._pull_thread, args=(src, self._queue))
+        self._worker.daemon=True
+        self._worker.start()
+
+    def send(self, value:JSON):
+        self._sink.write(json.dumps(value))
+        self._sink.write("\n")
+
+    def try_recv(self, block=False) -> Optional[JSON]:
+        try:
+            if block:
+                obj=self._queue.get()
+            else:
+                obj=self._queue.get_nowait()
+        except queue.Empty:
+            return None
+        if isinstance(obj,Exception):
+            raise obj   # Handles expected EOFError too
+        return obj
+    
+    def recv(self) -> JSON:
+        return self.try_recv(True)
+        
+    def flush(self):
+        self._sink.flush()
+
+    def close(self):
+        self._sink.close()
 
 class JSONRPCError(Exception):
     def __init__(self, description:str, code:Optional[int]=None, payload=None):
@@ -367,6 +433,22 @@ class TestJSONChannelRawChannelOnPipes(unittest.TestCase):
         chan.close()
 
         server.join()
+
+class TestJSONChannelRawChannelOnStreams(unittest.TestCase):
+
+    def test_call0(self):
+        src=StringIO("{}\n[]\n5")
+        sink=StringIO()
+        
+        chan=JSONRawChannelOnStreams(src, sink)
+        assertJSONEqual(self, chan.recv(),"{}")
+        assertJSONEqual(self, chan.recv(),"[]")
+        assertJSONEqual(self, chan.recv(),"5")
+        try:
+            chan.recv()
+            self.assertTrue(False)
+        except EOFError:
+            pass
 
 class TestJSONServerStub(unittest.TestCase):
     class XServer(JSONServerStub):

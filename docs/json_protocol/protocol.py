@@ -31,6 +31,10 @@ class Endpoint:
             self.device=pathOrDevice
             self.port=port
 
+    @property
+    def full(self):
+        return self._full
+
     def __eq__(self,o):
         return self._full==o._full
 
@@ -39,6 +43,9 @@ class Endpoint:
     
     def __str__(self):
         return self._full
+
+    def __hash__(self):
+        return hash(self._full)
 
 
 class Event:
