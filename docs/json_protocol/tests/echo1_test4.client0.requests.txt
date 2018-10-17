@@ -1,0 +1,15 @@
+{"jsonrpc":"2.0","method":"bind", "id":"i0", "params":{
+    "owned_devices":["ext0"],
+    "graph_type":"echo",
+    "graph_instance":"echo_1"
+}}
+{"jsonrpc":"2.0","method":"run","id":"i1"}
+{"jsonrpc":"2.0","method":"poll","id":"i2", "params":{
+    "async":true
+}}
+{"jsonrpc":"2.0","method":"send","id":"i3", "params":{
+    "messages":[{"src":"ext0:out"}]
+}}
+{"jsonrpc":"2.0","method":"halt","id":"i4","params":{
+    "code":0
+}}

@@ -13,7 +13,6 @@ class PseudoServer:
             self.halt=None
 
         def post(self, message:MulticastMessage):
-            print("post({})".format(message))
             self.outgoing.append(message)
 
     class Events(DownwardConnectionEvents):
@@ -37,14 +36,12 @@ class PseudoServer:
             # Create a map of endpoints to endpoints within the connection
             incoming_edges={} # type: Dict[str,Sequence[str]]
             for e in owned_devices:
-                print("  Setup {}".format(e))
                 for (p,srcs) in parent._dst_to_src.get(e,{}).items():
                     for src in srcs:
                         incoming_edges.setdefault(src.full,[]).append(Endpoint(e,p).full)
                         parent._external_routes.setdefault(src,set()).add(info)
 
-            print("External_routes = "+str(parent._external_routes))
-
+            
             # Record that each external is connected
             parent._externals_connected |= set(owned_devices)
                 
@@ -59,7 +56,6 @@ class PseudoServer:
             info=self._connection_to_info[connection]
             assert info.halt==None
             for m in messages:
-                print("on_send({})".format(m))
                 parent._route_message(m)
 
         def on_poll(self, connection, max_messages):
@@ -125,7 +121,6 @@ class PseudoServer:
         self._connections.append(connection)
 
     def _route_message(self, msg:MulticastMessage):
-        print("_route_message({})".format(msg))
         assert self._running
         for dst in self._src_to_dst.get(msg.src,set()):
             if dst.device in self._internals:
@@ -138,11 +133,12 @@ class PseudoServer:
         assert msg.src.device in self._internals
         self._route_message(msg)
 
-    def run(self):
+    def run(self, event : threading.Event):
+        print("running")
         assert not self._running
         self._running=True
         try:
-            while True:
+            while not event.is_set():
                 for c in self._connections:
                     c.do_events(self._events)
         except EOFError:
@@ -166,14 +162,37 @@ def create_echo_app_server(count:int):
 
     return server
 
-if __name__=="__main__":
-    server=create_echo_app_server(1)
 
+import unittest
+
+
+if __name__=="__main__":
+    count=1
+    if len(sys.argv)>1:
+        count=int(sys.argv[1])
+
+    server=create_echo_app_server(count)
+
+    timeout=1.0
+    expectTimeout=False
+    
     channel=JSONRawChannelOnStreams(sys.stdin, sys.stdout)
     pull=JSONServerPull(channel)
     dc=DownwardConnection(pull)
 
     server.add_connection(dc)
 
-    server.run()
-    sys.stdout.flush()
+    event=threading.Event()
+    worker=threading.Thread(target=lambda: server.run(event))
+    worker.isDaemon=True
+    worker.start()
+    worker.join(timeout)
+    timedOut=False
+    if worker.is_alive:
+        event.set()
+        worker.join()
+        timedOut=True
+    if timedOut == expectTimeout:
+        sys.exit(0)
+    else:
+        sys.exit(1)

@@ -177,7 +177,7 @@ Each connection goes through the following states:
 
 - RUNNING : run has been called, and messages can now flow via send/poll.
 
-- FINISHED : execution has finished due to a halt
+- FINISHED : execution has finished due to a halt.
 
 - ERRORED : some situation has caused the channel to move into an unrecoverable error state. No further
     calls can be made, and probably any in-flight calls will fail eventually.
@@ -244,7 +244,7 @@ We will use the following types as short-hand for the procedures:
 
     - `message : { "type"?:"msg", "src":endpoint, "data"?:JSON }` : A message event...
 
-    - `halt : { "type"?:"halt", "code":int, "message"?:str }` : Event received when execution has been halted.
+    - `halt : { "type":"halt", "code":int, "message"?:str }` : Event received when execution has been halted.
   
 
 ### `bind` : Bind a connection to a set of devices
@@ -378,34 +378,57 @@ Possible errors
 
 ### `poll` : Retrieve messages or other events that have occurred.
 
-In the synchronous mode it is necessary for clients to request messages,
+In the RPC mode; it is necessary for clients to request messages,
 as there must be a request in flight to allow for a response containing
 the messages. The set of things that can be returned is more general 
 than just messages, though currently the only other defined event is the
 halt event.
+
+To cater for channel delay, clients may issue asynchronous
+polls, which means the server can hold the call open until messages
+are available. However, not all servers are guaranteed to support this,
+and they may choose to complete asynchronous calls synchronously.
+If a server does choose to complete such calls asynchronously, it should
+complete asynchronous calls in the order in which they were issued. If a client
+mixes asynchronous and synchronous calls, then the server is allowed to
+complete all outstanding async calls before responding to the synchronous
+one, or it can service the synchronous call while leaving the async
+calls open.
+
 
 There is no particular guarantee on event ordering, either within the
 calls to poll, or between calls to poll. So it is possible that one
 call to poll might contain an event that was caused by an event that
 is not received until a later call to poll. If such things are important,
 then the application needs to inject time-stamps or use other mechanisms
-to resolve ordering. That said, servers should attempt to deliver events
+to resolve ordering. That said, servers are encouraged to deliver events
 in a way that respects event timing and causality where feasible.
+
+The halt event has a particular meaning, as the halt event means that
+there will be no more events produced by the system (nor can new messages
+be sent to the system). The halt event may appear in the result along with
+other events, or may appear by itself. The halt event will cause all
+outstanding asynchronous calls to be flushed, and any future calls to
+`poll` (whether synchronous or async) will fail.
 
 #### Parameters
 
-- "async" : `bool=false` If false, then the call should return immediately with events
-    that are currently available. Otherwise the server is allowed to hold the call open
-    until there are events to return.
+- "async" : `bool=false` If false, then the call should return immediately with 
+    the currently available events.
+    If true, then the server _may_ hold the request open and continue to process
+    other requests. In this scenario the response to the `poll` request will be
+    delivered at a future point, possibly inserted amongst other responses.
 
-- "max_messages" : `int=0` Allows for a cap on the number of messages received. If this
-    is missing or 0 then the number of messages is not limited.
+- "max_events" : `int=0` Allows for a cap on the number of events received. If this
+    is missing or 0 then the number of events is not limited.
 
 #### Results
 
-- "events"? : `[ message ]` An array of zero or more events. The order of events in the
+- "events"? : `[ event ]` An array of zero or more events. The order of events in the
     array does not need to correspond to real-time or causal ordering. If there are no
     events then this field may be omitted.
+  
+- "halt"? : {  }
 
 
 #### Errors
@@ -430,11 +453,11 @@ Synchronous request with limit:
     "max_messages":3    # Set a limit on the number of events in the respons
   }}
 <-- {"jsonrpc":"2.0", "id":"id9", "result":{
-    "messages" : [
+    "events" : [
       { "src":"dev001:out", "data":{ "val":5 } },
       { "src":"dev002:out", "data":{ "val":9 }, "type":"msg" },         # Allowed, but redundant to indicate event is a message
-    ],
-    "halt" : { "type":"halt", "code":-1, "message":"Pre-condition failed." }   # Halt message is delivered, will move to halt state
+      { "type":"halt", "code":-1, "message":"Pre-condition failed." }   # Halt message is delivered, will move to halt state
+    ]
   }}
 --> {"jsonrpc":"2.0", "id":"id10", "method":"poll" }
 <-- {"jsonrpc":"2.0", "id":"id9", "error":{           # Following calls to poll will fail
@@ -535,13 +558,13 @@ Halt and then keep pumping messages until done:
 <-- {"jsonrpc":"2.0", "id":"id5", "result":{}}
 --> {"jsonrpc":"2.0", "id":"id6", "method":"poll"}
 <-- {"jsonrpc":"2.0", "id":"id6", "result":{
-    "messages": [
+    "events": [
       {"src":"wibble:out", "data":{"x":5} }  # Halt might not be immediate, could get other messages
     ]
   }}
 --> {"jsonrpc":"2.0", "id":"id7", "method":"poll"}
 <-- {"jsonrpc":"2.0", "id":"id7", "result":{
-    "halt": {"type":"halt", "code":10, "message":"Much failure"}  # Halt message will be delivered back
+    "events": {"type":"halt", "code":10, "message":"Much failure"}  # Halt message will be delivered back
   }}
 ```
 

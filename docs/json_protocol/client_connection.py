@@ -22,7 +22,6 @@ class UpwardConnection:
     def bind(self, owned_devices:Sequence[str], owner="user", owner_cookie:Optional[str]=None, graph_type:str="*", graph_instance:str="*"):
         assert self._state==ConnectionState.CONNECTED
         try:
-            print(owned_devices)
             results=self._connection.call("bind", {
                 "owner":owner,
                 "owner_cookie":owner_cookie,

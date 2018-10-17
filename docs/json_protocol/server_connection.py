@@ -41,7 +41,7 @@ class DownwardConnectionEvents:
         raise NotImplementedError
 
     def on_poll(self, connection:"DownwardConnection",
-            max_messages:Optional[int]
+            max_events:Optional[int]
         ) -> Sequence[Event] :
         raise NotImplementedError
 
@@ -76,10 +76,8 @@ class DownwardConnection:
         self._pending_polls=[] # type: List[ Pair[str,int] ]
 
     def _do_events_CONNECTED(self, events:DownwardConnectionEvents) -> bool:
-        print("CONNECTED")
         (method,id,params)=self._connection.try_begin(valid_methods=["bind"])
         if method==None:
-            print("  nothing")
             return False
         try:
             assert method=="bind"
@@ -87,8 +85,6 @@ class DownwardConnection:
             self._owner_cookie=params.get("owner", None)
             graph_type=params.get("graph_type", "*")
             graph_instance=params.get("graph_instance", "*")
-            print(params)
-            print("Owned devices: {}".format(params.get("owned_devices")))
             self._devices=set(params.get("owned_devices",[]))
             (self.graph_type,self.graph_instance,self.incoming_edges)=events.on_connect(self, self._owner, self._owner_cookie, graph_type, graph_instance, self._devices)
             self._connection.complete(id, {
@@ -105,8 +101,6 @@ class DownwardConnection:
             raise
 
     def _do_events_BOUND(self, events:DownwardConnectionEvents) -> bool:
-        print("BOUND")
-        
         (method,self._bind_id,params)=self._connection.try_begin(valid_methods=["run"])
         if method==None:
             return False
@@ -114,7 +108,6 @@ class DownwardConnection:
         return True
 
     def _do_events_RUN_REQUESTED(self, events:DownwardConnectionEvents) -> bool:
-        print("RUN_REQUESTED")
         try:
             if not events.on_run(self):
                 return False
@@ -149,18 +142,17 @@ class DownwardConnection:
         return True
 
     def _do_events_RUNNING(self, events:DownwardConnectionEvents) -> bool:
-        print("RUNNING")
         (method,id,params)=self._connection.try_begin(valid_methods=["poll","send","halt"])
         if method:
             if method=="send": 
                 events.on_send(self, json_objects_to_events(params.get("messages",[])))
                 self._connection.complete(id)
             elif method=="poll":
-                max_messages=params.get("max_messages",2**32)
+                max_events=params.get("max_events",2**32)
                 is_async=params.get("async", False)
                 if not is_async:
                     # Have to deal with it immediately
-                    events=events.on_poll(self,max_messages)
+                    events=events.on_poll(self,max_events)
                     self._connection.complete(id, { "events" : events_to_json_objects(events) })
                     if contains_halt(events):
                         for (prev_id,_) in self._pending_polls:
@@ -168,12 +160,14 @@ class DownwardConnection:
                         self._pending_polls=[]
                 else:
                     # Will deal with it later
-                    self._pending_polls.append( (id,max_messages) )
+                    self._pending_polls.append( (id,max_events) )
             elif method=="halt":
                 # Note that we don't transition to FINISHED ourselves, the controller will do it.
                 events.on_halt(self, params["code"], params.get("message",None) )
                 self._state=ConnectionState.HALT_REQUESTED
                 self._connection.complete(id)
+                # Mop up any outstanding polls
+                self._do_events_async_poll(events)
             else:
                 assert False, "Invalid method in this state"
             return True
@@ -182,19 +176,17 @@ class DownwardConnection:
             return self._do_events_async_poll(events)
             
     def _do_events_HALT_REQUESTED(self, events:DownwardConnectionEvents) -> bool:
-        print("HALT_REQUESTED")
         (method,id,params)=self._connection.try_begin(valid_methods=["poll"])
         if method:
             if method=="poll":
-                max_messages=params.get("max_messages",2**32)
+                max_events=params.get("max_events",2**32)
                 is_async=params.get("async", False)
                 if not is_async:
                     # Have to deal with it immediately
-                    events=events.on_poll(self,max_messages)
+                    events=events.on_poll(self,max_events)
                     self._connection.complete(id, { "events" : events_to_json_objects(events) })   
                     if contains_halt(events):
                         self._state=ConnectionState.FINISHED
-                        print("HALT_REQUESTED -> FINISHED")
                         for (prev_id,_) in self._pending_polls:
                             self._connection.complete(id, {"events":[]} )
                 else:

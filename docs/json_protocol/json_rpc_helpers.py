@@ -116,8 +116,7 @@ class JSONRawChannelOnStreams(JSONRawChannel):
             for line in src:
                 acc+=line
                 acc=acc.lstrip()
-                #print("acc = "+acc)
-
+                
                 while True:
                     try:
                         (obj,pos)=decoder.raw_decode(acc)
@@ -258,16 +257,12 @@ class JSONServerStub:
     def run(self):
         while True:
             try:
-                print("Server blocking")
                 msg=self._channel.recv()
-                print("Server received")
             except EOFError:
-                print("Server timeout")
                 break
             res=self._dispatch(msg)
             if res:
                 self._channel.send(res)
-        print("Server loop done")
         self._channel.close()
 
 
@@ -290,8 +285,7 @@ class JSONServerPull:
                 msg=self._channel.try_recv()
             if msg==None:
                 return (None,None,None)
-            print(msg)
-
+            
             if not isinstance(msg,dict):
                 self._error(id, -32600, "Request is not an object (batches not supported yet).")
                 continue
@@ -325,7 +319,7 @@ class JSONServerPull:
 
     def complete(self, id:str, result:Optional[JSON]=None):
         assert id in self._in_progress
-        res={"jsonrpc":"2.0","id":id, "result" : result }
+        res={"jsonrpc":"2.0","id":id, "result" : result or {} }
         self._channel.send(res)
         self._in_progress.remove(id)
 
@@ -390,12 +384,9 @@ import unittest
 def server_echo_proc(c2s,s2c):
     channel=JSONRawChannelOnPipe(c2s,s2c)
     while True:
-        print("Server waiting")
         msg=channel.recv()
         if msg==None:
-            print("Server done")
             break
-        print("Server recevied {}".format(msg))
         channel.send(msg)
     channel.close()#
 
@@ -429,7 +420,6 @@ class TestJSONChannelRawChannelOnPipes(unittest.TestCase):
         chan.send({"x":10})
         got=chan.recv()
         self.assertEqual(got,{"x":10})
-        print("Closing channel")
         chan.close()
 
         server.join()
@@ -466,7 +456,6 @@ class TestJSONServerStub(unittest.TestCase):
         server=TestJSONServerStub.XServer(chan)
         server.run()
         out=chan.output[0]["result"]
-        print(out)
         self.assertEqual(out, {"y":1.0})
 
     def test_read2(self):

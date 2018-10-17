@@ -45,8 +45,7 @@ class JSONSplitter:
         return self._state != JSONSplitter.STATE_BETWEEN
 
     def add(self, buffer:str) -> Sequence[JSON]:
-        print("add({})".format(buffer))
-
+        
         end=self._split(buffer, 0) # Does the buffer contain or complete a fragment?
         if end==None:
             self._buffers.append(buffer)
@@ -64,7 +63,6 @@ class JSONSplitter:
         begin=0
         total=len(buffer) # Size of current buffer
         while end:
-            print(buffer[begin:end])
             res.append( json.loads(buffer[begin:end]) )
             begin=end
             if begin >= total:
@@ -88,7 +86,6 @@ class JSONSplitter:
         _level=self._level
         for i in range(start, len(buffer)):
             ch=buffer[i]
-            print("  i={}, ch={}, state={}".format(i, ch, _state))
             if _state==STATE_ESCAPE:
                 _state=STATE_STRING # We don't do error checkign on allowed chars here
             elif _state==STATE_STRING:
