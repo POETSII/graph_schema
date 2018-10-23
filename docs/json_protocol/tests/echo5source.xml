@@ -1,0 +1,25 @@
+<?xml version="1.0"?>
+<Graphs xmlns="https://poets-project.org/schemas/virtual-graph-schema-v2">
+	<GraphTypeReference id="echo" src="echo_graph_type.xml" />
+  <GraphInstance id="echo5source" graphTypeId="echo">
+
+<Documentation><![CDATA[
+
+                   |
+                   |
+        ext0:out <-|-- int0:out
+            
+
+		]]></Documentation>
+
+		<DeviceInstances>
+            <DevI id="int0" type="server" />
+			<ExtI id="ext0" type="client" />
+			
+		</DeviceInstances>
+		<EdgeInstances>
+			<EdgeI path="ext0:in-int0:out" />
+		</EdgeInstances>
+	</GraphInstance>
+</Graphs>
+

@@ -145,20 +145,49 @@ class PseudoServer:
             return
 
 
-def create_echo_app_server(count:int):
-    server=PseudoServer("echo", "echo_{}".format(count))
+def create_echo_app_server(config:str):
+    server=PseudoServer("echo", config)
 
     def on_msg(dst:Endpoint, msg:MulticastMessage):
         msg=MulticastMessage(Endpoint(dst.device,"out"),msg.data)
         server.send(msg)
 
-    for i in range(count):
-        internal="int{}".format(i)
-        external="ext{}".format(i)
-        server.add_internal(internal, on_msg)
-        server.add_external(external)
-        server.add_route(Endpoint(internal,"in"),Endpoint(external,"out"))
-        server.add_route(Endpoint(external,"in"),Endpoint(internal,"out"))
+    if config=="echo1":
+        server.add_internal("int0", on_msg)
+        server.add_external("ext0")
+        server.add_route(Endpoint("int0","in"),Endpoint("ext0","out"))
+        server.add_route(Endpoint("ext0","in"),Endpoint("int0","out"))
+    elif config=="echo2parallel":
+        server.add_internal("int0", on_msg)
+        server.add_external("ext0")
+        server.add_route(Endpoint("int0","in"),Endpoint("ext0","out"))
+        server.add_route(Endpoint("ext0","in"),Endpoint("int0","out"))
+        server.add_internal("int1", on_msg)
+        server.add_external("ext1")
+        server.add_route(Endpoint("int1","in"),Endpoint("ext1","out"))
+        server.add_route(Endpoint("ext1","in"),Endpoint("int1","out"))
+    elif config=="echo3fork":
+        server.add_internal("int0", on_msg)
+        server.add_external("ext0")
+        server.add_external("extA")
+        server.add_external("extB")
+        server.add_route(Endpoint("int0","in"),Endpoint("ext0","out"))
+        server.add_route(Endpoint("extA","in"),Endpoint("int0","out"))
+        server.add_route(Endpoint("extB","in"),Endpoint("int0","out"))
+    elif config=="echo4join":
+        server.add_internal("int0", on_msg)
+        server.add_external("extA")
+        server.add_external("extB")
+        server.add_route(Endpoint("int0","in"),Endpoint("extA","out"))
+        server.add_route(Endpoint("int0","in"),Endpoint("extB","out"))
+        server.add_route(Endpoint("extA","in"),Endpoint("int0","out"))
+        server.add_route(Endpoint("extB","in"),Endpoint("int0","out"))
+    elif config=="echo5source":
+        server.add_internal("int0", on_msg)
+        server.add_external("extA")
+        server.add_route(Endpoint("ext0","in"),Endpoint("int0","out"))
+    else:
+        assert False, "Unknown config"
 
     return server
 
@@ -167,11 +196,11 @@ import unittest
 
 
 if __name__=="__main__":
-    count=1
+    config="echo1"
     if len(sys.argv)>1:
-        count=int(sys.argv[1])
+        config=sys.argv[1]
 
-    server=create_echo_app_server(count)
+    server=create_echo_app_server(config)
 
     timeout=1.0
     expectTimeout=False

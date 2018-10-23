@@ -1,7 +1,7 @@
 {"jsonrpc":"2.0","method":"bind", "id":"i0", "params":{
     "owned_devices":["ext1"],
     "graph_type":"echo",
-    "graph_instance":"echo_2"
+    "graph_instance":"echo2parallel"
 }}
 {"jsonrpc":"2.0","method":"run","id":"i1"}
 {"jsonrpc":"2.0","method":"send","id":"i2","params":{
