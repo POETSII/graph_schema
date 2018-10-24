@@ -16,7 +16,7 @@ class UpwardConnection:
         self._state=ConnectionState.CONNECTED
         self._devices=set() # : Set[str]
         self._pending_polls=[] # type: List[ Pair[str,int] ]
-        self._incoming_edges={} # type: Map[ str, List[str] ]
+        self._incoming_edges=None # type: Optional[Map[ Endpoint, List[Endpoint] ]]
 
     def bind(self, owned_devices:Sequence[str], owner="user", owner_cookie:Optional[str]=None, graph_type:str="*", graph_instance:str="*"):
         assert self._state==ConnectionState.CONNECTED
@@ -31,10 +31,19 @@ class UpwardConnection:
             self._graph_type=results["graph_type"]
             self._graph_instance=results["graph_instance"]
             self._incoming_edges=results["incoming_edges"]
+            self._incoming_edges={
+                Endpoint(src) : [ Endpoint(dst) for dst in dests]
+                for (src,dests) in self._incoming_edges.items()
+            }
             self._state=ConnectionState.BOUND
         except:
             self._state=ConnectionState.ERRORED
             raise
+
+    @property
+    def incoming_edges(self):
+        assert self._incoming_edges
+        return self._incoming_edges
 
     def run(self):
         assert self._state==ConnectionState.BOUND

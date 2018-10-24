@@ -13,6 +13,8 @@ import logging
 import os
 import time
 
+import atexit
+
 # No recursive type support, this should be enough
 JSONObject = Dict[str,any]
 JSONArray = List[any]
@@ -108,6 +110,22 @@ class JSONRawChannelOnArrays(JSONRawChannel):
     def output(self):
         return self._output
 
+
+_open_sinks=set()
+
+@atexit.register
+def _close_open_sinks():
+    sinks=set(_open_sinks)
+    for s in sinks:
+        s._close_open_sink()
+
+def _add_open_sink(sink):
+    _open_sinks.add(sink)
+
+def _remove_open_sink(sink):
+    _open_sinks.remove(sink)
+
+
 class JSONRawChannelOnStreams(JSONRawChannel):
     def _pull_thread(src:io.TextIOBase, dst:queue.Queue):
         try:
@@ -122,9 +140,10 @@ class JSONRawChannelOnStreams(JSONRawChannel):
             NOT_WHITESPACE = re.compile(r'[^\s]')
             decoder=json.JSONDecoder()
 
+            eof=False
             last_read=time.time()
             acc=""
-            while True:
+            while not eof:
                 try:
                     ch=src.read(1)
                     acc=acc+ch
@@ -147,6 +166,10 @@ class JSONRawChannelOnStreams(JSONRawChannel):
                 while True:
                     try:
                         (obj,pos)=decoder.raw_decode(acc)
+                        if isinstance(obj,str) and obj.lower()=="eof":
+                            eof=True
+                            acc=""
+                            break
                         dst.put(obj)
                         acc=acc[pos:]
                     except json.JSONDecodeError:
@@ -163,6 +186,8 @@ class JSONRawChannelOnStreams(JSONRawChannel):
     def __init__(self, src:io.TextIOBase, sink:io.TextIOBase):
         self._src=src
         self._sink=sink
+        self._open=True
+        _add_open_sink(self)
 
         self._queue=queue.Queue()
         self._worker=threading.Thread(target=  JSONRawChannelOnStreams._pull_thread, args=(src, self._queue))
@@ -189,12 +214,20 @@ class JSONRawChannelOnStreams(JSONRawChannel):
         return self.try_recv(True)
         
     def flush(self):
+        assert self._open
         self._sink.flush()
 
-    def close(self):
-        self._sink.close()
-        self._src.close()
+    def _close_open_sink(self):
+        self.close()
 
+    def close(self):
+        if self._open:
+            _remove_open_sink(self)
+            self._sink.write('"eof"')
+            self._sink.flush()
+            self._sink.close()
+            self._open=False
+        
 class JSONRPCError(Exception):
     def __init__(self, description:str, code:Optional[int]=None, payload=None):
         super().__init__()

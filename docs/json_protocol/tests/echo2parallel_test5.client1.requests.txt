@@ -10,3 +10,4 @@
 {"jsonrpc":"2.0","method":"poll","id":"i4","params":{
     "async":true
 }}
+"eof"

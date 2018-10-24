@@ -8,3 +8,4 @@
     "code":0
 }}
 {"jsonrpc":"2.0","method":"poll","id":"i3"}
+"eof"

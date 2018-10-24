@@ -13,3 +13,4 @@
 {"jsonrpc":"2.0","method":"halt","id":"i4","params":{
     "code":0
 }}
+"eof"

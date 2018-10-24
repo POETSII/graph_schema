@@ -51,7 +51,12 @@ class PseudoServer:
 
         def on_run(self, connection) :
             parent=self._parent
-            return len(parent._externals_connected)==len(parent._externals)
+            res=len(parent._externals_connected)==len(parent._externals)
+            if res:
+                if parent._startup_events:
+                    for s in parent._startup_events:
+                        parent._route_message(s)
+            return res
 
         def on_send(self, connection, messages:List[MulticastMessage]):
             parent=self._parent
@@ -94,6 +99,7 @@ class PseudoServer:
         self._running=False
         self._halt=False
         self._events=PseudoServer.Events(self)
+        self._startup_events=[] # type: Sequence[MulticastMessage]
 
     def default_recv_hook(self, dst:Endpoint, msg:MulticastMessage):
         raise NotImplementedError()
@@ -141,6 +147,7 @@ class PseudoServer:
         assert not self._running
         self._running=True
         try:
+
             while not event.is_set():
                 for c in self._connections:
                     c.do_events(self._events)
@@ -150,7 +157,10 @@ class PseudoServer:
         finally:
             logging.info("Server: got EOF")
             for c in self._connections:
-                c.close()
+                try:
+                    c.close()
+                except:
+                    pass
 
 
 def create_echo_app_server(config:str):
@@ -192,8 +202,9 @@ def create_echo_app_server(config:str):
         server.add_route(Endpoint("extB","in"),Endpoint("int0","out"))
     elif config=="echo5source":
         server.add_internal("int0", on_msg)
-        server.add_external("extA")
+        server.add_external("ext0")
         server.add_route(Endpoint("ext0","in"),Endpoint("int0","out"))
+        server._startup_events.append(MulticastMessage(Endpoint("int0:out")))
     else:
         assert False, "Unknown config"
 

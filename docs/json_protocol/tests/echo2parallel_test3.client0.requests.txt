@@ -8,6 +8,7 @@
     "messages" :[  { "src":"ext0:out" }, { "src":"ext1:out" } ]
 }}
 {"jsonrpc":"2.0","method":"halt","id":"i3","params":{
-    "code":0
+    "code":1
 }}
 {"jsonrpc":"2.0","method":"poll","id":"i4"}
+"eof"
