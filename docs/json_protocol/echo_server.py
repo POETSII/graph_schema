@@ -1,5 +1,6 @@
 import io
 import sys
+import logging
 
 from server_connection import *
 
@@ -21,6 +22,7 @@ class PseudoServer:
             self._connection_to_info={} # type: Map[DownwardConnection,ConnectionInfo]
 
         def on_connect(self, connection, owner, owner_cookie, graph_type, graph_instance, owned_devices:Sequence[str]) :
+            logging.info("Server: on_connect")
             parent=self._parent
             self.requireParameterNone(owner_cookie, "bind.owner_cookie")
             self.requireParameterWildcardOrEqual(graph_type, parent.graph_type, "bind.graph_type")
@@ -58,15 +60,15 @@ class PseudoServer:
             for m in messages:
                 parent._route_message(m)
 
-        def on_poll(self, connection, max_messages):
-            assert max_messages > 0
+        def on_poll(self, connection, max_events):
+            assert max_events > 0
             parent=self._parent
             info=self._connection_to_info[connection]
             assert not info.halt
-            todo=min(max_messages, len(info.outgoing))
+            todo=min(max_events, len(info.outgoing))
             res=info.outgoing[:todo]
             info.outgoing=info.outgoing[todo:]
-            if parent._halt and len(res) < max_messages:
+            if parent._halt and len(res) < max_events:
                 info.halt=parent._halt
                 res.append(parent._halt)
             return res
@@ -118,6 +120,7 @@ class PseudoServer:
         self._dst_to_src.setdefault(dst.device,{}).setdefault(dst.port,set()).add(src)
 
     def add_connection(self, connection:DownwardConnection):
+        logging.info("Server: add_connection")
         self._connections.append(connection)
 
     def _route_message(self, msg:MulticastMessage):
@@ -134,15 +137,20 @@ class PseudoServer:
         self._route_message(msg)
 
     def run(self, event : threading.Event):
-        print("running")
+        logging.info("Server: running")
         assert not self._running
         self._running=True
         try:
             while not event.is_set():
                 for c in self._connections:
                     c.do_events(self._events)
+                #logging.info("Server: loop")
         except EOFError:
             return
+        finally:
+            logging.info("Server: got EOF")
+            for c in self._connections:
+                c.close()
 
 
 def create_echo_app_server(config:str):
@@ -196,32 +204,38 @@ import unittest
 
 
 if __name__=="__main__":
+    logging.basicConfig(level=logging.INFO)
+
     config="echo1"
     if len(sys.argv)>1:
         config=sys.argv[1]
 
     server=create_echo_app_server(config)
 
-    timeout=1.0
+    timeout=5.0
     expectTimeout=False
     
     channel=JSONRawChannelOnStreams(sys.stdin, sys.stdout)
     pull=JSONServerPull(channel)
     dc=DownwardConnection(pull)
 
+    event=threading.Event()
+
     server.add_connection(dc)
 
-    event=threading.Event()
-    worker=threading.Thread(target=lambda: server.run(event))
-    worker.isDaemon=True
-    worker.start()
-    worker.join(timeout)
-    timedOut=False
-    if worker.is_alive:
-        event.set()
-        worker.join()
-        timedOut=True
-    if timedOut == expectTimeout:
-        sys.exit(0)
-    else:
-        sys.exit(1)
+    server.run(event)
+
+    
+    # worker=threading.Thread(target=lambda: server.run(event))
+    # worker.isDaemon=True
+    # worker.start()
+    # worker.join(timeout)
+    # timedOut=False
+    # if worker.is_alive:
+    #     event.set()
+    #     worker.join()
+    #     timedOut=True
+    # if timedOut == expectTimeout:
+    #     sys.exit(0)
+    # else:
+    #     sys.exit(1)

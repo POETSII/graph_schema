@@ -82,7 +82,7 @@ class DownwardConnection:
         try:
             assert method=="bind"
             self._owner=params.get("owner", "user")
-            self._owner_cookie=params.get("owner", None)
+            self._owner_cookie=params.get("owner_cookie", None)
             graph_type=params.get("graph_type", "*")
             graph_instance=params.get("graph_instance", "*")
             self._devices=set(params.get("owned_devices",[]))
@@ -148,7 +148,7 @@ class DownwardConnection:
                 events.on_send(self, json_objects_to_events(params.get("messages",[])))
                 self._connection.complete(id)
             elif method=="poll":
-                max_events=params.get("max_events",2**32)
+                max_events=params.get("max_events") or 2**32
                 is_async=params.get("async", False)
                 if not is_async:
                     # Have to deal with it immediately
@@ -179,7 +179,7 @@ class DownwardConnection:
         (method,id,params)=self._connection.try_begin(valid_methods=["poll"])
         if method:
             if method=="poll":
-                max_events=params.get("max_events",2**32)
+                max_events=params.get("max_events") or 2**32
                 is_async=params.get("async", False)
                 if not is_async:
                     # Have to deal with it immediately
@@ -206,7 +206,9 @@ class DownwardConnection:
             return True
         return False
         
-
+    def close(self):
+        if self._connection:
+            self._connection.close()
 
     def do_events(self, events:DownwardConnectionEvents) -> bool:
         """Handle any pending events on the connections."""

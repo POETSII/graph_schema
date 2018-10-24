@@ -9,6 +9,9 @@ import random
 import socket
 import re
 import io
+import logging
+import os
+import time
 
 # No recursive type support, this should be enough
 JSONObject = Dict[str,any]
@@ -108,14 +111,38 @@ class JSONRawChannelOnArrays(JSONRawChannel):
 class JSONRawChannelOnStreams(JSONRawChannel):
     def _pull_thread(src:io.TextIOBase, dst:queue.Queue):
         try:
+            import fcntl
+
+            # HACK: doesn't work if the thing is not a file
+            fd = src.fileno()
+            flags = fcntl.fcntl(fd, fcntl.F_GETFL)
+            fcntl.fcntl(fd, fcntl.F_SETFL, flags | os.O_NONBLOCK)
+
             # Adapted from https://stackoverflow.com/a/50384432
             NOT_WHITESPACE = re.compile(r'[^\s]')
             decoder=json.JSONDecoder()
 
+            last_read=time.time()
             acc=""
-            for line in src:
-                acc+=line
-                acc=acc.lstrip()
+            while True:
+                try:
+                    ch=src.read(1)
+                    acc=acc+ch
+                    acc=acc.lstrip()
+                    
+                except IOError:
+                    logging.warn("Server: IOError")
+                    time.sleep(1e-5) # HACK!
+                    continue
+                if ch!="":
+                    last_read=time.time()
+                else:
+                    #logging.warn("Server: empty last_time={}, now={}".format(last_read, time.time()))
+                    time.sleep(1e-5) # HACK!
+                    if time.time() - last_read > 1.0:
+                        logging.warn("Server: break due to no input for 1.0 seconds")
+                        break
+                    continue
                 
                 while True:
                     try:
@@ -166,6 +193,7 @@ class JSONRawChannelOnStreams(JSONRawChannel):
 
     def close(self):
         self._sink.close()
+        self._src.close()
 
 class JSONRPCError(Exception):
     def __init__(self, description:str, code:Optional[int]=None, payload=None):
@@ -195,6 +223,7 @@ class JSONClientProxy:
             "params":parameters
         }
         self.channel.send(msg)
+        self.channel.flush()
         res=self.channel.recv()
         if not isinstance(res,dict):
             raise JSONRPCError("Response was not an object.", payload=res)
@@ -273,6 +302,7 @@ class JSONServerPull:
 
     def _error(self, id:str, code:int, message:str):
         self._channel.send({"jsonrpc":"2.0", "id":id, "error":{ "code":code, "message":message } })
+        self._channel.flush()
 
     def begin(self, valid_methods:Optional[List[str]]=None) -> Tuple[str,Optional[id],Optional[JSON]]:
         return self.try_begin(block=True, valid_methods=valid_methods)
@@ -321,12 +351,18 @@ class JSONServerPull:
         assert id in self._in_progress
         res={"jsonrpc":"2.0","id":id, "result" : result or {} }
         self._channel.send(res)
+        self._channel.flush()
         self._in_progress.remove(id)
 
     def error(self, id:str, code:int, message:Optional[str]=None):
         assert id in self._in_progress
         self._error(id, code, message)
+        self._channel.flush()
         self._in_progress.remove(id)
+
+    def close(self):
+        self._channel.close()
+        self._channel=None
 
 
 

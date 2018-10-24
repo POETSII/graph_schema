@@ -11,7 +11,6 @@ class ConnectionState(Enum):
     ERRORED = 6
 
 class UpwardConnection:
-    
     def __init__(self, connection:JSONClientProxy):
         self._connection=connection
         self._state=ConnectionState.CONNECTED
@@ -76,3 +75,4 @@ class UpwardConnection:
 
     def close(self):
         self._connection.close()
+        self._state=ConnectionState.ERRORED
