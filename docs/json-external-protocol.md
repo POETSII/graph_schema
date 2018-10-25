@@ -149,6 +149,16 @@ internal line-feeds and whitespace within objects, but there must be
 at least one new-line following each object. The following new-line should be
 flushed in order to consider the preceding object flushed.
 
+Another problem with stream transports is that in many clients it is very
+difficult to detect the difference between "no data ready" and "end of
+stream" in a non-blocking way (looking at you, python). As a consequence,
+stream transports **should** be terminated with a single literal  string `"eof"`.
+This string is not part of JSON-RPC, and simply guarantees that no more
+data will come down the channel. Both ends of a channel should attempt
+to write `"eof"` down the channel whenever terminating the stream (whether
+due to successfull or errored termination), as it gives the other end the
+best chance of terminating without hanging or waiting for a timeout.
+
 ### Security
 
 The protocol is not designed to provide security, so this must be provided at the channel
