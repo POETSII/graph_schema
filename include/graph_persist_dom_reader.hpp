@@ -45,18 +45,18 @@ TypedDataSpecElementPtr loadTypedDataSpecElement(xmlpp::Element *eMember)
   xmlpp::Node::PrefixNsMap ns;
   ns["g"]="https://poets-project.org/schemas/virtual-graph-schema-v2";
 
-  
+
   std::string name=get_attribute_required(eMember, "name");
-  
+
   if(eMember->get_name()=="Scalar"){
     std::string type=get_attribute_required(eMember, "type");
     std::string defaultValue=get_attribute_optional(eMember, "default");
     return makeScalar(name, type, defaultValue);
-  
+
   }else if(eMember->get_name()=="Array"){
     std::string lengthS=get_attribute_required(eMember, "length");
     unsigned length=std::stoul(lengthS);
-    
+
     TypedDataSpecElementPtr elt;
     std::string typeS=get_attribute_optional(eMember, "type");
     if(!typeS.empty()){
@@ -65,16 +65,16 @@ TypedDataSpecElementPtr loadTypedDataSpecElement(xmlpp::Element *eMember)
       throw std::runtime_error("Arrays of non-scalar not implemented yet.");
     }
     return makeArray(name, length, elt);
-    
+
   }else if(eMember->get_name()=="Tuple"){
     std::vector<TypedDataSpecElementPtr> members;
-    
+
     for(auto *nSubMember : eMember->find("./g:Scalar | ./g:Union | ./g:Array | ./g:Tuple",ns))
     {
       auto eSubMember=(xmlpp::Element*)nSubMember;
       members.push_back( loadTypedDataSpecElement( eSubMember ) );
     }
-    
+
     return makeTuple(name, members.begin(), members.end() );
   }else if(eMember->get_name()=="Union"){
     throw std::runtime_error("Union not impl.");
@@ -88,17 +88,17 @@ TypedDataSpecPtr loadTypedDataSpec(xmlpp::Element *eTypedDataSpec)
 {
   xmlpp::Node::PrefixNsMap ns;
   ns["g"]="https://poets-project.org/schemas/virtual-graph-schema-v2";
-  
+
   std::vector<TypedDataSpecElementPtr> members;
-  
+
   for(auto *nMember : eTypedDataSpec->find("./g:Scalar|./g:Tuple|./g:Array|./g:Union", ns))
   {
     auto eMember=(xmlpp::Element*)nMember;
     members.push_back( loadTypedDataSpecElement( eMember ) );
   }
-  
+
   auto elt=makeTuple("_", members.begin(), members.end());
-  
+
   return std::make_shared<TypedDataSpecImpl>(elt);
 }
 
@@ -106,17 +106,17 @@ MessageTypePtr loadMessageTypeElement(xmlpp::Element *eMessageType)
 {
   xmlpp::Node::PrefixNsMap ns;
   ns["g"]="https://poets-project.org/schemas/virtual-graph-schema-v2";
-  
+
   std::string id=get_attribute_required(eMessageType, "id");
-  
+
   rapidjson::Document metadata=parse_meta_data(eMessageType, "./g:MetaData", ns);
-  
+
   TypedDataSpecPtr spec;
   auto *eSpec=find_single(eMessageType, "./g:Message", ns);
   if(eSpec){
     spec=loadTypedDataSpec(eSpec);
   }
-  
+
   return std::make_shared<MessageTypeImpl>(id, spec);
 }
 
@@ -178,7 +178,7 @@ public:
       std::cerr<<"  output : "<<o->getName()<<"\n";
     }
   }
-  
+
   virtual uint32_t calcReadyToSend(OrchestratorServices*, const typed_data_t*, const typed_data_t*, const typed_data_t*) const override
   {
     throw std::runtime_error("calcReadyToSend - input pin not loaded from provider, so functionality not available.");
@@ -207,23 +207,23 @@ DeviceTypePtr loadDeviceTypeElement(
 {
   // TODO : This is stupid. Circular initialisation stuff, but we end up with cycle of references.
   auto futureSrc=std::make_shared<DeviceTypePtr>();
-  
+
   // Passed into pins...
   std::function<DeviceTypePtr ()> delayedSrc=  [=]() -> DeviceTypePtr { return *futureSrc; };
-  
+
   xmlpp::Node::PrefixNsMap ns;
   ns["g"]="https://poets-project.org/schemas/virtual-graph-schema-v2";
-  
+
   std::string id=get_attribute_required(eDeviceType, "id");
   rapidjson::Document metadata=parse_meta_data(eDeviceType, "./g:MetaData", ns);
-  
+
   std::cerr<<"Loading "<<id<<"\n";
-  
+
   std::vector<std::string> sharedCode;
   for(auto *n : eDeviceType->find("./g:SharedCode", ns)){
     sharedCode.push_back(((xmlpp::Element*)n)->get_child_text()->get_content());
   }
-  
+
   TypedDataSpecPtr properties;
   auto *eProperties=find_single(eDeviceType, "./g:Properties", ns);
   if(eProperties){
@@ -231,7 +231,7 @@ DeviceTypePtr loadDeviceTypeElement(
   }else{
     properties=std::make_shared<TypedDataSpecImpl>();
   }
-  
+
   TypedDataSpecPtr state;
   auto *eState=find_single(eDeviceType, "./g:State", ns);
   if(eState){
@@ -239,23 +239,23 @@ DeviceTypePtr loadDeviceTypeElement(
   }else{
     state=std::make_shared<TypedDataSpecImpl>();
   }
-  
+
   std::vector<InputPinPtr> inputs;
-  
+
   for(auto *n : eDeviceType->find("./g:InputPin",ns)){
     auto *e=(xmlpp::Element*)n;
-    
+
     std::string name=get_attribute_required(e, "name");
     std::string messageTypeId=get_attribute_required(e, "messageTypeId");
     bool isApplication=get_attribute_optional_bool(e, "application");
-    
+
     if(messageTypes.find(messageTypeId)==messageTypes.end()){
       throw std::runtime_error("Unknown messageTypeId '"+messageTypeId+"'");
     }
     auto messageType=messageTypes.at(messageTypeId);
-    
+
     rapidjson::Document inputMetadata=parse_meta_data(e, "./g:MetaData", ns);
-  
+
     TypedDataSpecPtr inputProperties;
     auto *eInputProperties=find_single(e, "./g:Properties", ns);
     if(eInputProperties){
@@ -263,7 +263,7 @@ DeviceTypePtr loadDeviceTypeElement(
     }else{
       inputProperties=std::make_shared<TypedDataSpecImpl>();
     }
-    
+
     TypedDataSpecPtr inputState;
     auto *eInputState=find_single(e, "./g:State", ns);
     if(eInputState){
@@ -271,17 +271,17 @@ DeviceTypePtr loadDeviceTypeElement(
     }else{
       inputState=std::make_shared<TypedDataSpecImpl>();
     }
-    
+
     auto *eHandler=find_single(e, "./g:OnReceive", ns);
     if(eHandler==NULL){
       throw std::runtime_error("Missing OnReceive handler.");
     }
     std::string onReceive=readTextContent(eHandler);
-    
-    
+
+
     inputs.push_back(std::make_shared<InputPinDynamic>(
       delayedSrc,
-      name, 
+      name,
       inputs.size(),
       messageType,
       isApplication,
@@ -290,48 +290,48 @@ DeviceTypePtr loadDeviceTypeElement(
       onReceive
     ));
   }
-  
-  
+
+
   std::vector<OutputPinPtr> outputs;
-  
+
   for(auto *n : eDeviceType->find("./g:OutputPin",ns)){
     auto *e=(xmlpp::Element*)n;
-    
+
     std::string name=get_attribute_required(e, "name");
     std::string messageTypeId=get_attribute_required(e, "messageTypeId");
-    
+
     if(messageTypes.find(messageTypeId)==messageTypes.end()){
       throw std::runtime_error("Unknown messageTypeId '"+messageTypeId+"'");
     }
     auto messageType=messageTypes.at(messageTypeId);
     bool isApplication=get_attribute_optional_bool(e, "application");
-    
+
     rapidjson::Document outputMetadata=parse_meta_data(e, "./g:MetaData", ns);
- 
+
     auto *eHandler=find_single(e, "./g:OnSend", ns);
     if(eHandler==NULL){
       throw std::runtime_error("Missing OnSend handler.");
     }
     std::string onSend=readTextContent(eHandler);
-    
-    
+
+
     outputs.push_back(std::make_shared<OutputPinDynamic>(
       delayedSrc,
-      name, 
+      name,
       outputs.size(),
       messageType,
       isApplication,
       onSend
     ));
   }
-  
+
   auto res=std::make_shared<DeviceTypeDynamic>(
     id, properties, state, inputs, outputs
   );
-  
+
   // Lazily fill in the thing that delayedSrc points to
   *futureSrc=res;
-  
+
   return res;
 }
 
@@ -367,9 +367,9 @@ GraphTypePtr loadGraphTypeElement(const filepath &srcPath, xmlpp::Element *eGrap
   xmlpp::Node::PrefixNsMap ns;
   ns["g"]="https://poets-project.org/schemas/virtual-graph-schema-v2";
 
-  
+
   std::string id=get_attribute_required(eGraphType, "id");
-  
+
   TypedDataSpecPtr properties;
   auto *eGraphProperties=find_single(eGraphType, "./g:Properties", ns);
   if(eGraphProperties){
@@ -377,38 +377,38 @@ GraphTypePtr loadGraphTypeElement(const filepath &srcPath, xmlpp::Element *eGrap
   }else{
     properties=std::make_shared<TypedDataSpecImpl>();
   }
-  
+
   std::vector<std::string> sharedCode;
   for(auto *nSharedCode : eGraphType->find("./g:SharedCode", ns)){
     std::string x=readTextContent((xmlpp::Element*)nSharedCode);
     sharedCode.push_back(x);
   }
-  
+
   rapidjson::Document metadata=parse_meta_data(eGraphType, "./g:MetaData", ns);
-   
+
   std::map<std::string,MessageTypePtr> messageTypesById;
   std::vector<MessageTypePtr> messageTypes;
   std::vector<DeviceTypePtr> deviceTypes;
-  
+
   auto *eMessageTypes=find_single(eGraphType, "./g:MessageTypes", ns);
   for(auto *nMessageType : eMessageTypes->find("./g:MessageType", ns)){
     auto mt=loadMessageTypeElement( (xmlpp::Element*)nMessageType);
-    
+
     messageTypesById[mt->getId()]=mt;
-    
+
     messageTypes.push_back(mt);
     events->onMessageType(mt);
   }
-  
+
   auto *eDeviceTypes=find_single(eGraphType, "./g:DeviceTypes", ns);
   for(auto *nDeviceType : eDeviceTypes->find("./g:DeviceType", ns)){
     auto dt=loadDeviceTypeElement(messageTypesById, (xmlpp::Element*)nDeviceType);
-    
+
     std::cerr<<"device type = "<<dt->getId()<<"\n";
     deviceTypes.push_back( dt );
     events->onDeviceType(dt);
   }
-  
+
   auto res=std::make_shared<GraphTypeDynamic>(
     id,
     properties,
@@ -418,9 +418,9 @@ GraphTypePtr loadGraphTypeElement(const filepath &srcPath, xmlpp::Element *eGrap
     deviceTypes
     );
 
-  
+
   events->onGraphType(res);
-  
+
   return res;
 }
 
@@ -430,21 +430,21 @@ GraphTypePtr loadGraphTypeReferenceElement(const filepath &srcPath, xmlpp::Eleme
 {
   std::string id=get_attribute_required(eGraphTypeReference, "id");
   std::string src=get_attribute_required(eGraphTypeReference, "src");
-  
+
   filepath newRelPath(src);
   filepath newPath=absolute(newRelPath, srcPath);
-  
+
   if(!exists(newPath)){
     throw std::runtime_error("Couldn't resolve graph reference src '"+src+"', tried looking in '"+newPath.native()+"'");
   }
-  
+
   auto parser=std::make_shared<xmlpp::DomParser>(newPath.native());
   if(!*parser){
     throw std::runtime_error("Couldn't parse XML at '"+newPath.native()+"'");
   }
-  
+
   auto root=parser->get_document()->get_root_node();
-  
+
   return loadGraphType(newPath, root, events, id);
 }
 
@@ -453,21 +453,21 @@ GraphTypePtr loadGraphType(const filepath &srcPath, xmlpp::Element *parent, Grap
 {
   xmlpp::Node::PrefixNsMap ns;
   ns["g"]="https://poets-project.org/schemas/virtual-graph-schema-v2";
-  
+
   std::cerr<<"parent = "<<parent<<"\n";
   for(auto *nGraphType : parent->find("./*")){
     std::cerr<<"  "<<nGraphType->get_name()<<"\n";
   }
-  
+
   auto *eGraphType=find_single(parent, "./g:GraphType[@id='"+id+"'] | ./g:GraphTypeReference[@id='"+id+"']", ns);
-  if(eGraphType!=0){   
+  if(eGraphType!=0){
     if(eGraphType->get_name()=="GraphTypeReference"){
       return loadGraphTypeReferenceElement(srcPath, eGraphType, events);
     }else{
       return loadGraphTypeElement(srcPath, eGraphType, events);
     }
   }
-  
+
   throw unknown_graph_type_error(id);
 }
 
@@ -475,9 +475,9 @@ std::map<std::string,GraphTypePtr> loadAllGraphTypes(const filepath &srcPath, xm
 {
   xmlpp::Node::PrefixNsMap ns;
   ns["g"]="https://poets-project.org/schemas/virtual-graph-schema-v2";
-  
+
   std::map<std::string,GraphTypePtr> res;
-  
+
   for(auto *nGraphType : parent->find("./g:GraphType", ns)){
     auto r=loadGraphTypeElement(srcPath, (xmlpp::Element *)nGraphType, events);
     if( res.find(r->getId())!=res.end() ){
@@ -503,12 +503,12 @@ void loadGraph(Registry *registry, const filepath &srcPath, xmlpp::Element *pare
 
   std::string graphId=get_attribute_required(eGraph, "id");
   std::string graphTypeId=get_attribute_required(eGraph, "graphTypeId");
-  
+
   GraphTypePtr graphType;
   if(registry){
     try{
       graphType=registry->lookupGraphType(graphTypeId);
-      
+
       for(auto et : graphType->getMessageTypes()){
         events->onMessageType(et);
       }
@@ -540,7 +540,7 @@ void loadGraph(Registry *registry, const filepath &srcPath, xmlpp::Element *pare
     graphMetadata=parse_meta_data(eGraph, "g:MetaData", ns);
   }
   gId=events->onBeginGraphInstance(graphType, graphId, graphProperties, std::move(graphMetadata));
-  
+
   std::unordered_map<std::string, std::pair<uint64_t,DeviceTypePtr> > devices;
 
   auto *eDeviceInstances=find_single(eGraph, "./g:DeviceInstances", ns);
@@ -565,12 +565,21 @@ void loadGraph(Registry *registry, const filepath &srcPath, xmlpp::Element *pare
       deviceProperties=dt->getPropertiesSpec()->create();
     }
 
+    TypedDataPtr deviceState;
+    auto *eState=find_single(eDevice, "./g:S", ns);
+    if(eState){
+      deviceState=dt->getStateSpec()->load(eState);
+    }else{
+      deviceState=dt->getStateSpec()->create();
+    }
+
     uint64_t dId;
     rapidjson::Document deviceMetadata;
     if(parseMetaData){
       deviceMetadata=parse_meta_data(eDevice, "g:M", ns);
     }
-    dId=events->onDeviceInstance(gId, dt, id, deviceProperties, std::move(deviceMetadata));
+
+    dId=events->onDeviceInstance(gId, dt, id, deviceProperties, deviceState, std::move(deviceMetadata));
 
     devices.insert(std::make_pair( id, std::make_pair(dId, dt)));
   }
@@ -605,10 +614,10 @@ void loadGraph(Registry *registry, const filepath &srcPath, xmlpp::Element *pare
 
     auto &srcDevice=devices.at(srcDeviceId);
     auto &dstDevice=devices.at(dstDeviceId);
-    
+
     auto srcPin=srcDevice.second->getOutput(srcPinName);
     auto dstPin=dstDevice.second->getInput(dstPinName);
-    
+
     if(!srcPin){
       throw std::runtime_error("No source pin called '"+srcPinName+"' on device '"+srcDeviceId);
     }

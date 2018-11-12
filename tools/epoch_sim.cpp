@@ -121,16 +121,16 @@ struct EpochSim
     return 0;
   }
 
-  virtual uint64_t onDeviceInstance(uint64_t gId, const DeviceTypePtr &dt, const std::string &id, const TypedDataPtr &deviceProperties, rapidjson::Document &&) override
+  virtual uint64_t onDeviceInstance(uint64_t gId, const DeviceTypePtr &dt, const std::string &id, const TypedDataPtr &deviceProperties, const TypedDataPtr &deviceState, rapidjson::Document &&) override
   {
-    TypedDataPtr state=dt->getStateSpec()->create();
+    // TypedDataPtr state=dt->getStateSpec()->create();
     device d;
     d.index=m_devices.size();
     d.id=id;
     d.name=intern(id);
     d.type=dt;
     d.properties=deviceProperties;
-    d.state=state;
+    d.state=deviceState;
     d.keyValueSeq=0;
     d.readyToSend=0;
     d.outputCount=dt->getOutputCount();
