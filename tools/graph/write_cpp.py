@@ -80,32 +80,32 @@ def render_typed_data_add_hash(proto,dst,prefix):
             for i in range(0,proto.length):
                 for j in range(proto.type.length):
                     dst.write('  hash.add({}{}[{}][{}]);\n'.format(prefix,proto.name,i,j))
-        
+
         else:
             raise RuntimeError("Haven't implemented arrays of non-scalars yet.")
     else:
         raise RuntimeError("Unknown data type {}.".format(type(proto)))
 
 
-def render_typed_data_load_v4_tuple(proto,dst,prefix,indent):
+def render_typed_data_load_v4_tuple(proto,dst,prefix,indent,parentName,subNum):
     assert isinstance(proto,TupleTypedDataSpec)
     for elt in proto.elements_by_index:
-        dst.write('{}if(document.HasMember("{}")){{\n'.format(indent,elt.name))
-        dst.write('{}  const rapidjson::Value &n=document["{}"];\n'.format(indent,elt.name))
+        dst.write('{}if({}.HasMember("{}")){{\n'.format(indent,parentName,elt.name))
+        dst.write('{}  const rapidjson::Value &n{}={}["{}"];\n'.format(indent,subNum,parentName,elt.name))
         if isinstance(elt,ScalarTypedDataSpec):
 
             if elt.type=="int64_t" or elt.type=="int32_t" or elt.type=="int16_t" or elt.type=="int8_t" or elt.type=="char" :
-                dst.write('{}  {}{}=n.GetInt();\n'.format(indent, prefix, elt.name))
+                dst.write('{}  {}{}=n{}.GetInt();\n'.format(indent, prefix, elt.name, subNum))
 
             elif elt.type=="uint64_t" or elt.type=="uint32_t" or elt.type=="uint16_t" or elt.type=="uint8_t":
-                dst.write('{}  {}{}=n.GetUint();\n'.format(indent, prefix, elt.name))
+                dst.write('{}  {}{}=n{}.GetUint();\n'.format(indent, prefix, elt.name, subNum))
 
             elif elt.type=="float" or elt.type=="double":
-                dst.write('{}  {}{}=n.GetDouble();\n'.format(indent, prefix, elt.name))
+                dst.write('{}  {}{}=n{}.GetDouble();\n'.format(indent, prefix, elt.name, subNum))
             else:
                 raise RuntimeError("Unknown scalar data type : "+elt.type)
         elif isinstance(elt,TupleTypedDataSpec):
-            render_typed_data_load_v4_tuple(elt,dst,prefix+elt.name+".",indent+"    ")
+            render_typed_data_load_v4_tuple(elt,dst,prefix+elt.name+".",indent+"    ","n"+str(subNum),subNum+1)
         elif isinstance(elt,ArrayTypedDataSpec):
             dst.write('{}  assert(n.IsArray());\n')
             if isinstance(elt.type,ScalarTypedDataSpec):
@@ -168,7 +168,7 @@ def render_typed_data_load_v4(proto,dst,elt,prefix,indent):
     dst.write('{}  rapidjson::Document document;\n'.format(indent))
     dst.write('{}  document.Parse(text.c_str());\n'.format(indent))
     dst.write('{}  assert(document.IsObject());\n'.format(indent))
-    render_typed_data_load_v4_tuple(proto,dst,prefix,indent)
+    render_typed_data_load_v4_tuple(proto,dst,prefix,indent,"document",0)
     dst.write('{}}}'.format(indent))
 
 def render_typed_data_save_v4(proto,dst,elt,prefix,indent):
@@ -396,7 +396,7 @@ def emit_device_local_constants(dt,subs,indent=""):
 {indent}const unsigned RTS_FLAG_{currPinName}=1ul<<{currPinIndex};
 """.format(currPinName=ip.name,currPinIndex=currPinIndex,**subs)
         currPinIndex+=1
-        
+
     return res
 
 def emit_input_pin_local_constants(dt,subs,indent=""):
@@ -574,7 +574,7 @@ def render_output_pin_as_cpp(op,dst):
     dst.write('    auto message=cast_typed_data<{}_message_t>(gMessage);\n'.format(op.message_type.id))
     dst.write('    HandlerLogImpl handler_log(orchestrator);\n')
     dst.write('    auto handler_exit=[&](int code) -> void { orchestrator->application_exit(code); };\n')
-    dst.write('    auto handler_export_key_value=[&](uint32_t key, uint32_t value) -> void { orchestrator->export_key_value(key, value); };\n')   
+    dst.write('    auto handler_export_key_value=[&](uint32_t key, uint32_t value) -> void { orchestrator->export_key_value(key, value); };\n')
     dst.write("""
     auto handler_checkpoint=[&](bool preEvent, int level, const char *fmt, ...) -> void {
         va_list a;
@@ -638,10 +638,10 @@ def render_device_type_as_cpp(dt,dst):
 
     subs["deviceGlobalConstants"]=emit_device_global_constants(dt,subs,"    ")
     subs["deviceLocalConstants"]=emit_device_local_constants(dt,subs, "    ")
-    
-    
+
+
     dst.write("namespace ns_{}{{\n".format(dt.id));
-    
+
     dst.write(subs["deviceGlobalConstants"])
     dst.write(subs["deviceLocalConstants"])
 
@@ -729,7 +729,7 @@ def render_graph_as_cpp(graph,dst, destPath, asHeader=False):
     dst.write('#include "rapidjson/document.h"\n')
 
     render_typed_data_as_spec(gt.properties, "{}_properties_t".format(gt.id),"pp:Properties",dst,asHeader)
-    
+
     dst.write("#undef assert")
     dst.write("#define assert handler_assert\n")
 
