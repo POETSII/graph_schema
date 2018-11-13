@@ -46,7 +46,7 @@ def get_attrib_optional(node,name):
     if name not in node.attrib:
         return None
     return node.attrib[name]
-    
+
 def get_attrib_optional_bool(node,name):
     if name not in node.attrib:
         return False
@@ -56,7 +56,7 @@ def get_attrib_optional_bool(node,name):
     if v=="true" or v=="1":
         return True;
     raise XMLSyntaxError("Couldn't convert value {} to bool".format(v, node))
-        
+
 
 def get_attrib_defaulted(node,name,default):
     if name not in node.attrib:
@@ -147,14 +147,15 @@ def load_metadata(parent, name):
 
 def load_type_def(parent,td, namedTypes):
     id=get_attrib(td,"id")
+    elts=[]
     try:
-        typeNode=td.find("p:*",ns)
-        if typeNode is None:
-            raise XMLSyntaxError("Missing sub-child to give actual type.")
-            
-        type=load_typed_data_spec(typeNode, namedTypes)
-        
-        return Typedef(id,type)
+        for eltNode in td.findall("p:*",ns): # Anything from this namespace must be a member
+            if eltNode is None:
+                raise XMLSyntaxError("Missing sub-child to give actual type.")
+            elt=load_typed_data_spec(eltNode, namedTypes)
+            elts.append(elt)
+
+        return Typedef(id,elts)
     except XMLSyntaxError:
             raise
     except Exception as e:
@@ -293,13 +294,13 @@ def load_device_type(graph,dtNode,sourceFile):
 def load_graph_type(graphNode, sourcePath):
     id=get_attrib(graphNode,"id")
     sys.stderr.write("  Loading graph type {}\n".format(id))
-    
+
     namedTypes={}
     namedTypesByIndex=[]
     for etNode in graphNode.findall("p:Types/p:TypeDef",ns):
         sys.stderr.write("  Loading type defs, current={}\n".format(namedTypes))
         td=load_type_def(graphNode,etNode, namedTypes)
-        namedTypes[td.id]=td
+        namedTypes[td.name]=td
         namedTypesByIndex.append(td)
 
     properties=None
@@ -314,7 +315,7 @@ def load_graph_type(graphNode, sourcePath):
         shared_code.append(n.text)
 
     graphType=GraphType(id,properties,metadata,shared_code)
-    
+
     for nt in namedTypesByIndex:
         graphType.add_typedef(nt)
 
@@ -365,12 +366,12 @@ def load_external_instance(graph, eiNode):
     metadata=None
 
     for n in eiNode: # walk over children rather than using find. Better performance
-        if n.tag == _ns_M: 
+        if n.tag == _ns_M:
             assert not metadata
             metadata=json.loads("{"+n.text+"}")
         else:
             assert "Unknown tag type in EdgeI"
-    
+
     return DeviceInstance(graph,id,external_type,properties,metadata)
 
 def load_device_instance(graph,diNode):
@@ -391,7 +392,7 @@ def load_device_instance(graph,diNode):
     for n in diNode: # walk over children rather than using find. Better performance
         if n.tag==_ns_P:
             assert not properties
-            
+
             spec=device_type.properties
             assert spec is not None, "Can't have properties value for device with no properties spec"
 
@@ -425,19 +426,19 @@ _split_path_re=re.compile("^([^:]+):([^-]+)-([^:]+):([^-]+)$")
 def load_edge_instance(graph,eiNode):
     path=eiNode.attrib["path"]
     (dst_device_id,dst_pin_name,src_device_id,src_pin_name)=_split_path_re.match(path).groups()
-    
+
     dst_device=graph.device_instances[dst_device_id]
     src_device=graph.device_instances[src_device_id]
-    
+
     assert dst_pin_name in dst_device.device_type.inputs, "Couldn't find input pin called '{}' in device type '{}'. Inputs are [{}]".format(dst_pin_name,dst_device.device_type.id, [p.name for p in dst_device.device_type.inputs])
     assert src_pin_name in src_device.device_type.outputs
-    
+
     properties=None
     metadata=None
     for n in eiNode: # walk over children rather than using find. Better performance
         if n.tag==_ns_P:
             assert not properties
-            
+
             spec=dst_device.device_type.inputs[dst_pin_name].properties
             assert spec is not None, "Can't have properties value for edge with no properties spec"
 

@@ -133,7 +133,7 @@ def save_message_type(parent,mt):
 def save_device_type(parent,dt):
     n=etree.SubElement(parent,toNS("p:DeviceType"))
 
-    n.attrib["id"]=dt.id    
+    n.attrib["id"]=dt.id
     save_typed_struct_spec(n, toNS("p:Properties"), dt.properties)
     save_typed_struct_spec(n, toNS("p:State"), dt.state)
     save_metadata(n, toNS("p:MetaData"), dt.metadata)
@@ -208,10 +208,10 @@ def save_edge_instance(parent, ei):
     return n
 
 
-def save_graph_type(parent, graph):    
+def save_graph_type(parent, graph):
     gn = etree.SubElement(parent,toNS("p:GraphType"))
     gn.attrib["id"]=graph.id
-    
+
     tdn=etree.Element(toNS("p:Types"))
     gn.append(tdn)
     for td in graph.typedefs_by_index:
@@ -263,7 +263,7 @@ def save_graph_instance(parent, graph):
         save_edge_instance(ein, graph.edge_instances[i] )
 
     return gn
-    
+
 
 def save_graph_instance_metadata_patch(parent, id,graphMeta,deviceMeta,edgeMeta):
     gn = etree.Element(toNS("p:GraphInstanceMetadataPatch"))
@@ -279,8 +279,8 @@ def save_graph_instance_metadata_patch(parent, id,graphMeta,deviceMeta,edgeMeta)
     for di in sorted(deviceMeta.keys()):
         n=etree.SubElement(din, diTag, {"id":di})
         save_metadata(n, toNS("p:M"), deviceMeta[id])
-        
-        
+
+
     ein = etree.Element(toNS("p:EdgeInstances"))
     ein.attrib["sorted"]="1"
     gn.append(ein)
@@ -288,14 +288,14 @@ def save_graph_instance_metadata_patch(parent, id,graphMeta,deviceMeta,edgeMeta)
     for ei in sorted(edgeMeta.keys()):
         n=etree.SubElement(ein, eiTag, {"id":ei})
         save_metadata(n, toNS("p:M"), edgeMeta[ei])
-        
-    return gn    
- 
+
+    return gn
+
 
 def save_graph(graph,dst):
     nsmap = { None : "https://poets-project.org/schemas/virtual-graph-schema-v2" }
     root=etree.Element(toNS("p:Graphs"), nsmap=nsmap)
-    
+
     if dst is str:
         if dst.endswith(".gz"):
             import gzip
@@ -317,7 +317,7 @@ def save_graph(graph,dst):
         tree = etree.ElementTree(root)
         #s=etree.tostring(root,pretty_print=True,xml_declaration=True).decode("utf8")
         #dst.write(s)
-        
+
         # TODO : Fix this!
         if (sys.version_info > (3, 0)):
             # Python3
@@ -337,7 +337,7 @@ def save_metadata_patch(id,graphMeta,deviceMeta,edgeMeta,dst):
     tree = etree.ElementTree(root)
     #s=etree.tostring(root,pretty_print=True,xml_declaration=True).decode("utf8")
     #dst.write(s)
-    
+
     # TODO : Fix this!
     if (sys.version_info > (3, 0)):
         # Python3
@@ -346,4 +346,4 @@ def save_metadata_patch(id,graphMeta,deviceMeta,edgeMeta,dst):
         #Python2
         tree.write(dst, pretty_print=True, xml_declaration=True)
 
-    
+

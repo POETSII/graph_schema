@@ -36,9 +36,9 @@ class frozendict(dict):
     setdefault = _immutable
 
 class ScalarTypedDataSpec(TypedDataSpec):
-    
+
     _primitives=set(["int32_t","uint32_t","int16_t","uint16_t","int8_t","uint8_t","float","double"])
-    
+
     def _check_value(self,value):
         assert not isinstance(self.type,Typedef)
         if self.type=="int32_t":
@@ -71,9 +71,10 @@ class ScalarTypedDataSpec(TypedDataSpec):
         TypedDataSpec.__init__(self,name)
         assert isinstance(type,Typedef) or (type in ScalarTypedDataSpec._primitives), "Didn't understand type parameter {}".format(type)
         self.type=type
-        if isinstance(self.type,Typedef):
-            self.default=self.type.expand(default)
-        elif default is not None:
+        # if isinstance(self.type,Typedef):
+        #     self.default=self.type.expand(default)
+        # elif default is not None:
+        if default is not None:
             self.default=self._check_value(default)
         else:
             self.default=0
@@ -83,7 +84,7 @@ class ScalarTypedDataSpec(TypedDataSpec):
         if isinstance(self.default,list):
             self.default=tuple(self.default) # make it hashable
         self._hash = hash(self.name) ^ hash(self.type) ^ hash(self.default)
-            
+
     def visit_subtypes(self,visitor):
         if isinstance(self.type,Typedef):
             visitor(self.type)
@@ -93,7 +94,7 @@ class ScalarTypedDataSpec(TypedDataSpec):
             return True
         if isinstance(self.type,Typedef):
             return self.type.is_refinement_compatible(inst)
-        
+
         try:
             self._check_value(inst)
         except:
@@ -109,17 +110,17 @@ class ScalarTypedDataSpec(TypedDataSpec):
         if isinstance(self.type,Typedef):
             return self.type.expand(inst)
         return self._check_value(inst)
-            
+
     def contract(self,inst):
         if inst is not None:
             default=self.default or 0
             if inst!=default:
                 return inst
         return None
-            
+
     def __eq__(self, o):
         return isinstance(o, ScalarTypedDataSpec) and self.name==o.name and self.type==o.type and self.default==o.default
-        
+
     def __hash__(self):
         return self._hash
 
@@ -164,7 +165,7 @@ class TupleTypedDataSpec(TypedDataSpec):
             acc=acc+str(self._elts_by_index[i])
             acc=acc+"\n"
         return acc+"]"
-        
+
     def visit_subtypes(self,visitor):
         map(visitor, self._elts_by_index)
 
@@ -178,7 +179,7 @@ class TupleTypedDataSpec(TypedDataSpec):
         for e in self._elts_by_index:
             inst[e.name]=e.expand(inst.get(e.name,None))
         return inst
-        
+
     def contract(self,inst):
         if inst is None:
             return inst
@@ -242,7 +243,7 @@ class ArrayTypedDataSpec(TypedDataSpec):
         for i in range(self.length):
             inst[i]=self.type.expand(inst[i])
         return inst
-        
+
     def contract(self,inst):
         if inst is None:
             return inst
@@ -293,35 +294,57 @@ def is_refinement_compatible(proto,inst):
     return proto.is_refinement_compatible(inst)
 
 
-class Typedef(TypedDataSpec):
-    def __init__(self,id,type):
-        TypedDataSpec.__init__(self,id)
-        self.id=id
-        assert(isinstance(type,TypedDataSpec))
-        self.type=type
-        self._hash=hash(id) + 19937*hash(type)
+# class Typedef(TypedDataSpec):
+#     def __init__(self,id,elements):
+#         TypedDataSpec.__init__(self,id)
+#         self.id=id
+#         self._elts_by_name={}
+#         self.elements_by_index=[]
+#         self._hash = hash(self.name)
+#         for e in elements:
+#             if e.name in self.elements_by_index:
+#                 raise GraphDescriptionError("Tuple element name appears twice.")
+#             self._elts_by_name[e.name]=e
+#             self.elements_by_index.append(e)
+#             self._hash = self._hash ^ hash(e)
 
-    def is_refinement_compatible(self,inst):
-        sys.stderr.write(" is_refinement_compatible( {} , {} )\n".format(self,inst))
-        return self.type.is_refinement_compatible(inst)
-    
-    def create_default(self):
-        return self.type.create_default()
+#     def is_refinement_compatible(self,inst):
+#         sys.stderr.write(" is_refinement_compatible( {} , {} )\n".format(self,inst))
+#         return self.type.is_refinement_compatible(inst)
 
-    def expand(self,inst):
-        return self.type.expand(inst)
-        
-    def contract(self,inst):
-        return self.contract(inst)
-            
-    def __eq__(self, o):
-        return isinstance(o, Typedef) and self.id==o.id
+#     def create_default(self):
+#         return { e.name:e.create_default() for e in self.elements_by_index  }
 
-    def __hash__(self):
-        return self._hash
+#     # def create_default(self):
+#     #     return self.type.create_default()
 
-    def __str__(self):
-        return "{}[{}]".format(self.id,self.type)
+#     # def expand(self,inst):
+#     #     for type in self.types:
+#     #         return type.expand(inst)
+
+#     def expand(self,inst):
+#         if inst is None:
+#             return self.create_default()
+#         assert isinstance(inst,dict), "Want to expand dict, got '{}'".format(inst)
+#         for e in self.elements_by_index:
+#             inst[e.name]=e.expand(inst.get(e.name,None))
+#         return inst
+
+#     def contract(self,inst):
+#         return self.contract(inst)
+
+#     def __eq__(self, o):
+#         return isinstance(o, Typedef) and self.id==o.id
+
+#     def __hash__(self):
+#         return self._hash
+
+#     def __str__(self):
+#         return "{}".format(self.id)
+
+class Typedef(TupleTypedDataSpec):
+    def __init__(self,id,elements):
+        TupleTypedDataSpec.__init__(self,id,elements)
 
 class MessageType(object):
     def __init__(self,parent,id,message,metadata=None,cTypeName=None,numid=0):
@@ -414,27 +437,28 @@ class GraphType(object):
         self.typedefs_by_index=[]
         self.typedefs={}
         self.message_types=collections.OrderedDict()
-        
-    def _validate_type(self,type):
+
+    def _validate_type(self,types):
         """Walk through the types and check that any typedefs have already been added to the graphtype."""
-        if isinstance(type,Typedef):
-            if (type.id not in self.typedefs):
-                raise GraphDescriptionError("Typedef {} not added to graph type. Knowns are {}".format(type.id,self.typedefs.values()))
-            if (self.typedefs[type.id]!=type):
-                raise GraphDescriptionError("Typedef has wrong identity.")
-            # If it's in the graph, we don't need to validate it's contained type again
-        else:
-            type.visit_subtypes( lambda t: self._validate_type(t) )
-            
-        
+        for type in types:
+            if isinstance(type,Typedef):
+                if (type.id not in self.typedefs):
+                    raise GraphDescriptionError("Typedef {} not added to graph type. Knowns are {}".format(type.id,self.typedefs.values()))
+                if (self.typedefs[type.id]!=type):
+                    raise GraphDescriptionError("Typedef has wrong identity.")
+                # If it's in the graph, we don't need to validate it's contained type again
+            else:
+                type.visit_subtypes( lambda t: self._validate_type(t) )
+
+
     def add_typedef(self,typedef):
         assert(isinstance(typedef,Typedef))
-        if typedef.id in self.typedefs:
+        if typedef.name in self.typedefs:
             raise GraphDescriptionError("typedef already exists.")
-        self._validate_type(typedef.type)
+        self._validate_type(typedef.elements_by_index)
         self.typedefs_by_index.append(typedef)
-        self.typedefs[typedef.id]=typedef
-        
+        self.typedefs[typedef.name]=typedef
+
 
     def add_message_type(self,message_type):
         if message_type.id in self.message_types:
@@ -485,29 +509,29 @@ class DeviceInstance(object):
         self.device_type=device_type
         self.properties=properties
         self.metadata=metadata
-        
+
     def set_property(self, name, value):
         if self.properties==None:
             self.properties={}
         self.properties[name]=value
         if __debug__ and not is_refinement_compatible(self.device_type.properties,self.properties):
             raise GraphDescriptionError("Setting property {} on {} results in properties incompatible with device type properties: proto={}, value={}".format(name, self.id, self.device_type.properties, self.properties))
-            
+
 
 
 class EdgeInstance(object):
-    
+
     def __init__(self,parent,dst_device,dst_pin,src_device,src_pin,properties=None,metadata=None):
         # type : (GraphInstance, DeviceInstance, Union[str,InputPin], DeviceInstance, Union[str,OutputPin], Optional[Dict], Optional[Dict] ) -> None
         self.parent=parent
 
-        if isinstance(dst_pin,str): 
+        if isinstance(dst_pin,str):
             if __debug__ and (dst_pin not in dst_device.device_type.inputs):
                 raise GraphDescriptionError("Pin '{}' does not exist on dest device type '{}'. Candidates are {}".format(dst_pin,dst_device.device_type.id,",".join(dst_device.device_type.inputs)))
             dst_pin=dst_device.device_type.inputs[dst_pin]
         else:
             assert dst_device.device_type.inputs[dst_pin.name]==dst_pin
-        
+
         if isinstance(src_pin,str):
             if __debug__ and (src_pin not in src_device.device_type.outputs):
                 raise GraphDescriptionError("Pin '{}' does not exist on src device type '{}'. Candidates are {}".format(src_pin,src_device.device_type.id,",".join(dst_device.device_type.outputs)))
@@ -520,7 +544,7 @@ class EdgeInstance(object):
 
         if __debug__ and (not is_refinement_compatible(dst_pin.properties,properties)):
             raise GraphDescriptionError("Properties are not compatible: proto={}, value={}.".format(dst_pin.properties, properties))
-            
+
         if __debug__ and dst_pin.is_application:
             raise GraphDescriptionError("Attempt to connect edge instance to application input pin")
         if __debug__ and src_pin.is_application:
@@ -592,11 +616,11 @@ class GraphInstance:
             self._validate_device_instance(di)
         else:
             self._validated=False
-        
+
         self.device_instances[di.id]=di
-        
+
         return di
-        
+
     def create_device_instance(self, id,device_type,properties=None,metadata=None):
         if isinstance(device_type,str):
             assert isinstance(self.graph_type,GraphType)
@@ -606,7 +630,7 @@ class GraphInstance:
         assert isinstance(device_type,DeviceType)
         di=DeviceInstance(self,id,device_type,properties,metadata)
         return self.add_device_instance(di)
-        
+
 
     def add_edge_instance(self,ei,validate=False):
         if __debug__ and (ei.id in self.edge_instances):
@@ -618,33 +642,33 @@ class GraphInstance:
             self._validated=False
 
         self.edge_instances[ei.id]=ei
-        
+
         return ei
-        
+
     def create_edge_instance(self,dst_device,dst_pin_name,src_device,src_pin_name,properties=None,metadata=None):
         ei=EdgeInstance(self,dst_device,dst_pin_name,src_device,src_pin_name,properties,metadata)
         return self.add_edge_instance(ei)
-            
-        
+
+
     #~ def add_reduction(self,dstDevInst,dstPinName,reducerFactory,maxFanIn,srcInstances,srcPinName):
         #~ """Adds a reduction via a tree of reduction nodes.
-        
+
             #~ dstDevInst : the (already constructed) destination node
             #~ dstPinName : output pin name for the destination _and_ the input pin for reducers
             #~ reducerFactor : a functor from (name,faninCount) -> deviceInstance
             #~ maxFanIn : largest acceptable fanin at any level of tree
             #~ srcInstances: Array of source instances
             #~ srcPinName : output pin name for the sources _and_ the output pin for reducers
-        
+
         #~ """
-        
+
         #~ assert(len(srcInstances)>0)
-        
+
         #~ while(len(srcInstances)>maxFanIn):
             #~ currLevel=srcInstances
             #~ nextLevel=[]
-            
-            
+
+
 
     def validate(self):
         if self._validated:
