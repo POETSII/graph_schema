@@ -343,8 +343,8 @@ def is_refinement_compatible(proto,inst):
 #         return "{}".format(self.id)
 
 class Typedef(TupleTypedDataSpec):
-    def __init__(self,id,elements):
-        TupleTypedDataSpec.__init__(self,id,elements)
+    def __init__(self,name,elements):
+        TupleTypedDataSpec.__init__(self,name,elements)
 
 class MessageType(object):
     def __init__(self,parent,id,message,metadata=None,cTypeName=None,numid=0):

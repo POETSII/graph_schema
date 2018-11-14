@@ -8,7 +8,10 @@ def render_typed_data_as_decl(proto,dst,indent=""):
     if proto is None:
         pass
     elif isinstance(proto,ScalarTypedDataSpec):
-        dst.write("{}{} {};\n".format(indent, proto.type, proto.name))
+        if isinstance(proto.type, Typedef):
+            dst.write("{}{} {};\n".format(indent, proto.type.name, proto.name))
+        else:
+            dst.write("{}{} {};\n".format(indent, proto.type, proto.name))
     elif isinstance(proto,TupleTypedDataSpec):
         dst.write("{}struct {{\n".format(indent))
         for elt in proto.elements_by_index:
@@ -23,23 +26,20 @@ def render_typed_data_as_decl(proto,dst,indent=""):
                 raise RuntimeError("Haven't implemented arrays of arrays of non-scalars yet...")
             dst.write("{}{} {}[{}][{}];\n".format(indent, etype.type.type, proto.name, proto.length, etype.length))
         elif isinstance(proto.type,Typedef):
-            # dst.write("{}{} {}[{}];\n".format(indent, proto.type.name, proto.name, proto.length))
-            dst.write("{}struct {{\n".format(indent))
-            for elt in proto.type.elements_by_index:
-                render_typed_data_as_decl(elt,dst,indent+"  ")
-            dst.write("{}}} {}[{}];\n".format(indent,proto.name,proto.length));
+            dst.write("{}{} {}[{}];\n".format(indent, proto.type.name, proto.name, proto.length))
         else:
             raise RuntimeError("Haven't implemented arrays of non-scalars yet.")
     else:
         raise RuntimeError("Unknown data type {}.".format(type(proto)))
 
-
 def render_typed_data_init(proto,dst,prefix):
     if proto is None:
         pass
     elif isinstance(proto,ScalarTypedDataSpec):
-
-        if proto.default:
+        if isinstance(proto.type,Typedef):
+            for elt in proto.type.elements_by_index:
+                render_typed_data_init(elt,dst,prefix+proto.name+".")
+        elif proto.default:
             value=proto.default
             if proto.type=="bool":
                 value = 1 if value else 0
@@ -77,7 +77,11 @@ def render_typed_data_add_hash(proto,dst,prefix):
     if proto is None:
         pass
     elif isinstance(proto,ScalarTypedDataSpec):
-        dst.write('hash.add({}{});\n'.format(prefix,proto.name))
+        if isinstance(proto.type, Typedef):
+            for elt in proto.type.elements_by_index:
+                render_typed_data_add_hash(elt,dst,prefix+proto.name+".")
+        else:
+            dst.write('hash.add({}{});\n'.format(prefix,proto.name))
     elif isinstance(proto,TupleTypedDataSpec):
         for elt in proto.elements_by_index:
             render_typed_data_add_hash(elt,dst,prefix+proto.name+".")
@@ -105,7 +109,10 @@ def render_typed_data_load_v4_tuple(proto,dst,prefix,indent,parentName,subNum):
             dst.write('{}if({}.HasMember("{}")){{\n'.format(indent,parentName,elt.name))
             dst.write('{}  const rapidjson::Value &n{}={}["{}"];\n'.format(indent,subNum,parentName,elt.name))
         if isinstance(elt,ScalarTypedDataSpec):
-            if elt.type=="int64_t" or elt.type=="int32_t" or elt.type=="int16_t" or elt.type=="int8_t" or elt.type=="char" :
+            if isinstance(elt.type,Typedef):
+                render_typed_data_load_v4_tuple(elt.type,dst,prefix+elt.name+".",indent+"    ","n"+str(subNum),subNum+1)
+
+            elif elt.type=="int64_t" or elt.type=="int32_t" or elt.type=="int16_t" or elt.type=="int8_t" or elt.type=="char" :
                 dst.write('{}  {}{}=n{}.GetInt();\n'.format(indent, prefix, elt.name, subNum))
 
             elif elt.type=="uint64_t" or elt.type=="uint32_t" or elt.type=="uint16_t" or elt.type=="uint8_t":
@@ -113,6 +120,9 @@ def render_typed_data_load_v4_tuple(proto,dst,prefix,indent,parentName,subNum):
 
             elif elt.type=="float" or elt.type=="double":
                 dst.write('{}  {}{}=n{}.GetDouble();\n'.format(indent, prefix, elt.name, subNum))
+
+            elif isinstance(elt.type,Typedef):
+                dst.write('{}  {}{}'.format(indent, prefix, elt.name))
             else:
                 raise RuntimeError("Unknown scalar data type : "+elt.type)
         elif isinstance(elt,TupleTypedDataSpec):
@@ -205,7 +215,17 @@ def render_typed_data_save_v4(proto,dst,elt,prefix,indent):
 def render_typed_data_save(proto, dst, prefix, indent):
     if isinstance(proto,ScalarTypedDataSpec):
 
-        if proto.type=="uint64_t" or proto.type=="uint32_t" or proto.type=="uint16_t" or proto.type=="uint8_t":
+        if isinstance(proto.type, Typedef):
+            etype=proto.type
+            dst.write('{}if(sep){{ dst<<","; }} sep=true;\n'.format(indent))
+            dst.write('{}{{ bool sep=false;\n'.format(indent))
+            dst.write('{}dst<<"\\"{}\\":{{";\n'.format(indent,proto.name))
+            for elt in etype.elements_by_index:
+                render_typed_data_save(elt, dst, prefix+proto.name+".", indent+"  ")
+            dst.write('{}dst<<"}}"\n;'.format(indent))
+            dst.write('{}}}\n'.format(indent))
+
+        elif proto.type=="uint64_t" or proto.type=="uint32_t" or proto.type=="uint16_t" or proto.type=="uint8_t":
             dst.write('{}if({}{} != {}){{ if(sep){{ dst<<","; }}; dst<<"\\"{}\\":"<<(uint64_t){}{}; sep=true; }}\n'.format(indent, prefix, proto.name, proto.default, proto.name, prefix, proto.name))
         elif proto.type=="int64_t" or proto.type=="int32_t" or proto.type=="int16_t" or proto.type=="int8_t":
             dst.write('{}if({}{} != {}){{ if(sep){{ dst<<","; }}; dst<<"\\"{}\\":"<<(int64_t){}{}; sep=true; }}\n'.format(indent, prefix, proto.name, proto.default, proto.name, prefix, proto.name))
@@ -275,7 +295,10 @@ def render_typed_data_as_elements(proto, dst, prefix):
     if proto is None:
         dst.write('{}makeTuple("_",{{}})\n'.format(prefix))
     elif isinstance(proto,ScalarTypedDataSpec):
-        dst.write('{}makeScalar("{}","{}","{}")\n'.format(prefix,proto.name,proto.type, proto.default or 0))
+        if isinstance(proto.type,Typedef):
+            render_typed_data_as_elements(proto.type, dst, prefix+"  ")
+        else:
+            dst.write('{}makeScalar("{}","{}","{}")\n'.format(prefix,proto.name,proto.type, proto.default or 0))
     elif isinstance(proto,TupleTypedDataSpec):
         dst.write('{}makeTuple("{}",{{\n'.format(prefix,proto.name))
         first=True
@@ -769,6 +792,14 @@ def render_graph_as_cpp(graph,dst, destPath, asHeader=False):
 
     dst.write('#include "graph.hpp"\n')
     dst.write('#include "rapidjson/document.h"\n')
+
+    if gt.typedefs_by_index:
+        dst.write("\n// USER DEFINED TYPES")
+        for i in gt.typedefs_by_index:
+            dst.write("typedef struct {} {{".format(i.name))
+            for elt in i.elements_by_index:
+                render_typed_data_as_decl(elt,dst,"    ")
+            dst.write("}} {};\n\n".format(i.name))
 
     render_typed_data_as_spec(gt.properties, "{}_properties_t".format(gt.id),"pp:Properties",dst,asHeader)
 
