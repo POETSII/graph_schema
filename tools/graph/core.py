@@ -441,10 +441,11 @@ class GraphType(object):
     def _validate_type(self,types):
         """Walk through the types and check that any typedefs have already been added to the graphtype."""
         for type in types:
-            if isinstance(type,Typedef):
-                if (type.id not in self.typedefs):
-                    raise GraphDescriptionError("Typedef {} not added to graph type. Knowns are {}".format(type.id,self.typedefs.values()))
-                if (self.typedefs[type.id]!=type):
+            if isinstance (type,ScalarTypedDataSpec) and isinstance(type.type,Typedef):
+                type=type.type
+                if (type.name not in self.typedefs):
+                    raise GraphDescriptionError("Typedef {} not added to graph type. Knowns are {}".format(type.name,self.typedefs.values()))
+                if (self.typedefs[type.name]!=type):
                     raise GraphDescriptionError("Typedef has wrong identity.")
                 # If it's in the graph, we don't need to validate it's contained type again
             else:
