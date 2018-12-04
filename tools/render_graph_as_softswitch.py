@@ -108,6 +108,7 @@ def render_typed_data_as_struct(td,dst,name):
         dst.write("typedef struct {{}} {};\n".format(name))
 
 def render_typed_data_inst_contents(td,ti,dst):
+    sys.stdout.flush()
     if isinstance(td,ScalarTypedDataSpec):
         if ti is None:
             dst.write(str(td.default))
@@ -166,7 +167,7 @@ def scalar_to_bytes(val,type):
 def convert_typed_data_inst_to_bytes(td,ti):
     if td==None:
         return bytearray([])
-    if isinstance(td,ScalarTypedDataSpec):
+    elif isinstance(td,ScalarTypedDataSpec):
         if isinstance(td.type, Typedef):
             res=bytearray([])
             for e in td.type.elements_by_index:
@@ -675,7 +676,7 @@ def render_graph_instance_as_thread_context(
             if not _use_BLOB:
                 render_typed_data_inst(di.device_type.state, props[di.device_type]["DEVICE_TYPE_STATE_T"], None, deviceStateName, dst)
             else:
-                blob=convert_typed_data_inst_to_bytes(di.device_type.state, None) # TODO : This could be much cheaper, as it is always the same
+                blob=convert_typed_data_inst_to_bytes(di.device_type.state, di.state) # TODO : This could be much cheaper, as it is always the same
                 deviceStateOffset=globalState.add(deviceStateName, blob)
 
         render_device_instance_outputs(devices_to_thread, di, dst, edges_out, globalOutputPinTargets, globalProperties,

@@ -102,13 +102,16 @@ class ScalarTypedDataSpec(TypedDataSpec):
         return True
 
     def create_default(self):
-        return self.default
+        if isinstance(self.type, Typedef):
+            return self.type.create_default()
+        else:
+            return self.default
 
     def expand(self,inst):
-        if inst is None:
-            return self.create_default()
         if isinstance(self.type,Typedef):
             return self.type.expand(inst)
+        elif inst is None:
+            return self.create_default()
         return self._check_value(inst)
 
     def contract(self,inst):
@@ -239,9 +242,14 @@ class ArrayTypedDataSpec(TypedDataSpec):
         if inst is None:
             return self.create_default()
         assert isinstance(inst,list)
-        assert len(inst)==self.length
+        # assert len(inst)==self.length
+        l = len(inst)
+        # FILLING IN THE BLANKS TO AVOID A HUGE GRAPH INSTANCE
         for i in range(self.length):
-            inst[i]=self.type.expand(inst[i])
+            if i < l:
+                inst[i]=self.type.expand(inst[i])
+            else:
+                inst.append(self.type.create_default())
         return inst
 
     def contract(self,inst):
@@ -501,7 +509,7 @@ class GraphTypeReference(object):
 
 
 class DeviceInstance(object):
-    def __init__(self,parent,id,device_type,properties=None,metadata=None):
+    def __init__(self,parent,id,device_type,properties=None,state=None,metadata=None):
         if __debug__ and (properties is not None and not is_refinement_compatible(device_type.properties,properties)):
             raise GraphDescriptionError("Properties not compatible with device type properties: proto={}, value={}".format(device_type.properties, properties))
 
@@ -509,6 +517,7 @@ class DeviceInstance(object):
         self.id=id
         self.device_type=device_type
         self.properties=properties
+        self.state=state
         self.metadata=metadata
 
     def set_property(self, name, value):

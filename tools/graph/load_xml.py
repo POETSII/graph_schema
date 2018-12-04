@@ -12,6 +12,7 @@ ns={"p":"https://poets-project.org/schemas/virtual-graph-schema-v2"}
 
 # Precalculate, as these are on inner loop for (DevI|ExtI) and EdgeI
 _ns_P="{{{}}}P".format(ns["p"])
+_ns_S="{{{}}}S".format(ns["p"])
 _ns_M="{{{}}}M".format(ns["p"])
 _ns_DevI="{{{}}}DevI".format(ns["p"])
 _ns_ExtI="{{{}}}ExtI".format(ns["p"])
@@ -387,6 +388,7 @@ def load_device_instance(graph,diNode):
     device_type=graph.graph_type.device_types[device_type_id]
 
     properties=None
+    state=None
     metadata=None
 
     for n in diNode: # walk over children rather than using find. Better performance
@@ -399,13 +401,23 @@ def load_device_instance(graph,diNode):
             value=json.loads("{"+n.text+"}")
             assert spec.is_refinement_compatible(value), "Spec = {}, value= {}".format(spec,value)
             properties=spec.expand(value)
+        elif n.tag==_ns_S:
+            assert not state
+
+            spec=device_type.state
+            assert spec is not None, "Can't have state value for device with no state spec"
+
+            value=json.loads("{"+n.text+"}")
+            # assert spec.is_refinement_compatible(value), "Spec = {}, value= {}".format(spec,value)
+            # TODO: ENSURE REFINEMENT IS COMPATIBLE
+            state=spec.expand(value)
         elif n.tag==_ns_M:
             assert not metadata
             metadata=json.loads("{"+n.text+"}")
         else:
             assert "Unknown tag type in EdgeI"
 
-    return DeviceInstance(graph,id,device_type,properties,metadata)
+    return DeviceInstance(graph,id,device_type,properties,state,metadata)
 
 def split_endpoint(endpoint,node):
     parts=endpoint.split(':')
