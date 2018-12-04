@@ -71,8 +71,6 @@ class ScalarTypedDataSpec(TypedDataSpec):
         TypedDataSpec.__init__(self,name)
         assert isinstance(type,Typedef) or (type in ScalarTypedDataSpec._primitives), "Didn't understand type parameter {}".format(type)
         self.type=type
-        # if isinstance(self.type,Typedef):
-        #     self.default=self.type.expand(default)
         # elif default is not None:
         if default is not None:
             self.default=self._check_value(default)
@@ -243,12 +241,16 @@ class ArrayTypedDataSpec(TypedDataSpec):
             return self.create_default()
         assert isinstance(inst,list)
         # assert len(inst)==self.length
+        assert len(inst) <= self.length
+        # Now allowing only some of the array elements, but still ensuring that there isn't too many
         l = len(inst)
-        # FILLING IN THE BLANKS TO AVOID A HUGE GRAPH INSTANCE
+        # Filling in the blanks
         for i in range(self.length):
             if i < l:
+                # Fill the array from the front
                 inst[i]=self.type.expand(inst[i])
             else:
+                # Don't need to provide all array elements, so fill in the blanks
                 inst.append(self.type.create_default())
         return inst
 
