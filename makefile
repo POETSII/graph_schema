@@ -96,6 +96,8 @@ build-virtual-schema-v2 : derived/virtual-graph-schema-v2.rng derived/virtual-gr
 
 build-virtual-schema-v2.1 : derived/virtual-graph-schema-v2.1.rng derived/virtual-graph-schema-v2.1.xsd
 
+build-virtual-schema-v3 : derived/virtual-graph-schema-v3.rng derived/virtual-graph-schema-v3.xsd
+
 regenerate-random :
 	python3.4 tools/create_random_graph.py 1 > test/virtual/random1.xml
 	python3.4 tools/create_random_graph.py 2 > test/virtual/random2.xml
