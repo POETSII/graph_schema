@@ -71,8 +71,9 @@ class ScalarTypedDataSpec(TypedDataSpec):
         TypedDataSpec.__init__(self,name)
         assert isinstance(type,Typedef) or (type in ScalarTypedDataSpec._primitives), "Didn't understand type parameter {}".format(type)
         self.type=type
-        # elif default is not None:
-        if default is not None:
+        if isinstance(self.type,Typedef):
+            self.default=self.type.expand(default)
+        elif default is not None:
             self.default=self._check_value(default)
         else:
             self.default=0
@@ -304,57 +305,53 @@ def is_refinement_compatible(proto,inst):
     return proto.is_refinement_compatible(inst)
 
 
-# class Typedef(TypedDataSpec):
-#     def __init__(self,id,elements):
-#         TypedDataSpec.__init__(self,id)
-#         self.id=id
-#         self._elts_by_name={}
-#         self.elements_by_index=[]
-#         self._hash = hash(self.name)
-#         for e in elements:
-#             if e.name in self.elements_by_index:
-#                 raise GraphDescriptionError("Tuple element name appears twice.")
-#             self._elts_by_name[e.name]=e
-#             self.elements_by_index.append(e)
-#             self._hash = self._hash ^ hash(e)
+class Typedef(TypedDataSpec):
+    def __init__(self,id,elements):
+        TypedDataSpec.__init__(self,id)
+        self.id=id
+        self._elts_by_name={}
+        self.elements_by_index=[]
+        self._hash = hash(self.name)
+        for e in elements:
+            if e.name in self.elements_by_index:
+                raise GraphDescriptionError("Tuple element name appears twice.")
+            self._elts_by_name[e.name]=e
+            self.elements_by_index.append(e)
+            self._hash = self._hash ^ hash(e)
 
-#     def is_refinement_compatible(self,inst):
-#         sys.stderr.write(" is_refinement_compatible( {} , {} )\n".format(self,inst))
-#         return self.type.is_refinement_compatible(inst)
+    def is_refinement_compatible(self,inst):
+        sys.stderr.write(" is_refinement_compatible( {} , {} )\n".format(self,inst))
+        return self.type.is_refinement_compatible(inst)
 
-#     def create_default(self):
-#         return { e.name:e.create_default() for e in self.elements_by_index  }
+    def create_default(self):
+        return { e.name:e.create_default() for e in self.elements_by_index  }
 
-#     # def create_default(self):
-#     #     return self.type.create_default()
+    # def create_default(self):
+    #     return self.type.create_default()
 
-#     # def expand(self,inst):
-#     #     for type in self.types:
-#     #         return type.expand(inst)
+    # def expand(self,inst):
+    #     for type in self.types:
+    #         return type.expand(inst)
 
-#     def expand(self,inst):
-#         if inst is None:
-#             return self.create_default()
-#         assert isinstance(inst,dict), "Want to expand dict, got '{}'".format(inst)
-#         for e in self.elements_by_index:
-#             inst[e.name]=e.expand(inst.get(e.name,None))
-#         return inst
+    def expand(self,inst):
+        if inst is None:
+            return self.create_default()
+        assert isinstance(inst,dict), "Want to expand dict, got '{}'".format(inst)
+        for e in self.elements_by_index:
+            inst[e.name]=e.expand(inst.get(e.name,None))
+        return inst
 
-#     def contract(self,inst):
-#         return self.contract(inst)
+    def contract(self,inst):
+        return self.contract(inst)
 
-#     def __eq__(self, o):
-#         return isinstance(o, Typedef) and self.id==o.id
+    def __eq__(self, o):
+        return isinstance(o, Typedef) and self.id==o.id
 
-#     def __hash__(self):
-#         return self._hash
+    def __hash__(self):
+        return self._hash
 
-#     def __str__(self):
-#         return "{}".format(self.id)
-
-class Typedef(TupleTypedDataSpec):
-    def __init__(self,name,elements):
-        TupleTypedDataSpec.__init__(self,name,elements)
+    def __str__(self):
+        return "{}".format(self.id)
 
 class MessageType(object):
     def __init__(self,parent,id,message,metadata=None,cTypeName=None,numid=0):
@@ -448,27 +445,25 @@ class GraphType(object):
         self.typedefs={}
         self.message_types=collections.OrderedDict()
 
-    def _validate_type(self,types):
+    def _validate_type(self,type):
         """Walk through the types and check that any typedefs have already been added to the graphtype."""
-        for type in types:
-            if isinstance (type,ScalarTypedDataSpec) and isinstance(type.type,Typedef):
-                type=type.type
-                if (type.name not in self.typedefs):
-                    raise GraphDescriptionError("Typedef {} not added to graph type. Knowns are {}".format(type.name,self.typedefs.values()))
-                if (self.typedefs[type.name]!=type):
-                    raise GraphDescriptionError("Typedef has wrong identity.")
-                # If it's in the graph, we don't need to validate it's contained type again
-            else:
-                type.visit_subtypes( lambda t: self._validate_type(t) )
+        if isinstance(type,Typedef):
+            if (type.id not in self.typedefs):
+                raise GraphDescriptionError("Typedef {} not added to graph type. Knowns are {}".format(type.id,self.typedefs.values()))
+            if (self.typedefs[type.id]!=type):
+                raise GraphDescriptionError("Typedef has wrong identity.")
+            # If it's in the graph, we don't need to validate it's contained type again
+        else:
+            type.visit_subtypes( lambda t: self._validate_type(t) )
 
 
     def add_typedef(self,typedef):
         assert(isinstance(typedef,Typedef))
-        if typedef.name in self.typedefs:
+        if typedef.id in self.typedefs:
             raise GraphDescriptionError("typedef already exists.")
-        self._validate_type(typedef.elements_by_index)
+        self._validate_type(typedef.type)
         self.typedefs_by_index.append(typedef)
-        self.typedefs[typedef.name]=typedef
+        self.typedefs[typedef.id]=typedef
 
 
     def add_message_type(self,message_type):

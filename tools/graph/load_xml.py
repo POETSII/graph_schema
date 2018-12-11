@@ -8,7 +8,7 @@ import os
 import sys
 import json
 
-ns={"p":"https://poets-project.org/schemas/virtual-graph-schema-v2"}
+ns={"p":"https://poets-project.org/schemas/virtual-graph-schema-v3"}
 
 # Precalculate, as these are on inner loop for (DevI|ExtI) and EdgeI
 _ns_P="{{{}}}P".format(ns["p"])
@@ -148,15 +148,14 @@ def load_metadata(parent, name):
 
 def load_type_def(parent,td, namedTypes):
     id=get_attrib(td,"id")
-    elts=[]
     try:
-        for eltNode in td.findall("p:*",ns): # Anything from this namespace must be a member
-            if eltNode is None:
-                raise XMLSyntaxError("Missing sub-child to give actual type.")
-            elt=load_typed_data_spec(eltNode, namedTypes)
-            elts.append(elt)
+        typeNode=td.find("p:*",ns)
+        if typeNode is None:
+            raise XMLSyntaxError("Missing sub-child to give actual type.")
 
-        return Typedef(id,elts)
+        type=load_typed_data_spec(typeNode, namedTypes)
+
+        return Typedef(id,type)
     except XMLSyntaxError:
             raise
     except Exception as e:
@@ -301,7 +300,7 @@ def load_graph_type(graphNode, sourcePath):
     for etNode in graphNode.findall("p:Types/p:TypeDef",ns):
         sys.stderr.write("  Loading type defs, current={}\n".format(namedTypes))
         td=load_type_def(graphNode,etNode, namedTypes)
-        namedTypes[td.name]=td
+        namedTypes[td.id]=td
         namedTypesByIndex.append(td)
 
     properties=None
