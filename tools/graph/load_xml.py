@@ -123,6 +123,7 @@ def load_struct_spec(name, members,namedTypes):
     for eltNode in members.findall("p:*",ns): # Anything from this namespace must be a member
         elt=load_typed_data_spec(eltNode,namedTypes)
         elts.append(elt)
+
     return TupleTypedDataSpec(name, elts)
 
 def load_struct_instance(spec,dt):

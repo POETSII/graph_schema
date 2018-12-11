@@ -82,7 +82,7 @@ class ScalarTypedDataSpec(TypedDataSpec):
             self.default=frozendict(self.default)
         if isinstance(self.default,list):
             self.default=tuple(self.default) # make it hashable
-        self._hash = hash(self.name) ^ hash(self.type) ^ hash(self.default)
+        self._hash = hash(self.name) ^ hash(self.type) # ^ hash(self.default)
 
     def visit_subtypes(self,visitor):
         if isinstance(self.type,Typedef):
@@ -306,40 +306,22 @@ def is_refinement_compatible(proto,inst):
 
 
 class Typedef(TypedDataSpec):
-    def __init__(self,id,elements):
+    def __init__(self,id,type):
         TypedDataSpec.__init__(self,id)
         self.id=id
-        self._elts_by_name={}
-        self.elements_by_index=[]
-        self._hash = hash(self.name)
-        for e in elements:
-            if e.name in self.elements_by_index:
-                raise GraphDescriptionError("Tuple element name appears twice.")
-            self._elts_by_name[e.name]=e
-            self.elements_by_index.append(e)
-            self._hash = self._hash ^ hash(e)
+        assert(isinstance(type,TypedDataSpec))
+        self.type=type
+        self._hash=hash(id) + 19937*hash(type)
 
     def is_refinement_compatible(self,inst):
         sys.stderr.write(" is_refinement_compatible( {} , {} )\n".format(self,inst))
         return self.type.is_refinement_compatible(inst)
 
     def create_default(self):
-        return { e.name:e.create_default() for e in self.elements_by_index  }
-
-    # def create_default(self):
-    #     return self.type.create_default()
-
-    # def expand(self,inst):
-    #     for type in self.types:
-    #         return type.expand(inst)
+        return self.type.create_default()
 
     def expand(self,inst):
-        if inst is None:
-            return self.create_default()
-        assert isinstance(inst,dict), "Want to expand dict, got '{}'".format(inst)
-        for e in self.elements_by_index:
-            inst[e.name]=e.expand(inst.get(e.name,None))
-        return inst
+        return self.type.expand(inst)
 
     def contract(self,inst):
         return self.contract(inst)
@@ -351,7 +333,7 @@ class Typedef(TypedDataSpec):
         return self._hash
 
     def __str__(self):
-        return "{}".format(self.id)
+        return "{}[{}]".format(self.id,self.type)
 
 class MessageType(object):
     def __init__(self,parent,id,message,metadata=None,cTypeName=None,numid=0):

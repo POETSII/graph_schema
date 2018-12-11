@@ -8,7 +8,10 @@ def render_typed_data_as_decl(proto,dst,indent=""):
     if proto is None:
         pass
     elif isinstance(proto,ScalarTypedDataSpec):
-        dst.write("{}{} {};\n".format(indent, proto.type, proto.name))
+        if not isinstance(proto.type,Typedef):
+            dst.write("{}{} {};\n".format(indent, proto.type, proto.name))
+        else:
+            dst.write("{}{} {};\n".format(indent, proto.type.id, proto.name))
     elif isinstance(proto,TupleTypedDataSpec):
         dst.write("{}struct {{\n".format(indent))
         for elt in proto.elements_by_index:
@@ -17,6 +20,8 @@ def render_typed_data_as_decl(proto,dst,indent=""):
     elif isinstance(proto,ArrayTypedDataSpec):
         if isinstance(proto.type,ScalarTypedDataSpec):
             dst.write("{}{} {}[{}];\n".format(indent, proto.type.type, proto.name, proto.length));
+        elif  isinstance(proto.type, Typedef):
+            dst.write("{}{} {}[{}];\n".format(indent, proto.type.id, proto.name, proto.length))
         elif isinstance(proto.type,ArrayTypedDataSpec):
             etype=proto.type
             if not isinstance(etype.type,ScalarTypedDataSpec):
@@ -31,8 +36,12 @@ def render_typed_data_init(proto,dst,prefix):
     if proto is None:
         pass
     elif isinstance(proto,ScalarTypedDataSpec):
-
-        if proto.default:
+        if isinstance(proto.type,Typedef):
+            tup = proto.type.type
+            pfix = prefix+proto.name+"."
+            for elt in tup.elements_by_index:
+                render_typed_data_init(elt,dst,pfix)
+        elif proto.default:
             value=proto.default
             if proto.type=="bool":
                 value = 1 if value else 0
@@ -49,6 +58,13 @@ def render_typed_data_init(proto,dst,prefix):
                     dst.write('{}{}[{}] = {};\n'.format(prefix,proto.name,i,proto.type.default))
                 else:
                     dst.write('{}{}[{}] = 0;\n'.format(prefix,proto.name,i))
+        if isinstance(proto.type,Typedef):
+            default = proto.type.create_default()
+            tup = proto.type.type
+            for i in range(0,proto.length):
+                for e in tup.elements_by_index:
+                    pfix='{}{}[{}].'.format(prefix,proto.name,i)
+                    render_typed_data_init(e, dst, pfix)
         elif isinstance(proto.type,ArrayTypedDataSpec):
             etype=proto.type
             if not isinstance(etype.type,ScalarTypedDataSpec):
@@ -67,7 +83,13 @@ def render_typed_data_add_hash(proto,dst,prefix):
     if proto is None:
         pass
     elif isinstance(proto,ScalarTypedDataSpec):
-        dst.write('hash.add({}{});\n'.format(prefix,proto.name))
+        if not isinstance(proto.type, Typedef):
+            dst.write('hash.add({}{});\n'.format(prefix,proto.name))
+        else:
+            tup = proto.type.type
+            pfix=prefix+proto.name+"."
+            for elt in tup.elements_by_index:
+                render_typed_data_add_hash(elt,dst,pfix)
     elif isinstance(proto,TupleTypedDataSpec):
         for elt in proto.elements_by_index:
             render_typed_data_add_hash(elt,dst,prefix+proto.name+".")
@@ -75,6 +97,12 @@ def render_typed_data_add_hash(proto,dst,prefix):
         if isinstance(proto.type,ScalarTypedDataSpec):
             for i in range(0,proto.length):
                 dst.write('  hash.add({}{}[{}]);\n'.format(prefix,proto.name,i))
+        elif isinstance(proto.type, Typedef):
+            tup = proto.type.type
+            for i in range(0,proto.length):
+                pfix = prefix+proto.name+"["+str(i)+"]."
+                for elt in tup.elements_by_index:
+                    render_typed_data_add_hash(elt,dst,pfix)
         elif isinstance(proto.type,ArrayTypedDataSpec) and isinstance(proto.type.type,ScalarTypedDataSpec):
             for i in range(0,proto.length):
                 for j in range(proto.type.length):
@@ -85,25 +113,29 @@ def render_typed_data_add_hash(proto,dst,prefix):
     else:
         raise RuntimeError("Unknown data type {}.".format(type(proto)))
 
-def render_typed_data_load_v4_tuple(proto,dst,prefix,indent):
+def render_typed_data_load_v4_tuple(proto,dst,prefix,indent,parentName,subNum):
     assert isinstance(proto,TupleTypedDataSpec)
     for elt in proto.elements_by_index:
-        dst.write('{}if(document.HasMember("{}")){{\n'.format(indent,elt.name))
-        dst.write('{}  const rapidjson::Value &n=document["{}"];\n'.format(indent,elt.name))
+        dst.write('{}if({}.HasMember("{}")){{\n'.format(indent,parentName,elt.name))
+        dst.write('{}  const rapidjson::Value &n{}={}["{}"];\n'.format(indent,subNum,parentName,elt.name))
         if isinstance(elt,ScalarTypedDataSpec):
 
             if elt.type=="int64_t" or elt.type=="int32_t" or elt.type=="int16_t" or elt.type=="int8_t" or elt.type=="char" :
-                dst.write('{}  {}{}=n.GetInt();\n'.format(indent, prefix, elt.name))
+                dst.write('{}  {}{}=n{}.GetInt();\n'.format(indent, prefix, elt.name, subNum))
 
             elif elt.type=="uint64_t" or elt.type=="uint32_t" or elt.type=="uint16_t" or elt.type=="uint8_t":
-                dst.write('{}  {}{}=n.GetUint();\n'.format(indent, prefix, elt.name))
+                dst.write('{}  {}{}=n{}.GetUint();\n'.format(indent, prefix, elt.name, subNum))
 
             elif elt.type=="float" or elt.type=="double":
-                dst.write('{}  {}{}=n.GetDouble();\n'.format(indent, prefix, elt.name))
+                dst.write('{}  {}{}=n{}.GetDouble();\n'.format(indent, prefix, elt.name, subNum))
+
+            elif isinstance(elt.type, Typedef):
+                tup = elt.type.type
+                render_typed_data_load_v4_tuple(tup,dst,prefix+elt.name+".",indent+"    ","n"+str(subNum),subNum+1)
             else:
                 raise RuntimeError("Unknown scalar data type : "+elt.type)
         elif isinstance(elt,TupleTypedDataSpec):
-            render_typed_data_load_v4_tuple(elt,dst,prefix+elt.name+".",indent+"    ")
+            render_typed_data_load_v4_tuple(elt,dst,prefix+elt.name+".",indent+"    ","n"+str(subNum),subNum+1)
         elif isinstance(elt,ArrayTypedDataSpec):
             dst.write('{}  assert(n.IsArray());\n')
             if isinstance(elt.type,ScalarTypedDataSpec):
@@ -121,6 +153,11 @@ def render_typed_data_load_v4_tuple(proto,dst,prefix,indent):
                         dst.write('{}  {}{}[{}]=n[{}].GetDouble();\n'.format(indent, prefix,elt.name,i,i))
                     else:
                         raise RuntimeError("Unknown scalar data type.")
+            elif isinstance(elt.type, Typedef):
+                tup=elt.type.type
+                for i in range(0, elt.length):
+                    pfix=prefix+elt.name+"["+str(i)+"]."
+                    render_typed_data_load_v4_tuple(tup,dst,pfix,indent,"n"+str(subNum),subNum+1)
             elif isinstance(elt.type,ArrayTypedDataSpec):
                 etype=elt.type
                 if not isinstance(etype.type,ScalarTypedDataSpec):
@@ -189,6 +226,11 @@ def render_typed_data_save(proto, dst, prefix, indent):
             dst.write('{}if({}{} != {}){{ if(sep){{ dst<<","; }}; dst<<"\\"{}\\":"<<(int64_t){}{}; sep=true; }}\n'.format(indent, prefix, proto.name, proto.default, proto.name, prefix, proto.name))
         elif proto.type=="float" or proto.type=="double":
             dst.write('{}if({}{} != {}){{ if(sep){{ dst<<","; }}; dst<<"\\"{}\\":"<<float_to_string({}{}); sep=true; }}\n'.format(indent, prefix, proto.name, proto.default, proto.name, prefix, proto.name))
+        elif isinstance(proto.type, Typedef):
+            tup = proto.type.type
+            pfix = prefix+proto.name+"."
+            for elt in tup.elements_by_index:
+                render_typed_data_save(elt,dst,pfix,indent)
         else:
             dst.write('{}if({}{} != {}){{ if(sep){{ dst<<","; }}; dst<<"\\"{}\\":"<<{}{}; sep=true; }}\n'.format(indent, prefix, proto.name, proto.default, proto.name, prefix, proto.name))
 
@@ -205,6 +247,15 @@ def render_typed_data_save(proto, dst, prefix, indent):
             else:
                 dst.write('{}  dst<<(int64_t)({}{}[ii]);\n'.format(indent, prefix, proto.name))
             dst.write("{}}}".format(indent)); # End of for loop
+            dst.write('{}dst<<"]"; sep=true;\n'.format(indent))
+        elif isinstance(proto.type,Typedef):
+            tup = proto.type.type
+            dst.write('{}if(sep){{ dst<<","; }}; dst<<"\\"{}\\":[";'.format(indent,proto.name))
+            for i in range(proto.length):
+                pfix=prefix+proto.name+"["+str(i)+"]."
+                for e in tup.elements_by_index:
+                    render_typed_data_save(e, dst, pfix, indent);
+                dst.write('{}  dst<<"]";\n'.format(indent))
             dst.write('{}dst<<"]"; sep=true;\n'.format(indent))
         elif isinstance(proto.type,ArrayTypedDataSpec):
             etype=proto.type
@@ -243,7 +294,19 @@ def render_typed_data_as_elements(proto, dst, prefix):
     if proto is None:
         dst.write('{}makeTuple("_",{{}})\n'.format(prefix))
     elif isinstance(proto,ScalarTypedDataSpec):
-        dst.write('{}makeScalar("{}","{}","{}")\n'.format(prefix,proto.name,proto.type, proto.default or 0))
+        if not isinstance(proto.type, Typedef):
+            dst.write('{}makeScalar("{}","{}","{}")\n'.format(prefix,proto.name,proto.type, proto.default or 0))
+        else:
+            tup = proto.type.type
+            dst.write('{}makeTuple("{}",{{\n'.format(prefix,proto.name))
+            first=True
+            for elt in tup.elements_by_index:
+                if first:
+                    first=False
+                else:
+                    dst.write("{},\n".format(prefix))
+                render_typed_data_as_elements(elt, dst, prefix+"  ")
+            dst.write('{}}})\n'.format(prefix))
     elif isinstance(proto,TupleTypedDataSpec):
         dst.write('{}makeTuple("{}",{{\n'.format(prefix,proto.name))
         first=True
@@ -258,6 +321,8 @@ def render_typed_data_as_elements(proto, dst, prefix):
         dst.write('{}makeArray("{}",{},\n'.format(prefix,proto.name,proto.length))
         render_typed_data_as_elements(proto.type, dst, prefix+"  ")
         dst.write("{})\n".format(prefix))
+    elif isinstance(proto,Typedef):
+        render_typed_data_as_elements(proto.type, dst, prefix)
     else:
         assert False, "Unknown data-type, {}".format(proto)
 
@@ -730,7 +795,7 @@ def render_graph_as_cpp(graph,dst, destPath, asHeader=False):
         dst.write("\n// USER DEFINED TYPES")
         for i in gt.typedefs_by_index:
             dst.write("typedef struct {} {{".format(i.name))
-            for elt in i.elements_by_index:
+            for elt in i.type.elements_by_index:
                 render_typed_data_as_decl(elt,dst,"    ")
             dst.write("}} {};\n\n".format(i.name))
 
