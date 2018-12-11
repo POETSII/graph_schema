@@ -310,14 +310,14 @@ struct EpochSim
 
     std::uniform_real_distribution<> udist;
 
-    ReceiveOrchestratorServicesImpl receiveServices{logLevel, stdout, 0, 0, m_onExportKeyValue, m_onDeviceExit, m_onCheckpoint};
+    ReceiveOrchestratorServicesImpl receiveServices{logLevel, stderr, 0, 0, m_onExportKeyValue, m_onDeviceExit, m_onCheckpoint};
     {
       std::stringstream tmp;
       tmp<<"Epoch "<<m_epoch<<", Recv: ";
       receiveServices.setPrefix(tmp.str().c_str());
     }
 
-    SendOrchestratorServicesImpl sendServices{logLevel, stdout, 0, 0, m_onExportKeyValue, m_onDeviceExit, m_onCheckpoint};
+    SendOrchestratorServicesImpl sendServices{logLevel, stderr, 0, 0, m_onExportKeyValue, m_onDeviceExit, m_onCheckpoint};
     {
       std::stringstream tmp;
       tmp<<"Epoch "<<m_epoch<<", Send: ";
