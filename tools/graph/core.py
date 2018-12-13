@@ -385,6 +385,7 @@ class DeviceType(object):
         self.metadata=metadata
         self.shared_code=shared_code
         self.ready_to_send_handler="" # Hrmm, this was missing as an explicit member, but is used by load/save
+        self.init_handler=""
         self.isExternal=isExternal
 
     def add_input(self,name,message_type,is_application,properties,state,metadata,receive_handler,source_file=None,source_line={}):

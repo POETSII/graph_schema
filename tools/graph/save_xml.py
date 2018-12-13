@@ -143,6 +143,11 @@ def save_device_type(parent,dt):
             sn=etree.SubElement(n,toNS("p:SharedCode"))
             sn.text=etree.CDATA(s)
 
+    if dt.init_handler
+        pn=etree.Element(toNS("Init"))
+        pn.text=etree.CDATA(dt.init_handler)
+        n.append(pn)
+
     for p in dt.inputs_by_index:
         pn=etree.SubElement(n,toNS("p:InputPin"))
         pn.attrib["name"]=p.name

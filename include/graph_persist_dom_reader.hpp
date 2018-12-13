@@ -43,7 +43,7 @@ rapidjson::Document parse_meta_data(xmlpp::Element *parent, const char *name, xm
 TypedDataSpecElementPtr loadTypedDataSpecElement(xmlpp::Element *eMember)
 {
   xmlpp::Node::PrefixNsMap ns;
-  ns["g"]="https://poets-project.org/schemas/virtual-graph-schema-v2";
+  ns["g"]="https://poets-project.org/schemas/virtual-graph-schema-v3";
 
 
   std::string name=get_attribute_required(eMember, "name");
@@ -87,7 +87,7 @@ TypedDataSpecElementPtr loadTypedDataSpecElement(xmlpp::Element *eMember)
 TypedDataSpecPtr loadTypedDataSpec(xmlpp::Element *eTypedDataSpec)
 {
   xmlpp::Node::PrefixNsMap ns;
-  ns["g"]="https://poets-project.org/schemas/virtual-graph-schema-v2";
+  ns["g"]="https://poets-project.org/schemas/virtual-graph-schema-v3";
 
   std::vector<TypedDataSpecElementPtr> members;
 
@@ -105,7 +105,7 @@ TypedDataSpecPtr loadTypedDataSpec(xmlpp::Element *eTypedDataSpec)
 MessageTypePtr loadMessageTypeElement(xmlpp::Element *eMessageType)
 {
   xmlpp::Node::PrefixNsMap ns;
-  ns["g"]="https://poets-project.org/schemas/virtual-graph-schema-v2";
+  ns["g"]="https://poets-project.org/schemas/virtual-graph-schema-v3";
 
   std::string id=get_attribute_required(eMessageType, "id");
 
@@ -179,6 +179,11 @@ public:
     }
   }
 
+  virtual void init(OrchestratorServices*, const typed_data_t*, const typed_data_t*, typed_data_t*) const override
+  {
+    throw std::runtime_error("init - input pin not loaded from provider, so functionality not available.");
+  }
+
   virtual uint32_t calcReadyToSend(OrchestratorServices*, const typed_data_t*, const typed_data_t*, const typed_data_t*) const override
   {
     throw std::runtime_error("calcReadyToSend - input pin not loaded from provider, so functionality not available.");
@@ -212,7 +217,7 @@ DeviceTypePtr loadDeviceTypeElement(
   std::function<DeviceTypePtr ()> delayedSrc=  [=]() -> DeviceTypePtr { return *futureSrc; };
 
   xmlpp::Node::PrefixNsMap ns;
-  ns["g"]="https://poets-project.org/schemas/virtual-graph-schema-v2";
+  ns["g"]="https://poets-project.org/schemas/virtual-graph-schema-v3";
 
   std::string id=get_attribute_required(eDeviceType, "id");
   rapidjson::Document metadata=parse_meta_data(eDeviceType, "./g:MetaData", ns);
@@ -365,7 +370,7 @@ public:
 GraphTypePtr loadGraphTypeElement(const filepath &srcPath, xmlpp::Element *eGraphType, GraphLoadEvents *events)
 {
   xmlpp::Node::PrefixNsMap ns;
-  ns["g"]="https://poets-project.org/schemas/virtual-graph-schema-v2";
+  ns["g"]="https://poets-project.org/schemas/virtual-graph-schema-v3";
 
 
   std::string id=get_attribute_required(eGraphType, "id");
@@ -452,7 +457,7 @@ GraphTypePtr loadGraphTypeReferenceElement(const filepath &srcPath, xmlpp::Eleme
 GraphTypePtr loadGraphType(const filepath &srcPath, xmlpp::Element *parent, GraphLoadEvents *events, const std::string &id)
 {
   xmlpp::Node::PrefixNsMap ns;
-  ns["g"]="https://poets-project.org/schemas/virtual-graph-schema-v2";
+  ns["g"]="https://poets-project.org/schemas/virtual-graph-schema-v3";
 
   std::cerr<<"parent = "<<parent<<"\n";
   for(auto *nGraphType : parent->find("./*")){
@@ -474,7 +479,7 @@ GraphTypePtr loadGraphType(const filepath &srcPath, xmlpp::Element *parent, Grap
 std::map<std::string,GraphTypePtr> loadAllGraphTypes(const filepath &srcPath, xmlpp::Element *parent, GraphLoadEvents *events)
 {
   xmlpp::Node::PrefixNsMap ns;
-  ns["g"]="https://poets-project.org/schemas/virtual-graph-schema-v2";
+  ns["g"]="https://poets-project.org/schemas/virtual-graph-schema-v3";
 
   std::map<std::string,GraphTypePtr> res;
 
@@ -493,7 +498,7 @@ std::map<std::string,GraphTypePtr> loadAllGraphTypes(const filepath &srcPath, xm
 void loadGraph(Registry *registry, const filepath &srcPath, xmlpp::Element *parent, GraphLoadEvents *events)
 {
   xmlpp::Node::PrefixNsMap ns;
-  ns["g"]="https://poets-project.org/schemas/virtual-graph-schema-v2";
+  ns["g"]="https://poets-project.org/schemas/virtual-graph-schema-v3";
 
   auto *eGraph=find_single(parent, "./g:GraphInstance", ns);
   if(eGraph==0)

@@ -691,17 +691,22 @@ def render_device_type_as_cpp(dt,dst):
         "devicePropertiesStructName"    : "{}_properties_t".format(dt.id),
         "deviceStateStructName"         : "{}_state_t".format(dt.id),
         "handlerCode"                   : dt.ready_to_send_handler,
+        "initCode"                      : dt.init_handler,
         "inputCount"                    : len(dt.inputs),
         "outputCount"                   : len(dt.outputs)
     }
+    if dt.init_source_line and dt.init_source_file:
+        subs["preInitProcLinePragma"]= '#line {} "{}"\n'.format(dt.init_source_line-1,dt.init_source_file)
+    else:
+        subst["preInitProcLinePragma"]="// No line/file information for init handler"
+
     if dt.ready_to_send_source_line and dt.ready_to_send_source_file:
         subs["preProcLinePragma"]= '#line {} "{}"\n'.format(dt.ready_to_send_source_line-1,dt.ready_to_send_source_file)
     else:
-        subst["preProcLinePragma"]="// No line/file information for handler"
+        subst["preProcLinePragma"]="// No line/file information for readyToSend handler"
 
     subs["deviceGlobalConstants"]=emit_device_global_constants(dt,subs,"    ")
     subs["deviceLocalConstants"]=emit_device_local_constants(dt,subs, "    ")
-
 
     dst.write("namespace ns_{}{{\n".format(dt.id));
 
@@ -770,6 +775,61 @@ def render_device_type_as_cpp(dt,dst):
     return fReadyToSend;
   }}
 """.format(**subs))
+
+    if (dt.init_handler):
+        dst.write(
+    """
+      virtual void init(
+        OrchestratorServices *orchestrator,
+        const typed_data_t *gGraphProperties,
+        const typed_data_t *gDeviceProperties,
+        typed_data_t *gDeviceState
+      ) const override {{
+        auto graphProperties=cast_typed_properties<{graphPropertiesStructName}>(gGraphProperties);
+        auto deviceProperties=cast_typed_properties<{devicePropertiesStructName}>(gDeviceProperties);
+        auto deviceState=cast_typed_properties<{deviceStateStructName}>(gDeviceState);
+        HandlerLogImpl handler_log(orchestrator);
+        auto handler_exit=[&](int code) -> void {{ orchestrator->application_exit(code); }};
+        auto handler_export_key_value=[&](uint32_t key, uint32_t value) -> void {{ orchestrator->export_key_value(key, value); }};
+        auto handler_checkpoint=[&](bool preEvent, int level, const char *fmt, ...) -> void {{
+            va_list a;
+            va_start(a,fmt);
+            orchestrator->vcheckpoint(preEvent,level,fmt,a);
+            va_end(a);
+        }};
+
+        // Begin custom handler
+        {preInitProcLinePragma}
+        {initCode}
+        __POETS_REVERT_PREPROC_DETOUR__
+        // End custom handler
+      }}
+    """.format(**subs))
+    else:
+        dst.write(
+    """
+      virtual void init(
+        OrchestratorServices *orchestrator,
+        const typed_data_t *gGraphProperties,
+        const typed_data_t *gDeviceProperties,
+        typed_data_t *gDeviceState
+      ) const override {{
+        auto graphProperties=cast_typed_properties<{graphPropertiesStructName}>(gGraphProperties);
+        auto deviceProperties=cast_typed_properties<{devicePropertiesStructName}>(gDeviceProperties);
+        auto deviceState=cast_typed_properties<{deviceStateStructName}>(gDeviceState);
+        HandlerLogImpl handler_log(orchestrator);
+        auto handler_exit=[&](int code) -> void {{ orchestrator->application_exit(code); }};
+        auto handler_export_key_value=[&](uint32_t key, uint32_t value) -> void {{ orchestrator->export_key_value(key, value); }};
+        auto handler_checkpoint=[&](bool preEvent, int level, const char *fmt, ...) -> void {{
+            va_list a;
+            va_start(a,fmt);
+            orchestrator->vcheckpoint(preEvent,level,fmt,a);
+            va_end(a);
+        }};
+        // NO INIT HANDLER PROVIDED
+        return;
+    }}
+    """.format(**subs))
 
     dst.write("};\n")
     dst.write("DeviceTypePtr {}_Spec_get(){{\n".format(dt.id))
