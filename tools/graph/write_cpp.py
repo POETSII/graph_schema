@@ -58,7 +58,7 @@ def render_typed_data_init(proto,dst,prefix):
                     dst.write('{}{}[{}] = {};\n'.format(prefix,proto.name,i,proto.type.default))
                 else:
                     dst.write('{}{}[{}] = 0;\n'.format(prefix,proto.name,i))
-        if isinstance(proto.type,Typedef):
+        elif isinstance(proto.type,Typedef):
             default = proto.type.create_default()
             tup = proto.type.type
             for i in range(0,proto.length):
@@ -137,27 +137,45 @@ def render_typed_data_load_v4_tuple(proto,dst,prefix,indent,parentName,subNum):
         elif isinstance(elt,TupleTypedDataSpec):
             render_typed_data_load_v4_tuple(elt,dst,prefix+elt.name+".",indent+"    ","n"+str(subNum),subNum+1)
         elif isinstance(elt,ArrayTypedDataSpec):
-            dst.write('{}  assert(n.IsArray());\n')
             if isinstance(elt.type,ScalarTypedDataSpec):
+                dst.write('{}  assert(n{}.IsArray());\n'.format(indent,subNum))
                 for i in range(0,elt.length):
                     if elt.type.type=="int64_t" or elt.type.type=="int32_t" or elt.type.type=="int16_t" or elt.type.type=="int8_t" or elt.type=="char":
-                        dst.write('{}  assert(n[{}].IsInt());\n'.format(indent,i))
-                        dst.write('{}  {}{}[{}]=n[{}].GetInt();\n'.format(indent, prefix, elt.name,i,i))
+                        dst.write('{}  assert(n{}[{}].IsInt());\n'.format(indent,subnum,i))
+                        dst.write('{}  {}{}[{}]=n{}[{}].GetInt();\n'.format(indent, prefix, elt.name,i,subNum,i))
 
                     elif elt.type.type=="uint64_t" or elt.type.type=="uint32_t" or elt.type.type=="uint16_t" or elt.type.type=="uint8_t":
-                        dst.write('{}  assert(n[{}].IsUint());\n'.format(indent,i))
-                        dst.write('{}  {}{}[{}]=n[{}].GetUint();\n'.format(indent, prefix,elt.name,i,i))
+                        dst.write('{}  assert(n{}[{}].IsUint());\n'.format(indent,subNum,i))
+                        dst.write('{}  {}{}[{}]=n{}[{}].GetUint();\n'.format(indent, prefix,elt.name,i,subNum,i))
 
                     elif elt.type.type=="float" or elt.type.type=="double":
-                        dst.write('{}  assert(n[{}].IsDouble());\n'.format(indent,i))
-                        dst.write('{}  {}{}[{}]=n[{}].GetDouble();\n'.format(indent, prefix,elt.name,i,i))
+                        dst.write('{}  assert(n{}[{}].IsDouble());\n'.format(indent,i))
+                        dst.write('{}  {}{}[{}]=n{}[{}].GetDouble();\n'.format(indent, prefix,elt.name,i,subNum,i))
                     else:
                         raise RuntimeError("Unknown scalar data type.")
             elif isinstance(elt.type, Typedef):
                 tup=elt.type.type
-                for i in range(0, elt.length):
-                    pfix=prefix+elt.name+"["+str(i)+"]."
-                    render_typed_data_load_v4_tuple(tup,dst,pfix,indent,"n"+str(subNum),subNum+1)
+                dst.write('{}  if (n{}.IsArray()) {{\n'.format(indent,subNum))
+                dst.write('{}    auto l = n{}.Size();'.format(indent,subNum))
+                dst.write('{}    assert(l <= {});'.format(indent, elt.length))
+                dst.write('{}    for (uint32_t i = 0; i < l; i++) {{'.format(indent))
+                pfix=prefix+elt.name+"[i]."
+                render_typed_data_load_v4_tuple(tup,dst,pfix,indent+"      ","n"+str(subNum)+"[i]",subNum+1)
+                dst.write('{}    }}'.format(indent))
+
+                dst.write('{}  }} else if (n{}.IsObject()) {{'.format(indent,subNum))
+                dst.write('{}    auto l = n{}.MemberCount();'.format(indent,subNum))
+                dst.write('{}    assert(l <= {});'.format(indent, elt.length))
+                dst.write('{}    for (uint32_t i = 0; i < {}; i++) {{'.format(indent,elt.length))
+                dst.write('{}      auto s = std::to_string(i);'.format(indent))
+                dst.write('{}      if (n{}.HasMember(s.c_str())) {{'.format(indent,subNum))
+                dst.write('{}        const rapidjson::Value &n{}=n{}[s.c_str()];'.format(indent,subNum+1,subNum))
+                render_typed_data_load_v4_tuple(tup,dst,pfix,indent+"        ","n"+str(subNum+1),subNum+2)
+                dst.write('{}      }} else {{'.format(indent))
+                dst.write('{}        continue;'.format(indent))
+                dst.write('{}      }}'.format(indent))
+                dst.write('{}    }}'.format(indent))
+                dst.write('{}  }}'.format(indent))
             elif isinstance(elt.type,ArrayTypedDataSpec):
                 etype=elt.type
                 if not isinstance(etype.type,ScalarTypedDataSpec):

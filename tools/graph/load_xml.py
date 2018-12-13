@@ -413,8 +413,8 @@ def load_device_instance(graph,diNode):
             assert spec is not None, "Can't have state value for device with no state spec"
 
             value=json.loads("{"+n.text+"}")
-            # assert spec.is_refinement_compatible(value), "Spec = {}, value= {}".format(spec,value)
-            # TODO: ENSURE REFINEMENT IS COMPATIBLE
+            assert spec.is_refinement_compatible(value), "Spec = {}, value= {}".format(spec,value)
+
             state=spec.expand(value)
         elif n.tag==_ns_M:
             assert not metadata
@@ -484,7 +484,6 @@ def load_graph_instance(graphTypes, graphNode):
     metadata=load_metadata(graphNode, "p:MetaData")
 
     graph=GraphInstance(id,graphType,properties,metadata)
-
     disNode=graphNode.findall("p:DeviceInstances",ns)
     assert(len(disNode)==1)
     for diNode in disNode[0]:
