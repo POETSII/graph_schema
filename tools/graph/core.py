@@ -306,11 +306,12 @@ def is_refinement_compatible(proto,inst):
 
 
 class Typedef(TypedDataSpec):
-    def __init__(self,id,type):
+    def __init__(self,id,type,default=""):
         TypedDataSpec.__init__(self,id)
         self.id=id
         assert(isinstance(type,TypedDataSpec))
         self.type=type
+        self.default=default
         self._hash=hash(id) + 19937*hash(type)
 
     def is_refinement_compatible(self,inst):
@@ -333,7 +334,8 @@ class Typedef(TypedDataSpec):
         return self._hash
 
     def __str__(self):
-        return "{}[{}]".format(self.id,self.type)
+        return self.id
+        # return "{}[{}]".format(self.id,self.type) If we are to allow typedefs of typedefs, this cannot be used
 
 class MessageType(object):
     def __init__(self,parent,id,message,metadata=None,cTypeName=None,numid=0):
