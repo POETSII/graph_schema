@@ -526,7 +526,7 @@ def render_typedef_as_elements(proto, dst, prefix, parentName):
         dst.write('{}makeScalar("{}","{}","{}")\n'.format(prefix,parentName,e.type, proto.default or 0))
     elif isinstance(e, ArrayTypedDataSpec):
         dst.write('{}makeArray("{}",{},\n'.format(prefix,parentName,e.length))
-        render_typed_data_as_elements(e, dst, prefix+"  ")
+        render_typed_data_as_elements(e.type, dst, prefix+"  ")
         dst.write("{})\n".format(prefix))
     elif isinstance(e, TupleTypedDataSpec):
         tup = proto.type
