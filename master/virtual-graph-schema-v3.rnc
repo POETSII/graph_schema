@@ -1053,6 +1053,10 @@ grammar {
         ## Gives the default for this thing
         attribute default { text } ?,
 
+        element Default {
+          typedDataValue
+        } ?,
+
         element Documentation {
           documentation
         } ?
@@ -1062,6 +1066,10 @@ grammar {
         attribute name { identifier },
 
         typedDataMember +,
+
+        element Default {
+          typedDataValue
+        } ?,
 
         element Documentation {
           documentation
@@ -1092,6 +1100,10 @@ grammar {
           typedDataMember
         ),
 
+        element Default {
+          typedDataValue
+        } ?,
+
         element Documentation {
           documentation
         } ?
@@ -1112,6 +1124,10 @@ grammar {
         ## The tag indices will be assigned in the order that
         ## the alternatives appear here.
         typedDataMember +,
+
+        element Default {
+          typedDataValue
+        } ?,
 
         element Documentation {
           documentation
