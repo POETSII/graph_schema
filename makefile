@@ -105,9 +105,9 @@ regenerate-random :
 	python3.4 tools/create_random_graph.py 8 > test/virtual/random4.xml
 
 
-%.checked : %.xml $(JING) master/virtual-graph-schema-v2.2.rnc derived/virtual-graph-schema-v2.2.xsd
-	java -jar $(JING) -c master/virtual-graph-schema-v2.2.rnc $*.xml
-	java -jar $(JING) derived/virtual-graph-schema-v2.2.xsd $*.xml
+%.checked : %.xml $(JING) master/virtual-graph-schema-v3.rnc derived/virtual-graph-schema-v3.xsd
+	java -jar $(JING) -c master/virtual-graph-schema-v3.rnc $*.xml
+	java -jar $(JING) derived/virtual-graph-schema-v3.xsd $*.xml
 	touch $@
 
 validate-virtual/% : output/%.checked
@@ -167,7 +167,7 @@ endif
 
 providers/$1.graph.cpp providers/$1.graph.hpp : $$($1_src_xml) $(JING)
 	mkdir -p providers
-	java -jar $(JING) -c master/virtual-graph-schema-v2.1.rnc $$($1_src_xml)
+	java -jar $(JING) -c master/virtual-graph-schema-v3.rnc $$($1_src_xml)
 	$$(PYTHON) tools/render_graph_as_cpp.py $$($1_src_xml) providers/$1.graph.cpp
 	$$(PYTHON) tools/render_graph_as_cpp.py --header < $$($1_src_xml) > providers/$1.graph.hpp
 
@@ -222,7 +222,6 @@ include apps/gals_heat_float/makefile.inc
 # Non-default
 include apps/nursery/airfoil/airfoil.inc
 include apps/nursery/relaxation_heat/makefile.inc
-
 
 #TODO : Defunct?
 include tools/partitioner.inc
