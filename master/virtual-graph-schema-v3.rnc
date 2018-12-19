@@ -46,7 +46,8 @@
 # Fix incorrect definition for TypeDef (typedDataSpec -> typedDataMember)
 # TypeDef can now contain documentation
 # Optional Default tag has been added to Scalar, Array, Tuple, and Union
-#
+# Optional attribute "indexed" in OutputPin added:
+#   Boolean used to indicate whether this pin broadcasts or sends to an index.
 
 
 
@@ -529,7 +530,11 @@ grammar {
           ## An output pin that appear on the device type.
           element OutputPin {
             ## Name of the pin, must be unique within the device type
-            attribute name { identifier }
+            (
+              attribute name { identifier },
+
+              attribute indexed { xsd:boolean } ?
+            )
 
             &
 
