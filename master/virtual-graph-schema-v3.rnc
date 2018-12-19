@@ -38,12 +38,15 @@
 # PIP-0004 integrated
 #
 # ### Changes from 2.2 -> 3.0
+# For more information, see PIP-0017
 #
 # Application pins removed
-# Init handler added
-# DeviceSharedCode
-# Fix incorrect definition for type (typedDataSpec -> typedDataMember)
-# TypeDef can contain documentation
+# Optional Init handler added
+# DeviceSharedCode removed
+# Fix incorrect definition for TypeDef (typedDataSpec -> typedDataMember)
+# TypeDef can now contain documentation
+# Optional Default tag has been added to Scalar, Array, Tuple, and Union
+#
 
 
 
@@ -1051,11 +1054,22 @@ grammar {
         attribute type { typeName },
 
         ## Gives the default for this thing
-        attribute default { text } ?,
-
-        element Default {
-          typedDataValue
-        } ?,
+        ## If this is an int/uint/float then a single value can be provided in the tag.
+        ## However, if this is a declaration of a Typedef,
+        ## it may need more than a single value for it's default, JSON can be used for this.
+        ## Attributes don't accept " on, and a large JSON strings in an attribute can be messy
+        ## therefore, a Default tag can be used instead.
+        (
+          (
+            attribute default { text } ?
+          )
+          |
+          (
+            element Default {
+              text
+            } ?
+          )
+        ),
 
         element Documentation {
           documentation
@@ -1068,7 +1082,7 @@ grammar {
         typedDataMember +,
 
         element Default {
-          typedDataValue
+          text
         } ?,
 
         element Documentation {
@@ -1094,14 +1108,17 @@ grammar {
             attribute default { text } ?
           )
           |
-          ## Allows an array of any data-type
-          ##
-          ## The name of the typedDataSpec will be ignored.
-          typedDataMember
+          (
+            ## Allows an array of any data-type
+            ##
+            ## The name of the typedDataSpec will be ignored.
+            typedDataMember
+          )
         ),
 
+        ## Allows for a JSON string to be used to provide defaults to arrays.
         element Default {
-          typedDataValue
+          text
         } ?,
 
         element Documentation {
@@ -1126,7 +1143,7 @@ grammar {
         typedDataMember +,
 
         element Default {
-          typedDataValue
+          text
         } ?,
 
         element Documentation {
