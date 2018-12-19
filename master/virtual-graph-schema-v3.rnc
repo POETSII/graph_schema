@@ -1066,7 +1066,7 @@ grammar {
           |
           (
             element Default {
-              text
+              typedDataValue
             } ?
           )
         ),
@@ -1082,7 +1082,7 @@ grammar {
         typedDataMember +,
 
         element Default {
-          text
+          typedDataValue
         } ?,
 
         element Documentation {
@@ -1118,7 +1118,7 @@ grammar {
 
         ## Allows for a JSON string to be used to provide defaults to arrays.
         element Default {
-          text
+          typedDataValue
         } ?,
 
         element Documentation {
@@ -1143,7 +1143,7 @@ grammar {
         typedDataMember +,
 
         element Default {
-          text
+          typedDataValue
         } ?,
 
         element Documentation {
