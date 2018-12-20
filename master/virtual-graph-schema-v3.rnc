@@ -40,14 +40,17 @@
 # ### Changes from 2.2 -> 3.0
 # For more information, see PIP-0017
 #
-# Application pins removed
 # Optional Init handler added
-# DeviceSharedCode removed
-# Fix incorrect definition for TypeDef (typedDataSpec -> typedDataMember)
-# TypeDef can now contain documentation
+# <S> tag added to DevI to allow individual setting of device instance states.
 # Optional Default tag has been added to Scalar, Array, Tuple, and Union
 # Optional attribute "indexed" in OutputPin added:
 #   Boolean used to indicate whether this pin broadcasts or sends to an index.
+# Optional attribute "sendIndex" accepting an integer to identify this pin for indexed send Output pin
+# Application pins removed
+# DeviceSharedCode removed
+# Fix incorrect definition for TypeDef (typedDataSpec -> typedDataMember)
+# TypeDef can now contain documentation
+
 
 
 
@@ -861,6 +864,10 @@ grammar {
         ## would connect from a supervisor output to a supervisor input, but
         ## a supervisor only exists in the context of devices being managed.
         attribute path { xsd:string { pattern="[_a-zA-Z0-9]*:[_a-zA-Z0-9]+-[_a-zA-Z0-9]*:[_a-zA-Z0-9]+" } } ?,
+
+        ## Used in conjunction with "indexed" attribute in OutputPin
+        ## This indicates the index used to identify this edge only to send a message on
+        attribute sendIndex { xsd:integer } ?,
 
         ## Read-only properties associated with the destination (input pin) of the edge instance
         ##
