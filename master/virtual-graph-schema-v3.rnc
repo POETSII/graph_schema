@@ -641,7 +641,7 @@ grammar {
           ##   `${DEVICE_STATE_T} *deviceState` : Read-write pointer to the device state
           element Init {
             cxxSourceCode
-          }
+          } ?
         } *
 
        &
