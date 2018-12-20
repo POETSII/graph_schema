@@ -4,7 +4,7 @@ import sys
 
 registrationStatements=[]
 
-def render_typed_data_as_decl(proto,dst,indent=""):
+def render_typed_data_as_decl(proto,dst,indent="",arrayDec=""):
     if proto is None:
         pass
     elif isinstance(proto,ScalarTypedDataSpec):
@@ -19,76 +19,74 @@ def render_typed_data_as_decl(proto,dst,indent=""):
         dst.write("{}}} {};\n".format(indent,proto.name));
     elif isinstance(proto,ArrayTypedDataSpec):
         if isinstance(proto.type,ScalarTypedDataSpec):
-            dst.write("{}{} {}[{}];\n".format(indent, proto.type.type, proto.name, proto.length));
-        elif  isinstance(proto.type, Typedef):
-            dst.write("{}{} {}[{}];\n".format(indent, proto.type.id, proto.name, proto.length))
+            if arrayDec=="":
+                dst.write("{}{} {}[{}];\n".format(indent, proto.type.type, proto.name, proto.length))
+            else:
+                dst.write("{}{} {}[{}];\n".format(indent, proto.type.type, arrayDec,proto.length))
+        elif isinstance(proto.type, Typedef):
+            if arrayDec=="":
+                dst.write("{}{} {}[{}];\n".format(indent, proto.type.id, proto.name, proto.length))
+            else:
+                dst.write("{}{} {}[{}];\n".format(indent, proto.type.id, arrayDec, proto.length))
         elif isinstance(proto.type,TupleTypedDataSpec):
             etype=proto.type
             dst.write("{}struct {{\n".format(indent))
             for elt in etype.elements_by_index:
                 render_typed_data_as_decl(elt,dst,indent+"  ")
-            dst.write("{}}} {}[{}];\n".format(indent,proto.name,proto.length));
-        elif isinstance(proto.type,ArrayTypedDataSpec):
-            etype=proto.type
-            if isinstance(etype.type,ScalarTypedDataSpec):
-                dst.write("{}{} {}[{}][{}];\n".format(indent, etype.type.type, proto.name, proto.length, etype.length))
-            elif isinstance(etype.type,Typedef):
-                dst.write("{}{} {}[{}][{}];\n".format(indent, etype.type.id, proto.name, proto.length, etype.length))
-            elif isinstance(etype.type,TupleTypedDataSpec):
-                e=etype.type
-                dst.write("{}struct {{\n".format(indent))
-                for elt in e.elements_by_index:
-                    render_typed_data_as_decl(elt,dst,indent+"  ")
-                dst.write("{}}} {}[{}][{}];\n".format(indent,proto.name,proto.length,etype.length))
-            elif isinstance(etype.type,ArrayTypedDataSpec):
-                raise RuntimeError("Arrays with more than 2 dimensions have not been implemented.")
+            if arrayDec=="":
+                dst.write("{}}} {}[{}];\n".format(indent,proto.name,proto.length))
             else:
-                raise RuntimeError("Unrecognised type of 2D array.")
+                dst.write("{}}} {}[{}];\n".format(indent,arrayDec,proto.length))
+        elif isinstance(proto.type,ArrayTypedDataSpec):
+            if arrayDec=="":
+                render_typed_data_as_decl(proto.type,dst,indent,"{}[{}]".format(proto.name,proto.length))
+            else:
+                render_typed_data_as_decl(proto.type,dst,indent,"{}[{}]".format(arrayDec,proto.length))
         else:
             raise RuntimeError("Unrecognised type of array.")
     else:
         raise RuntimeError("Unknown data type {}.".format(type(proto)))
 
-def render_typedef_init(proto,dst,prefix):
-    e = proto.type
-    if isinstance(e, Typedef):
-        render_typedef_init(e,dst,prefix+"."+e.name)
-    elif isinstance(e, TupleTypedDataSpec):
-        for elt in e.elements_by_index:
-            render_typed_data_init(elt,dst,prefix+".")
-    elif isinstance(e, ScalarTypedDataSpec):
-        if e.default:
-            value=e.default
-            if e.type=="bool":
-                value = 1 if value else 0
-            dst.write('{} = {};\n'.format(prefix,value))
-    elif isinstance(e, ArrayTypedDataSpec):
-        if isinstance(e.type,ScalarTypedDataSpec):
-            for i in range(0,e.length):
-                if e.type.default is not None:
-                    dst.write('{}[{}] = {};\n'.format(prefix,i,e.type.default))
-                else:
-                    dst.write('{}[{}] = 0;\n'.format(prefix,i))
-        elif isinstance(e.type,Typedef):
-            render_typedef_init(e.type.type,dst,prefix)
-        elif isinstance(e.type,ArrayTypedDataSpec):
-            etype=e.type
-            if not isinstance(etype.type,ScalarTypedDataSpec):
-                raise RuntimeError("Haven't implemented arrays of arrays of non-scalars yet...")
-            val = etype.type.default or "0"
-            # TODO : embedd a for-loop?
-            for i in range(0,e.length):
-                for j in range(0,etype.length):
-                    dst.write('{}{}[{}][{}] = {};\n'.format(prefix,e.name,i,j,val))
-        else:
-            raise RuntimeError("Unrecognised type of array.")
+# def render_typedef_init(proto,dst,prefix):
+#     e = proto.type
+#     if isinstance(e, Typedef):
+#         render_typedef_init(e,dst,prefix+"."+e.name)
+#     elif isinstance(e, TupleTypedDataSpec):
+#         for elt in e.elements_by_index:
+#             render_typed_data_init(elt,dst,prefix+".")
+#     elif isinstance(e, ScalarTypedDataSpec):
+#         if e.default:
+#             value=e.default
+#             if e.type=="bool":
+#                 value = 1 if value else 0
+#             dst.write('{} = {};\n'.format(prefix,value))
+#     elif isinstance(e, ArrayTypedDataSpec):
+#         if isinstance(e.type,ScalarTypedDataSpec):
+#             for i in range(0,e.length):
+#                 if e.type.default is not None:
+#                     dst.write('{}[{}] = {};\n'.format(prefix,i,e.type.default))
+#                 else:
+#                     dst.write('{}[{}] = 0;\n'.format(prefix,i))
+#         elif isinstance(e.type,Typedef):
+#             render_typedef_init(e.type.type,dst,prefix)
+#         elif isinstance(e.type,ArrayTypedDataSpec):
+#             etype=e.type
+#             if not isinstance(etype.type,ScalarTypedDataSpec):
+#                 raise RuntimeError("Haven't implemented arrays of arrays of non-scalars yet...")
+#             val = etype.type.default or "0"
+#             # TODO : embedd a for-loop?
+#             for i in range(0,e.length):
+#                 for j in range(0,etype.length):
+#                     dst.write('{}{}[{}][{}] = {};\n'.format(prefix,e.name,i,j,val))
+#         else:
+#             raise RuntimeError("Unrecognised type of array.")
 
-def render_typed_data_init(proto,dst,prefix):
+def render_typed_data_init(proto,dst,prefix,indent="    ",arrayDec="",arrayIndex=0):
     if proto is None:
         pass
     elif isinstance(proto,ScalarTypedDataSpec):
         if isinstance(proto.type,Typedef):
-            render_typedef_init(proto.type, dst, prefix+proto.name)
+            render_typed_data_init(proto.type.type, dst, prefix+proto.name)
         elif proto.default:
             value=proto.default
             if proto.type=="bool":
@@ -100,44 +98,67 @@ def render_typed_data_init(proto,dst,prefix):
         for elt in proto.elements_by_index:
             render_typed_data_init(elt,dst,prefix+proto.name+".")
     elif isinstance(proto,ArrayTypedDataSpec):
-        if isinstance(proto.type,ScalarTypedDataSpec):
-            for i in range(0,proto.length):
-                if proto.type.default is not None:
-                    dst.write('{}{}[{}] = {};\n'.format(prefix,proto.name,i,proto.type.default))
-                else:
-                    dst.write('{}{}[{}] = 0;\n'.format(prefix,proto.name,i))
+        dst.write("{}for (int i{} = 0; i{} < {}; i{}++) {{\n".format(indent,arrayIndex, arrayIndex, proto.length, arrayIndex))
+        if isinstance(proto.type, ScalarTypedDataSpec):
+            d = 0
+            if proto.type.default is not None:
+                d = proto.type.default
+
+            if arrayDec=="":
+                dst.write('{}{}{}[i{}] = {};\n'.format(indent,prefix,proto.name,arrayIndex,d))
+            else:
+                dst.write('{}{}{}[i{}] = {};\n'.format(indent,prefix,arrayDec,arrayIndex,d))
+        # if isinstance(proto.type,ScalarTypedDataSpec):
+        #     for i in range(0,proto.length):
+        #         if proto.type.default is not None:
+        #             dst.write('{}{}[{}] = {};\n'.format(prefix,proto.name,i,proto.type.default))
+        #         else:
+        #             dst.write('{}{}[{}] = 0;\n'.format(prefix,proto.name,i))
         elif isinstance(proto.type,Typedef):
             for i in range(0, proto.length):
-                render_typedef_init(proto.type, dst, prefix+proto.name+"["+str(i)+"]")
+                render_typed_data_init(proto.type.type, dst, prefix+proto.name+"["+str(i)+"]")
         elif isinstance(proto.type,TupleTypedDataSpec):
             tup = proto.type
-            for i in range(0, proto.length):
-                for elt in tup.elements_by_index:
-                    render_typed_data_init(elt, dst, prefix+proto.name+"["+str(i)+"].")
+            for elt in tup.elements_by_index:
+                if arrayDec=="":
+                    render_typed_data_init(elt, dst, prefix+proto.name+"[i"+str(arrayIndex)+"].")
+                else:
+                    render_typed_data_init(elt, dst, indent+prefix+arrayDec+"[i"+str(arrayIndex)+"].")
+        # elif isinstance(proto.type,TupleTypedDataSpec):
+        #     tup = proto.type
+        #     for i in range(0, proto.length):
+        #         for elt in tup.elements_by_index:
+        #             render_typed_data_init(elt, dst, prefix+proto.name+"["+str(i)+"].")
         elif isinstance(proto.type,ArrayTypedDataSpec):
-            etype=proto.type
-            if isinstance(etype.type,ScalarTypedDataSpec):
-                val = etype.type.default or "0"
-                # TODO : embedd a for-loop?
-                for i in range(0,proto.length):
-                    for j in range(0,etype.length):
-                        dst.write('{}{}[{}][{}] = {};\n'.format(prefix,proto.name,i,j,val))
-            elif isinstance(etype.type,Typedef):
-                for i in range(0, proto.length):
-                    for j in range(0, etype.length):
-                        render_typedef_init(etype.type, dst, prefix+proto.name+"["+str(i)+"]["+str(j)+"]")
-            elif isinstance(etype.type,TupleTypedDataSpec):
-                tup = etype.type
-                for i in range(0, proto.length):
-                    for j in range(0, etype.length):
-                        for elt in tup.elements_by_index:
-                            render_typed_data_init(elt, dst, prefix+proto.name+"["+str(i)+"]["+str(j)+"].")
-            elif isinstance(etype.type,ArrayTypedDataSpec):
-                raise RuntimeError("Arrays with more than 2 dimensions have not been implemented.")
+            if arrayDec=="":
+                render_typed_data_init(proto.type,dst,prefix+proto.name,indent+"  ","[i"+str(arrayIndex)+"]",arrayIndex+1)
             else:
-                raise RuntimeError("Arrays with more than 2 dimensions have not been implemented.")
+                render_typed_data_init(proto.type,dst,prefix,indent+"  ",arrayDec+"[i"+str(arrayIndex)+"]",arrayIndex+1)
+
+            # etype=proto.type
+            # if isinstance(etype.type,ScalarTypedDataSpec):
+            #     val = etype.type.default or "0"
+            #     # TODO : embedd a for-loop?
+            #     for i in range(0,proto.length):
+            #         for j in range(0,etype.length):
+            #             dst.write('{}{}[{}][{}] = {};\n'.format(prefix,proto.name,i,j,val))
+            # elif isinstance(etype.type,Typedef):
+            #     for i in range(0, proto.length):
+            #         for j in range(0, etype.length):
+            #             render_typedef_init(etype.type, dst, prefix+proto.name+"["+str(i)+"]["+str(j)+"]")
+            # elif isinstance(etype.type,TupleTypedDataSpec):
+            #     tup = etype.type
+            #     for i in range(0, proto.length):
+            #         for j in range(0, etype.length):
+            #             for elt in tup.elements_by_index:
+            #                 render_typed_data_init(elt, dst, prefix+proto.name+"["+str(i)+"]["+str(j)+"].")
+            # elif isinstance(etype.type,ArrayTypedDataSpec):
+            #     raise RuntimeError("Arrays with more than 2 dimensions have not been implemented.")
+            # else:
+            #     raise RuntimeError("Arrays with more than 2 dimensions have not been implemented.")
         else:
             raise RuntimeError("Unrecognised type of array.")
+        dst.write("{}}}\n\n".format(indent))
     else:
         raise RuntimeError("Unknown data type {}.".format(type(proto)))
 
