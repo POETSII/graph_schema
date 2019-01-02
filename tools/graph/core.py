@@ -133,11 +133,14 @@ class ScalarTypedDataSpec(TypedDataSpec):
             return "{}:{}={}".format(self.type,self.name,self.default)
 
 class TupleTypedDataSpec(TypedDataSpec):
-    def __init__(self,name,elements):
+    def __init__(self,name,elements,default=None):
         TypedDataSpec.__init__(self,name)
         self._elts_by_name={}
         self._elts_by_index=[]
         self._hash = hash(self.name)
+        self.default = default
+        if self.default is not None:
+            self.default = self.expand(self.default)
         for e in elements:
             if e.name in self._elts_by_name:
                 raise GraphDescriptionError("Tuple element name appears twice.")
@@ -215,11 +218,14 @@ class TupleTypedDataSpec(TypedDataSpec):
 
 
 class ArrayTypedDataSpec(TypedDataSpec):
-    def __init__(self,name,length,type):
+    def __init__(self,name,length,type,default=None):
         TypedDataSpec.__init__(self,name)
         self.type=type
         assert length>0, "Lengths must be greater than 0, as per PIP0007"
         self.length=length
+        self.default = default
+        if self.default is not None:
+            self.default=self.expand(self.default)
         self._hash=hash(name) ^ hash(type) + length
 
     def __eq__(self, o):
@@ -240,20 +246,37 @@ class ArrayTypedDataSpec(TypedDataSpec):
     def expand(self,inst):
         if inst is None:
             return self.create_default()
-        assert isinstance(inst,list)
-        # assert len(inst)==self.length
-        assert len(inst) <= self.length
-        # Now allowing only some of the array elements, but still ensuring that there isn't too many
-        l = len(inst)
-        # Filling in the blanks
-        for i in range(self.length):
-            if i < l:
-                # Fill the array from the front
-                inst[i]=self.type.expand(inst[i])
-            else:
-                # Don't need to provide all array elements, so fill in the blanks
-                inst.append(self.type.create_default())
-        return inst
+        elif isinstance(inst,list):
+            # assert len(inst)==self.length
+            assert len(inst) <= self.length
+            # Now allowing only some of the array elements, but still ensuring that there isn't too many
+            l = len(inst)
+            # Filling in the blanks
+            for i in range(self.length):
+                if i < l:
+                    # Fill the array from the front
+                    inst[i]=self.type.expand(inst[i])
+                else:
+                    # Don't need to provide all array elements, so fill in the blanks
+                    inst.append(self.type.create_default())
+            return inst
+        elif isinstance(inst,dict):
+            # Can select particular index to default
+            assert len(inst) <= self.length
+            # Must ensure there is not too many
+            newInst = []
+            for i in range(0, self.length):
+                if str(i) in inst:
+                    # Fill this index in if specificed
+                    newInst.append(self.type.expand(inst[str(i)]))
+                else:
+                    # Fill it with a blank if not specified
+                    newInst.append(self.type.create_default())
+            return newInst
+        else:
+            # Something has gone wrong with the default string, just fill it with blanks for now
+            # TODO: Throw an error message here
+            return self.create_default()
 
     def contract(self,inst):
         if inst is None:
@@ -306,12 +329,14 @@ def is_refinement_compatible(proto,inst):
 
 
 class Typedef(TypedDataSpec):
-    def __init__(self,id,type,default=""):
+    def __init__(self,id,type,default=None):
         TypedDataSpec.__init__(self,id)
         self.id=id
         assert(isinstance(type,TypedDataSpec))
         self.type=type
         self.default=default
+        if self.default is not None:
+            self.default=self.expand(self.default)
         self._hash=hash(id) + 19937*hash(type)
 
     def is_refinement_compatible(self,inst):

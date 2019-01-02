@@ -47,17 +47,20 @@ def render_typed_data_as_decl(proto,dst,indent="",arrayIndex=""):
     else:
         raise RuntimeError("Unknown data type {}.".format(type(proto)))
 
-def render_typed_data_init(proto,dst,prefix,indent="    ",arrayIndex="",indexNum=0, isTypedef=False):
+def render_typed_data_init(proto,dst,prefix,indent="    ",arrayIndex="",indexNum=0, isTypedef=False, parentDefault=None):
     if proto is None:
         pass
     elif isinstance(proto,ScalarTypedDataSpec):
+        if parentDefault:
+            value=parentDefault
+        else:
+            value=proto.default
         if isinstance(proto.type,Typedef):
             if isTypedef or not arrayIndex=="":
-                render_typed_data_init(proto.type.type, dst, prefix, indent, arrayIndex,indexNum+1,True)
+                render_typed_data_init(proto.type.type, dst, prefix, indent, arrayIndex,indexNum+1,True,value)
             else:
-                render_typed_data_init(proto.type.type, dst, prefix+proto.name, indent, arrayIndex,indexNum+1,True)
-        elif proto.default:
-            value=proto.default
+                render_typed_data_init(proto.type.type, dst, prefix+proto.name, indent, arrayIndex,indexNum+1,True,value)
+        elif proto.default or parentDefault:
             if proto.type=="bool":
                 value = 1 if value else 0
             if isTypedef or not arrayIndex=="":
@@ -70,29 +73,70 @@ def render_typed_data_init(proto,dst,prefix,indent="    ",arrayIndex="",indexNum
             else:
                 dst.write('{}{}{} = 0;\n'.format(indent,prefix,proto.name))
     elif isinstance(proto,TupleTypedDataSpec):
+        if proto.default:
+            value=proto.default
+        else:
+            value=parentDefault
         for elt in proto.elements_by_index:
-            if isTypedef or not arrayIndex=="":
-                render_typed_data_init(elt,dst,prefix+"."+elt.name,indent+"  ", arrayIndex, indexNum+1,True)
+            if value is not None:
+                d = value[elt.name]
             else:
-                render_typed_data_init(elt,dst,prefix+proto.name+"."+elt.name,indent+"  ",arrayIndex, indexNum+1)
+                d = None
+            if isTypedef or not arrayIndex=="":
+                render_typed_data_init(elt,dst,prefix+"."+elt.name,indent+"  ", arrayIndex, indexNum+1,True,d)
+            else:
+                render_typed_data_init(elt,dst,prefix+proto.name+".",indent+"  ",arrayIndex, indexNum+1,False,d)
     elif isinstance(proto,ArrayTypedDataSpec):
-        dst.write("{}for (int i{} = 0; i{} < {}; i{}++) {{\n".format(indent,indexNum, indexNum, proto.length, indexNum))
+        # TODO: Find a way of combining defaults at different levels of multiple dimensional arrays
+        value = proto.default
+        if parentDefault is not None:
+            value = parentDefault
         if isinstance(proto.type, ScalarTypedDataSpec):
-            d = 0
-            if proto.type.default is not None:
-                d = proto.type.default
+            if value is not None:
+                for i in range(0, proto.length):
+                        if isTypedef or not arrayIndex=="":
+                            dst.write('{}{}{}[{}] = {};\n'.format(indent,prefix,arrayIndex,i,value[i]))
+                        else:
+                            dst.write('{}{}{}[{}] = {};\n'.format(indent,prefix,proto.name,i,value[i]))
+                return
 
-            if isTypedef or not arrayIndex=="":
-                dst.write('{}{}{}[i{}] = {};\n'.format(indent,prefix,arrayIndex,indexNum,d))
             else:
-                dst.write('{}{}{}[i{}] = {};\n'.format(indent,prefix,proto.name,indexNum,d))
+                dst.write("{}for (int i{} = 0; i{} < {}; i{}++) {{\n".format(indent,indexNum, indexNum, proto.length, indexNum))
+                if proto.type.default is not None:
+                    d = proto.type.default
+                else:
+                    d = 0
+
+                if isTypedef or not arrayIndex=="":
+                    dst.write('{}{}{}[i{}] = {};\n'.format(indent,prefix,arrayIndex,indexNum,d))
+                else:
+                    dst.write('{}{}{}[i{}] = {};\n'.format(indent,prefix,proto.name,indexNum,d))
 
         elif isinstance(proto.type,Typedef):
-            if isTypedef or not arrayIndex=="":
-                render_typed_data_init(proto.type.type, dst, prefix+arrayIndex+"[i"+str(indexNum)+"]",indent+"  ",arrayIndex+"[i"+str(indexNum)+"]",indexNum+1,True)
+            if value is not None:
+                for i in range(0, proto.length):
+                    if isTypedef or not arrayIndex=="":
+                        render_typed_data_init(proto.type.type, dst, prefix+arrayIndex+"["+str(i)+"]",indent+"  ",arrayIndex+"["+str(i)+"]",indexNum+1,True,value[i])
+                    else:
+                        render_typed_data_init(proto.type.type, dst, prefix+proto.name+arrayIndex+"["+str(i)+"]",indent+"  ","["+str(i)+"]",indexNum+1,True,value[i])
+                return
             else:
-                render_typed_data_init(proto.type.type, dst, prefix+proto.name+arrayIndex+"[i"+str(indexNum)+"]",indent+"  ","[i"+str(indexNum)+"]",indexNum+1,True)
+                dst.write("{}for (int i{} = 0; i{} < {}; i{}++) {{\n".format(indent,indexNum, indexNum, proto.length, indexNum))
+                if isTypedef or not arrayIndex=="":
+                    render_typed_data_init(proto.type.type, dst, prefix+arrayIndex+"[i"+str(indexNum)+"]",indent+"  ",arrayIndex+"[i"+str(indexNum)+"]",indexNum+1,True)
+                else:
+                    render_typed_data_init(proto.type.type, dst, prefix+proto.name+arrayIndex+"[i"+str(indexNum)+"]",indent+"  ","[i"+str(indexNum)+"]",indexNum+1,True)
         elif isinstance(proto.type,TupleTypedDataSpec):
+            if value is not None:
+                tup = proto.type
+                for i in range(0, proto.length):
+                    for elt in tup.elements_by_index:
+                        if isTypedef or not arrayIndex=="":
+                            render_typed_data_init(elt, dst, prefix+arrayIndex+"["+str(i)+"]."+elt.name,indent+"  ",arrayIndex+"["+str(i)+"]."+elt.name,indexNum+1,True,value[i][elt.name])
+                        else:
+                            render_typed_data_init(elt, dst, prefix+proto.name+"["+str(i)+"]."+elt.name,indent+"  ","["+str(i)+"]."+elt.name,indexNum+1,True,value[i][elt.name])
+                return
+            dst.write("{}for (int i{} = 0; i{} < {}; i{}++) {{\n".format(indent,indexNum, indexNum, proto.length, indexNum))
             tup = proto.type
             for elt in tup.elements_by_index:
                 if isTypedef or not arrayIndex=="":
@@ -101,10 +145,19 @@ def render_typed_data_init(proto,dst,prefix,indent="    ",arrayIndex="",indexNum
                     render_typed_data_init(elt, dst, prefix+proto.name+"[i"+str(indexNum)+"]."+elt.name,indent+"  ","[i"+str(indexNum)+"]."+elt.name,indexNum+1)
 
         elif isinstance(proto.type,ArrayTypedDataSpec):
-            if isTypedef or not arrayIndex=="":
-                render_typed_data_init(proto.type,dst,prefix,indent+"  ",arrayIndex+"[i"+str(indexNum)+"]",indexNum+1)
+            if value is not None:
+                for i in range(0, proto.length):
+                    if isTypedef or not arrayIndex=="":
+                        render_typed_data_init(proto.type, dst, prefix+arrayIndex+"["+str(i)+"]",indent+"  ",arrayIndex+"["+str(i)+"]",indexNum+1,True,value[i])
+                    else:
+                        render_typed_data_init(proto.type, dst, prefix+proto.name+arrayIndex+"["+str(i)+"]",indent+"  ","["+str(i)+"]",indexNum+1,True,value[i])
+                return
             else:
-                render_typed_data_init(proto.type,dst,prefix+proto.name,indent+"  ","[i"+str(indexNum)+"]",indexNum+1)
+                dst.write("{}for (int i{} = 0; i{} < {}; i{}++) {{\n".format(indent,indexNum, indexNum, proto.length, indexNum))
+                if isTypedef or not arrayIndex=="":
+                    render_typed_data_init(proto.type,dst,prefix,indent+"  ",arrayIndex+"[i"+str(indexNum)+"]",indexNum+1)
+                else:
+                    render_typed_data_init(proto.type,dst,prefix+proto.name,indent+"  ","[i"+str(indexNum)+"]",indexNum+1)
         else:
             raise RuntimeError("Unrecognised type of array.")
         dst.write("{}}}\n\n".format(indent))
@@ -134,7 +187,7 @@ def render_typed_data_add_hash(proto,dst,prefix,indent="    ",indexNum=0,arrayIn
             if isTypedef or not arrayIndex=="":
                 dst.write('{}  hash.add({}{}[i{}]);\n'.format(indent,prefix,arrayIndex,indexNum))
             else:
-                dst.write('{}  hash.add({}{}{}[i{}]);\n'.format(indent,prefix,proto.name,indexNum))
+                dst.write('{}  hash.add({}{}{}[i{}]);\n'.format(indent,prefix,proto.name,arrayIndex,indexNum))
         elif isinstance(proto.type, Typedef):
             if isTypedef or not arrayIndex=="":
                 render_typed_data_add_hash(proto.type.type,dst,prefix+arrayIndex+"[i"+str(indexNum)+"]",indent+"  ",indexNum+1,"",True)
@@ -364,7 +417,7 @@ def render_typed_data_save(proto, dst, prefix, indent, indexNum=0, arrayIndex=""
             if isTypedef or not arrayIndex=="":
                 render_typed_data_save(elt, dst, prefix+".", indent+"  ",indexNum+1, arrayIndex)
             else:
-                render_typed_data_save(elt, dst, prefix+"."+proto.name+".", indent+"  ",indexNum+1, arrayIndex)
+                render_typed_data_save(elt, dst, prefix+proto.name+".", indent+"  ",indexNum+1, arrayIndex)
         dst.write('{}dst<<"}}";\n'.format(indent))
         dst.write('{}}}\n'.format(indent))
     else:

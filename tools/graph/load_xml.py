@@ -79,30 +79,55 @@ def load_typed_data_spec(dt, namedTypes={}):
     tag=deNS(dt.tag)
     if tag=="p:Tuple":
         elts=[]
+        default=None
         for eltNode in dt.findall("p:*",ns): # Anything from this namespace must be a member
-            elt=load_typed_data_spec(eltNode, namedTypes)
-            elts.append(elt)
-        return TupleTypedDataSpec(name,elts)
+            if not deNS(eltNode.tag) == "p:Default":
+                elt=load_typed_data_spec(eltNode, namedTypes)
+                elts.append(elt)
+            else:
+                default = json.loads('{'+eltNode.text+'}')
+        return TupleTypedDataSpec(name,elts,default)
     elif tag=="p:Array":
         length=int(get_attrib(dt,"length"))
         type=get_attrib_optional(dt, "type")
+        default=None
+        d=dt.find("p:Default", ns)
+        if d is not None:
+            if d.text.strip().startswith('['):
+                default=json.loads('{"'+name+'":'+d.text+'}')
+            else:
+                default=json.loads('{"'+name+'": {'+d.text+'} }')
+            default=default[name]
         if type:
             if type in namedTypes:
                 type=namedTypes[type]
             else:
                 type=ScalarTypedDataSpec("_",type)
         else:
-            subs=dt.findall("p:*",ns) # Anything from this namespace must be the sub-type
-            if len(subs)!=1:
+            subs=dt.findall("p:*",ns) # Anything from this namespace must be the sub-type other than <Default>
+            if default:
+                if len(subs)!=2:
+                    raise RuntimeError("If there is no type attribute, there should be exactly one sub-type element.")
+                if deNS(subs[0].tag) == "p:Default":
+                    type=load_typed_data_spec(subs[1], namedTypes)
+                else:
+                    type=load_typed_data_spec(subs[0], namedTypes)
+            elif len(subs)!=1:
                 raise RuntimeError("If there is no type attribute, there should be exactly one sub-type element.")
-            type=load_typed_data_spec(subs[0], namedTypes)
-        return ArrayTypedDataSpec(name,length,type)
+            else:
+                type=load_typed_data_spec(subs[0], namedTypes)
+        return ArrayTypedDataSpec(name,length,type,default)
     elif tag=="p:Scalar":
         type=get_attrib(dt, "type")
         default=get_attrib_optional(dt, "default")
         if default:
             sys.stderr.write("  default='{}', converting to json\n".format(default))
             default=json.loads(default) # needed for typedef'd structs
+        else:
+            d = dt.find("p:Default", ns)
+            if d is not None:
+                default = json.loads('{'+d.text+'}')
+
         sys.stderr.write("namedTypes={}\n".format(namedTypes))
         if type in namedTypes:
             type=namedTypes[type]
