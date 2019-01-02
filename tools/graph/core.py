@@ -379,7 +379,42 @@ class MessageType(object):
         self.message=message
         self.metadata=metadata
         self.numid=numid
+        size = self._checkMessageSize(self.message)
+        if size > 44:
+            raise RuntimeError("ERROR: Message \"" + self.id + "\" has a payload that's too large.\n"
+                             + "A message header is 20 bytes, and this payload is " + str(size) + " bytes.\n"
+                             + "The total is therefore " + str(20+size) + " bytes, and must be a maximum of 64")
 
+    def _checkMessageSize(self, payload):
+        # https://github.com/POETSII/toy_softswitch/blob/873a9f4583179d6d1842c6fc3ef1068c7294f32e/include/softswitch.hpp#L29
+        # The header of a message is 20 bytes, the total message size is 64.
+        # This function serves to check that the total message size, header+payload, is no more than 64 bytes.
+        # Therefore the payload must be less than or equal to 44 bytes
+        if isinstance(payload, ScalarTypedDataSpec):
+            if isinstance(payload.type, Typedef):
+                return self._checkMessageSize(payload.type)
+            elif payload.type == "uint8_t" or payload.type == "int8_t":
+                return 1
+            elif payload.type == "uint16_t" or payload.type == "int16_t":
+                return 2
+            elif payload.type == "uint32_t" or payload.type == "int32_t":
+                return 4
+            elif payload.type == "float" or payload.type == "double":
+                return 4
+            else:
+                raise RuntimeError("Unrecognised scalar type in message")
+        elif isinstance(payload, Typedef):
+            return self._checkMessageSize(payload.type)
+        elif isinstance(payload, TupleTypedDataSpec):
+            value = 0
+            for elt in payload.elements_by_index:
+                value = value + self._checkMessageSize(elt)
+            return value
+        elif isinstance(payload, ArrayTypedDataSpec):
+            return (self._checkMessageSize(payload.type) * payload.length)
+        else:
+            raise RuntimeError("Unrecognised type in message")
+        return 0
 
 class Pin(object):
     def __init__(self,parent,name,message_type,is_application,metadata,source_file,source_line):
