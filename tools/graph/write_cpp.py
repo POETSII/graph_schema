@@ -987,6 +987,46 @@ def render_device_type_as_cpp(dt,dst):
 
     registrationStatements.append('registry->registerDeviceType(ns_{}::{}_Spec_get());'.format(dt.id,dt.id,dt.id))
 
+def render_typedef_decl(td,dst,arrayIndex="",name=""):
+    if isinstance(td, TupleTypedDataSpec):
+        if name=="":
+            dst.write("typedef struct {} {{".format(td.name))
+        else:
+            dst.write("typedef struct {} {{".format(name))
+        for elt in td.elements_by_index:
+            render_typed_data_as_decl(elt,dst,"    ")
+        if name=="":
+            dst.write("}} {}{};\n\n".format(td.name,arrayIndex))
+        else:
+            dst.write("}} {}{};\n\n".format(name,arrayIndex))
+    elif isinstance(td, ScalarTypedDataSpec):
+        if isinstance(td.type, Typedef):
+            if name=="":
+                dst.write("typedef {} {}{};\n\n".format(td.type.type,td.name,arrayIndex))
+            else:
+                dst.write("typedef {} {}{};\n\n".format(td.type.type,name,arrayIndex))
+        else:
+            if name=="":
+                dst.write("typedef {} {}{};\n\n".format(td.type, td.name,arrayIndex))
+            else:
+                dst.write("typedef {} {}{};\n\n".format(td.type, name,arrayIndex))
+    elif isinstance(td, ArrayTypedDataSpec):
+        print()
+        print(name)
+        print(td.name)
+        print()
+        if name=="":
+            render_typedef_decl(td.type,dst,arrayIndex+"["+str(td.length)+"]",td.name)
+        else:
+            render_typedef_decl(td.type,dst,arrayIndex+"["+str(td.length)+"]",name)
+    elif isinstance(td, Typedef):
+        if name=="":
+            render_typedef_decl(td.type,dst,arrayIndex,td.name)
+        else:
+            render_typedef_decl(td.type,dst,arrayIndex,name=name)
+    else:
+        raise RuntimeError("Unrecognised type in TypeDef declarations")
+
 def render_graph_as_cpp(graph,dst, destPath, asHeader=False):
     gt=graph
 
@@ -1000,21 +1040,23 @@ def render_graph_as_cpp(graph,dst, destPath, asHeader=False):
     if gt.typedefs_by_index:
         dst.write("\n// USER DEFINED TYPES")
         for i in gt.typedefs_by_index:
-            if isinstance(i.type, TupleTypedDataSpec):
-                dst.write("typedef struct {} {{".format(i.name))
-                for elt in i.type.elements_by_index:
-                    render_typed_data_as_decl(elt,dst,"    ")
-                dst.write("}} {};\n\n".format(i.name))
-            elif isinstance(i.type, ScalarTypedDataSpec):
-                if isinstance(i.type.type, Typedef):
-                    dst.write("typedef {} {};\n\n".format(i.type,i.name))
-                else:
-                    dst.write("typedef {} {};\n\n".format(i.type.type, i.name))
-            elif isinstance(i.type, ArrayTypedDataSpec):
-                if isinstance(i.type.type, Typedef):
-                    dst.write("typedef {} {}[{}];\n\n".format(i.type.type, i.name, i.type.length))
-                else:
-                    dst.write("typedef {} {}[{}];\n\n".format(i.type.type.type, i.name, i.type.length))
+            render_typedef_decl(i,dst)
+        #     if isinstance(i.type, TupleTypedDataSpec):
+        #         dst.write("typedef struct {} {{".format(i.name))
+        #         for elt in i.type.elements_by_index:
+        #             render_typed_data_as_decl(elt,dst,"    ")
+        #         dst.write("}} {};\n\n".format(i.name))
+        #     elif isinstance(i.type, ScalarTypedDataSpec):
+        #         if isinstance(i.type.type, Typedef):
+        #             dst.write("typedef {} {};\n\n".format(i.type,i.name))
+        #         else:
+        #             dst.write("typedef {} {};\n\n".format(i.type.type, i.name))
+        #     elif isinstance(i.type, ArrayTypedDataSpec):
+        #         if isinstance(i.type.type, Typedef):
+        #             dst.write("typedef {} {}[{}];\n\n".format(i.type.type, i.name, i.type.length))
+        #         elif isinstance(i.type,ArrayTypedDataSpec):
+        #         else:
+        #             dst.write("typedef {} {}[{}];\n\n".format(i.type.type.type, i.name, i.type.length))
 
     render_typed_data_as_spec(gt.properties, "{}_properties_t".format(gt.id),"pp:Properties",dst,asHeader)
 
