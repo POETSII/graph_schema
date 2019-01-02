@@ -35,6 +35,15 @@ class frozendict(dict):
     update = _immutable
     setdefault = _immutable
 
+# Freezes a dictionary using the above frozen dict
+# This is for the case of dictionaries containing dictionaries
+def freezedict(d):
+    newD = {}
+    for i in d:
+        if isinstance(i, dict):
+            newD[i]=freezedict(i)
+    frozendict(newD)
+
 class ScalarTypedDataSpec(TypedDataSpec):
 
     _primitives=set(["int32_t","uint32_t","int16_t","uint16_t","int8_t","uint8_t","float","double"])
@@ -79,10 +88,10 @@ class ScalarTypedDataSpec(TypedDataSpec):
             self.default=0
         if isinstance(self.default,dict):
             #self.default=frozenset(self.default) # make it hashable
-            self.default=frozendict(self.default)
+            self.default=freezedict(self.default) # frozendict(self.default)
         if isinstance(self.default,list):
             self.default=tuple(self.default) # make it hashable
-        self._hash = hash(self.name) ^ hash(self.type) # ^ hash(self.default)
+        self._hash = hash(self.name) ^ hash(self.type) ^ hash(self.default)
 
     def visit_subtypes(self,visitor):
         if isinstance(self.type,Typedef):
