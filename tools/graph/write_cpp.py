@@ -1011,10 +1011,6 @@ def render_typedef_decl(td,dst,arrayIndex="",name=""):
             else:
                 dst.write("typedef {} {}{};\n\n".format(td.type, name,arrayIndex))
     elif isinstance(td, ArrayTypedDataSpec):
-        print()
-        print(name)
-        print(td.name)
-        print()
         if name=="":
             render_typedef_decl(td.type,dst,arrayIndex+"["+str(td.length)+"]",td.name)
         else:
@@ -1025,7 +1021,7 @@ def render_typedef_decl(td,dst,arrayIndex="",name=""):
         else:
             render_typedef_decl(td.type,dst,arrayIndex,name=name)
     else:
-        raise RuntimeError("Unrecognised type in TypeDef declarations")
+        raise RuntimeError("Unrecognised type \"{}\" in TypeDef declarations".format(td))
 
 def render_graph_as_cpp(graph,dst, destPath, asHeader=False):
     gt=graph
