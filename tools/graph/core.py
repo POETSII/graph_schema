@@ -406,6 +406,8 @@ class MessageType(object):
                 return 4
             elif payload.type == "float" or payload.type == "double":
                 return 4
+            elif payload.type== "uint64_t" or payload.type == "int64_t":
+                return 8
             else:
                 raise RuntimeError("Unrecognised scalar type in message")
         elif isinstance(payload, Typedef):
