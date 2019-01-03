@@ -72,37 +72,33 @@ def thread_distance(dst,src):
     return 0
 
 
-def render_typed_data_as_type_decl(td,dst,indent,name=None):
+def render_typed_data_as_type_decl(td,dst,indent,name=None, arrayIndex=""):
     if name==None:
         name=td.name
     assert(name!="_")
     if isinstance(td,ScalarTypedDataSpec):
         if isinstance(td.type, Typedef):
-            dst.write("{}{} {}\n".format(indent, td.type.name, td.name))
+            dst.write("{}{} {}{}\n".format(indent, td.type.name, td.name, arrayIndex))
         else:
-            dst.write("{0}{1} {2} /*indent={0},type={1},name={2}*/".format(indent, td.type, name))
+            dst.write("{0}{1} {2}{3} /*indent={0},type={1},name={2}*/".format(indent, td.type, name, arrayIndex))
     elif isinstance(td,TupleTypedDataSpec):
-        if isinstance(td, Typedef):
-            dst.write("{}struct {} {{\n".format(indent, name))
-        else:
-            dst.write("{}struct {{\n".format(indent))
+        dst.write("{}struct {{\n".format(indent))
         for e in td.elements_by_index:
             render_typed_data_as_type_decl(e,dst,indent+"  ")
             dst.write(";\n")
-        dst.write("{}}} {}".format(indent,name))
+        dst.write("{}}} {}{}".format(indent,name,arrayIndex))
     elif isinstance(td,ArrayTypedDataSpec):
         if isinstance(td.type,Typedef):
-            dst.write("{}{} {}[{}]".format(indent,td.type.name,td.name,td.length))
+            dst.write("{}{} {}{}[{}]".format(indent,td.type.name,td.name,arrayIndex,td.length))
         else:
-            render_typed_data_as_type_decl(td.type,dst,indent,name="")
-            dst.write("{}[{}] /*{}*/".format(name, td.length,name))
+            render_typed_data_as_type_decl(td.type,dst,indent,name,arrayIndex+"["+str(td.length)+"]")
     else:
         raise RuntimeError("Unknown data type {}".format(td));
 
 def render_typed_data_as_struct(td,dst,name):
     if td:
-        dst.write("typedef \n")
-        render_typed_data_as_type_decl(td,dst,"  ",name=name)
+        dst.write("typedef ")
+        render_typed_data_as_type_decl(td,dst,"",name=name)
         dst.write(";\n")
     else:
         dst.write("typedef struct {{}} {};\n".format(name))
@@ -170,8 +166,8 @@ def convert_typed_data_inst_to_bytes(td,ti):
     elif isinstance(td,ScalarTypedDataSpec):
         if isinstance(td.type, Typedef):
             res=bytearray([])
-            for e in td.type.elements_by_index:
-                res.extend(convert_typed_data_inst_to_bytes(e,ti and ti.get(e.name,None)))
+            e = td.type.type
+            res.extend(convert_typed_data_inst_to_bytes(td.type.type,ti))
             return res
         else:
             if ti is None:
@@ -188,6 +184,10 @@ def convert_typed_data_inst_to_bytes(td,ti):
         res=bytearray([])
         for i in range(td.length):
             res.extend(convert_typed_data_inst_to_bytes(td.type,ti and ti[i]) )
+        return res
+    elif isinstance(td,Typedef):
+        res=bytearray([])
+        res.extend(convert_typed_data_inst_to_bytes(td.type,ti))
         return res
     else:
         raise RuntimeError("Unknown type {}".format(td))
@@ -398,6 +398,27 @@ def output_device_instance_addresses(gi,device_to_thread, thread_to_devices, dst
                 pinIndex = op.parent.outputs_by_index.index(op)
                 dst.write("""{}_{},out,{},{},{}\n""".format(deviceName, op.name,threadId,deviceOffset, pinIndex))
 
+def render_typedef_decl(td,dst,arrayIndex="",name=None):
+    if name==None:
+        name=td.name
+    if isinstance(td, TupleTypedDataSpec):
+        dst.write("typedef struct {} {{".format(name))
+        for elt in td.elements_by_index:
+            render_typed_data_as_type_decl(elt,dst,"    ")
+            dst.write(";\n")
+        dst.write("}} {}{};\n\n".format(name,arrayIndex))
+    elif isinstance(td, ScalarTypedDataSpec):
+        if isinstance(td.type, Typedef):
+                dst.write("typedef {} {}{};\n\n".format(td.type.type,name,arrayIndex))
+        else:
+                dst.write("typedef {} {}{};\n\n".format(td.type, name,arrayIndex))
+    elif isinstance(td, ArrayTypedDataSpec):
+            render_typedef_decl(td.type,dst,arrayIndex+"["+str(td.length)+"]",name)
+    elif isinstance(td, Typedef):
+            render_typedef_decl(td.type,dst,arrayIndex,name=name)
+    else:
+        raise RuntimeError("Unrecognised type \"{}\" in TypeDef declarations".format(td))
+
 def render_graph_type_as_softswitch_decls(gt,dst):
     gtProps=make_graph_type_properties(gt)
     dst.write("""
@@ -429,12 +450,8 @@ def render_graph_type_as_softswitch_decls(gt,dst):
     if gt.typedefs_by_index:
         dst.write("\n// USER DEFINED TYPES")
         for i in gt.typedefs_by_index:
-            render_typed_data_as_struct(i,dst,i.name)
+            render_typedef_decl(i,dst)
             dst.write("\n")
-            # dst.write("typedef struct {} {{".format(i.name))
-            # for elt in i.elements_by_index:
-                # render_typed_data_as_struct(elt,dst,)
-            # dst.write("}} {};\n\n".format(i.name))
 
     dst.write("\n// GRAPH PROPERTIES")
     render_typed_data_as_struct(gt.properties,dst,gtProps["GRAPH_TYPE_PROPERTIES_T"])
