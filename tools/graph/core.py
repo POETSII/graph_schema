@@ -303,15 +303,20 @@ class ArrayTypedDataSpec(TypedDataSpec):
         if inst is None:
             return True;
 
-        if not isinstance(inst,list):
-            return False
-
-        if len(inst)!=self.length:
-            return False
-
-        for v in inst:
-            if not self.type.is_refinement_compatible(v):
+        if isinstance(inst,list):
+            if len(inst)>self.length:
                 return False
+            for v in inst:
+                if not self.type.is_refinement_compatible(v):
+                    return False
+        elif isinstance(inst,dict):
+            if len(inst)>self.length:
+                return False
+            for v in inst:
+                if not self.type.is_refinement_compatible(inst[v]):
+                    return False
+
+
 
         return True
 
@@ -412,8 +417,10 @@ class MessageType(object):
             return value
         elif isinstance(payload, ArrayTypedDataSpec):
             return (self._checkMessageSize(payload.type) * payload.length)
+        elif payload is None:
+            return 0
         else:
-            raise RuntimeError("Unrecognised type in message")
+            raise RuntimeError("Unrecognised type in message {}".format(payload))
         return 0
 
 class Pin(object):
