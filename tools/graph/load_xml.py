@@ -269,10 +269,11 @@ def load_device_type(graph,dtNode,sourceFile):
 
     dt=DeviceType(graph,id,properties,state,metadata,shared_code,False)
 
-    (handler,sourceLine)=get_child_text(dtNode,"p:Init")
-    dt.init_handler=handler
-    dt.init_source_line=sourceLine
-    dt.init_source_file=sourceFile
+    if dtNode.find("p:Init",ns) is not None:
+        (handler,sourceLine)=get_child_text(dtNode,"p:Init")
+        dt.init_handler=handler
+        dt.init_source_line=sourceLine
+        dt.init_source_file=sourceFile
 
     for p in dtNode.findall("p:InputPin",ns):
         name=get_attrib(p,"name")
