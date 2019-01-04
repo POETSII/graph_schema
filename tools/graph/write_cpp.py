@@ -844,12 +844,12 @@ def render_device_type_as_cpp(dt,dst):
     if dt.init_source_line and dt.init_source_file:
         subs["preInitProcLinePragma"]= '#line {} "{}"\n'.format(dt.init_source_line-1,dt.init_source_file)
     else:
-        subst["preInitProcLinePragma"]="// No line/file information for init handler"
+        subs["preInitProcLinePragma"]="// No line/file information for init handler"
 
     if dt.ready_to_send_source_line and dt.ready_to_send_source_file:
         subs["preProcLinePragma"]= '#line {} "{}"\n'.format(dt.ready_to_send_source_line-1,dt.ready_to_send_source_file)
     else:
-        subst["preProcLinePragma"]="// No line/file information for readyToSend handler"
+        subs["preProcLinePragma"]="// No line/file information for readyToSend handler"
 
     subs["deviceGlobalConstants"]=emit_device_global_constants(dt,subs,"    ")
     subs["deviceLocalConstants"]=emit_device_local_constants(dt,subs, "    ")
