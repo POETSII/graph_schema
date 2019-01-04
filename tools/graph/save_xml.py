@@ -28,12 +28,15 @@ def _type_to_element(parent,t):
     tag=_type_to_tag[type(t)]
     return etree.SubElement(parent,tag)
 
+# TODO: Don't print empty parts of default, i.e. in a tuple { x, y, z }, if only x is non-0, then print { "x": 1 } only
 def save_typed_data_spec(dt):
     if isinstance(dt,TupleTypedDataSpec):
         n=etree.Element(toNS("p:Tuple"))
         n.attrib["name"]=dt.name
         for e in dt.elements_by_index:
             n.append(save_typed_data_spec(e))
+        if dt.default is not None:
+            save_typed_struct_instance(n, toNS("p:Default"), dt, dt.default)
     elif isinstance(dt,ScalarTypedDataSpec):
         n=etree.Element(toNS("p:Scalar"))
         n.attrib["name"]=dt.name
@@ -41,9 +44,12 @@ def save_typed_data_spec(dt):
             n.attrib["type"]=dt.type.id
         else:
             n.attrib["type"]=dt.type
-
-        if dt.default is not None and dt.default is not 0:
-            n.attrib["default"]=json.dumps(dt.default) # Need json for typedef'd structs and arrays
+        if dt.default is not None:
+            if (isinstance(dt.default, int) or isinstance(dt.default, float)):
+                if dt.default is not 0:
+                    n.attrib["default"]=json.dumps(dt.default) # Need json for typedef'd structs and arrays
+            else:
+                save_typed_struct_instance(n, toNS("p:Default"), dt, dt.default)
     elif isinstance(dt,ArrayTypedDataSpec):
         n=etree.Element(toNS("p:Array"))
         n.attrib["name"]=dt.name
@@ -53,8 +59,12 @@ def save_typed_data_spec(dt):
         else:
             subn=save_typed_data_spec(dt.type)
             n.append(subn)
+        if dt.default is not None:
+            save_typed_struct_instance(n, toNS("p:Default"), dt, dt.default)
+    elif isinstance(dt,Typedef):
+        return save_typed_data_spec(dt.type)
     else:
-        raise RuntimeError("Unknown data type.")
+        raise RuntimeError("Unknown data type: {}.".format(dt))
 
     return n
 
@@ -93,9 +103,12 @@ def save_typed_struct_instance(node,childTagNameWithNS,type,inst):
         text=json.dumps(inst)
     except BaseException:
         raise RuntimeError("Exception while serialising '{}'".format(inst))
-    assert text.startswith('{') and text.endswith('}')
+    assert (text.startswith('{') and text.endswith('}')) or (text.startswith('[') and text.endswith(']'))
     r=etree.SubElement(node, childTagNameWithNS)
-    r.text=text[1:-1] # Get rid of brackets
+    if (text.startswith('[') and text.endswith(']')):
+        r.text=text # Get rid of brackets
+    else:
+        r.text=text[1:-1]
     return r
 
 def save_metadata(node,childTagNameWithNS,value):
@@ -189,13 +202,21 @@ def save_device_type(parent,dt):
 
 _device_instance_tag_type=toNS("p:DevI")
 _device_instance_properties_type=toNS("p:P")
+_device_instance_state_type=toNS("p:S")
 _device_instance_metadata_type=toNS("p:M")
 
 
 def save_device_instance(parent, di):
     n=etree.SubElement(parent, _device_instance_tag_type, {"id":di.id,"type":di.device_type.id} )
 
-    save_typed_struct_instance(n, _device_instance_properties_type, di.device_type.properties, di.properties)
+    defaultProperties=di.device_type.properties.create_default()
+    differingProperties={}
+    if di.properties is not None:
+        for p in defaultProperties:
+            if defaultProperties[p] != di.properties[p]:
+                differingProperties[p] = di.properties[p]
+        save_typed_struct_instance(n, _device_instance_properties_type, di.device_type.properties, differingProperties)
+
     save_metadata(n, _device_instance_metadata_type, di.metadata)
 
     return n

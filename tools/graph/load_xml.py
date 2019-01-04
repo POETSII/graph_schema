@@ -89,7 +89,7 @@ def load_typed_data_spec(dt, namedTypes={}, namespace=None):
         default=None
         for eltNode in dt.findall("p:*",namespace): # Anything from this namespace must be a member
             if not deNS(eltNode.tag) == "p:Default":
-                elt=load_typed_data_spec(eltNode, namedTypes)
+                elt=load_typed_data_spec(eltNode, namedTypes,namespace)
                 elts.append(elt)
             else:
                 default = json.loads('{'+eltNode.text+'}')
@@ -116,13 +116,13 @@ def load_typed_data_spec(dt, namedTypes={}, namespace=None):
                 if len(subs)!=2:
                     raise RuntimeError("If there is no type attribute, there should be exactly one sub-type element.")
                 if deNS(subs[0].tag) == "p:Default":
-                    type=load_typed_data_spec(subs[1], namedTypes)
+                    type=load_typed_data_spec(subs[1], namedTypes, namespace)
                 else:
-                    type=load_typed_data_spec(subs[0], namedTypes)
+                    type=load_typed_data_spec(subs[0], namedTypes, namespace)
             elif len(subs)!=1:
                 raise RuntimeError("If there is no type attribute, there should be exactly one sub-type element.")
             else:
-                type=load_typed_data_spec(subs[0], namedTypes)
+                type=load_typed_data_spec(subs[0], namedTypes, namespace)
         return ArrayTypedDataSpec(name,length,type,default)
     elif tag=="p:Scalar":
         type=get_attrib(dt, "type")
@@ -183,14 +183,18 @@ def load_metadata(parent, name, namespace=None):
 
     return metadata
 
-def load_type_def(parent,td, namedTypes):
+def load_type_def(parent,td, namedTypes, namespace=None):
+    if namespace==None:
+        namespace = ns
+
     id=get_attrib(td,"id")
     try:
-        typeNode=td.find("p:*",ns)
+        typeNode=td.find("p:*",namespace)
         if typeNode is None:
             raise XMLSyntaxError("Missing sub-child to give actual type.")
 
-        type=load_typed_data_spec(typeNode, namedTypes)
+
+        type=load_typed_data_spec(typeNode, namedTypes, namespace)
 
         return Typedef(id,type)
     except XMLSyntaxError:
