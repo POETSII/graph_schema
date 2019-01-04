@@ -22,8 +22,10 @@ _ns_EdgeI="{{{}}}EdgeI".format(ns["p"])
 _ns_DeviceType="{{{}}}DeviceType".format(ns["p"])
 _ns_ExternalType="{{{}}}ExternalType".format(ns["p"])
 
-def deNS(t):
-    tt=t.replace("{"+ns["p"]+"}","p:")
+def deNS(t, namespace=None):
+    if namespace==None:
+        namespace=ns
+    tt=t.replace("{"+namespace["p"]+"}","p:")
     #print("{} -> {}".format(t,tt))
     return tt
 
@@ -64,8 +66,10 @@ def get_attrib_defaulted(node,name,default):
         return default
     return node.attrib[name]
 
-def get_child_text(node,name):
-    n=node.find(name,ns)
+def get_child_text(node,name,namespace=None):
+    if namespace==None:
+        namespace=ns
+    n=node.find(name,namespace)
     if n is None:
         raise XMLSyntaxError("No child text node called {}".format(name),node)
     text=n.text
@@ -73,14 +77,17 @@ def get_child_text(node,name):
     return (text,line)
 
 
-def load_typed_data_spec(dt, namedTypes={}):
+def load_typed_data_spec(dt, namedTypes={}, namespace=None):
+    if namespace==None:
+        namspace=ns
+
     name=get_attrib(dt,"name")
 
-    tag=deNS(dt.tag)
+    tag=deNS(dt.tag,namespace)
     if tag=="p:Tuple":
         elts=[]
         default=None
-        for eltNode in dt.findall("p:*",ns): # Anything from this namespace must be a member
+        for eltNode in dt.findall("p:*",namespace): # Anything from this namespace must be a member
             if not deNS(eltNode.tag) == "p:Default":
                 elt=load_typed_data_spec(eltNode, namedTypes)
                 elts.append(elt)
@@ -91,7 +98,7 @@ def load_typed_data_spec(dt, namedTypes={}):
         length=int(get_attrib(dt,"length"))
         type=get_attrib_optional(dt, "type")
         default=None
-        d=dt.find("p:Default", ns)
+        d=dt.find("p:Default", namespace)
         if d is not None:
             if d.text.strip().startswith('['):
                 default=json.loads('{"'+name+'":'+d.text+'}')
@@ -104,7 +111,7 @@ def load_typed_data_spec(dt, namedTypes={}):
             else:
                 type=ScalarTypedDataSpec("_",type)
         else:
-            subs=dt.findall("p:*",ns) # Anything from this namespace must be the sub-type other than <Default>
+            subs=dt.findall("p:*",namespace) # Anything from this namespace must be the sub-type other than <Default>
             if default:
                 if len(subs)!=2:
                     raise RuntimeError("If there is no type attribute, there should be exactly one sub-type element.")
@@ -124,7 +131,7 @@ def load_typed_data_spec(dt, namedTypes={}):
             sys.stderr.write("  default='{}', converting to json\n".format(default))
             default=json.loads(default) # needed for typedef'd structs
         else:
-            d = dt.find("p:Default", ns)
+            d = dt.find("p:Default", namespace)
             if d is not None:
                 default = json.loads('{'+d.text+'}')
 
@@ -143,10 +150,12 @@ def load_typed_data_instance(dt,spec):
     return spec.expand(value)
 
 
-def load_struct_spec(name, members,namedTypes):
+def load_struct_spec(name, members,namedTypes,namespace=None):
+    if namespace==None:
+        namespace=ns
     elts=[]
-    for eltNode in members.findall("p:*",ns): # Anything from this namespace must be a member
-        elt=load_typed_data_spec(eltNode,namedTypes)
+    for eltNode in members.findall("p:*",namespace): # Anything from this namespace must be a member
+        elt=load_typed_data_spec(eltNode,namedTypes,namespace)
         elts.append(elt)
 
     return TupleTypedDataSpec(name, elts)
@@ -160,9 +169,11 @@ def load_struct_instance(spec,dt):
     assert(spec.is_refinement_compatible(value))
     return spec.expand(value)
 
-def load_metadata(parent, name):
+def load_metadata(parent, name, namespace=None):
+    if namespace==None:
+        namespace=ns
     metadata={}
-    metadataNode=parent.find(name,ns)
+    metadataNode=parent.find(name,namespace)
     if metadataNode is not None and metadataNode.text is not None:
         try:
             metadata=json.loads("{"+metadataNode.text+"}")
@@ -188,13 +199,15 @@ def load_type_def(parent,td, namedTypes):
         raise XMLSyntaxError("Error while parsing type def {}".format(id),td,e)
 
 
-def load_message_type(parent,dt, namedTypes):
+def load_message_type(parent,dt, namedTypes, namespace=None):
+    if namespace==None:
+        namespace=ns
     id=get_attrib(dt,"id")
     try:
         message=None
-        messageNode=dt.find("p:Message",ns)
+        messageNode=dt.find("p:Message",namespace)
         if messageNode is not None:
-            message=load_struct_spec(id+"_message", messageNode, namedTypes)
+            message=load_struct_spec(id+"_message", messageNode, namedTypes, namespace)
 
         metadata=load_metadata(dt, "p:MetaData")
 
@@ -212,7 +225,7 @@ def load_external_type(graph,dtNode,sourceFile):
     shared_code=[]
     dt=DeviceType(graph,id,properties,state,metadata,shared_code, True)
 
-    for p in dtNode.findall("p:InputPin", ns):
+    for p in dtNode.findall("p:InputPin", namespace):
         name=get_attrib(p,"name")
         message_type_id=get_attrib(p,"messageTypeId")
         if message_type_id not in graph.message_types:
@@ -228,7 +241,7 @@ def load_external_type(graph,dtNode,sourceFile):
         dt.add_input(name,message_type,is_application,properties,state,pinMetadata, handler,sourceFile,sourceLine)
         sys.stderr.write("      Added external input {}\n".format(name))
 
-    for p in dtNode.findall("p:OutputPin", ns):
+    for p in dtNode.findall("p:OutputPin", namespace):
         name=get_attrib(p,"name")
         message_type_id=get_attrib(p,"messageTypeId")
         if message_type_id not in graph.message_types:
@@ -248,34 +261,37 @@ def load_external_type(graph,dtNode,sourceFile):
 
     return dt
 
-def load_device_type(graph,dtNode,sourceFile):
+def load_device_type(graph,dtNode,sourceFile,namespace=None):
+    if namespace==None:
+        namespace=ns
+
     id=get_attrib(dtNode,"id")
 
     state=None
-    stateNode=dtNode.find("p:State",ns)
+    stateNode=dtNode.find("p:State",namespace)
     if stateNode is not None:
-        state=load_struct_spec(id+"_state", stateNode,graph.typedefs)
+        state=load_struct_spec(id+"_state", stateNode,graph.typedefs,namespace)
 
     properties=None
-    propertiesNode=dtNode.find("p:Properties",ns)
+    propertiesNode=dtNode.find("p:Properties",namespace)
     if propertiesNode is not None:
-        properties=load_struct_spec(id+"_properties", propertiesNode,graph.typedefs)
+        properties=load_struct_spec(id+"_properties", propertiesNode,graph.typedefs, namespace)
 
     metadata=load_metadata(dtNode,"p:MetaData")
 
     shared_code=[]
-    for s in dtNode.findall("p:SharedCode",ns):
+    for s in dtNode.findall("p:SharedCode",namespace):
         shared_code.append(s.text)
 
     dt=DeviceType(graph,id,properties,state,metadata,shared_code,False)
 
-    if dtNode.find("p:Init",ns) is not None:
-        (handler,sourceLine)=get_child_text(dtNode,"p:Init")
+    if dtNode.find("p:Init",namespace) is not None:
+        (handler,sourceLine)=get_child_text(dtNode,"p:Init", namespace)
         dt.init_handler=handler
         dt.init_source_line=sourceLine
         dt.init_source_file=sourceFile
 
-    for p in dtNode.findall("p:InputPin",ns):
+    for p in dtNode.findall("p:InputPin",namespace):
         name=get_attrib(p,"name")
         message_type_id=get_attrib(p,"messageTypeId")
         if message_type_id not in graph.message_types:
@@ -285,7 +301,7 @@ def load_device_type(graph,dtNode,sourceFile):
 
         try:
             state=None
-            stateNode=p.find("p:State",ns)
+            stateNode=p.find("p:State",namespace)
             if stateNode is not None:
                 state=load_struct_spec(id+"_state", stateNode,graph.typedefs)
         except Exception as e:
@@ -293,7 +309,7 @@ def load_device_type(graph,dtNode,sourceFile):
 
         try:
             properties=None
-            propertiesNode=p.find("p:Properties",ns)
+            propertiesNode=p.find("p:Properties",namespace)
             if propertiesNode is not None:
                 properties=load_struct_spec(id+"_properties", propertiesNode,graph.typedefs)
         except Exception as e:
@@ -301,11 +317,11 @@ def load_device_type(graph,dtNode,sourceFile):
 
         pinMetadata=load_metadata(p,"p:MetaData")
 
-        (handler,sourceLine)=get_child_text(p,"p:OnReceive")
+        (handler,sourceLine)=get_child_text(p,"p:OnReceive",namespace)
         dt.add_input(name,message_type,is_application,properties,state,pinMetadata, handler,sourceFile,sourceLine)
         sys.stderr.write("      Added input {}\n".format(name))
 
-    for p in dtNode.findall("p:OutputPin",ns):
+    for p in dtNode.findall("p:OutputPin",namespace):
         name=get_attrib(p,"name")
         message_type_id=get_attrib(p,"messageTypeId")
         if message_type_id not in graph.message_types:
@@ -313,37 +329,40 @@ def load_device_type(graph,dtNode,sourceFile):
         is_application=get_attrib_optional_bool(p,"application")
         message_type=graph.message_types[message_type_id]
         pinMetadata=load_metadata(p,"p:MetaData")
-        (handler,sourceLine)=get_child_text(p,"p:OnSend")
+        (handler,sourceLine)=get_child_text(p,"p:OnSend",namespace)
         dt.add_output(name,message_type,is_application,pinMetadata,handler,sourceFile,sourceLine)
 
-    (handler,sourceLine)=get_child_text(dtNode,"p:ReadyToSend")
+    (handler,sourceLine)=get_child_text(dtNode,"p:ReadyToSend",namespace)
     dt.ready_to_send_handler=handler
     dt.ready_to_send_source_line=sourceLine
     dt.ready_to_send_source_file=sourceFile
 
     return dt
 
-def load_graph_type(graphNode, sourcePath):
+def load_graph_type(graphNode, sourcePath, namespace=None):
+    if namespace==None:
+        namespace=ns
+
     id=get_attrib(graphNode,"id")
     sys.stderr.write("  Loading graph type {}\n".format(id))
 
     namedTypes={}
     namedTypesByIndex=[]
-    for etNode in graphNode.findall("p:Types/p:TypeDef",ns):
+    for etNode in graphNode.findall("p:Types/p:TypeDef",namespace):
         sys.stderr.write("  Loading type defs, current={}\n".format(namedTypes))
         td=load_type_def(graphNode,etNode, namedTypes)
         namedTypes[td.id]=td
         namedTypesByIndex.append(td)
 
     properties=None
-    propertiesNode=graphNode.find("p:Properties",ns)
+    propertiesNode=graphNode.find("p:Properties",namespace)
     if propertiesNode is not None:
-        properties=load_struct_spec(id+"_properties", propertiesNode, namedTypes)
+        properties=load_struct_spec(id+"_properties", propertiesNode, namedTypes, namespace)
 
-    metadata=load_metadata(graphNode,"p:MetaData")
+    metadata=load_metadata(graphNode,"p:MetaData",namespace)
 
     shared_code=[]
-    for n in graphNode.findall("p:SharedCode",ns):
+    for n in graphNode.findall("p:SharedCode",namespace):
         shared_code.append(n.text)
 
     graphType=GraphType(id,properties,metadata,shared_code)
@@ -351,23 +370,26 @@ def load_graph_type(graphNode, sourcePath):
     for nt in namedTypesByIndex:
         graphType.add_typedef(nt)
 
-    for etNode in graphNode.findall("p:MessageTypes/p:*",ns):
-        et=load_message_type(graphType,etNode, graphType.typedefs)
+    for etNode in graphNode.findall("p:MessageTypes/p:*",namespace):
+        et=load_message_type(graphType,etNode, graphType.typedefs, namespace)
         graphType.add_message_type(et)
 
-    for dtNode in graphNode.findall("p:DeviceTypes/p:*",ns):
-        if dtNode.tag == _ns_DeviceType:
-            dt=load_device_type(graphType,dtNode, sourcePath)
+    for dtNode in graphNode.findall("p:DeviceTypes/p:*",namespace):
+        deviceTypeTag = "{{{}}}DeviceType".format(namespace["p"])
+        if dtNode.tag == deviceTypeTag:
+            dt=load_device_type(graphType,dtNode, sourcePath, namespace)
             graphType.add_device_type(dt)
             sys.stderr.write("    Added device type {}\n".format(dt.id))
         elif dtNode.tag == _ns_ExternalType:
-            et=load_external_type(graphType,dtNode,sourcePath)
+            et=load_external_type(graphType,dtNode,sourcePath, namespace)
             graphType.add_device_type(et)
             sys.stderr.write("    Added external device type {}\n".format(et.id))
 
     return graphType
 
-def load_graph_type_reference(graphNode,basePath):
+def load_graph_type_reference(graphNode,basePath,namespace=None):
+    if namespace==None:
+        namespace=ns
     id=get_attrib(graphNode,"id")
 
     src=get_attrib_optional(graphNode, "src")
@@ -379,7 +401,7 @@ def load_graph_type_reference(graphNode,basePath):
         doc = tree.getroot()
         graphsNode = doc;
 
-        for gtNode in graphsNode.findall("p:GraphType",ns):
+        for gtNode in graphsNode.findall("p:GraphType",namespace):
             gt=load_graph_type(gtNode, fullSrc)
             if gt.id==id:
                 return gt
@@ -496,13 +518,19 @@ def load_edge_instance(graph,eiNode):
 
     return EdgeInstance(graph,dst_device,dst_pin_name,src_device,src_pin_name,properties,metadata)
 
-def load_graph_instance(graphTypes, graphNode):
+def load_graph_instance(graphTypes, graphNode, namespace=None):
+    if namespace==None:
+        namespace=ns
+    devITag = "{{{}}}DevI".format(namespace["p"])
+    extITag = "{{{}}}ExtI".format(namespace["p"])
+    edgeITag = "{{{}}}EdgeI".format(namespace["p"])
+
     id=get_attrib(graphNode,"id")
     graphTypeId=get_attrib(graphNode,"graphTypeId")
     graphType=graphTypes[graphTypeId]
 
     properties=None
-    propertiesNode=graphNode.find("p:Properties",ns)
+    propertiesNode=graphNode.find("p:Properties",namespace)
     if propertiesNode is not None:
         assert graphType.properties
         properties=load_struct_instance(graphType.properties, propertiesNode)
@@ -510,28 +538,30 @@ def load_graph_instance(graphTypes, graphNode):
     metadata=load_metadata(graphNode, "p:MetaData")
 
     graph=GraphInstance(id,graphType,properties,metadata)
-    disNode=graphNode.findall("p:DeviceInstances",ns)
+    disNode=graphNode.findall("p:DeviceInstances",namespace)
     assert(len(disNode)==1)
     for diNode in disNode[0]:
-        assert (diNode.tag==_ns_DevI) or (diNode.tag==_ns_ExtI)
-        if diNode.tag==_ns_DevI:
+        assert (diNode.tag==devITag) or (diNode.tag==extITag)
+        if diNode.tag==devITag:
             di=load_device_instance(graph,diNode)
             graph.add_device_instance(di)
-        elif diNode.tag==_ns_ExtI:
+        elif diNode.tag==extITag:
             ei=load_external_instance(graph,diNode)
             graph.add_device_instance(ei)
 
-    eisNode=graphNode.findall("p:EdgeInstances",ns)
+    eisNode=graphNode.findall("p:EdgeInstances",namespace)
     assert(len(eisNode)==1)
     for eiNode in eisNode[0]:
-        assert eiNode.tag==_ns_EdgeI
+        assert eiNode.tag==edgeITag
         ei=load_edge_instance(graph,eiNode)
         graph.add_edge_instance(ei)
 
     return graph
 
 
-def load_graph_types_and_instances(src,basePath):
+def load_graph_types_and_instances(src,basePath,namespace=None):
+    if namespace==None:
+        namespace=ns
 
     tree = etree.parse(src)
     doc = tree.getroot()
@@ -541,19 +571,19 @@ def load_graph_types_and_instances(src,basePath):
     graphs={}
 
     try:
-        for gtNode in graphsNode.findall("p:GraphType",ns):
+        for gtNode in graphsNode.findall("p:GraphType",namespace):
             sys.stderr.write("Loading graph type\n")
-            gt=load_graph_type(gtNode, basePath)
+            gt=load_graph_type(gtNode, basePath, namespace)
             graphTypes[gt.id]=gt
 
-        for gtRefNode in graphsNode.findall("p:GraphTypeReference",ns):
+        for gtRefNode in graphsNode.findall("p:GraphTypeReference",namespace):
             sys.stderr.write("Loading graph reference\n")
-            gt=load_graph_type_reference(gtRefNode,basePath)
+            gt=load_graph_type_reference(gtRefNode, basePath, namespace)
             graphTypes[gt.id]=gt
 
-        for giNode in graphsNode.findall("p:GraphInstance",ns):
+        for giNode in graphsNode.findall("p:GraphInstance",namespace):
             sys.stderr.write("Loading graph\n")
-            g=load_graph_instance(graphTypes, giNode)
+            g=load_graph_instance(graphTypes, giNode, namespace)
             graphs[g.id]=g
 
         return (graphTypes,graphs)
