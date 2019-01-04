@@ -466,6 +466,8 @@ class DeviceType(object):
         self.shared_code=shared_code
         self.ready_to_send_handler="" # Hrmm, this was missing as an explicit member, but is used by load/save
         self.init_handler=""
+        self.init_source_file=None
+        self.init_source_line=None
         self.isExternal=isExternal
 
     def add_input(self,name,message_type,is_application,properties,state,metadata,receive_handler,source_file=None,source_line={}):
@@ -648,7 +650,7 @@ class GraphInstance:
     def _validate_device_type(self,dt):
         for p in dt.pins.values():
             if p.message_type.id not in self.graph_type.message_types:
-                raise GraphDescriptionError("DeviceType uses a message type that is uknown.")
+                raise GraphDescriptionError("DeviceType uses a message type that is unknown.")
             if p.message_type != self.graph_type.message_types[p.message_type.id]:
                 raise GraphDescriptionError("DeviceType uses a message type object that is not part of this graph.")
 
