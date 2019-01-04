@@ -342,6 +342,8 @@ def load_device_type(graph,dtNode,sourceFile,namespace=None):
 def load_graph_type(graphNode, sourcePath, namespace=None):
     if namespace==None:
         namespace=ns
+    deviceTypeTag = "{{{}}}DeviceType".format(namespace["p"])
+    externalTypeTag = "{{{}}}ExternalType".format(namespace["p"])
 
     id=get_attrib(graphNode,"id")
     sys.stderr.write("  Loading graph type {}\n".format(id))
@@ -375,12 +377,12 @@ def load_graph_type(graphNode, sourcePath, namespace=None):
         graphType.add_message_type(et)
 
     for dtNode in graphNode.findall("p:DeviceTypes/p:*",namespace):
-        deviceTypeTag = "{{{}}}DeviceType".format(namespace["p"])
+
         if dtNode.tag == deviceTypeTag:
             dt=load_device_type(graphType,dtNode, sourcePath, namespace)
             graphType.add_device_type(dt)
             sys.stderr.write("    Added device type {}\n".format(dt.id))
-        elif dtNode.tag == _ns_ExternalType:
+        elif dtNode.tag == externalTypeTag:
             et=load_external_type(graphType,dtNode,sourcePath, namespace)
             graphType.add_device_type(et)
             sys.stderr.write("    Added external device type {}\n".format(et.id))
@@ -410,7 +412,11 @@ def load_graph_type_reference(graphNode,basePath,namespace=None):
     else:
         return GraphTypeReference(id)
 
-def load_external_instance(graph, eiNode):
+def load_external_instance(graph, eiNode, namespace=None):
+    if namespace==None:
+        namespace = ns
+    pTag = "{{{}}}M".format(namespace["p"])
+
     id=get_attrib(eiNode,"id")
     external_type_id=get_attrib(eiNode,"type")
     if external_type_id not in graph.graph_type.device_types:
@@ -420,7 +426,7 @@ def load_external_instance(graph, eiNode):
     metadata=None
 
     for n in eiNode: # walk over children rather than using find. Better performance
-        if n.tag == _ns_M:
+        if n.tag == mTag:
             assert not metadata
             metadata=json.loads("{"+n.text+"}")
         else:
@@ -428,7 +434,13 @@ def load_external_instance(graph, eiNode):
 
     return DeviceInstance(graph,id,external_type,properties,metadata)
 
-def load_device_instance(graph,diNode):
+def load_device_instance(graph,diNode,namespace=None):
+    if namespace==None:
+        namespace=ns
+    pTag = "{{{}}}P".format(namespace["p"])
+    sTag = "{{{}}}S".format(namespace["p"])
+    mTag = "{{{}}}M".format(namespace["p"])
+
     id=get_attrib(diNode,"id")
 
     device_type_id=get_attrib(diNode,"type")
@@ -445,7 +457,7 @@ def load_device_instance(graph,diNode):
     metadata=None
 
     for n in diNode: # walk over children rather than using find. Better performance
-        if n.tag==_ns_P:
+        if n.tag==pTag:
             assert not properties
 
             spec=device_type.properties
@@ -454,7 +466,7 @@ def load_device_instance(graph,diNode):
             value=json.loads("{"+n.text+"}")
             assert spec.is_refinement_compatible(value), "Spec = {}, value= {}".format(spec,value)
             properties=spec.expand(value)
-        elif n.tag==_ns_S:
+        elif n.tag==sTag:
             assert not state
 
             spec=device_type.state
@@ -464,7 +476,7 @@ def load_device_instance(graph,diNode):
             assert spec.is_refinement_compatible(value), "Spec = {}, value= {}".format(spec,value)
 
             state=spec.expand(value)
-        elif n.tag==_ns_M:
+        elif n.tag==mTag:
             assert not metadata
             metadata=json.loads("{"+n.text+"}")
         else:
@@ -543,7 +555,7 @@ def load_graph_instance(graphTypes, graphNode, namespace=None):
     for diNode in disNode[0]:
         assert (diNode.tag==devITag) or (diNode.tag==extITag)
         if diNode.tag==devITag:
-            di=load_device_instance(graph,diNode)
+            di=load_device_instance(graph,diNode,namespace)
             graph.add_device_instance(di)
         elif diNode.tag==extITag:
             ei=load_external_instance(graph,diNode)
