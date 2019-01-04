@@ -7,7 +7,7 @@ import os
 import sys
 import json
 
-ns={"p":"https://poets-project.org/schemas/virtual-graph-schema-v2"}
+ns={"p":"https://poets-project.org/schemas/virtual-graph-schema-v3"}
 
 def toNS(t):
     tt=t.replace("p:","{"+ns["p"]+"}")
@@ -143,8 +143,8 @@ def save_device_type(parent,dt):
             sn=etree.SubElement(n,toNS("p:SharedCode"))
             sn.text=etree.CDATA(s)
 
-    if dt.init_handler
-        pn=etree.Element(toNS("Init"))
+    if dt.init_handler:
+        pn=etree.Element(toNS("p:Init"))
         pn.text=etree.CDATA(dt.init_handler)
         n.append(pn)
 
@@ -298,7 +298,7 @@ def save_graph_instance_metadata_patch(parent, id,graphMeta,deviceMeta,edgeMeta)
 
 
 def save_graph(graph,dst):
-    nsmap = { None : "https://poets-project.org/schemas/virtual-graph-schema-v2" }
+    nsmap = { None : "https://poets-project.org/schemas/virtual-graph-schema-v3" }
     root=etree.Element(toNS("p:Graphs"), nsmap=nsmap)
 
     if dst is str:
