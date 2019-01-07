@@ -56,6 +56,8 @@ def save_typed_data_spec(dt):
         n.attrib["length"]=str(dt.length)
         if isinstance(dt.type,ScalarTypedDataSpec):
             n.attrib["type"]=dt.type.type
+        elif isinstance(dt.type,Typedef):
+            n.attrib["type"]=dt.type.id
         else:
             subn=save_typed_data_spec(dt.type)
             n.append(subn)
@@ -206,16 +208,50 @@ _device_instance_state_type=toNS("p:S")
 _device_instance_metadata_type=toNS("p:M")
 
 
+def reduce_typed_data(default, typed, result=None):
+    if default == typed:
+        if isinstance(default, dict):
+            return {}
+        elif isinstance(default, list):
+            return []
+        else:
+            return 0
+    elif isinstance(default, dict):
+        res = {}
+        for i in default:
+            r = reduce_typed_data(default[i], typed[i], res)
+            if r != [] and r != {} and r != 0:
+                res[i] = r
+        return res
+    elif isinstance(default, list):
+        res = []
+        diff = []
+        for i in range(0, len(default)):
+            r = reduce_typed_data(default[i], typed[i], res)
+            if r == [] or r == {} or r == 0:
+                diff.append(r)
+            else:
+                diff.append(r)
+                res = []
+                for l in range(0, len(diff)):
+                    res.append(diff[l])
+        return res
+    else:
+        return typed
+
+
 def save_device_instance(parent, di):
     n=etree.SubElement(parent, _device_instance_tag_type, {"id":di.id,"type":di.device_type.id} )
 
-    defaultProperties=di.device_type.properties.create_default()
-    differingProperties={}
+    defaultProperties = di.device_type.properties.create_default()
     if di.properties is not None:
-        for p in defaultProperties:
-            if defaultProperties[p] != di.properties[p]:
-                differingProperties[p] = di.properties[p]
+        differingProperties = reduce_typed_data(defaultProperties, di.properties)
         save_typed_struct_instance(n, _device_instance_properties_type, di.device_type.properties, differingProperties)
+
+    defaultState = di.device_type.state.create_default()
+    if di.state is not None:
+        differingState = reduce_typed_data(defaultState, di.state)
+        save_typed_struct_instance(n, _device_instance_state_type, di.device_type.state, differingState)
 
     save_metadata(n, _device_instance_metadata_type, di.metadata)
 

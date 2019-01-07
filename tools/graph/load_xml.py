@@ -133,7 +133,11 @@ def load_typed_data_spec(dt, namedTypes={}, namespace=None):
         else:
             d = dt.find("p:Default", namespace)
             if d is not None:
-                default = json.loads('{'+d.text+'}')
+                if d.text.strip().startswith('['):
+                    default=json.loads('{"'+name+'":'+d.text+'}')
+                else:
+                    default=json.loads('{"'+name+'": {'+d.text+'} }')
+                default=default[name]
 
         sys.stderr.write("namedTypes={}\n".format(namedTypes))
         if type in namedTypes:
