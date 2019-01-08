@@ -76,8 +76,16 @@ def get_child_text(node,name,namespace=None):
     line=n.sourceline
     return (text,line)
 
+def load_documentation_of_typed_data(node, member, namespace=None):
+    if namespace == None:
+        namespace = ns
 
-def load_typed_data_spec(dt, namedTypes={}, namespace=None):
+    documentation = None
+    docNode = node.find("p:Documentation", namespace)
+    if docNode is not None:
+        member.add_documentation(docNode.text)
+
+def load_typed_data_spec(dt, namedTypes={}, namespace=None, loadDocumentation=False):
     if namespace==None:
         namspace=ns
 
@@ -89,11 +97,12 @@ def load_typed_data_spec(dt, namedTypes={}, namespace=None):
         default=None
         for eltNode in dt.findall("p:*",namespace): # Anything from this namespace must be a member
             if not deNS(eltNode.tag) == "p:Default":
-                elt=load_typed_data_spec(eltNode, namedTypes,namespace)
+                elt=load_typed_data_spec(eltNode, namedTypes,namespace,loadDocumentation)
                 elts.append(elt)
             else:
                 default = json.loads('{'+eltNode.text+'}')
-        return TupleTypedDataSpec(name,elts,default)
+        member = TupleTypedDataSpec(name,elts,default)
+        # return TupleTypedDataSpec(name,elts,default)
     elif tag=="p:Array":
         length=int(get_attrib(dt,"length"))
         type=get_attrib_optional(dt, "type")
@@ -116,14 +125,15 @@ def load_typed_data_spec(dt, namedTypes={}, namespace=None):
                 if len(subs)!=2:
                     raise RuntimeError("If there is no type attribute, there should be exactly one sub-type element.")
                 if deNS(subs[0].tag) == "p:Default":
-                    type=load_typed_data_spec(subs[1], namedTypes, namespace)
+                    type=load_typed_data_spec(subs[1], namedTypes, namespace, loadDocumentation)
                 else:
-                    type=load_typed_data_spec(subs[0], namedTypes, namespace)
+                    type=load_typed_data_spec(subs[0], namedTypes, namespace, loadDocumentation)
             elif len(subs)!=1:
                 raise RuntimeError("If there is no type attribute, there should be exactly one sub-type element.")
             else:
-                type=load_typed_data_spec(subs[0], namedTypes, namespace)
-        return ArrayTypedDataSpec(name,length,type,default)
+                type=load_typed_data_spec(subs[0], namedTypes, namespace, loadDocumentation)
+        member = ArrayTypedDataSpec(name,length,type,default)
+        # return ArrayTypedDataSpec(name,length,type,default)
     elif tag=="p:Scalar":
         type=get_attrib(dt, "type")
         default=get_attrib_optional(dt, "default")
@@ -142,9 +152,13 @@ def load_typed_data_spec(dt, namedTypes={}, namespace=None):
         sys.stderr.write("namedTypes={}\n".format(namedTypes))
         if type in namedTypes:
             type=namedTypes[type]
-        return ScalarTypedDataSpec(name,type,default)
+        member = ScalarTypedDataSpec(name,type,default)
+        # return ScalarTypedDataSpec(name,type,default)
     else:
         raise XMLSyntaxError("Unknown data type '{}'.".format(tag), dt)
+    if loadDocumentation:
+        load_documentation_of_typed_data(dt, member, namespace)
+    return member
 
 def load_typed_data_instance(dt,spec):
     if dt is None:
@@ -154,12 +168,12 @@ def load_typed_data_instance(dt,spec):
     return spec.expand(value)
 
 
-def load_struct_spec(name, members,namedTypes,namespace=None):
+def load_struct_spec(name, members,namedTypes,namespace=None,loadDocumentation=False):
     if namespace==None:
         namespace=ns
     elts=[]
     for eltNode in members.findall("p:*",namespace): # Anything from this namespace must be a member
-        elt=load_typed_data_spec(eltNode,namedTypes,namespace)
+        elt=load_typed_data_spec(eltNode,namedTypes,namespace,loadDocumentation)
         elts.append(elt)
 
     return TupleTypedDataSpec(name, elts)
@@ -187,27 +201,32 @@ def load_metadata(parent, name, namespace=None):
 
     return metadata
 
-def load_type_def(parent,td, namedTypes, namespace=None):
+def load_type_def(parent,td, namedTypes, namespace=None, loadDocumentation=False):
     if namespace==None:
         namespace = ns
 
     id=get_attrib(td,"id")
+    documentation=None
     try:
-        typeNode=td.find("p:*",namespace)
-        if typeNode is None:
-            raise XMLSyntaxError("Missing sub-child to give actual type.")
+        typeNodes=td.findall("p:*",namespace)
+        assert len(typeNodes) <= 2, "Typedef can hold one data type and documentation only." + str(len(typeNodes))
+        for typeNode in typeNodes:
+            if typeNode is None:
+                raise XMLSyntaxError("Missing sub-child to give actual type.")
+            elif deNS(typeNode.tag, namespace) == "p:Documentation":
+                if loadDocumentation:
+                    documentation = typeNode.text
+            else:
+                type=load_typed_data_spec(typeNode, namedTypes, namespace, loadDocumentation)
 
-
-        type=load_typed_data_spec(typeNode, namedTypes, namespace)
-
-        return Typedef(id,type)
+        return Typedef(id,type,documentation=documentation)
     except XMLSyntaxError:
             raise
     except Exception as e:
         raise XMLSyntaxError("Error while parsing type def {}".format(id),td,e)
 
 
-def load_message_type(parent,dt, namedTypes, namespace=None):
+def load_message_type(parent,dt, namedTypes, namespace=None, loadDocumentation=False):
     if namespace==None:
         namespace=ns
     id=get_attrib(dt,"id")
@@ -215,23 +234,36 @@ def load_message_type(parent,dt, namedTypes, namespace=None):
         message=None
         messageNode=dt.find("p:Message",namespace)
         if messageNode is not None:
-            message=load_struct_spec(id+"_message", messageNode, namedTypes, namespace)
+            message=load_struct_spec(id+"_message", messageNode, namedTypes, namespace, loadDocumentation)
 
         metadata=load_metadata(dt, "p:MetaData")
 
-        return MessageType(parent,id,message,metadata)
+        documentation=None
+        if loadDocumentation:
+            docNode=dt.find("p:Documentation",namespace)
+            if docNode is not None:
+                documentation=docNode.text
+
+        return MessageType(parent,id,message,metadata,documentation=documentation)
     except XMLSyntaxError:
             raise
     except Exception as e:
         raise XMLSyntaxError("Error while parsing message {}".format(id),dt,e)
 
-def load_external_type(graph,dtNode,sourceFile):
+def load_external_type(graph,dtNode,sourceFile,loadDocumentation=False):
     id=get_attrib(dtNode,"id")
     state=None
     properties=None
     metadata=load_metadata(dtNode, "p:MetaData")
     shared_code=[]
-    dt=DeviceType(graph,id,properties,state,metadata,shared_code, True)
+
+    documentation=None
+    if loadDocumentation:
+        docNode=dtNode.find("p:Documentation",namespace)
+        if docNode is not None:
+            documentation=docNode.text
+
+    dt=DeviceType(graph,id,properties,state,metadata,shared_code, True, documentation)
 
     for p in dtNode.findall("p:InputPin", namespace):
         name=get_attrib(p,"name")
@@ -269,7 +301,7 @@ def load_external_type(graph,dtNode,sourceFile):
 
     return dt
 
-def load_device_type(graph,dtNode,sourceFile,namespace=None):
+def load_device_type(graph,dtNode,sourceFile,namespace=None,loadDocumentation=False):
     if namespace==None:
         namespace=ns
 
@@ -278,12 +310,12 @@ def load_device_type(graph,dtNode,sourceFile,namespace=None):
     state=None
     stateNode=dtNode.find("p:State",namespace)
     if stateNode is not None:
-        state=load_struct_spec(id+"_state", stateNode,graph.typedefs,namespace)
+        state=load_struct_spec(id+"_state", stateNode,graph.typedefs,namespace,loadDocumentation)
 
     properties=None
     propertiesNode=dtNode.find("p:Properties",namespace)
     if propertiesNode is not None:
-        properties=load_struct_spec(id+"_properties", propertiesNode,graph.typedefs, namespace)
+        properties=load_struct_spec(id+"_properties", propertiesNode,graph.typedefs, namespace, loadDocumentation)
 
     metadata=load_metadata(dtNode,"p:MetaData")
 
@@ -291,7 +323,13 @@ def load_device_type(graph,dtNode,sourceFile,namespace=None):
     for s in dtNode.findall("p:SharedCode",namespace):
         shared_code.append(s.text)
 
-    dt=DeviceType(graph,id,properties,state,metadata,shared_code,False)
+    documentation=None
+    if loadDocumentation:
+        docNode=dtNode.find("p:Documentation",namespace)
+        if docNode is not None:
+            documentation=docNode.text
+
+    dt=DeviceType(graph,id,properties,state,metadata,shared_code,isExternal=False,documentation=documentation)
 
     if dtNode.find("p:Init",namespace) is not None:
         (handler,sourceLine)=get_child_text(dtNode,"p:Init", namespace)
@@ -305,13 +343,13 @@ def load_device_type(graph,dtNode,sourceFile,namespace=None):
         if message_type_id not in graph.message_types:
             raise XMLSyntaxError("Unknown messageTypeId {}".format(message_type_id),p)
         message_type=graph.message_types[message_type_id]
-        is_application=get_attrib_optional_bool(p,"application")
+        is_application=get_attrib_optional_bool(p,"application") # TODO: REMOVE APPLICATION PIN
 
         try:
             state=None
             stateNode=p.find("p:State",namespace)
             if stateNode is not None:
-                state=load_struct_spec(id+"_state", stateNode,graph.typedefs)
+                state=load_struct_spec(id+"_state", stateNode,graph.typedefs, namespace, loadDocumentation)
         except Exception as e:
             raise XMLSyntaxError("Error while parsing state of pin {} : {}".format(id,e),p,e)
 
@@ -319,14 +357,20 @@ def load_device_type(graph,dtNode,sourceFile,namespace=None):
             properties=None
             propertiesNode=p.find("p:Properties",namespace)
             if propertiesNode is not None:
-                properties=load_struct_spec(id+"_properties", propertiesNode,graph.typedefs)
+                properties=load_struct_spec(id+"_properties", propertiesNode,graph.typedefs, namespace, loadDocumentation)
         except Exception as e:
             raise XMLSyntaxError("Error while parsing properties of pin {} : {}".format(id,e),p,e)
 
         pinMetadata=load_metadata(p,"p:MetaData")
 
+        documentation = None
+        if loadDocumentation:
+            docNode = p.find("p:Documentation", namespace)
+            if docNode is not None:
+                documentation = docNode.text
+
         (handler,sourceLine)=get_child_text(p,"p:OnReceive",namespace)
-        dt.add_input(name,message_type,is_application,properties,state,pinMetadata, handler,sourceFile,sourceLine)
+        dt.add_input(name,message_type,is_application,properties,state,pinMetadata, handler,sourceFile,sourceLine,documentation)
         sys.stderr.write("      Added input {}\n".format(name))
 
     for p in dtNode.findall("p:OutputPin",namespace):
@@ -338,7 +382,12 @@ def load_device_type(graph,dtNode,sourceFile,namespace=None):
         message_type=graph.message_types[message_type_id]
         pinMetadata=load_metadata(p,"p:MetaData")
         (handler,sourceLine)=get_child_text(p,"p:OnSend",namespace)
-        dt.add_output(name,message_type,is_application,pinMetadata,handler,sourceFile,sourceLine)
+        documentation = None
+        if loadDocumentation:
+            docNode = p.find("p:Documentation", namespace)
+            if docNode is not None:
+                documentation = docNode.text
+        dt.add_output(name,message_type,is_application,pinMetadata,handler,sourceFile,sourceLine,documentation)
 
     (handler,sourceLine)=get_child_text(dtNode,"p:ReadyToSend",namespace)
     dt.ready_to_send_handler=handler
@@ -347,7 +396,7 @@ def load_device_type(graph,dtNode,sourceFile,namespace=None):
 
     return dt
 
-def load_graph_type(graphNode, sourcePath, namespace=None):
+def load_graph_type(graphNode, sourcePath, namespace=None, loadDocumentation=False):
     if namespace==None:
         namespace=ns
     deviceTypeTag = "{{{}}}DeviceType".format(namespace["p"])
@@ -360,34 +409,40 @@ def load_graph_type(graphNode, sourcePath, namespace=None):
     namedTypesByIndex=[]
     for etNode in graphNode.findall("p:Types/p:TypeDef",namespace):
         sys.stderr.write("  Loading type defs, current={}\n".format(namedTypes))
-        td=load_type_def(graphNode,etNode, namedTypes)
+        td=load_type_def(graphNode, etNode, namedTypes, namespace, loadDocumentation)
         namedTypes[td.id]=td
         namedTypesByIndex.append(td)
 
     properties=None
     propertiesNode=graphNode.find("p:Properties",namespace)
     if propertiesNode is not None:
-        properties=load_struct_spec(id+"_properties", propertiesNode, namedTypes, namespace)
+        properties=load_struct_spec(id+"_properties", propertiesNode, namedTypes, namespace, loadDocumentation)
 
     metadata=load_metadata(graphNode,"p:MetaData",namespace)
+
+    documentation=None
+    if loadDocumentation:
+        docNode=graphNode.find("p:Documentation",namespace)
+        if docNode is not None:
+            documentation = docNode.text
 
     shared_code=[]
     for n in graphNode.findall("p:SharedCode",namespace):
         shared_code.append(n.text)
 
-    graphType=GraphType(id,properties,metadata,shared_code)
+    graphType=GraphType(id,properties,metadata,shared_code,documentation)
 
     for nt in namedTypesByIndex:
         graphType.add_typedef(nt)
 
     for etNode in graphNode.findall("p:MessageTypes/p:*",namespace):
-        et=load_message_type(graphType,etNode, graphType.typedefs, namespace)
+        et=load_message_type(graphType,etNode, graphType.typedefs, namespace, loadDocumentation)
         graphType.add_message_type(et)
 
     for dtNode in graphNode.findall("p:DeviceTypes/p:*",namespace):
 
         if dtNode.tag == deviceTypeTag:
-            dt=load_device_type(graphType,dtNode, sourcePath, namespace)
+            dt=load_device_type(graphType, dtNode, sourcePath, namespace, loadDocumentation)
             graphType.add_device_type(dt)
             sys.stderr.write("    Added device type {}\n".format(dt.id))
         elif dtNode.tag == externalTypeTag:
@@ -538,7 +593,7 @@ def load_edge_instance(graph,eiNode):
 
     return EdgeInstance(graph,dst_device,dst_pin_name,src_device,src_pin_name,properties,metadata)
 
-def load_graph_instance(graphTypes, graphNode, namespace=None):
+def load_graph_instance(graphTypes, graphNode, namespace=None, loadDocumentation=False):
     if namespace==None:
         namespace=ns
     devITag = "{{{}}}DevI".format(namespace["p"])
@@ -557,7 +612,15 @@ def load_graph_instance(graphTypes, graphNode, namespace=None):
 
     metadata=load_metadata(graphNode, "p:MetaData")
 
-    graph=GraphInstance(id,graphType,properties,metadata)
+    documentation=None
+    if loadDocumentation:
+        docNode=graphNode.find("p:Documentation",namespace)
+        if docNode is not None:
+            documentation=docNode.text
+            print(documentation)
+            sys.exit()
+
+    graph=GraphInstance(id,graphType,properties,metadata, documentation)
     disNode=graphNode.findall("p:DeviceInstances",namespace)
     assert(len(disNode)==1)
     for diNode in disNode[0]:
@@ -579,7 +642,7 @@ def load_graph_instance(graphTypes, graphNode, namespace=None):
     return graph
 
 
-def load_graph_types_and_instances(src,basePath,namespace=None):
+def load_graph_types_and_instances(src,basePath,namespace=None,loadDocumentation=False):
     if namespace==None:
         namespace=ns
 
@@ -593,7 +656,7 @@ def load_graph_types_and_instances(src,basePath,namespace=None):
     try:
         for gtNode in graphsNode.findall("p:GraphType",namespace):
             sys.stderr.write("Loading graph type\n")
-            gt=load_graph_type(gtNode, basePath, namespace)
+            gt=load_graph_type(gtNode, basePath, namespace, loadDocumentation)
             graphTypes[gt.id]=gt
 
         for gtRefNode in graphsNode.findall("p:GraphTypeReference",namespace):
@@ -603,7 +666,7 @@ def load_graph_types_and_instances(src,basePath,namespace=None):
 
         for giNode in graphsNode.findall("p:GraphInstance",namespace):
             sys.stderr.write("Loading graph\n")
-            g=load_graph_instance(graphTypes, giNode, namespace)
+            g=load_graph_instance(graphTypes, giNode, namespace, loadDocumentation)
             graphs[g.id]=g
 
         return (graphTypes,graphs)

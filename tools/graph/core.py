@@ -8,9 +8,13 @@ class TypedDataSpec(object):
     def __init__(self,name):
         self.name=name
         self.cTypeName=None
+        self.documentation=None
 
     def visit_subtypes(self,visitor):
         pass
+
+    def add_documentation(self, documentation):
+        self.documentation = documentation
 
 
 # https://stackoverflow.com/a/48725499
@@ -343,7 +347,7 @@ def is_refinement_compatible(proto,inst):
 
 
 class Typedef(TypedDataSpec):
-    def __init__(self,id,type,default=None):
+    def __init__(self,id,type,default=None,documentation=None):
         TypedDataSpec.__init__(self,id)
         self.id=id
         assert(isinstance(type,TypedDataSpec))
@@ -352,6 +356,7 @@ class Typedef(TypedDataSpec):
         if self.default is not None:
             self.default=self.expand(self.default)
         self._hash=hash(id) + 19937*hash(type)
+        self.documentation=documentation
 
     def is_refinement_compatible(self,inst):
         sys.stderr.write(" is_refinement_compatible( {} , {} )\n".format(self,inst))
@@ -377,7 +382,7 @@ class Typedef(TypedDataSpec):
         # return "{}[{}]".format(self.id,self.type) If we are to allow typedefs of typedefs, this cannot be used
 
 class MessageType(object):
-    def __init__(self,parent,id,message,metadata=None,cTypeName=None,numid=0):
+    def __init__(self,parent,id,message,metadata=None,cTypeName=None,numid=0,documentation=None):
         assert (message is None) or isinstance(message,TypedDataSpec)
         self.id=id
         self.parent=parent
@@ -389,6 +394,7 @@ class MessageType(object):
             raise RuntimeError("ERROR: Message \"" + self.id + "\" has a payload that's too large.\n"
                              + "A message header is 20 bytes, and this payload is " + str(size) + " bytes.\n"
                              + "The total is therefore " + str(20+size) + " bytes, and must be a maximum of 64")
+        self.documentation=documentation
 
     def _checkMessageSize(self, payload):
         # https://github.com/POETSII/toy_softswitch/blob/873a9f4583179d6d1842c6fc3ef1068c7294f32e/include/softswitch.hpp#L29
@@ -426,7 +432,7 @@ class MessageType(object):
         return 0
 
 class Pin(object):
-    def __init__(self,parent,name,message_type,is_application,metadata,source_file,source_line):
+    def __init__(self,parent,name,message_type,is_application,metadata,source_file,source_line,documentation=None):
         self.parent=parent
         self.name=name
         self.message_type=message_type
@@ -434,23 +440,24 @@ class Pin(object):
         self.metadata=metadata
         self.source_file=source_file
         self.source_line=source_line
+        self.documentation=documentation
 
 
 class InputPin(Pin):
-    def __init__(self,parent,name,message_type,is_application,properties,state,metadata,receive_handler,source_file=None,source_line=None):
-        Pin.__init__(self,parent,name,message_type,is_application,metadata,source_file,source_line)
+    def __init__(self,parent,name,message_type,is_application,properties,state,metadata,receive_handler,source_file=None,source_line=None,documentation=None):
+        Pin.__init__(self,parent,name,message_type,is_application,metadata,source_file,source_line,documentation)
         self.properties=properties
         self.state=state
         self.receive_handler=receive_handler
 
 class OutputPin(Pin):
-    def __init__(self,parent,name,message_type,is_application,metadata,send_handler,source_file,source_line):
-        Pin.__init__(self,parent,name,message_type,is_application,metadata,source_file,source_line)
+    def __init__(self,parent,name,message_type,is_application,metadata,send_handler,source_file,source_line,documentation=None):
+        Pin.__init__(self,parent,name,message_type,is_application,metadata,source_file,source_line,documentation)
         self.send_handler=send_handler
 
 
 class DeviceType(object):
-    def __init__(self,parent,id,properties,state,metadata=None,shared_code=[], isExternal=False):
+    def __init__(self,parent,id,properties,state,metadata=None,shared_code=[], isExternal=False, documentation=None):
         assert (state is None) or isinstance(state,TypedDataSpec)
         assert (properties is None) or isinstance(properties,TypedDataSpec)
         self.id=id
@@ -469,8 +476,9 @@ class DeviceType(object):
         self.init_source_file=None
         self.init_source_line=None
         self.isExternal=isExternal
+        self.documentation=documentation
 
-    def add_input(self,name,message_type,is_application,properties,state,metadata,receive_handler,source_file=None,source_line={}):
+    def add_input(self,name,message_type,is_application,properties,state,metadata,receive_handler,source_file=None,source_line={},documentation=None):
         assert (state is None) or isinstance(state,TypedDataSpec)
         assert (properties is None) or isinstance(properties,TypedDataSpec)
         if name in self.pins:
@@ -479,26 +487,26 @@ class DeviceType(object):
             raise GraphDescriptionError("Unregistered message type {} on pin {} of device type {}".format(message_type.id,name,self.id))
         if message_type != self.parent.message_types[message_type.id]:
             raise GraphDescriptionError("Incorrect message type object {} on pin {} of device type {}".format(message_type.id,name,self.id))
-        p=InputPin(self, name, self.parent.message_types[message_type.id], is_application, properties, state, metadata, receive_handler, source_file, source_line)
+        p=InputPin(self, name, self.parent.message_types[message_type.id], is_application, properties, state, metadata, receive_handler, source_file, source_line, documentation)
         self.inputs[name]=p
         self.inputs_by_index.append(p)
         self.pins[name]=p
 
-    def add_output(self,name,message_type,is_application, metadata,send_handler,source_file=None,source_line=None):
+    def add_output(self,name,message_type,is_application, metadata,send_handler,source_file=None,source_line=None,documentation=None):
         if name in self.pins:
             raise GraphDescriptionError("Duplicate pin {} on device type {}".format(name,self.id))
         if message_type.id not in self.parent.message_types:
             raise GraphDescriptionError("Unregistered message type {} on pin {} of device type {}".format(message_type.id,name,self.id))
         if message_type != self.parent.message_types[message_type.id]:
             raise GraphDescriptionError("Incorrect message type object {} on pin {} of device type {}".format(message_type.id,name,self.id))
-        p=OutputPin(self, name, self.parent.message_types[message_type.id], is_application, metadata, send_handler, source_file, source_line)
+        p=OutputPin(self, name, self.parent.message_types[message_type.id], is_application, metadata, send_handler, source_file, source_line, documentation)
         self.outputs[name]=p
         self.outputs_by_index.append(p)
         self.pins[name]=p
 
 
 class GraphType(object):
-    def __init__(self,id,properties,metadata=None,shared_code=[]):
+    def __init__(self,id,properties,metadata=None,shared_code=[],documentation=None):
         self.id=id
         if properties:
             assert isinstance(properties,TupleTypedDataSpec), "Expected TupleTypedDataSpec, got={}".format(properties)
@@ -509,6 +517,7 @@ class GraphType(object):
         self.typedefs_by_index=[]
         self.typedefs={}
         self.message_types=collections.OrderedDict()
+        self.documentation=documentation
 
     def _validate_type(self,type):
         """Walk through the types and check that any typedefs have already been added to the graphtype."""
@@ -634,7 +643,7 @@ class EdgeInstance(object):
 
 
 class GraphInstance:
-    def __init__(self,id,graph_type,properties=None,metadata=None):
+    def __init__(self,id,graph_type,properties=None,metadata=None,documentation=None):
         self.id=id
         self.graph_type=graph_type
         assert is_refinement_compatible(graph_type.properties,properties), "value {} is not a refinement of {}".format(properties,graph_type.properties)
@@ -642,6 +651,7 @@ class GraphInstance:
         self.metadata=metadata
         self.device_instances={}
         self.edge_instances={}
+        self.documentation=documentation
         self._validated=True
 
     def _validate_message_type(self,et):
