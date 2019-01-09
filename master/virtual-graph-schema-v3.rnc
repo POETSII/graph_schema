@@ -536,6 +536,8 @@ grammar {
             (
               attribute name { identifier },
 
+              ## This is an indicator of whether this output pin performs an "Indexed Sends" PIP-0002
+              ## If so, then the message produced will be able to send to a single device based on index
               attribute indexed { xsd:boolean } ?
             )
 
