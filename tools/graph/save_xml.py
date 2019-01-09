@@ -33,6 +33,9 @@ def save_typed_data_spec(dt):
     if isinstance(dt,TupleTypedDataSpec):
         n=etree.Element(toNS("p:Tuple"))
         n.attrib["name"]=dt.name
+        if dt.documentation is not None:
+            doc = etree.SubElement(n, toNS("p:Documentation"))
+            doc.text = dt.documentation
         for e in dt.elements_by_index:
             n.append(save_typed_data_spec(e))
         if dt.default is not None:
@@ -40,6 +43,9 @@ def save_typed_data_spec(dt):
     elif isinstance(dt,ScalarTypedDataSpec):
         n=etree.Element(toNS("p:Scalar"))
         n.attrib["name"]=dt.name
+        if dt.documentation is not None:
+            doc = etree.SubElement(n, toNS("p:Documentation"))
+            doc.text = dt.documentation
         if isinstance(dt.type,Typedef):
             n.attrib["type"]=dt.type.id
         else:
@@ -54,6 +60,9 @@ def save_typed_data_spec(dt):
         n=etree.Element(toNS("p:Array"))
         n.attrib["name"]=dt.name
         n.attrib["length"]=str(dt.length)
+        if dt.documentation is not None:
+            doc = etree.SubElement(n, toNS("p:Documentation"))
+            doc.text = dt.documentation
         if isinstance(dt.type,ScalarTypedDataSpec):
             n.attrib["type"]=dt.type.type
         elif isinstance(dt.type,Typedef):
@@ -131,6 +140,9 @@ def save_type_def(parent,td):
 
     n.attrib["id"]=td.id
     s=save_typed_data_spec(td.type)
+    if td.documentation is not None:
+        doc = etree.SubElement(n,toNS("p:Documentation"))
+        doc.text = td.documentation
     n.append(s)
 
     return n
@@ -139,6 +151,9 @@ def save_message_type(parent,mt):
     n=etree.SubElement(parent,toNS("p:MessageType"))
 
     n.attrib["id"]=mt.id
+    if mt.documentation is not None:
+        doc = etree.SubElement(n,toNS("p:Documentation"))
+        doc.text = mt.documentation
     save_typed_struct_spec(n, toNS("p:Message"), mt.message)
     save_metadata(n, toNS("p:MetaData"), mt.metadata)
 
@@ -149,6 +164,9 @@ def save_device_type(parent,dt):
     n=etree.SubElement(parent,toNS("p:DeviceType"))
 
     n.attrib["id"]=dt.id
+    if dt.documentation is not None:
+        doc = etree.SubElement(n, toNS("p:Documentation"))
+        doc.text = dt.documentation
     save_typed_struct_spec(n, toNS("p:Properties"), dt.properties)
     save_typed_struct_spec(n, toNS("p:State"), dt.state)
     save_metadata(n, toNS("p:MetaData"), dt.metadata)
@@ -167,8 +185,11 @@ def save_device_type(parent,dt):
         pn=etree.SubElement(n,toNS("p:InputPin"))
         pn.attrib["name"]=p.name
         pn.attrib["messageTypeId"]=p.message_type.id
-        if p.is_application:
+        if p.is_application: # TODO: Remove applications pins in all forms
             pn.attrib["application"]="true"
+        if p.documentation is not None:
+            doc = etree.SubElement(pn, toNS("p:Documentation"))
+            doc.text = p.documentation
         if(p.properties):
             save_typed_struct_spec(pn, toNS("p:Properties"), p.properties)
         if(p.state):
@@ -185,9 +206,11 @@ def save_device_type(parent,dt):
         pn=etree.SubElement(n,toNS("OutputPin"))
         pn.attrib["name"]=p.name
         pn.attrib["messageTypeId"]=p.message_type.id
-        if p.is_application:
+        if p.is_application: # TODO: Remove applications pins in all forms
             pn.attrib["application"]="true"
-
+        if p.documentation is not None:
+            doc = etree.SubElement(pn, toNS("p:Documentation"))
+            doc.text = p.documentation
         save_metadata(pn, "p:MetaData", p.metadata)
 
         h=etree.Element(toNS("p:OnSend"))
@@ -274,6 +297,11 @@ def save_graph_type(parent, graph):
     gn = etree.SubElement(parent,toNS("p:GraphType"))
     gn.attrib["id"]=graph.id
 
+    if graph.documentation is not None:
+        doc=etree.Element(toNS("p:Documentation"))
+        doc.text = graph.documentation
+        gn.append(doc)
+
     tdn=etree.Element(toNS("p:Types"))
     gn.append(tdn)
     for td in graph.typedefs_by_index:
@@ -305,6 +333,10 @@ def save_graph_instance(parent, graph):
     gn = etree.SubElement(parent, toNS("p:GraphInstance"));
     gn.attrib["id"]=graph.id
     gn.attrib["graphTypeId"]=graph.graph_type.id
+
+    if graph.documentation is not None:
+        doc = etree.SubElement(gn, toNS("p:Documentation"))
+        doc.text = graph.documentation
 
     save_typed_struct_instance(gn, toNS("p:Properties"), graph.graph_type.properties ,graph.properties)
 
