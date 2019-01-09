@@ -525,6 +525,32 @@ def render_rts_handler_as_softswitch(dev,dst,devProps):
     }}
     """.format(**devProps))
 
+def render_init_handler_as_softswitch(dev,dst,devProps):
+    devProps=devProps or make_device_type_properties(dev)
+    devProps=add_props(devProps, {
+        "DEVICE_TYPE_C_LOCAL_CONSTANTS" : calc_device_type_c_locals(dev,devProps)
+    })
+
+    dst.write("""
+    void {GRAPH_TYPE_ID}_{DEVICE_TYPE_ID}_init_handler(
+        const {GRAPH_TYPE_PROPERTIES_T} *graphProperties,
+        const {DEVICE_TYPE_PROPERTIES_T} *deviceProperties,
+        const {DEVICE_TYPE_STATE_T} *deviceState
+    ){{
+      {DEVICE_TYPE_C_LOCAL_CONSTANTS}
+
+      // Begin initialisation code
+      {DEVICE_TYPE_INIT_HANDLER_SOURCE_LOCATION}
+    """.format(**devProps))
+    if devProps["DEVICE_TYPE_INIT_HANDLER"] != "":
+        dst.write("{DEVICE_TYPE_INIT_HANDLER}".format(**devProps))
+    else:
+        dst.write("return;")
+    dst.write("""
+      __POETS_REVERT_PREPROC_DETOUR__
+      // End initialisation code
+    }
+    """)
 
 def render_receive_handler_as_softswitch(pin, dst, pinProps):
     pinProps = pinProps or make_input_pin_properties(pinProps)
@@ -574,6 +600,7 @@ bool {OUTPUT_PORT_FULL_ID}_send_handler(
 """.format(**pinProps))
 
 def render_device_type_as_softswitch_defs(dt,dst,dtProps):
+    render_init_handler_as_softswitch(dt,dst,dtProps)
     render_rts_handler_as_softswitch(dt,dst,dtProps)
     for ip in dt.inputs_by_index:
         render_receive_handler_as_softswitch(ip,dst,make_input_pin_properties(ip))
