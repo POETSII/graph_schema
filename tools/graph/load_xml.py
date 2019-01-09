@@ -617,8 +617,6 @@ def load_graph_instance(graphTypes, graphNode, namespace=None, loadDocumentation
         docNode=graphNode.find("p:Documentation",namespace)
         if docNode is not None:
             documentation=docNode.text
-            print(documentation)
-            sys.exit()
 
     graph=GraphInstance(id,graphType,properties,metadata, documentation)
     disNode=graphNode.findall("p:DeviceInstances",namespace)
