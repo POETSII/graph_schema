@@ -535,7 +535,7 @@ def render_init_handler_as_softswitch(dev,dst,devProps):
     void {GRAPH_TYPE_ID}_{DEVICE_TYPE_ID}_init_handler(
         const {GRAPH_TYPE_PROPERTIES_T} *graphProperties,
         const {DEVICE_TYPE_PROPERTIES_T} *deviceProperties,
-        const {DEVICE_TYPE_STATE_T} *deviceState
+        {DEVICE_TYPE_STATE_T} *deviceState
     ){{
       {DEVICE_TYPE_C_LOCAL_CONSTANTS}
 
@@ -672,6 +672,7 @@ def render_graph_type_as_softswitch_defs(gt,dst):
             dst.write(",\n")
         dst.write("""
         {{
+            (init_handler_t){GRAPH_TYPE_ID}_{DEVICE_TYPE_ID}_init_handler,
             (ready_to_send_handler_t){GRAPH_TYPE_ID}_{DEVICE_TYPE_ID}_ready_to_send_handler,
             OUTPUT_COUNT_{DEVICE_TYPE_FULL_ID}_V,
             OUTPUT_VTABLES_{DEVICE_TYPE_FULL_ID},
