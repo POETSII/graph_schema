@@ -177,16 +177,22 @@ def convert_typed_data_inst_to_bytes(td,ti):
             return scalar_to_bytes(v, td.type)
     elif isinstance(td,TupleTypedDataSpec):
         res=bytearray([])
+        if td.default is not None:
+            ti = td.default
         for e in td.elements_by_index:
             res.extend(convert_typed_data_inst_to_bytes(e,ti and ti.get(e.name,None)))
         return res
     elif isinstance(td,ArrayTypedDataSpec):
         res=bytearray([])
+        if td.default is not None:
+            ti = td.default
         for i in range(td.length):
             res.extend(convert_typed_data_inst_to_bytes(td.type,ti and ti[i]) )
         return res
     elif isinstance(td,Typedef):
         res=bytearray([])
+        if td.default is not None:
+            ti = td.default
         res.extend(convert_typed_data_inst_to_bytes(td.type,ti))
         return res
     else:
