@@ -33,6 +33,24 @@
 			"location.dimension" : 2
 		</MetaData>
 
+<SharedCode><![CDATA[
+#ifdef POETS_LEGACY_HAS_HANDLER_EXIT
+#define _do_handler_exit(code) handler_exit(code)
+#else
+#define _do_handler_exit(code) ((void)0)
+#endif
+
+#define fake_handler_exit(code) \
+{ \
+    if((code)==0){ \
+        handler_log(0, "_HANDLER_EXIT_SUCCESS_9be65737_"); \
+    }else{ \
+        handler_log(0, "_HANDLER_EXIT_FAIL_9be65737_"); \
+    } \
+    _do_handler_exit(code); \
+}
+]]></SharedCode>
+
 		<!--<Types>
 			<TypeDef id="update_t">
 				<Tuple name="_">
@@ -269,7 +287,7 @@
 
 			// TODO : move this out of the send handler into compute
 			if( (deviceState->t & graphProperties->exportDeltaMask)==0 ){
-				handler_export_key_value(0, 0x800000ul+(uint32_t)(int32_t)(deviceState->v*65536));
+				//handler_export_key_value(0, 0x800000ul+(uint32_t)(int32_t)(deviceState->v*65536));
 			}
 
 			deviceState->ca = deviceProperties->wSelf * deviceState->v + deviceState->na;
@@ -305,7 +323,7 @@
 				<OnReceive><![CDATA[
 				deviceState->done++;
 				if(deviceState->done == deviceProperties->fanin){
-					handler_exit(0);
+					fake_handler_exit(0);
 				}
 				]]></OnReceive>
 			</InputPin>

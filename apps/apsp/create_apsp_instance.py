@@ -86,15 +86,22 @@ def apsp_ref(conn):
     sumSumDist=0
     
     for i in range(n):
+        if (i%100)==0:
+            sys.stderr.write("  {} / {}\n".format(i,n))
         dist=sp_ref(i)
         sumSumDist+=sum(dist)
         sumMaxDist+=max(dist)
     
     return (sumMaxDist,sumSumDist)
 
-if len(connections)<1000:
+if len(connections)<=4096:
+    sys.stderr.write("Calculating ref dists...\n")
+    if len(connections)>=1000:
+        sys.stderr.write("   (warning: this will be slow)\n")
     (refSumMaxDist,refSumSumDist)=apsp_ref(connections)
+    sys.stderr.write("   done\n")
 else:
+    sys.stderr.write("WARNING: big graph, so not calculating ref dists. Self-check will fail.\n")
     (refSumMaxDist,refSumSumDist)=(0,0)
 sys.stderr.write("{},{}\n".format(refSumMaxDist,refSumSumDist))
 

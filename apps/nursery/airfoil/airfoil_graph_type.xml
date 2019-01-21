@@ -825,7 +825,7 @@
 
 								int rmsScaled=(int)(rms*100000000);
 								handler_log(0, "  %d  %d*10^-8", deviceState->iter, rmsScaled);
-								handler_export_key_value(deviceState->iter, rmsScaled);
+								//handler_export_key_value(deviceState->iter, rmsScaled);
 								
 								deviceState->iter_print=0;
 							}
