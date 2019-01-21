@@ -1,22 +1,30 @@
+#!/usr/bin/env python3
+
 from graph.core import *
 
 from graph.load_xml import load_graph_types_and_instances
-from graph.save_xml import save_graph
+from graph.save_xml_stream import save_graph
 import sys
 import os
 import math
 
 
 
-src=sys.argv[1]
+import os
+appBase=os.path.dirname(os.path.realpath(__file__))
+
+src=appBase+"/clock_tree_graph_type.xml"
 (graphTypes,graphInstances)=load_graph_types_and_instances(src,src)
 
 d=4
 b=2
+maxTicks=100
+if len(sys.argv)>1:
+    d=int(sys.argv[1])
 if len(sys.argv)>2:
-    d=int(sys.argv[2])
+    b=int(sys.argv[2])
 if len(sys.argv)>3:
-    b=int(sys.argv[3])
+    maxTicks=int(sys.argv[3])
 
 graphType=graphTypes["clock_tree"]
 rootType=graphType.device_types["root"]
@@ -25,7 +33,7 @@ leafType=graphType.device_types["leaf"]
 
 instName="clock_{}_{}".format(d,b)
 
-properties=None
+properties={"max_ticks":maxTicks}
 res=GraphInstance(instName, graphType, properties)
 
 nodes={}
@@ -39,9 +47,9 @@ def create(prefix, parent,depth):
         res.add_edge_instance(EdgeInstance(res,parent,"ack_in",node,"ack_out",None))
     else:
         if depth==d:
-            node=DeviceInstance(res, prefix, rootType, None, {"fanout":b})
+            node=DeviceInstance(res, prefix, rootType, {"fanout":b}, None)
         else:
-            node=DeviceInstance(res, prefix, branchType, None, {"fanout":b})
+            node=DeviceInstance(res, prefix, branchType, {"fanout":b}, None)
         res.add_device_instance(node)
         for i in range(b):
             child=create("{}_{}".format(prefix,i), node, depth-1)

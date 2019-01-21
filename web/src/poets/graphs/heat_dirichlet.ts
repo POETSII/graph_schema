@@ -21,8 +21,11 @@ class DirichletDeviceProperties
     extends TypedData
 {
     static elements = [
-        tInt("dt"), tInt("neighbours"),
-        tFloat("amplitude"), tFloat("phase"), tFloat("frequency"), tFloat("bias")
+        tInt("dt",1), tInt("neighbours"),
+        tFloat("amplitude",1.0),
+        tFloat("phase",0.5),
+        tFloat("frequency",1.0),
+        tFloat("bias")
     ];
 
     constructor(
@@ -64,6 +67,13 @@ class DirichletInitInputPort
     {
         super("__init__", initEdgeType);
     }   
+
+    private rts_flag_out : number=0;
+
+    onBindDevice(parent:DeviceType)
+    {
+        this.rts_flag_out=parent.getOutput("out").rts_flag;
+    }   
     
     onReceive(
         graphPropertiesG : TypedData,
@@ -71,9 +81,8 @@ class DirichletInitInputPort
         deviceStateG : TypedData,
         edgePropertiesG : TypedData,
         edgeStateG : TypedData,
-        messageG : TypedData,
-        rts : { [key:string] : boolean; }
-    ) : void
+        messageG : TypedData
+    ) : number
      {
         let deviceProperties=devicePropertiesG as DirichletDeviceProperties;
         let deviceState=deviceStateG as DirichletDeviceState;
@@ -85,7 +94,7 @@ class DirichletInitInputPort
         deviceState.v=deviceProperties.bias + deviceProperties.amplitude
             * Math.sin(deviceProperties.phase + deviceProperties.frequency * deviceState.t);
 
-        rts["out"] = deviceState.cs==deviceProperties.neighbours;
+        return deviceState.cs==deviceProperties.neighbours ? this.rts_flag_out : 0;
     }
 };
 
@@ -96,6 +105,13 @@ class DirichletInInputPort
     {
         super("in", updateEdgeType);
     }
+
+    private rts_flag_out : number=0;
+
+    onBindDevice(parent:DeviceType)
+    {
+        this.rts_flag_out=parent.getOutput("out").rts_flag;
+    }   
     
     onReceive(
         graphPropertiesG : TypedData,
@@ -103,9 +119,9 @@ class DirichletInInputPort
         deviceStateG : TypedData,
         edgePropertiesG : TypedData,
         edgeStateG : TypedData,
-        messageG : TypedData,
-        rts : { [key:string] : boolean; }
-    ){
+        messageG : TypedData
+    ) : number
+    {
         let deviceProperties=devicePropertiesG as DirichletDeviceProperties;
         let deviceState=deviceStateG as DirichletDeviceState;
         let message=messageG as UpdateMessage;
@@ -116,7 +132,7 @@ class DirichletInInputPort
             assert( message.t == deviceState.t+deviceProperties.dt );
             deviceState.ns++;
         }
-        rts["out"] = deviceState.cs == deviceProperties.neighbours;
+        return deviceState.cs == deviceProperties.neighbours ? this.rts_flag_out : 0;
     }
 };
 
@@ -127,23 +143,31 @@ class DirichletOutOutputPort
     {
         super("out", updateEdgeType);
     }   
+
+    private rts_flag_out : number=0;
+
+    onBindDevice(parent:DeviceType)
+    {
+        this.rts_flag_out=parent.getOutput("out").rts_flag;
+    }   
     
     onSend(
         graphPropertiesG : TypedData,
         devicePropertiesG : TypedData,
         deviceStateG : TypedData,
-        messageG : TypedData,
-        rts : { [key:string] : boolean; }
-    ) : boolean
+        messageG : TypedData
+    ) : [boolean,number]
     {
         let graphProperties=graphPropertiesG as HeatGraphProperties;
         let deviceProperties=devicePropertiesG as DirichletDeviceProperties;
         let deviceState=deviceStateG as DirichletDeviceState;
         let message=messageG as UpdateMessage;
         
+        var doSend=false;
+        var rts=0;
+
         if(deviceState.t > graphProperties.maxTime){
-            rts["out"]=false;
-            return false;
+            // do nothing
         }else{
             deviceState.v=deviceProperties.bias + deviceProperties.amplitude
                 * Math.sin(deviceProperties.phase + deviceProperties.frequency * deviceState.t);
@@ -154,9 +178,10 @@ class DirichletOutOutputPort
             message.t = deviceState.t;
             message.v=deviceState.v;
             
-            rts["out"] = deviceState.cs == deviceProperties.neighbours;
-            return true;
+            rts= deviceState.cs == deviceProperties.neighbours ? this.rts_flag_out : 0;
+            doSend=true;
         }
+        return [doSend,rts];
     }
 };
 

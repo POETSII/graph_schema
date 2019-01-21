@@ -1,0 +1,134 @@
+<?xml version="1.0"?>
+<Graphs xmlns="https://poets-project.org/schemas/virtual-graph-schema-v2">
+  <GraphType id="async_explicit_heat">
+    <MetaData>
+      "nativeDimension":2
+    </MetaData>
+
+    <Properties>
+      <Scalar type="float" name="endTime" default="10" />
+      <Scalar type="uint32_t" name="width" />
+      <Scalar type="uint32_t" name="height" />
+    </Properties>
+
+    <SharedCode><![CDATA[
+
+		template<class TP, class TS>
+		void update_next(const TP *deviceProperties, TS *deviceState)
+		{
+			if( !deviceState->isNext){
+				deviceState->isNext=true;
+				for(unsigned i=0; i<deviceProperties->degree; i++){
+					assert(deviceState->nhood_nt[i] != deviceState->nt);
+					if(deviceState->nhood_nt[i] < deviceState->nt){
+						deviceState->isNext=false;
+						break;
+					}
+				}
+			}
+		}
+
+
+    ]]></SharedCode>
+
+    <MessageTypes>
+      <MessageType id="__init__">
+  			<!-- This doesn't have any properties -->
+      </MessageType>
+
+      <MessageType id="bracket">
+      <Message>
+        <Scalar type="uint32_t" name="t"/>
+				<Scalar type="uint32_t" name="nt"/>
+				<Scalar type="uint32_t" name="pt"/>
+        <Scalar type="int32_t" name="v" />
+				<Scalar type="int32_t" name="pv" />
+      </Message>
+      </MessageType>
+    </MessageTypes>
+
+    <DeviceTypes>
+      <DeviceType id="cell">
+				<Properties>
+					<Scalar type="uint32_t" name="degree" />
+					<Scalar type="uint32_t" name="dt" />
+
+					<Scalar type="uint32_t" name="wSelf" />
+					<Array type="uint32_t" length="8" name="wOther" />
+				</Properties>
+
+  <State>
+		<Scalar type="uint32_t" name="t" />
+		<Scalar type="uint32_t" name="nt" />
+		<Scalar type="float" name="v" />
+
+		<Array type="int32_t" length="8" name="nhood_v">
+			<Documentation>This collects the values of the neighbourhood at time t.
+		</Array>
+		<Array type="uint32_t" length="8" name="nhood_nt">
+			<Documentation>This collects the next firing times in the neighbourhood.
+		</Array>
+		<Array type="uint8_t" name="nhood_ready">
+			<Documentation>Counts the number that have been sampled at nt.</Documentation>
+		</Array>
+
+		<Scalar type="uint8_t" name="isEarliest">
+			<Documentation>If true, then this cell has the lowest nt in the neighbourhood.
+			Once true, this </Documentation>
+		</Scalar>
+
+		<Scalar type="uint8_t" name="isEarliest">
+			<Documentation>If true, then this cell has the lowest nt in the neighbourhood.</Documentation>
+		</Scalar>
+  </State>
+
+  <InputPin name="__init__" messageTypeId="__init__">
+    <OnReceive><![CDATA[
+		assert(deviceProperties->degree <= 8); // arbitrary constant, needs to match array sizes...
+
+    ]]>
+    </OnReceive>
+  </InputPin>
+
+  <InputPin name="in" messageTypeId="update">
+    <Properties>
+      <Scalar type="uint32_t" name="index" />
+    </Properties>
+    
+    <OnReceive><![CDATA[
+		if(message->t >= deviceState->nt && deviceState->nt < deviceState->pt){
+			// This is one of the times we need to collect before proceeding at nt
+			assert(deviceState->nhood_ready < deviceProperties->degree);
+
+			deviceState->nhood_v[message->index] = interp(deviceState->nt, message->t, message->v, message->pt, message->pv);
+			deviceState->nhood_ready++;
+		}
+
+		assert(deviceState->nt != message->nt);
+
+		// Incoming messages must be in order due to dependencies enforced by application (maybe?)
+		assert(deviceState->nhood_nt[message->index] > message->nt);
+
+		update_next(deviceProperties, deviceState);
+
+    ]]></OnReceive>
+  </InputPin>
+
+  <OutputPin name="out" messageTypeId="update">
+    <OnSend><![CDATA[
+		assert(deviceState->isNext && deviceState->nhood_ready==deviceProperties->degree);
+
+		
+    ]]></OnSend>
+  </OutputPin>
+
+  <ReadyToSend><![CDATA[
+  *readyToSend = 0;
+	if(deviceState->isNext && deviceState->nhood_ready==deviceProperties->degree){
+		*readyToSend = RTS_FLAG_out;
+	}
+  ]]></ReadyToSend>
+      </DeviceType>
+    </DeviceTypes>
+  </GraphType>
+</Graphs>

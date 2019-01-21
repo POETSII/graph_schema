@@ -1,5 +1,5 @@
 <?xml version="1.0"?>
-<Graphs xmlns="http://TODO.org/POETS/virtual-graph-schema-v1">
+<Graphs xmlns="https://poets-project.org/schemas/virtual-graph-schema-v2">
   <GraphType id="gals_izhikevich">
     <!-- This is not a true simulation as it does not guarantee that spikes will
 	 be integrated in the same time interval. An unfair orchestrator could
@@ -77,7 +77,7 @@
 		  <Scalar name="rts" type="uint32_t" />
 		</State>
 
-		<InputPort name="__init__" messageTypeId="__init__">
+		<InputPin name="__init__" messageTypeId="__init__">
 
 		  <OnReceive><![CDATA[
 		  deviceState->rng = deviceProperties->seed;
@@ -93,9 +93,9 @@
 		  deviceState->rts = RTS_FLAG_fire;
 		  ]]>
 		  </OnReceive>
-		</InputPort>
+		</InputPin>
 
-		<OutputPort name="fire" messageTypeId="synapse">
+		<OutputPin name="fire" messageTypeId="synapse">
 		  <OnSend><![CDATA[
 		  assert(deviceState->pendingFires > 0);
 
@@ -120,9 +120,9 @@
 
 		  handler_log(3, "fanin=%d", deviceProperties->fanin);
 		  ]]></OnSend>
-		</OutputPort>
+		</OutputPin>
 
-		<InputPort name="input" messageTypeId="synapse">
+		<InputPin name="input" messageTypeId="synapse">
 			<Properties>
 			<Scalar type="float" name="weight" />
 			</Properties>
@@ -140,7 +140,7 @@
 		  }
 		  handler_log(3, "Icount = %d, fanin=%d", deviceState->Icount, deviceProperties->fanin);
 		  ]]></OnReceive>
-		</InputPort>
+		</InputPin>
 
 		<ReadyToSend><![CDATA[
 		*readyToSend = (deviceState->pendingFires > 0) ? RTS_FLAG_fire : 0;

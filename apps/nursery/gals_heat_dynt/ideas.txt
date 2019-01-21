@@ -1,0 +1,62 @@
+
+
+Each cell has intrinsic dt. Each neighbour has a time
+step of {dt/2, dt, dt*2}. Call them {fine, equal, coarse}.
+
+
+So for a cell at time t, with update at m.t :
+
+- Receive update from equal node:
+  if t=msg.t:
+    acc[t] += m.x * e.w
+  elif t==msg.t+dt:
+    acc[t+dt] += m.x * e.w
+  else:
+    abort()
+
+- Receive update from fine node:
+  if t=msg.t:
+    acc[t] += m.x * e.w
+  elif t==msg.t+dt/2:
+    skip
+  elif t==msg.t+dt:
+    acc[t+dt] += m.x * e.w
+  else:
+    abort()
+
+- Receive update from coarse node:
+  if t==msg.t:
+    assert t%dt == 0 // Must be even step
+    acc[t] += m.x * e.w
+  elif t==msg.t+dt:
+    assert t%dt == 1 // Must be odd step, and update is from future
+    acc[t] += (m.x + m.xp)/2 * e.w
+    acc[t+dt] += m.x * e.q
+  else:
+    abort()
+    
+
+
+    
+    1 2 2 4 4 2 1 1
+    
+0   + + + + + + + +
+1   + v v v v v + +
+2   + + + v v + + +
+3   + v v v v v + +
+4   + + + + + + + +
+
+
+++    ++
+
+++    ++
+ v    +
+ +
+ 
+++    ++
++v    +v
+ +     +
+ 
+++
++v
+++

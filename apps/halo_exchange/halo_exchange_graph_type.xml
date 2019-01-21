@@ -1,0 +1,584 @@
+<?xml version="1.0"?>
+<Graphs xmlns="https://poets-project.org/schemas/virtual-graph-schema-v2">
+	<GraphType id="halo_exchange">
+		
+		<SharedCode><![CDATA[
+			enum orientation_t { north, east, south, west };
+		
+		int32_t fix_mul(int32_t x, int32_t y)
+		{
+		  auto xy=x*(int64_t)y;
+		  xy += (1<<23);
+		  xy = xy>>24;
+		  assert( -2147483648 <= xy && xy <= 2147483647 );
+		  return (int32_t)(xy);
+		}
+		
+		int32_t fix_add(int32_t x, int32_t y)
+		{
+		  int64_t xy64=x+(int64_t)y;
+		  assert( -2147483648 <= xy64 && xy64 <= 2147483647 );
+		  int32_t xy=x+y;
+		  return xy;
+		}
+		
+		int32_t fix_sub(int32_t x, int32_t y)
+		{
+		  int64_t xy64=x-(int64_t)y;
+		  assert( -2147483648 <= xy64 && xy64 <= 2147483647 );
+		  int32_t xy=x-y;
+		  return xy;
+		}
+		
+		bool fix_gt(int32_t x, int32_t y)
+		{
+		  return x>y;
+		}
+		
+		bool fix_lt(int32_t x, int32_t y)
+		{
+		  return x>y;
+		}
+
+			uint32_t cell_updateFunc(halo_exchange_cell_10by10_state_t *state, const halo_exchange_cell_10by10_properties_t *properties) {
+				 //Process the timestep for this device
+ 
+		uint32_t hL = properties->haloLength;
+	  uint32_t tmpV[hL*hL] = { 0 };
+	 	for(uint32_t i=0; i<hL*hL; i++){ 
+	 	//Accumulate all points surrounding the current point
+
+	 	//North of point
+	 	if(i<hL) //We are at the northern face of this node and need to use the halo value	
+	 		tmpV[i] += state->cN[i];
+	 	else
+	 		tmpV[i] += state->v[i-hL];
+
+	 	//East of point
+	 	if((i!=0) && (i % hL == (hL-1))) //We are at the eastern face of this node and need to use the halo value
+	 		tmpV[i] += state->cE[i/(hL-1)]; 
+	 	else
+	 		tmpV[i] += state->v[i+1];
+
+	 	//South of point
+	 	if(i >= (hL*hL -1) - (hL-1)) //We are at the southern face of this node and need to use the halo value
+	 		tmpV[i] += state->cS[i - ((hL*hL -1) - (hL-1))]; 
+	 	else
+	 		tmpV[i] += state->v[i+hL];
+	 
+	 	//West of point
+	 	if(i % hL == 0) //We are at the western face of this node and need to use the halo value
+	 		tmpV[i] += state->cW[i/hL];
+	 	else
+	 		tmpV[i] += state->v[i-1];
+	 	}
+	 
+	 	for(uint32_t i=0; i<hL*hL; i++) {
+	 		state->v[i] = tmpV[i];
+	 	}
+	 	//for(uint32_t i=0; i<hL; i++){ 
+	     //handler_log(2 ,"%u	%u	%u	%u	%u	%u	%u	%u	%u", tmpV[(i*hL)+0],tmpV[(i*hL)+1],tmpV[(i*hL)+2],tmpV[(i*hL)+3],tmpV[(i*hL)+4],tmpV[(i*hL)+5],tmpV[(i*hL)+6],tmpV[(i*hL)+7],tmpV[(i*hL)+8]); 
+	 	//} 
+	 	return 0; 
+				}
+
+			uint32_t cell_initFunc(halo_exchange_cell_10by10_state_t *state, const halo_exchange_cell_10by10_properties_t *properties) {
+				 //the initial state for this device
+
+			uint32_t hL = properties->haloLength;
+			for(uint32_t i=0; i<hL*hL; i++) {
+					state->v[i] = 0;
+			}
+			return 1;
+				}
+
+			bool allArrived(const halo_exchange_cell_10by10_state_t *state, const halo_exchange_cell_10by10_properties_t *gp) {
+				for(uint32_t i=0; i<4; i++) {
+					if (!state->c_arrivalFlags[i])
+						return false;
+					}
+				return true;
+			}
+			void clearArrived(halo_exchange_cell_10by10_state_t *state) {
+				for(uint32_t i=0; i<4; i++) {
+						state->c_arrivalFlags[i] = 0;
+					}
+				return;
+			}
+
+			bool allSent(const halo_exchange_cell_10by10_state_t *state, const halo_exchange_cell_10by10_properties_t *gp) {
+				for(uint32_t i=0; i<4; i++) {
+					if(!state->sentFlags[i])
+						return false;
+				}
+				return true;
+			}
+
+			void moveToNextIter(halo_exchange_cell_10by10_state_t *state, const halo_exchange_cell_10by10_properties_t *dp, const halo_exchange_properties_t *gp) {
+				for(uint32_t i=0; i< 4; i++) {
+					state->c_arrivalFlags[i] = state->n_arrivalFlags[i];
+					state->n_arrivalFlags[i] = 0;
+					state->sentFlags[i] = 0;
+				}
+				const uint32_t hL = dp->haloLength;
+				for(uint32_t i=0; i< hL; i++) {
+					state->cN[i] = state->nN[i];
+					state->cE[i] = state->nE[i];
+					state->cS[i] = state->nS[i];
+					state->cW[i] = state->nW[i];
+			}
+			state->t = state->t + gp->dt;
+			state->processed = 0;
+			return;
+		}
+
+			void loadMessage(const halo_exchange_update_message_t *message, halo_exchange_cell_10by10_state_t *state, const halo_exchange_cell_10by10_properties_t *dp, const halo_exchange_properties_t *gp, orientation_t dir) {
+				assert( message->t == state->t || message->t == state->t + gp->dt );
+				const uint32_t hL = dp->haloLength;
+				if(message->t == state->t) {
+					for(uint32_t i=0; i<hL; i++) {
+						if(dir == north)
+							state->cN[i] = message->v[i];
+						if(dir == east)
+							state->cE[i] = message->v[i];
+						if(dir == south)
+							state->cS[i] = message->v[i];
+						if(dir == west)
+							state->cW[i] = message->v[i];
+					}
+					state->c_arrivalFlags[dir] = 1;
+				}else if(message->t == state->t + gp->dt) {
+					for(uint32_t i=0; i<hL; i++) {
+						if(dir == north)
+						state->nN[i] = message->v[i];
+						if(dir == east)
+							state->nE[i] = message->v[i];
+						if(dir == south)
+							state->nS[i] = message->v[i];
+						if(dir == west)
+							state->nW[i] = message->v[i];
+					}
+					state->n_arrivalFlags[dir] = 1;
+				}
+			}
+
+
+			uint32_t boundary_updateFunc(halo_exchange_boundary_10_state_t *state, const halo_exchange_boundary_10_properties_t *properties) {
+				//Process the timestep for this device
+ 
+		uint32_t hL = properties->haloLength;
+		uint32_t tmpV[hL];	
+		
+		//c = NorthOf(c) + EastOf(c) + SouthOf(c) 
+		//Northmost element 
+		tmpV[0] = 0 + state->cV[0] + state->v[1];
+		
+		//Middle Elements 
+		for(uint32_t i=1; i<hL-1; i++) { 
+			tmpV[i] = state->v[i-1] + state->cV[i] + state->v[i+1]; 
+		} 
+		
+		//Southmost element 
+		tmpV[hL-1] = state->v[hL-2] + state->cV[hL-1] + 0; 
+		
+		//Load tmp value array into the real value array 
+		for(uint32_t i=0; i<hL; i++) { 
+			state->v[i] = tmpV[i]; 
+		} 
+		return 1;
+				}
+
+			uint32_t boundary_initFunc(halo_exchange_boundary_10_state_t *state, const halo_exchange_boundary_10_properties_t *properties) {
+				//used to initialise the state of the device
+
+		uint32_t hL = properties->haloLength;
+		for(uint32_t i=0; i<hL; i++) {
+			state->v[i] = 2;
+		}
+		return 1;
+				}
+
+		]]></SharedCode>
+
+	<Properties>
+		<Scalar type="uint32_t" name="maxTime" default="10000" />
+		<Scalar type="uint32_t" name="nodesPerDevice" default="100" />
+		<Scalar type="uint32_t" name="dt" default="1" />
+	</Properties>
+
+
+	<MessageTypes>
+		<MessageType id="__init__">
+		</MessageType>
+
+		<MessageType id="finished">
+		</MessageType>
+
+		<MessageType id="update">
+			<Message>
+				<Scalar type="uint32_t" name="t" />
+				<Array type="uint32_t" name="v" length="10" />
+			</Message>
+		</MessageType>
+	</MessageTypes>
+
+	<DeviceTypes>
+
+	<DeviceType id="cell_10by10">
+		<Properties>
+			<Scalar type="int32_t" name="updateDelta" />
+			<Scalar type="uint32_t" name="haloLength" default="10" />
+		</Properties>
+		<State>
+			<Scalar type="uint32_t" name="t"/>
+			<Array type="uint32_t" name="v" length="100"/>
+
+			<Array type="uint32_t" name="cN" length="10"/>
+			<Array type="uint32_t" name="cE" length="10"/>
+			<Array type="uint32_t" name="cS" length="10"/>
+			<Array type="uint32_t" name="cW" length="10"/>
+
+			<Array type="uint32_t" name="nN" length="10"/>
+			<Array type="uint32_t" name="nE" length="10"/>
+			<Array type="uint32_t" name="nS" length="10"/>
+			<Array type="uint32_t" name="nW" length="10"/>
+
+			<Array type="uint8_t" name="c_arrivalFlags" length="4"/>
+			<Array type="uint8_t" name="n_arrivalFlags" length="4"/>
+			<Array type="uint8_t" name="sentFlags" length="4"/>
+			<Scalar type="uint8_t" name="processed"/>
+		</State>
+
+		<ReadyToSend><![CDATA[
+			*readyToSend=0;
+			if(deviceState->processed) {
+				if(!deviceState->sentFlags[north])
+					*readyToSend = *readyToSend | RTS_FLAG_north_out;
+				if(!deviceState->sentFlags[east])
+					*readyToSend = *readyToSend | RTS_FLAG_east_out;
+				if(!deviceState->sentFlags[south])
+					*readyToSend = *readyToSend | RTS_FLAG_south_out;
+				if(!deviceState->sentFlags[west])
+					*readyToSend = *readyToSend | RTS_FLAG_west_out;
+			} else if(deviceState->t >= graphProperties->maxTime) {
+				*readyToSend = RTS_FLAG_finish;
+			} else {
+				*readyToSend=0;
+			}
+		]]></ReadyToSend>
+
+		<OutputPin name="finish" messageTypeId="finished">
+			<OnSend><![CDATA[
+			]]></OnSend>
+		</OutputPin>
+
+		<InputPin name="__init__" messageTypeId="__init__">
+			<OnReceive><![CDATA[
+				handler_log(2, "center device is being initialised");
+				deviceState->t=0;
+				deviceState->processed=0;
+				for(uint32_t i=0; i<deviceProperties->haloLength; i++) {
+					deviceState->cN[i]=0; deviceState->cE[i]=0; deviceState->cS[i]=0; deviceState->cW[i]=0;
+					deviceState->nN[i]=0; deviceState->nE[i]=0; deviceState->nS[i]=0; deviceState->nW[i]=0;
+					deviceState->n_arrivalFlags[i] = 0;
+					deviceState->c_arrivalFlags[i] = 0;
+				}
+				cell_initFunc(deviceState, deviceProperties);
+			]]></OnReceive>
+		</InputPin>
+
+
+		<InputPin name="north_in" messageTypeId="update">
+			<OnReceive><![CDATA[
+				loadMessage(message, deviceState, deviceProperties, graphProperties, north);
+				handler_log(2, "	current arrivals: n:%d e:%d s:%d w%d", deviceState->c_arrivalFlags[north], deviceState->c_arrivalFlags[east],deviceState->c_arrivalFlags[south],deviceState->c_arrivalFlags[west]);
+				if(message->t == deviceState->t) {
+					if(allArrived(deviceState, deviceProperties)) {
+						deviceState->processed=1;;
+						clearArrived(deviceState);
+						cell_updateFunc(deviceState, deviceProperties);
+						handler_log(2, "data-transfer complete computing timestep.");
+					}
+				}
+			]]></OnReceive>
+		</InputPin>
+
+
+		<InputPin name="east_in" messageTypeId="update">
+			<OnReceive><![CDATA[
+				loadMessage(message, deviceState, deviceProperties, graphProperties, east);
+				handler_log(2, "	current arrivals: n:%d e:%d s:%d w%d", deviceState->c_arrivalFlags[north], deviceState->c_arrivalFlags[east],deviceState->c_arrivalFlags[south],deviceState->c_arrivalFlags[west]);
+				if(message->t == deviceState->t) {
+					if(allArrived(deviceState, deviceProperties)) {
+						deviceState->processed=1;;
+						clearArrived(deviceState);
+						cell_updateFunc(deviceState, deviceProperties);
+						handler_log(2, "data-transfer complete computing timestep.");
+					}
+				}
+			]]></OnReceive>
+		</InputPin>
+
+
+		<InputPin name="south_in" messageTypeId="update">
+			<OnReceive><![CDATA[
+				loadMessage(message, deviceState, deviceProperties, graphProperties, south);
+				handler_log(2, "	current arrivals: n:%d e:%d s:%d w%d", deviceState->c_arrivalFlags[north], deviceState->c_arrivalFlags[east],deviceState->c_arrivalFlags[south],deviceState->c_arrivalFlags[west]);
+				if(message->t == deviceState->t) {
+					if(allArrived(deviceState, deviceProperties)) {
+						deviceState->processed=1;;
+						clearArrived(deviceState);
+						cell_updateFunc(deviceState, deviceProperties);
+						handler_log(2, "data-transfer complete computing timestep.");
+					}
+				}
+			]]></OnReceive>
+		</InputPin>
+
+
+		<InputPin name="west_in" messageTypeId="update">
+			<OnReceive><![CDATA[
+				loadMessage(message, deviceState, deviceProperties, graphProperties, west);
+				handler_log(2, "	current arrivals: n:%d e:%d s:%d w%d", deviceState->c_arrivalFlags[north], deviceState->c_arrivalFlags[east],deviceState->c_arrivalFlags[south],deviceState->c_arrivalFlags[west]);
+				if(message->t == deviceState->t) {
+					if(allArrived(deviceState, deviceProperties)) {
+						deviceState->processed=1;;
+						clearArrived(deviceState);
+						cell_updateFunc(deviceState, deviceProperties);
+						handler_log(2, "data-transfer complete computing timestep.");
+					}
+				}
+			]]></OnReceive>
+		</InputPin>
+
+
+		<OutputPin name="north_out" messageTypeId="update">
+			<OnSend><![CDATA[
+				handler_log(2, "sending message");
+				uint32_t hL = deviceProperties->haloLength;
+				for(uint32_t i=0; i < hL; i++) {
+					message->v[i] = deviceState->v[i];
+				}
+				message->t = deviceState->t;
+				deviceState->sentFlags[north] = 1;
+				if(allSent(deviceState, deviceProperties)) {
+					moveToNextIter(deviceState, deviceProperties, graphProperties);
+					handler_log(2, "moved to next timestep device->t=%d", deviceState->t);
+				}
+			]]></OnSend>
+		</OutputPin>
+		<OutputPin name="east_out" messageTypeId="update">
+			<OnSend><![CDATA[
+				handler_log(2, "sending message");
+				uint32_t hL = deviceProperties->haloLength;
+				for(uint32_t i=0; i < hL; i++) {
+					message->v[i] = deviceState->v[((i+1)*hL)-1];
+				}
+				message->t = deviceState->t;
+				deviceState->sentFlags[east] = 1;
+				if(allSent(deviceState, deviceProperties)) {
+					moveToNextIter(deviceState, deviceProperties, graphProperties);
+					handler_log(2, "moved to next timestep device->t=%d", deviceState->t);
+				}
+			]]></OnSend>
+		</OutputPin>
+		<OutputPin name="south_out" messageTypeId="update">
+			<OnSend><![CDATA[
+				handler_log(2, "sending message");
+				uint32_t hL = deviceProperties->haloLength;
+				for(uint32_t i=0; i < hL; i++) {
+					message->v[i] = deviceState->v[(hL * (hL - 1)) + i];
+				}
+				message->t = deviceState->t;
+				deviceState->sentFlags[south] = 1;
+				if(allSent(deviceState, deviceProperties)) {
+					moveToNextIter(deviceState, deviceProperties, graphProperties);
+					handler_log(2, "moved to next timestep device->t=%d", deviceState->t);
+				}
+			]]></OnSend>
+		</OutputPin>
+		<OutputPin name="west_out" messageTypeId="update">
+			<OnSend><![CDATA[
+				handler_log(2, "sending message");
+				uint32_t hL = deviceProperties->haloLength;
+				for(uint32_t i=0; i < hL; i++) {
+					message->v[i] = deviceState->v[i*hL];
+				}
+				message->t = deviceState->t;
+				deviceState->sentFlags[west] = 1;
+				if(allSent(deviceState, deviceProperties)) {
+					moveToNextIter(deviceState, deviceProperties, graphProperties);
+					handler_log(2, "moved to next timestep device->t=%d", deviceState->t);
+				}
+			]]></OnSend>
+		</OutputPin>
+	</DeviceType>
+
+	<DeviceType id="boundary_10">
+		<Properties>
+			<Scalar type="uint32_t" name="haloLength" default="10" />
+		</Properties>
+		<State>
+			<Array type="uint32_t" name="cV" length="10"/>
+			<Array type="uint32_t" name="nV" length="10"/>
+			<Array type="uint32_t" name="v" length="10"/>
+			<Scalar type="uint32_t" name="t"/>
+			<Scalar type="int8_t" name="cAvail"/>
+			<Scalar type="int8_t" name="nAvail"/>
+			<Scalar type="int8_t" name="init_firstfire"/>
+		</State>
+
+		<ReadyToSend><![CDATA[
+			*readyToSend=0;
+			if((deviceState->t == 0) && (deviceState->init_firstfire == 1)) {
+				*readyToSend = RTS_FLAG_out;
+			} else if (deviceState->cAvail) {
+				*readyToSend = RTS_FLAG_out;
+			} else if (deviceState->t >= graphProperties->maxTime) {
+				*readyToSend = RTS_FLAG_finish;
+			}
+		]]></ReadyToSend>
+
+		<InputPin name="__init__" messageTypeId="__init__">
+			<OnReceive><![CDATA[
+				handler_log(2, "edge device is being initialised");
+				deviceState->t = 0;
+				deviceState->cAvail = 0;
+				deviceState->nAvail = 0;
+				deviceState->init_firstfire = 1;
+				for(uint32_t i=0; i<deviceProperties->haloLength; i++){
+					deviceState->cV[i] = 0;
+					deviceState->nV[i] = 0;
+				}
+				boundary_initFunc(deviceState, deviceProperties);
+			]]></OnReceive>
+		</InputPin>
+
+		<OutputPin name="out" messageTypeId="update">
+			<OnSend><![CDATA[
+				uint32_t hL = deviceProperties->haloLength;
+				for(uint32_t i=0; i< hL; i++) {
+					message->v[i] = deviceState->v[i];
+				}
+				if(deviceState->cAvail) {
+					deviceState->t = deviceState->t + graphProperties->dt;
+					deviceState->cAvail = 0;
+				}
+				message->t = deviceState->t;
+				handler_log(2, "boundary is sending a message.  message->t=%d", message->t);
+				if(deviceState->nAvail) {
+					deviceState->nAvail = 0;
+					deviceState->cAvail = 1;
+					for(uint32_t i=0; i<hL; i++) {
+						deviceState->cV[i] = deviceState->nV[i];
+					}
+				}
+				deviceState->init_firstfire=0;
+			]]></OnSend>
+		</OutputPin>
+
+		<OutputPin name="finish" messageTypeId="finished">
+			<OnSend><![CDATA[
+			]]></OnSend>
+		</OutputPin>
+
+		<InputPin name="in" messageTypeId="update">
+			<OnReceive><![CDATA[
+				handler_log(2, "received message. state->t=%d 	 message->t=%d", deviceState->t, message->t);
+				uint32_t hL = deviceProperties->haloLength;
+				if(message->t == deviceState->t) {
+					deviceState->cAvail = 1;
+					boundary_updateFunc(deviceState, deviceProperties);
+				} else if (message->t == deviceState->t+hL) {
+					deviceState->nAvail = 1;
+					for(uint32_t i=0; i<hL; i++) {
+						deviceState->nV[i] = message->v[i];
+					}
+				}
+			]]></OnReceive>
+		</InputPin>
+	</DeviceType>
+
+	<DeviceType id="exit_node">
+		<Properties>
+			<Scalar name="fanin" type="uint32_t" />
+		</Properties>
+
+		<State>
+			<Scalar name="done" type="uint32_t" />
+		</State>
+
+		<ReadyToSend><![CDATA[
+			*readyToSend=0;
+		]]></ReadyToSend>
+
+		<InputPin name="done" messageTypeId="finished">
+			<OnReceive><![CDATA[
+				deviceState->done++;
+				handler_log(2, "done=0x%x, fanin=0x%x", deviceState->done, deviceProperties->fanin);
+				if(deviceState->done == deviceProperties->fanin){
+					handler_exit(0);
+				}
+			]]></OnReceive>
+		</InputPin>
+	</DeviceType>
+	</DeviceTypes>
+</GraphType>
+<GraphInstance id="test_2by2_of_10by10" graphTypeId="halo_exchange">
+	<DeviceInstances sorted="1">
+		<DevI id="nBnode_0" type="boundary_10" />
+		<DevI id="eBnode_0" type="boundary_10" />
+		<DevI id="sBnode_0" type="boundary_10" />
+		<DevI id="wBnode_0" type="boundary_10" />
+		<DevI id="nBnode_1" type="boundary_10" />
+		<DevI id="eBnode_1" type="boundary_10" />
+		<DevI id="sBnode_1" type="boundary_10" />
+		<DevI id="wBnode_1" type="boundary_10" />
+		<DevI id="cnode_0_0" type="cell_10by10" />
+		<DevI id="cnode_0_1" type="cell_10by10" />
+		<DevI id="cnode_1_0" type="cell_10by10" />
+		<DevI id="cnode_1_1" type="cell_10by10" />
+		<DevI id="exit_node_0" type="exit_node">
+			<P>"fanin": 12</P>
+		</DevI>
+	</DeviceInstances>
+	<EdgeInstances sorted="1">
+		<EdgeI path="cnode_0_0:north_in-nBnode_0:out"/>
+		<EdgeI path="cnode_0_0:east_in-cnode_1_0:west_out"/>
+		<EdgeI path="cnode_0_0:south_in-cnode_0_1:north_out"/>
+		<EdgeI path="cnode_0_0:west_in-wBnode_0:out"/>
+		<EdgeI path="exit_node_0:done-cnode_0_0:finish"/>
+		<EdgeI path="cnode_0_1:north_in-cnode_0_0:south_out"/>
+		<EdgeI path="cnode_0_1:east_in-cnode_1_1:west_out"/>
+		<EdgeI path="cnode_0_1:south_in-sBnode_0:out"/>
+		<EdgeI path="cnode_0_1:west_in-wBnode_1:out"/>
+		<EdgeI path="exit_node_0:done-cnode_0_1:finish"/>
+		<EdgeI path="cnode_1_0:north_in-nBnode_1:out"/>
+		<EdgeI path="cnode_1_0:east_in-eBnode_0:out"/>
+		<EdgeI path="cnode_1_0:south_in-cnode_1_1:north_out"/>
+		<EdgeI path="cnode_1_0:west_in-cnode_0_0:east_out"/>
+		<EdgeI path="exit_node_0:done-cnode_1_0:finish"/>
+		<EdgeI path="cnode_1_1:north_in-cnode_1_0:south_out"/>
+		<EdgeI path="cnode_1_1:east_in-eBnode_1:out"/>
+		<EdgeI path="cnode_1_1:south_in-sBnode_1:out"/>
+		<EdgeI path="cnode_1_1:west_in-cnode_0_1:east_out"/>
+		<EdgeI path="exit_node_0:done-cnode_1_1:finish"/>
+		<EdgeI path="nBnode_0:in-cnode_0_0:north_out"/>
+		<EdgeI path="eBnode_0:in-cnode_1_0:east_out"/>
+		<EdgeI path="sBnode_0:in-cnode_0_1:south_out"/>
+		<EdgeI path="wBnode_0:in-cnode_0_0:west_out"/>
+		<EdgeI path="nBnode_1:in-cnode_1_0:north_out"/>
+		<EdgeI path="eBnode_1:in-cnode_1_1:east_out"/>
+		<EdgeI path="sBnode_1:in-cnode_1_1:south_out"/>
+		<EdgeI path="wBnode_1:in-cnode_0_1:west_out"/>
+		<EdgeI path="exit_node_0:done-nBnode_0:finish"/>
+		<EdgeI path="exit_node_0:done-eBnode_0:finish"/>
+		<EdgeI path="exit_node_0:done-sBnode_0:finish"/>
+		<EdgeI path="exit_node_0:done-wBnode_0:finish"/>
+		<EdgeI path="exit_node_0:done-nBnode_1:finish"/>
+		<EdgeI path="exit_node_0:done-eBnode_1:finish"/>
+		<EdgeI path="exit_node_0:done-sBnode_1:finish"/>
+		<EdgeI path="exit_node_0:done-wBnode_1:finish"/>
+	</EdgeInstances>
+</GraphInstance>
+</Graphs>

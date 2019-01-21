@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 import pyamg
 import numpy as np
 import scipy.sparse
@@ -29,7 +31,9 @@ class MultiGrid:
         
         def smooth_iteration(self,x,b):
             if self.n==1:
-                x[0 ] = x[0] / self.A[0,0]
+                #sys.stderr.write("  smooth: x={}, b={}, A={}\n".format(x[0],b[0],self.A[0,0]))
+                x[0] = b[0] / self.A[0,0]
+                #sys.stderr.write("  smooth: x={}, b={}, A={}\n".format(x[0],b[0],self.A[0,0]))
             else:
                 # x' = (b-Ar*x)/Ad*omega + (1-omega)*x 
                 # x' = (b-Ar*x)/Ad*omega - omega*x + x
@@ -68,6 +72,38 @@ class MultiGrid:
         self.levels=[]
         for L in self.ml.levels:
             self.levels.append( MultiGrid.Level( L, iterations, omega ) )
+    
+    def hcycle(self,x,b,lvl=0):
+        L=self.levels[lvl]
+        
+        if lvl==len(self.levels)-1:
+            #sys.stderr.write("A = {}\n".format(L.A))
+            #sys.stderr.write("Upper : b={},x={}\n".format(b,x))
+            L.smooth(x,b)
+            #sys.stderr.write("Upper : b={},x={}\n".format(b,x))
+            return
+            
+        r=b-L.A*x   # Old residual
+        #sys.stderr.write("  resid = {}\n".format(r))
+        #sys.stderr.write("  peerAcc = {}\n".format(L.Ar*x))
+        #sys.stderr.write("  L.omega*x = {},  omega={}, x={}\n".format(L.omega*x, L.omega, x))
+        #sys.stderr.write("  AdInvOmega = {}\n".format(L.AdiagInvOmega))
+        #sys.stderr.write("  LHS={}\n".format((b-L.Ar*x)*L.AdiagInvOmega))
+        #dx = (b-L.Ar*x)*L.AdiagInvOmega - L.omega*x
+        #sys.stderr.write("  dx = {}\n".format(dx))
+        #x += dx # New value
+        #sys.stderr.write("  nx = {}\n".format(x))
+        
+        #r=b-L.A*x   # New residual
+        
+        coarse_x=np.zeros(self.levels[lvl+1].n)
+        coarse_b=L.R*r
+        self.hcycle(coarse_x, coarse_b, lvl+1)
+        
+        #sys.stderr.write("  Correction = {}\n".format(L.P*coarse_x))
+        x+=L.P*coarse_x
+        
+        L.smooth(x,b)
             
     def vcycle(self,x,b,lvl=0):
         L=self.levels[lvl]
@@ -175,8 +211,9 @@ if __name__=="__main__":
         xVa = x0.copy()
         xVa2 = x0.copy()
         xW = x0.copy()
+        xH=x0.copy()
         i=0
-        print("residuals : ", n, i, np.linalg.norm(b-A*xP), np.linalg.norm(b-A*xV), np.linalg.norm(b-A*xW))
+        print("residuals : ", n, i, np.linalg.norm(b-A*xP), np.linalg.norm(b-A*xV), np.linalg.norm(b-A*xW), np.linalg.norm(b-A*xH))
         while True:
             i=i+1
             xP = ml.solve(b, tol=1e-9, maxiter=iterations, x0=xP)
@@ -184,7 +221,8 @@ if __name__=="__main__":
             mg.vcycle_alt(xVa, b)
             mg.vcycle_alt2(xVa2, b)
             mg.wcycle(xW, b)        
-            print("residuals: ", n, i, np.linalg.norm(b-A*xP), np.linalg.norm(b-A*xV),np.linalg.norm(b-A*xVa),np.linalg.norm(b-A*xVa2), np.linalg.norm(b-A*xW))
+            mg.hcycle(xH, b)        
+            print("residuals: ", n, i, np.linalg.norm(b-A*xP), np.linalg.norm(b-A*xV),np.linalg.norm(b-A*xVa),np.linalg.norm(b-A*xVa2), np.linalg.norm(b-A*xW), np.linalg.norm(b-A*xH))
             if np.linalg.norm(b-A*xV) < 1e-3:
                 break
 

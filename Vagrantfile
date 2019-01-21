@@ -1,5 +1,8 @@
+
 # -*- mode: ruby -*-
 # vi: set ft=ruby :
+
+require 'etc'
 
 # All Vagrant configuration is done below. The "2" in Vagrant.configure
 # configures the configuration version (we support older styles for
@@ -21,8 +24,12 @@ Vagrant.configure(2) do |config|
 
   # Create a forwarded port mapping which allows access to a specific port
   # within the machine from a port on the host machine. In the example below,
-  # accessing "localhost:8080" will access port 80 on the guest machine.
-  # config.vm.network "forwarded_port", guest: 80, host: 8080
+  # accessing "localhost:8080" will access port 8000 on the guest machine.
+  config.vm.network "forwarded_port", guest: 80, host: 8080
+  
+  config.ssh.forward_agent = true
+  
+  config.ssh.forward_x11 = true
 
   # Create a private network, which allows host-only access to the machine
   # using a specific IP.
@@ -50,14 +57,23 @@ Vagrant.configure(2) do |config|
   #   # Display the VirtualBox GUI when booting the machine
   #   vb.gui = true
   #
-  #   # Customize the amount of memory on the VM:
-     vb.memory = "2048"
-  end
+  vcpu = Etc.nprocessors > 4 ? 4 : ( Etc.nprocessors > 1 ? Etc.nprocessors - 1 : 1 )
+   
+   vb.cpus = vcpu
+  
+   # Customize the amount of memory on the VM:
+   # 1  hcpu -> 1 vcpu : 5GB
+   # 2  hcpu -> 1 vcpu : 5GB
+   # 3  hcpu -> 2 vcpu : 6GB
+   # 4  hcpu -> 3 vcpu : 7GB
+   # 5+ hcpu -> 4 vcpu : 8GB
+    vb.memory = 4000 + vcpu * 1000     
+  
+   # If clock drifts more than 500ms, then force it (instead of smooth adjust)
+   vb.customize ["guestproperty","set", :id, "/VirtualBox/GuestAdd/VBoxService/--timesync-set-threshold", "500"]
 
-
-  config.vm.provider "virtualbox" do |v|
-    # If clock drifts more than 500ms, then force it (instead of smooth adjust)
-    v.customize ["guestproperty","set", :id, "/VirtualBox/GuestAdd/VBoxService/--timesync-set-threshold", "500"]
+    # Turn off audio, so that VM doesn't keep machine awake
+    vb.customize ["modifyvm", :id, "--audio", "none"]
   end
 
 
@@ -66,10 +82,15 @@ Vagrant.configure(2) do |config|
   # Puppet, Chef, Ansible, Salt, and Docker are also available. Please see the
   # documentation for more information about their specific syntax and use.
   config.vm.provision "shell", inline: <<-SHELL
+	 sudo apt-get update
+
      sudo apt-get install -y libxml2-dev gdb g++ git make libxml++2.6-dev libboost-dev python3 zip default-jre-headless python3-lxml curl mpich rapidjson-dev
+	
+
+     sudo apt-get install -y libxml2-dev gdb g++ git make libxml++2.6-dev libboost-dev libboost-filesystem-dev zip python3 zip default-jre-headless python3-lxml curl mpich rapidjson-dev
 
      # RISC-V toolchain (not sure exactly how much is needed)
-	sudo apt-get install -y autoconf automake autotools-dev curl libmpc-dev libmpfr-dev libgmp-dev gawk build-essential bison flex texinfo gperf libtool patchutils bc zlib1g-dev
+	  sudo apt-get install -y autoconf automake autotools-dev curl libmpc-dev libmpfr-dev libgmp-dev gawk build-essential bison flex texinfo gperf libtool patchutils bc zlib1g-dev
 
      # Graph partitioning
      sudo apt-get install -y metis
@@ -80,6 +101,17 @@ Vagrant.configure(2) do |config|
      # Editors
      sudo apt-get install -y emacs-nox screen
 
+     # Algebraic multigrid, plus others
+     sudo apt-get install -y python3-pip python3-numpy python3-scipy python3-ujson
+     sudo pip3 install pyamg
+     sudo pip3 install svgwrite
+
+     # Creating meshes
+     sudo apt-get install -y octave octave-msh octave-geometry hdf5-tools
+     # Fix a bug in geometry package for svg.
+     # Note that sed is _not_ using extended regular expressions (no "-r")
+     sudo sed -i -e 's/,{0},/,"{0}",/g' -e 's/,{1},/,"{1}",/g'  /usr/share/octave/packages/geometry-2.1.0/io/@svg/parseSVGData.py
+     
      # Used to support generation of documentation from schema
      sudo apt-get install -y xsltproc ant libsaxon-java docbook docbook-xsl-ns pandoc
 

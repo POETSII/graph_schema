@@ -1,0 +1,419 @@
+<?xml version="1.0"?>
+<Graphs xmlns="https://poets-project.org/schemas/virtual-graph-schema-v2">
+  <GraphType id="apsp">
+	<Documentation><![CDATA[
+		
+
+        ]]>
+	</Documentation>
+
+    <SharedCode><![CDATA[
+    uint64_t split_credit(unsigned nMsgs, uint64_t &curr)
+    {
+        assert(curr > nMsgs);
+        uint64_t msgCredit=(curr-1)/nMsgs;
+        assert(msgCredit>0);
+        curr -= msgCredit*nMsgs;
+        return msgCredit;
+    }
+    ]]></SharedCode>
+
+    <MessageTypes>
+      <MessageType id="__init__">
+		<Documentation>This doesn't have any properties</Documentation>
+      </MessageType>
+      
+      <MessageType id="progress">
+		<Documentation>Sent from nodes up to controller as they work through things. We use this to detect progress
+        within the current round, and to simultaneously collect the results.
+        </Documentation>
+        <Message>
+            <Scalar type="uint64_t" name="credit"><Documentation>Amount of credit contained in this message and being returned to the root</Documentation></Scalar>
+            <Scalar type="uint32_t" name="round"><Documentation>The current round this progress is talking about (mainly for sanity checks)</Documentation></Scalar>        
+            <Scalar type="uint32_t" name="maxDistance"><Documentation>Longest distance seen in this round</Documentation></Scalar>
+            <Scalar type="uint32_t" name="sumDistance"><Documentation>Sum of all distances in this round.</Documentation></Scalar>
+        </Message>
+      </MessageType>
+
+      <MessageType id="dist">
+		<Documentation>Shares a new distance update with connected nodes</Documentation>
+        <Message>
+            <Scalar type="uint64_t" name="credit"><Documentation>Amount of credit in this message</Documentation></Scalar>
+            <Scalar type="uint32_t" name="round"><Documentation>The current round this progress is talking about (mainly for sanity checks)</Documentation></Scalar>
+            <Scalar type="uint32_t" name="distance"><Documentation>Distance of sending node from the source for the current round</Documentation></Scalar>
+        </Message>
+      </MessageType>
+
+      <MessageType id="begin">
+        <Documentation>Sent to start the next round. This implicitly carries MAX_CREDIT</Documentation>
+        <Message>
+            <Scalar type="uint32_t" name="round"><Documentation>Round that is currently starting, and also the id of the source for that round.</Documentation></Scalar>
+        </Message>
+      </MessageType>
+
+      <MessageType id="credit_request">
+        <Message>
+            <Scalar type="uint64_t" name="creditRequested" />
+        </Message>
+      </MessageType>
+
+      <MessageType id="credit_grant">
+        <Message>
+            <Scalar type="uint64_t" name="creditGranted" />
+        </Message>
+      </MessageType>
+    </MessageTypes>
+    
+    <DeviceTypes>
+        <DeviceType id="credit_alloc">
+            <State>
+                <Scalar name="leftCreditRequested" type="uint64_t" />
+                <Scalar name="rightCreditRequested" type="uint64_t" />
+                <Scalar name="credit" type="uint64_t" />
+            </State>
+
+            <InputPin name="left_req"><![CDATA[
+            deviceState->leftCreditRequested += message->creditRequested;
+            ]]></InputPin>
+
+            <InputPin name="left_grant"><![CDATA[
+            
+            deviceState->leftCreditRequested += message->creditRequested;
+            ]]></InputPin>
+
+            <InputPin name="right_req"><![CDATA[
+            deviceState->rightCreditRequested += message->creditRequested;
+            ]]></InputPin>
+
+            <InputPin name="root_grant"><![CDATA[
+            deviceState->credit += message->creditGranted;
+            ]]></InputPin>
+
+
+        </DeviceType>
+
+      <DeviceType id="node">
+		<Properties>
+		  <Scalar type="uint32_t" name="index"><Documentation>The contiguous index of the graph node</Documentation></Scalar>
+          <Scalar type="uint32_t" name="degree"><Documentation>Number of outgoing edges for this node.</Documentation></Scalar>
+		</Properties>
+		
+		<State>
+		  <Scalar type="uint32_t" name="round" />
+          <Scalar type="uint32_t" name="dist" />
+          <Scalar type="uint64_t" name="credit" />
+		</State>
+		
+		<ReadyToSend><![CDATA[
+            if(deviceState->credit > 0){
+                // If we have credit, then we are active
+                if(deviceState->distDirty){
+                    if(deviceState->credit <= deviceProperties->degree){
+                        // We don't have enough credit to do a flood + an update
+                        *readyToSend = OUTPUT_FLAG_request_credit;
+                    }else{
+                        // Send flood in preference to an update
+                        *readyToSend = OUTPUT_FLAG_flood_out;
+                    }
+                }else{
+                    // nothing to flood, so return credit and send current distance to root
+                    *readyToSend = OUTPUT_FLAG_progress_out;
+                }
+            }else{
+                *readyToSend = 0;
+            }
+		]]></ReadyToSend>
+
+        <InputPin name="__init__" messageTypeId="__init__">
+          <OnReceive><![CDATA[
+		  deviceState->round=INT_MAX;
+		  ]]></OnReceive>
+		</InputPin>
+
+        <InputPin name="begin_in" messageTypeId="begin">
+            <OnReceive><![CDATA[
+            if(message->round==deviceProperties->index){
+                // It is this device's turn
+                deviceState->round=message->round;
+                deviceState->version=0;
+                deviceState->dist=0; // Start from here
+                deviceState->distDirty=true;
+                deviceState->credit=CREDIT_MAX;
+            }
+            ]]></OnReceive>
+        </InputPin>
+		
+		<OutputPin name="flood_out" messageTypeId="dist">
+		  <OnSend><![CDATA[
+          assert(deviceState->distDirty);
+          assert(deviceState->credit > deviceProperties->degree);
+
+          message->credit = split_credit(deviceProperties->degree, deviceState->credit);
+		  message->round = deviceState->round;
+          message->distance = deviceState->dist;
+
+          deviceState->distDirty = false;
+		  ]]></OnSend>
+		</OutputPin>
+		
+		<InputPin name="flood_in" messageTypeId="dist">
+            <Properties>
+                <Scalar type="uint32_t" name="w" default="1" />
+            </Properties>
+		  <OnReceive><![CDATA[
+		  if(message->round!=deviceState->round){
+                deviceState->round=message->round;
+                deviceState->dist=0xFFFFFFFFul;
+                handler_log(2, "New round=%u", message->round);
+                assert(dist->credit==0);
+          }
+          auto newDist=message->distance + edgeProperties->w;
+          if(newDist < deviceState->dist){
+                deviceState->dist = newDist;
+                deviceState->distDirty = true;
+                handler_log(2, "New dist=%u, ew=%u", deviceState->dist, edgeProperties->w);
+          }
+          deviceState->credit += message->credit;
+		  ]]></OnReceive>
+		</InputPin>
+
+        <OutputPin name="request_credit" messageTypeId="credit_request">
+            <![CDATA[
+            message->minCredit=deviceProperties->degree +1 - deviceState->degree;
+            message->source=deviceProperties->index;
+            ]]>
+        </OutputPin>
+
+        <InputPin name="grant_credit" messageTypeId="credit_grant">
+            <![CDATA[
+            if(message->
+            ]]>
+        </InputPin>
+
+        <OutputPin name="progress_out" messageTypeId="progress">
+            <OnSend><![CDATA[
+                assert(!deviceState->distDirty);
+                assert(deviceState->credit > 0);
+
+                message->round=deviceState->round;
+                message->credit=deviceState->credit;
+                message->maxDistance=deviceState->dist;
+                message->sumDistance=deviceState->dist;
+                
+                deviceState->credit=0;
+            ]]></OnSend>
+        </OutputPin>
+      </DeviceType>
+
+    <DeviceType id="branch">
+	  <Properties>
+	    <Scalar type="uint32_t" name="node_count"/>
+	  </Properties>
+	  
+	  <State>
+
+        <Scalar type="uint8_t" name="dirty" />
+        <Scalar type="uint32_t" name="round" />
+        <Scalar type="uint32_t" name="version" />
+        <Scalar type="uint32_t" name="localSendCount" />
+        <Scalar type="uint32_t" name="localRecvCount" />
+
+		<Scalar type="uint32_t" name="leftVersion" />
+        <Scalar type="uint32_t" name="leftMaxDistance" />
+        <Scalar type="uint32_t" name="leftSumDistance" />
+        <Scalar type="uint32_t" name="leftSendCount" />
+        <Scalar type="uint32_t" name="leftRecvCount" />
+
+        <Scalar type="uint32_t" name="rightVersion" />
+        <Scalar type="uint32_t" name="rightMaxDistance" />
+        <Scalar type="uint32_t" name="rightSumDistance" />
+        <Scalar type="uint32_t" name="rightSendCount" />
+        <Scalar type="uint32_t" name="rightRecvCount" />
+
+        
+	  </State>
+	  
+	  <ReadyToSend><![CDATA[
+      if(deviceState->dirty && deviceState->leftVersion>0 && deviceState->rightVersion>0){
+            *readyToSend = OUTPUT_FLAG_progress_out;
+      }else{
+            *readyToSend = 0;
+      }
+	  ]]></ReadyToSend>
+
+    <InputPin name="__init__" messageTypeId="__init__">
+          <OnReceive><![CDATA[
+		  deviceState->round=0xFFFFFFFFul; // -1
+		  ]]></OnReceive>
+		</InputPin>
+
+        <InputPin name="progress_in_left" messageTypeId="progress">
+            <OnReceive><![CDATA[
+                if(message->round != deviceState->round){
+                    assert(message->version > 0);
+                    assert(deviceState->round+1 == message->round);
+                    deviceState->round=message->round;
+                    deviceState->version=0;
+                    deviceState->leftVersion=0;
+                    deviceState->rightVersion=0;
+                    deviceState->localSendCount=0;
+                    deviceState->localRecvCount=0;
+                }
+
+                deviceState->localRecvCount++;
+
+                if(message->version < deviceState->leftVersion){
+                    return;
+                }
+                assert(message->version != deviceState->leftVersion);
+
+                deviceState->dirty=true;
+                deviceState->leftVersion=message->version;
+                deviceState->leftMaxDistance=message->maxDistance;
+                deviceState->leftSumDistance=message->sumDistance;
+                deviceState->leftSendCount=message->sendCount;
+                deviceState->leftRecvCount=message->recvCount;
+            ]]></OnReceive>
+        </InputPin>
+
+        <InputPin name="progress_in_right" messageTypeId="progress">
+            <OnReceive><![CDATA[
+                if(message->round != deviceState->round){
+                    assert(message->version > 0);
+                    assert(deviceState->round+1 == message->round);
+                    deviceState->round=message->round;
+                    deviceState->version=0;
+                    deviceState->leftVersion=0;
+                    deviceState->rightVersion=0;
+                    deviceState->localSendCount=0;
+                    deviceState->localRecvCount=0;
+                }
+
+                deviceState->localRecvCount++;
+
+                if(message->version < deviceState->rightVersion){
+                    return;
+                }
+                assert(message->version != deviceState->rightVersion);
+
+                deviceState->dirty=true;
+                deviceState->rightVersion=message->version;
+                deviceState->rightMaxDistance=message->maxDistance;
+                deviceState->rightSumDistance=message->sumDistance;
+                deviceState->rightSendCount=message->sendCount;
+                deviceState->rightRecvCount=message->recvCount;
+            ]]></OnReceive>
+        </InputPin>
+	
+
+        <OutputPin name="progress_out" messageTypeId="progress">
+            <OnSend><![CDATA[
+            assert(deviceState->dirty && deviceState->leftVersion>0 && deviceState->rightVersion>0);
+            
+            deviceState->version++;
+            deviceState->localSendCount++;
+
+            message->version=deviceState->version;
+            message->round=deviceState->round;
+            message->maxDistance=std::max(deviceState->leftMaxDistance , deviceState->rightMaxDistance);
+            message->sumDistance=deviceState->leftSumDistance + deviceState->rightSumDistance;
+            message->sendCount=deviceState->leftSendCount + deviceState->rightSendCount + deviceState->localSendCount;
+            message->recvCount=deviceState->leftRecvCount + deviceState->rightRecvCount + deviceState->localRecvCount;
+
+            deviceState->dirty=false;
+            ]]></OnSend>
+        </OutputPin>
+    </DeviceType>
+
+	<DeviceType id="controller">
+	  <Properties>
+	    <Scalar type="uint32_t" name="node_count"/>
+        <Scalar type="uint32_t" name="refSumMaxDist"/>
+        <Scalar type="uint32_t" name="refSumSumDist"/>
+	  </Properties>
+	  
+	  <State>
+		<Scalar type="uint32_t" name="localRecvCount" />
+
+        <Scalar type="uint32_t" name="round" />
+        <Scalar type="uint8_t" name="roundComplete" />
+
+        <Scalar type="uint32_t" name="maxDist" />
+        <Scalar type="uint32_t" name="sumDist" />
+
+        <Scalar type="uint32_t" name="sumMaxDist" />
+        <Scalar type="uint32_t" name="sumSumDist"></Scalar>
+	  </State>
+	  
+	  <ReadyToSend><![CDATA[
+      if(deviceState->roundComplete){
+            *readyToSend = OUTPUT_FLAG_begin_out;
+      }else{
+            *readyToSend = 0;
+      }
+	  ]]></ReadyToSend>
+
+        <InputPin name="__init__" messageTypeId="__init__">
+            <OnReceive><![CDATA[
+            // trigger first begin message
+            deviceState->round=0;
+            deviceState->roundComplete=true;
+            ]]>
+            </OnReceive>
+        </InputPin>
+	  
+	  <InputPin name="progress_in" messageTypeId="progress">
+	    <OnReceive><![CDATA[
+        
+        handler_log(3, "Round %u : sendCount=%u, recvCount=%u, messageRound=%u", deviceState->round, message->sendCount, message->recvCount, message->round);
+        
+        assert(deviceState->round==message->round);
+
+        deviceState->localRecvCount++;
+
+        if(message->sendCount == message->recvCount+deviceState->localRecvCount){
+            // We can only receive progress if _all_ nodes have sent a progress message,
+            // so as soon as things balance it is finished
+
+            handler_log(2, "Round %u complete", deviceState->round);
+
+            deviceState->sumMaxDist += message->maxDistance;
+            deviceState->sumSumDist += message->sumDistance;
+
+            deviceState->roundComplete = true;
+            deviceState->round++;            
+        }
+
+	    ]]></OnReceive>
+	  </InputPin>
+	  
+	  <OutputPin name="begin_out" messageTypeId="begin">
+	    <OnSend><![CDATA[
+	    assert(deviceState->roundComplete);
+
+        deviceState->roundComplete=false;
+        deviceState->localRecvCount=0;
+
+        message->round = deviceState->round;
+
+        if(deviceState->round >= deviceProperties->node_count){
+            handler_log(1, "sumMaxDist=%u, refSumMaxDist=%u", deviceState->sumMaxDist, deviceProperties->refSumMaxDist);
+            handler_log(1, "sumSumDist=%u, refSumSumDist=%u", deviceState->sumSumDist, deviceProperties->refSumSumDist);
+
+            auto sumMaxDistOk = deviceState->sumMaxDist==deviceProperties->refSumMaxDist;
+            assert(sumMaxDistOk);
+            auto sumSumDistOk = deviceState->sumSumDist==deviceProperties->refSumSumDist;
+            assert(sumSumDistOk);
+
+            *doSend = false;
+            handler_exit(sumMaxDistOk && sumSumDistOk ? 0 : -1);
+        }
+	    ]]></OnSend>
+	  </OutputPin>
+
+      </DeviceType>
+	  
+	  </DeviceTypes>
+	</GraphType>
+</Graphs>
+

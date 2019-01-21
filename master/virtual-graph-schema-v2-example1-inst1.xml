@@ -1,0 +1,47 @@
+<?xml version="1.0"?>
+<Graphs xmlns="https://poets-project.org/schemas/virtual-graph-schema-v2">
+  <!-- This is a bit like a #include. It effectively pastest the
+       graph definition in from the given file.  -->
+  <GraphTypeReference
+        id="dt10_graph_schema_example"
+        src="virtual-graph-schema-v1-example1.xml"
+  />
+    
+  <GraphInstance id="inst1" graphTypeId="dt10_graph_schema_example">
+    <Documentation>
+    This is a single self-stimulating cell called "x" which is a
+    leader.
+    <pre>
+    ````        
+            id:"x"
+         +------------+
+         |     in     +---.
+         +------------+   |
+         |P  leader=1 |   |
+         |S  hot=?    |   |
+         +------------+   |
+     .-->|    out     |   |
+     |   +------------+   |
+     |                    |
+     '--------------------'   
+    ````
+    </pre>
+    
+    When activated, this device will just keep sending messages
+    to itself. Between send and receive the device will be cold;
+    between receive and send the device will be hot.
+    </Documentation>
+    <DeviceInstances>
+      <!-- Create a single device instance with unique instance
+           id "x" and deviceTypeId "cell" -->
+      <DevI id="x" type="dev">
+        <P>"leader":1</P> <!-- Set the "leader" property to
+                               true. -->
+      </DevI>
+    </DeviceInstances>
+    <EdgeInstances>
+      <!-- Connect the out pin of "x" to its in pin. -->
+      <EdgeI path="x:in-x:out" />
+    </EdgeInstances>
+  </GraphInstance>
+</Graphs>

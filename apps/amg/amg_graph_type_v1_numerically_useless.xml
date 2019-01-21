@@ -1,0 +1,569 @@
+<?xml version="1.0"?>
+<Graphs xmlns="https://poets-project.org/schemas/virtual-graph-schema-v2">
+<GraphType id="amg">
+
+<Documentation>
+This works from a state machine point of view, but numerically fails.
+
+We need to send the true residual up the tree, otherwise it blows up,
+so it seems we can't avoid doing a full cycle.
+</Documentation>
+
+<SharedCode><![CDATA[
+#include <cmath>
+]]></SharedCode>
+
+<Properties>
+    <Scalar type="float" name="residualTol"><Documentation>The tolerance for the maximum absolute residual.</Documentation></Scalar>
+</Properties>
+
+<MessageTypes>
+    <MessageType id="linear_problem">
+        <Documentation>Provides a problem $A x = b$, with $A$ a known matrix encoded in the edge weights.</Documentation>
+        <Message>
+            <Scalar type="float" name="x" ><Documentation>Guess at solution. Part of $x=x_(1)$.</Documentation></Scalar>
+            <Scalar type="float" name="b" ><Documentation>Value to solve for. Part of $b=b_(1)$.</Documentation></Scalar>
+        </Message>
+    </MessageType>
+
+    <MessageType id="linear_solution">
+        <Documentation>Provides a solution to $A x = b$.</Documentation>
+        <Message>
+            <Scalar type="float" name="x"><Documentation>Solution. Part of $x=x_(1)$.</Documentation></Scalar>
+            <Scalar type="float" name="r"><Documentation>Global residual of the solution. $r = max(A x - b)$.</Documentation></Scalar>
+            <Scalar type="int32_t" name="i"><Documentation>Number of iterations used.</Documentation></Scalar>
+        </Message>
+    </MessageType>
+
+    <MessageType id="jacobi_exchange">
+        <Documentation>Shares a current solution to $A_(i) x_(i) = b_(i)$.</Documentation>
+        <Message>
+            <Scalar type="float" name="x"><Documentation>Solution. Part of $x=x_(i)$.</Documentation></Scalar>
+        </Message>
+    </MessageType>
+
+
+    <MessageType id="fine_to_coarse">
+        <Documentation>Messages being sent up the grid, in order to solve $A_(i) x_(i) = b_(i)$, where $A_(i)$ is some restricted
+            version of $A_(i) = R_(i) A_(i-1)$, and $b_(i)$ is a restricted version of the residual $R_(i) (A_(i-1) x_(i-1) - b_(i-1))$.
+
+            $max(r)$ is the _local_ maximum residual, i.e. it is a part of $max( A_0 x_0 - b_0) on the
+            finest level, but only covers the parts of the cone the device is connected to.
+            </Documentation>
+        <Message>
+            <Scalar type="float" name="b" ><Documentation>Value to solve for. Part of b_(i-1)</Documentation></Scalar>
+            <Scalar type="float" name="max_r"><Documentation>Max residual of all finer nodes (though not for whole network)</Documentation></Scalar>
+        </Message>
+    </MessageType>
+
+    <MessageType id="coarse_to_fine">
+        <Documentation>Corrections sent down the grid. These will be prolonged back onto the finer
+        solution, so $x_(i) = x_(i) + P_(i+1) x_(i+1)$.
+        $max(r)$ is the _global_ maximum residual for the original version of x at the finest level of the grid.
+        </Documentation>
+        <Message>
+            <Scalar type="float" name="x" ><Documentation>Best guess for $x_(i+1)$</Documentation></Scalar>
+            <Scalar type="float" name="max_r"><Documentation>Max residual of all nodes (for the whole network)</Documentation></Scalar>
+        </Message>
+    </MessageType>
+
+</MessageTypes>
+
+<DeviceTypes>
+
+    <DeviceType id="root">
+        <Properties>
+            <Scalar type="int32_t" name="fineTotal" ><Documentation>Number of fine that we receive from (not nesc. that we send to)</Documentation></Scalar>
+            <Scalar type="float" name="inv_Adiag" />
+        </Properties>
+
+        <State>
+            <Scalar type="int32_t" name="fineSeen" />
+            <Scalar type="float" name="fineAcc" />
+            <Scalar type="float" name="fineMaxResidual" />
+        </State>
+
+        <ReadyToSend><![CDATA[
+        *readyToSend = deviceState->fineSeen == deviceProperties->fineTotal ? RTS_FLAG_fine_down : 0;
+        handler_log(2, "root RTS : 0x%x", *readyToSend);
+        ]]></ReadyToSend>
+
+        <InputPin name="fine_up" messageTypeId="fine_to_coarse">
+            <Properties>
+                <Scalar type="float" name="R" ><Documentation>The component of R for this edge.</Documentation></Scalar>
+            </Properties>
+            <OnReceive><![CDATA[
+            assert(deviceState->fineSeen < deviceProperties->fineTotal);
+            deviceState->fineSeen++;
+            deviceState->fineAcc += edgeProperties->R*message->b;
+            deviceState->fineMaxResidual = std::max(deviceState->fineMaxResidual, message->max_r);
+            handler_log(3, "maxMaxResidual=%g", deviceState->fineMaxResidual);
+            ]]></OnReceive>
+        </InputPin>
+
+        <OutputPin name="fine_down" messageTypeId="coarse_to_fine">
+            <OnSend><![CDATA[
+            assert(deviceState->fineSeen == deviceProperties->fineTotal);
+
+            message->x = deviceState->fineAcc * deviceProperties->inv_Adiag;
+            message->max_r = deviceState->fineMaxResidual;
+            handler_log(3, "msg.maxMaxResidual=%g", deviceState->fineMaxResidual);
+
+            deviceState->fineSeen=0;
+            deviceState->fineAcc=0;
+            deviceState->fineMaxResidual=0;
+            ]]></OnSend>
+        </OutputPin>
+    </DeviceType>
+    
+    <!--  #######################################################################################  -->
+    <!--  #######################################################################################  -->
+    <!--  #######################################################################################  -->
+    <!--  #######################################################################################  -->
+    <!--  #######################################################################################  -->
+    
+    
+    
+    <DeviceType id="branch">
+        <Documentation>This is a middle tier solver, so it is only involved in
+        the sweep up and down.
+        </Documentation>
+
+        <SharedCode><![CDATA[
+
+        enum State{
+            State_Idle,         // Waiting for a problem to solve
+                                // when valid : send/peer_out -> State_Pre
+                                
+            State_Pre,          // Waiting till we've seen all peer messages
+                                // when pseen==nhood :  send/coarse_up -> State_Coarse
+            
+            State_Coarse        // Waiting till we get a message back from coarse
+                                // when r<INF : send/fine_down -> State_Idle
+        };
+
+        ]]></SharedCode>
+
+        <Properties>
+            <Scalar type="int32_t" name="fineCount"><Documentation>Number of fine that we receive from (not nesc. send to).</Documentation></Scalar>
+            <Scalar type="int32_t" name="peerCount" ><Documentation>Number of peers that we receive from (not nesc. send to).</Documentation></Scalar>
+            <Scalar type="int32_t" name="coarseCount"><Documentation>Number of coarse that we receive from (not nesc. send to).</Documentation></Scalar>
+            <Scalar type="float" name="Ad" />
+            <Scalar type="float" name="AdInvOmega" />
+            <Scalar type="float" name="omega" />
+        </Properties>
+
+        <State>
+            <Scalar type="int32_t" name="state" />
+
+            <Scalar type="float" name="b"><Documentation>Current problem RHS</Documentation></Scalar>
+            <Scalar type="float" name="x"><Documentation>Current problem guess</Documentation></Scalar>
+            <Scalar type="float" name="max_r"><Documentation>Global worst residual</Documentation></Scalar>
+
+            <Scalar type="int32_t" name="fineSeen" />
+            <Scalar type="float" name="fineAcc" />
+            <Scalar type="float" name="fineMaxResidual" />
+
+            <Scalar type="int32_t" name="peerSeen" />
+            <Scalar type="float" name="peerAcc" />
+
+            <Scalar type="int32_t" name="coarseSeen" />
+            <Scalar type="float" name="coarseAcc" />
+            
+            
+            <Scalar type="float" name="dx"><Documentation>DEBUG ONLY - take me out</Documentation></Scalar>
+            <Scalar type="float" name="Lomega_x"><Documentation>DEBUG ONLY - take me out</Documentation></Scalar>
+            <Scalar type="float" name="LHS"><Documentation>DEBUG ONLY - take me out</Documentation></Scalar>
+        </State>
+
+        <ReadyToSend><![CDATA[
+            *readyToSend = 0;
+            switch(deviceState->state){
+            case State_Idle:
+                if(deviceState->fineSeen==deviceProperties->fineCount){
+                    *readyToSend |= RTS_FLAG_peer_out;
+                }
+                break;
+            case State_Pre:
+                if(deviceState->peerSeen==deviceProperties->peerCount){
+                    *readyToSend |= RTS_FLAG_coarse_up;
+                }
+                break;
+            case State_Coarse:
+                if(deviceState->coarseSeen==deviceProperties->coarseCount){
+                    *readyToSend |= RTS_FLAG_fine_down;
+                }
+                break;
+            default:
+                assert(0);
+                break;
+            }
+        ]]></ReadyToSend>
+
+
+        <InputPin name="fine_up" messageTypeId="fine_to_coarse">
+            <Properties>
+                <Scalar type="float" name="R" />
+            </Properties>
+            <OnReceive><![CDATA[
+            assert(deviceState->state==State_Idle);
+            assert(deviceState->fineSeen < deviceProperties->fineCount);
+
+            deviceState->fineSeen++;  // Might enable send on peer_out
+            deviceState->fineAcc+=edgeProperties->R * message->b;
+            deviceState->fineMaxResidual=std::max(deviceState->fineMaxResidual, message->max_r);
+            ]]></OnReceive>
+        </InputPin>
+
+
+        <OutputPin name="peer_out" messageTypeId="jacobi_exchange">
+            <OnSend><![CDATA[
+            assert(deviceState->state==State_Idle);
+            assert(deviceState->fineSeen == deviceProperties->fineCount);
+            
+            deviceState->x = deviceState->fineAcc;
+            deviceState->fineSeen=0;
+            deviceState->fineAcc=0;
+            deviceState->fineMaxResidual=0;
+            deviceState->state=State_Pre;
+            
+            message->x=deviceState->x;
+            ]]></OnSend>
+        </OutputPin>
+
+        <InputPin name="peer_in" messageTypeId="jacobi_exchange">
+            <Properties>
+                <Scalar type="float" name="A" />
+            </Properties>
+            <OnReceive><![CDATA[
+            // This can happen in any state at all
+            assert(deviceState->peerSeen < deviceProperties->peerCount);
+            
+            deviceState->peerSeen ++;  // This will eventually allow a send/coarse_up
+            deviceState->peerAcc += edgeProperties->A * message->x;
+            
+            ]]></OnReceive>
+        </InputPin>
+
+
+        <OutputPin name="coarse_up" messageTypeId="fine_to_coarse">
+            <OnSend><![CDATA[
+            assert(deviceState->state==State_Pre);
+            assert(deviceState->peerSeen==deviceProperties->peerCount);
+
+            float r  = deviceState->b - deviceState->peerAcc - deviceProperties->Ad * deviceState->x;
+            float dx =(deviceState->b - deviceState->peerAcc) * deviceProperties->AdInvOmega
+                        - deviceProperties->omega * deviceState->x;
+
+            deviceState->LHS = (deviceState->b - deviceState->peerAcc) * deviceProperties->AdInvOmega;
+            deviceState->Lomega_x = deviceProperties->omega * deviceState->x; // DEBUG
+            deviceState->dx=dx; // DEBUG
+
+            message->b = r;               // Use the old residual
+            message->max_r = std::abs(r) ;          // ... for both
+
+            deviceState->x += dx;
+            deviceState->peerSeen=0;
+            deviceState->peerAcc=0;
+            deviceState->max_r=FLT_MAX;
+            deviceState->state=State_Coarse;
+            ]]></OnSend>
+        </OutputPin>
+
+        <InputPin name="coarse_down" messageTypeId="coarse_to_fine">
+            <Properties>
+                <Scalar type="float" name="P" />
+            </Properties>
+            <OnReceive><![CDATA[
+            assert(deviceState->state == State_Coarse);
+            assert(deviceState->coarseSeen < deviceProperties->coarseCount);
+            
+            // We should receive exactly the same max_r from _all_ coarse nodes, as it all comes from one root.
+            assert(deviceState->max_r == FLT_MAX || deviceState->max_r==message->max_r);
+
+            deviceState->coarseSeen++;   // This may enable sending on fine_down
+            deviceState->coarseAcc += edgeProperties->P * message->x;
+            deviceState->max_r = message->max_r;
+            ]]></OnReceive>
+        </InputPin>
+
+        <OutputPin name="fine_down" messageTypeId="coarse_to_fine">
+            <OnSend><![CDATA[
+            assert(deviceState->state==State_Coarse);
+            assert(deviceState->coarseSeen==deviceProperties->coarseCount);
+            
+            // TODO: This is slightly dangerous, as it is looking at the residual from
+            // before both the previous smooth and correction. Should it select the old x?
+
+            deviceState->x += deviceState->coarseAcc;
+            deviceState->coarseSeen=0;
+            deviceState->coarseAcc=0;
+            deviceState->state=State_Idle;
+            
+            message->x = deviceState->x;
+            message->max_r = deviceState->max_r;
+            ]]></OnSend>
+        </OutputPin>
+
+
+    </DeviceType>
+    
+    
+    <!--  #######################################################################################  -->
+    <!--  #######################################################################################  -->
+    <!--  #######################################################################################  -->
+    <!--  #######################################################################################  -->
+    <!--  #######################################################################################  -->
+    
+
+    <DeviceType id="leaf">
+        <Documentation>This is the finest level linear solver, with one device per element in
+        the original problem matrix. The finest is not the same as the middle-tier
+        nodes, as it needs to control the iteration until residual is met (though this
+        could be controlled by a property and a state).
+        </Documentation>
+
+        <SharedCode><![CDATA[
+
+        enum State{
+            State_Idle,         // Waiting for a problem to solve
+                                // when r > tol -> State_Pre
+                                
+            State_Pre,          // Waiting till we've seen all peer messages
+                                // when pseen==nhood :  send/coarse_up -> State_Coarse
+            
+            State_Coarse        // Waiting till we get a message back from coarse
+                                // when r<= tol   : send/peer_out -> State_Pre
+                                // when r<tol<INF : send/solution -> State_Idle
+        };
+
+        ]]></SharedCode>
+
+        <Properties>
+            <Scalar type="int32_t" name="peerCount" ><Documentation>Number of peers that we receive from (not nesc. send to).</Documentation></Scalar>
+            <Scalar type="int32_t" name="coarseCount"><Documentation>Number of coarse that we receive from (not nesc. send to).</Documentation></Scalar>
+            <Scalar type="float" name="Ad" />
+            <Scalar type="float" name="AdInvOmega" />
+            <Scalar type="float" name="omega" />
+        </Properties>
+
+        <State>
+            <Scalar type="int32_t" name="state" />
+            <Scalar type="int32_t" name="i"><Documentation>Number of iterations</Documentation></Scalar>
+
+            <Scalar type="float" name="b"><Documentation>Current problem RHS</Documentation></Scalar>
+            <Scalar type="float" name="x"><Documentation>Current problem guess</Documentation></Scalar>
+            <Scalar type="float" name="r"><Documentation>Global worst residual</Documentation></Scalar>
+
+            <Scalar type="int32_t" name="peerSeen" />
+            <Scalar type="float" name="peerAcc" />
+
+            <Scalar type="int32_t" name="coarseSeen" />
+            <Scalar type="float" name="coarseAcc" />
+            
+            
+            <Scalar type="float" name="dx"><Documentation>DEBUG ONLY - take me out</Documentation></Scalar>
+            <Scalar type="float" name="Lomega_x"><Documentation>DEBUG ONLY - take me out</Documentation></Scalar>
+            <Scalar type="float" name="LHS"><Documentation>DEBUG ONLY - take me out</Documentation></Scalar>
+        </State>
+
+        <ReadyToSend><![CDATA[
+            *readyToSend = 0;
+            switch(deviceState->state){
+            case State_Idle:
+                if(deviceState->r > graphProperties->residualTol){
+                    *readyToSend |= RTS_FLAG_peer_out;
+                }
+                break;
+            case State_Pre:
+                if(deviceState->peerSeen==deviceProperties->peerCount){
+                    *readyToSend |= RTS_FLAG_coarse_up;
+                }
+                break;
+            case State_Coarse:
+                if(deviceState->coarseSeen==deviceProperties->coarseCount){
+                    if(deviceState->r <= graphProperties->residualTol){
+                        *readyToSend |= RTS_FLAG_solution;
+                    }else{
+                        *readyToSend |= RTS_FLAG_peer_out;
+                    }
+                }
+                break;
+            default:
+                assert(0);
+                break;
+            }
+            handler_log(3, "state=%d, coarseSeen=%d, coarseCount=%d", deviceState->state, deviceState->coarseSeen, deviceProperties->coarseCount);
+            handler_log(2, "leaf RTS : 0x%x", *readyToSend);
+        ]]></ReadyToSend>
+
+
+        <InputPin name="problem" messageTypeId="linear_problem">
+            <OnReceive><![CDATA[
+            assert(deviceState->state==State_Idle);
+            assert(deviceState->r <= graphProperties->residualTol); // Condition for entering this state
+
+            deviceState->b = message->b;
+            deviceState->x = message->x;
+            deviceState->r = FLT_MAX;     // This will trigger RTS for peer_out
+            ]]></OnReceive>
+        </InputPin>
+
+
+        <OutputPin name="peer_out" messageTypeId="jacobi_exchange">
+            <OnSend><![CDATA[
+            assert(deviceState->state==State_Idle || deviceState->state==State_Coarse);
+            
+            // Coming from idle -> Pre, we have coarseAcc=0
+            // Otherwise for coarse -> pre it is the correction 
+            deviceState->x = deviceState->x + deviceState->coarseAcc;
+            deviceState->coarseSeen=0;
+            deviceState->coarseAcc=0;
+            deviceState->state=State_Pre;
+            
+            message->x=deviceState->x;
+            ]]></OnSend>
+        </OutputPin>
+
+        <InputPin name="peer_in" messageTypeId="jacobi_exchange">
+            <Properties>
+                <Scalar type="float" name="A" />
+            </Properties>
+            <OnReceive><![CDATA[
+            // This can happen in any state at all
+            assert(deviceState->peerSeen < deviceProperties->peerCount);
+            
+            deviceState->peerSeen ++;  // This will eventually allow a send/coarse_up
+            deviceState->peerAcc += edgeProperties->A * message->x;
+            
+            ]]></OnReceive>
+        </InputPin>
+
+
+        <OutputPin name="coarse_up" messageTypeId="fine_to_coarse">
+            <OnSend><![CDATA[
+            assert(deviceState->state==State_Pre);
+            assert(deviceState->peerSeen ==deviceProperties->peerCount);
+
+            float r  = deviceState->b - deviceState->peerAcc - deviceProperties->Ad * deviceState->x;
+            float dx =(deviceState->b - deviceState->peerAcc) * deviceProperties->AdInvOmega
+                        - deviceProperties->omega * deviceState->x;
+
+            deviceState->LHS = (deviceState->b - deviceState->peerAcc) * deviceProperties->AdInvOmega;
+            deviceState->Lomega_x = deviceProperties->omega * deviceState->x; // DEBUG
+            deviceState->dx=dx; // DEBUG
+
+            message->b = r;               // Use the old residual
+            message->max_r = std::abs(r) ;          // ... for both
+
+            deviceState->x += dx;
+            deviceState->peerSeen=0;
+            deviceState->peerAcc=0;
+            deviceState->r = FLT_MAX;
+            deviceState->state=State_Coarse;
+            ]]></OnSend>
+        </OutputPin>
+
+        <InputPin name="coarse_down" messageTypeId="coarse_to_fine">
+            <Properties>
+                <Scalar type="float" name="P" />
+            </Properties>
+            <OnReceive><![CDATA[
+            assert(deviceState->state == State_Coarse);
+            assert(deviceState->coarseSeen < deviceProperties->coarseCount);
+            
+            // We should receive exactly the same max_r from _all_ coarse nodes, as it all comes from one root.
+            assert(deviceState->r == FLT_MAX || deviceState->r==message->max_r);
+
+            deviceState->coarseSeen++;   // This many enable sending on either peer_out, or solution
+            deviceState->coarseAcc += edgeProperties->P * message->x;
+            deviceState->r = message->max_r;
+            ]]></OnReceive>
+        </InputPin>
+
+        <OutputPin name="solution" messageTypeId="linear_solution">
+            <OnSend><![CDATA[
+            assert(deviceState->state==State_Coarse);
+            assert(deviceState->coarseSeen==deviceProperties->coarseCount);
+            assert(deviceState->r <= graphProperties->residualTol);
+            
+            // TODO: This is slightly dangerous, as it is looking at the residual from
+            // before both the previous smooth and correction. Should it select the old x?
+
+            deviceState->x += deviceState->coarseAcc;
+            deviceState->coarseSeen=0;
+            deviceState->coarseAcc=0;
+            deviceState->state=State_Idle;
+            
+            message->x = deviceState->x;
+            message->r = deviceState->r;
+            ]]></OnSend>
+        </OutputPin>
+
+
+    </DeviceType>
+    
+    
+    <!--  #######################################################################################  -->
+    <!--  #######################################################################################  -->
+    <!--  #######################################################################################  -->
+    <!--  #######################################################################################  -->
+    <!--  #######################################################################################  -->
+    <!--  #######################################################################################  -->
+    
+
+    <DeviceType id="tester">
+        <Properties>
+            <Array type="float" name="b" length="8" />
+            <Array type="float" name="x" length="8" />
+        </Properties>
+
+        <State>
+            <Scalar type="int32_t" name="i" default="0" />
+        </State>
+
+        <ReadyToSend><![CDATA[
+        *readyToSend=0;
+        if( (deviceState->i < 16) && (0==(deviceState->i&1)) ){
+            *readyToSend=RTS_FLAG_problem;
+        }
+        handler_log(2, "test RTS : 0x%x", *readyToSend);
+        ]]></ReadyToSend>
+
+
+        <OutputPin name="problem" messageTypeId="linear_problem">
+            <OnSend><![CDATA[
+            assert((deviceState->i&1)==0);
+            assert(deviceState->i<16);
+
+            message->x = 5;
+            message->b = deviceProperties->b[deviceState->i];
+            deviceState->i++;
+            ]]></OnSend>
+        </OutputPin>
+
+       <InputPin name="solution" messageTypeId="linear_solution">
+            <OnReceive><![CDATA[
+            assert((deviceState->i&1)==1);
+            assert(deviceState->i<16);
+
+            auto rx=deviceProperties->x[deviceState->i/2];
+
+            auto x = message->x;
+            auto r = message->r;
+            auto i = message->i;
+
+            assert( (r>=0) && (r<graphProperties->residualTol) );
+
+            handler_log(3, " iter=%d, x=%g (dx=%g), r=%g, i=%d\n\n\n", deviceState->i/2, x, std::abs(x-rx), r, i);
+
+            deviceState->i++;
+            ]]></OnReceive>
+        </InputPin>
+    </DeviceType>
+
+</DeviceTypes>
+
+
+</GraphType>
+</Graphs>

@@ -1,0 +1,345 @@
+<?xml version="1.0"?>
+<Graphs xmlns="https://poets-project.org/schemas/virtual-graph-schema-v2">
+  <GraphType id="ising_spin_fix">
+    <!-- This is supposed to implement the method from [lubachevsky-87-asynchronous-ising-spin-models]:
+	 "Efficient Parallel Simulations of Asynchronous Cellular Arrays", 1987, Boris D. Lubachevsky
+	 
+	 The main difference with ising_spin is that this uses fixed point.
+
+	 We are also more careful to ensure that there is a definite least time within
+	 a neighbourhood. Every cell is given a tag, such that no two tags are the
+	 same for neighbouring cells - in practise this can just be a number from [0..9)
+
+	 0 1 2 0 1 2     0 1 2   0 0 0
+	 3 4 5 3 4 5  =  0 1 2 + 3 3 3
+	 6 7 8 6 7 8     0 1 2   6 6 6
+	 0 1 2 0 1 2
+	 3 4 5 3 4 5
+	 6 7 8 6 7 8 
+
+	 tag = (x%3)+(y%3)*3
+
+	 The tag then forms the 4 LSBs of the generated time, so that there is always
+	 a definitive least time within a neighbourhood.
+
+	 The erng has a mean of 2^17, and a maximum step of 2^22-1. Including the tag,
+	 that means each step moves (on average) 2^20, and the biggest step is 2^25-1.
+
+	 So we must have maxTime less than 2^32 - 2^25 to avoid wrap-around.
+
+	 Choosing maxStep=2^24 gives about 16 steps per device (for testing purposes, need more for relaxation)
+	 -->
+
+    <MetaData>
+      "nativeDimension":2
+    </MetaData>
+
+    <Properties>
+      <Scalar type="uint32_t" name="endTime" default="16777216" />
+      <Scalar type="uint32_t" name="width" />
+      <Scalar type="uint32_t" name="height" />
+      <Array name="probabilities" length="10" type="uint32_t" />
+    </Properties>
+
+    <SharedCode><![CDATA[
+
+    uint32_t mod(uint32_t x, uint32_t y)
+    {
+      while(x>=y){
+        x-=y;
+	}
+	return x;
+    }
+
+		uint32_t calc_tag(uint32_t x, uint32_t y)
+		{
+			return mod(x,3) + mod(y,3)*3;
+		}
+
+    uint32_t urng(uint32_t *state)
+    {
+      (*state) = (*state) *1664525+1013904223;
+      return (*state);
+    }
+
+    uint32_t rng_init(uint32_t x, uint32_t y)
+    {
+      y=(x<<16)^y;
+      for(unsigned i=0;i<10;i++){
+        y^=(y<<13); y^=(y>>17); (y^=(y<<5));
+      }
+      return y;
+    }
+
+		// This produces a time which is approximately distributed
+		// with a sort of exponential-ish distribution
+		// The maximum value is 2^21-1
+		// Expected value is:
+		// 0.5 * 0x4000 + 0.25 * 0x8000 + 0.125 * 0x10000 + ...
+		// = sum( 2^(-i-1) * 16384 * 2^i, i=0..5) + 2^-6 * 16384 * 2^6
+		// = sum( 16384 * 0.5, i=0..5 ) + 16384
+		// = 8192 * 6 + 16384 
+		// = 2^16
+		// 
+		// res=  2.^min(6,floor(-log2(rand(1,n)))) .* (rand(1,n)*32768);
+		uint32_t erng(uint32_t *state)
+    {
+			uint32_t v=urng(state);
+			uint32_t hi=v>>26; 		// Top 6 bits
+			uint32_t lo=(v<<6)>>17;				// Following 15 bits. Bottom 11 bits are discarded
+
+			uint32_t shift=6;
+			if(hi&1){ shift=0; }
+			else if(hi&2){ shift=1; }
+			else if(hi&4){ shift=2; }
+			else if(hi&8){ shift=3; }
+			else if(hi&16){ shift=4; }
+			else if(hi&32){ shift=5; }
+
+			uint32_t val=lo<<shift;
+			//fprintf(stderr, "2^%u*%u = %u\n", shift, lo, val);
+			return val;
+		}
+		
+		void cell_init(uint32_t x, uint32_t y, int32_t *spin, uint32_t *time, uint32_t *seed)
+		{
+			uint32_t tag = calc_tag(x,y);
+			*seed=rng_init( x, y );
+			*spin = (urng(seed)>>31) ? +1 : -1;
+			*time = (erng(seed) << 4) | tag ;
+		}
+
+    void chooseNextEvent(const uint32_t *probabilities, uint32_t tag, uint32_t *rng, int32_t *spins, uint32_t *times)
+    {
+      int sumStates=0;
+      for(unsigned i=1; i<5; i++){ // Only sum neighbours
+        sumStates+=spins[i];
+      }
+
+      unsigned index=(sumStates+4)/2 + 5*(spins[0]+1)/2;
+      uint32_t prob=probabilities[index];
+
+      if( urng(rng) < prob){
+        spins[0] *= -1; // Flip
+      }
+      times[0] = (((times[0]>>4) + erng(rng)) << 4) | tag;
+      }
+
+      // <Scalar type="uint32_t" name="direction" /> <!-- 1=Up, 2=Right, 3=Down, 4=Left -->
+
+      void get_neighbour_coords(uint32_t x, uint32_t y, uint32_t w, uint32_t h, int dir, uint32_t &nx, uint32_t &ny)
+      {
+      nx=x;
+      ny=y;
+      if(dir==1){ ny = y==0 ? h-1 : y-1; }
+      if(dir==2){ nx = x==w-1 ? 0 : x+1; }
+      if(dir==3){ ny = y==h-1 ? 0 : y+1; }
+      if(dir==4){ nx = x==0 ? w-1 : x-1; }
+      }
+
+    ]]></SharedCode>
+
+    <MessageTypes>
+      <MessageType id="__init__">
+	<!-- This doesn't have any properties -->
+      </MessageType>
+
+      <MessageType id="__print__">
+				<!-- This doesn't have any properties -->
+      </MessageType>
+
+			<MessageType id="finished">
+				<!-- This doesn't have any properties -->
+      </MessageType>
+
+      <MessageType id="update">
+				<Message>
+					<Scalar type="uint32_t" name="time" default="0" />
+					<Scalar type="uint32_t" name="spin" /> <!-- By implication, it had the opposite spin before-hand -->
+				</Message>
+      </MessageType>
+    </MessageTypes>
+
+    <DeviceTypes>
+      <DeviceType id="cell">
+
+			<SharedCode><![CDATA[
+			
+			]]></SharedCode>
+
+	<Properties>
+	  <Scalar type="uint32_t" name="x" default="0" />
+	  <Scalar type="uint32_t" name="y" default="0" />
+	</Properties>
+
+	<State>
+	  <Scalar type="uint32_t" name="rng" />
+
+	  <!-- Track time and spins in neighbourhood. Index 0 is this device -->
+	  <Array name="spins" length="5" type="int32_t" />
+	  <Array name="times" length="5" type="uint32_t" />
+
+	  <Scalar name="spin" type="int32_t" /> <!-- This is a copy for ease of printing -->
+	  <Scalar name="lastFlipTime" type="uint32_t" />
+
+	  <Scalar name="isEarliest" type="uint32_t" />
+
+		<Scalar name="tag" type="uint32_t" />
+	</State>
+
+	<InputPin name="__init__" messageTypeId="__init__">
+	  <OnReceive><![CDATA[
+	  // Initialise RNG and choose random starting spin
+	  uint32_t seed;
+	  uint32_t x=deviceProperties->x, y=deviceProperties->y;
+	  uint32_t W=graphProperties->width, H=graphProperties->height;
+
+		handler_log(3, " x=%u, y=%u", x, y);
+
+		cell_init(x, mod(y+H-1, H), deviceState->spins+1, deviceState->times+1, &seed);
+		cell_init( mod(x+1,W), y, 	deviceState->spins+2, deviceState->times+2, &seed);
+		cell_init(x, mod(y+1,H), 	deviceState->spins+3, deviceState->times+3, &seed);
+		cell_init(mod(x+W-1,W), y, deviceState->spins+4, deviceState->times+4, &seed);
+		
+	  // Final one is this node
+		cell_init(x, y, 				deviceState->spins+0, deviceState->times+0, &seed);
+	  deviceState->rng=seed; // Store the rng state back
+		deviceState->tag=calc_tag(x,y);
+		handler_log(3, "tag=%u", deviceState->tag);
+
+	  deviceState->spin=deviceState->spins[0];
+	  deviceState->lastFlipTime=0; // Bit redundant
+
+	  // We now have perfect knowledge of our neighbourhood, and
+	  // when they are planning to fire.
+
+	  handler_log(3, "next_t = %u, next_spin = %d", deviceState->times[0], deviceState->spins[0]);
+
+	  deviceState->isEarliest=1;
+	  for(unsigned i=1; i<5; i++){
+	    handler_log(3, "   times[%d] = %u", i, deviceState->times[i]);
+	    if(deviceState->times[0] >= deviceState->times[i]){
+              deviceState->isEarliest=0; // We are not the earliest cell in neighbourhood
+	    }
+	  }
+		handler_log(3, "tag=%u", deviceState->tag);
+	  ]]>
+	  </OnReceive>
+	</InputPin>
+
+	<InputPin name="__print__" messageTypeId="__print__">
+	  <OnReceive><![CDATA[
+	  handler_log(0, "isEarliest=%x, times={%u,%u,%u,%u,%u}",
+	    deviceState->isEarliest,
+	    deviceState->times[0], deviceState->times[1], deviceState->times[2], deviceState->times[3], deviceState->times[4]);
+	  ]]></OnReceive>
+	</InputPin>
+
+	<InputPin name="in" messageTypeId="update">
+	  <Properties>
+	    <Scalar type="uint32_t" name="direction" /> <!-- 1=Up, 2=Right, 3=Down, 4=Left -->
+	  </Properties>
+
+	  <OnReceive><![CDATA[
+	  uint32_t nx, ny;
+	  
+	  if(message->time >= deviceState->times[edgeProperties->direction]){
+  	    deviceState->spins[edgeProperties->direction]=message->spin;
+	    deviceState->times[edgeProperties->direction]=message->time;
+
+	    get_neighbour_coords(deviceProperties->x, deviceProperties->y, graphProperties->width, graphProperties->height, edgeProperties->direction, nx, ny);
+	    
+	    handler_log(4, "from %d=(%u,%d), new_time = %u, new_spin  %d", edgeProperties->direction, nx, ny, message->time, message->spin);
+	  }
+
+	  deviceState->isEarliest=1;
+
+	  for(unsigned i=1; i<5; i++){
+	    get_neighbour_coords(deviceProperties->x, deviceProperties->y, graphProperties->width, graphProperties->height, i, nx, ny);
+	    if(deviceState->times[i] < deviceState->times[0]){
+	      handler_log(4, "  time[%d (%u,%u)] = %u < time[0] = %u", i, nx, ny, deviceState->times[i],  deviceState->times[0]);
+	      deviceState->isEarliest = 0;
+	    }
+	}
+	handler_log(4, "isEarliest = %x, time=%u", deviceState->isEarliest, deviceState->times[0]);
+
+	  ]]></OnReceive>
+	</InputPin>
+
+	<OutputPin name="out" messageTypeId="update">
+	  <OnSend><![CDATA[
+	        uint32_t nx, ny;
+
+		uint32_t prevTime=deviceState->times[0];
+		int prevSpin=deviceState->spins[0];
+		handler_log(3, "256, tag=%u", deviceState->tag);
+		chooseNextEvent(graphProperties->probabilities,  deviceState->tag, &deviceState->rng, deviceState->spins, deviceState->times);
+		handler_log(3, "258, tag=%u", deviceState->tag);
+		message->spin = deviceState->spins[0];
+		message->time = deviceState->times[0];
+
+		if(prevSpin != deviceState->spins[0]){
+			deviceState->lastFlipTime = prevTime;
+		}
+		deviceState->spin=deviceState->spins[0];
+
+		handler_log(3, "tag=%u, prev_t = %u, next_t = %u, curr_spin = %d", deviceState->tag, prevTime, deviceState->times[0], deviceState->spins[0]);
+
+		deviceState->isEarliest=1;
+		for(unsigned i=1; i<5; i++){
+		        get_neighbour_coords(deviceProperties->x, deviceProperties->y, graphProperties->width, graphProperties->height, i, nx, ny);
+			if(deviceState->times[0] > deviceState->times[i]){
+				handler_log(4, "  time[%d (%u,%u)] = %u < time[0] = %u", i, nx, ny, deviceState->times[i],  deviceState->times[0]);
+				deviceState->isEarliest = 0;
+			}
+		}
+		handler_log(3, "isEarliest = %x, time=%u, send-finished=%x", deviceState->isEarliest, deviceState->times[0], deviceState->times[0] >= graphProperties->endTime );
+	  ]]></OnSend>
+	</OutputPin>
+
+
+	<OutputPin name="finished" messageTypeId="finished">
+	  <OnSend><![CDATA[
+		deviceState->times[0] = 0xFFFFFFFFul;
+		handler_log(4, "Finshed");
+	  ]]></OnSend>
+	</OutputPin>
+
+	<ReadyToSend><![CDATA[
+	if(deviceState->times[0] == 0xFFFFFFFFul){
+		*readyToSend = 0;
+	}else if(deviceState->times[0] >= graphProperties->endTime){
+		*readyToSend = RTS_FLAG_cell_finished;
+	}else if(deviceState->isEarliest){
+		*readyToSend = RTS_FLAG_cell_out;
+	}else{
+		*readyToSend = 0;
+	}
+	]]></ReadyToSend>
+      </DeviceType>
+
+		<DeviceType id="exit_node">
+			<Properties>
+				<Scalar name="fanin" type="uint32_t" />
+			</Properties>
+			<State>
+				<Scalar name="seen" type="uint32_t" />
+			</State>
+
+			<InputPin name="finished" messageTypeId="finished">
+				<OnReceive><![CDATA[
+				deviceState->seen++;
+				handler_log(2, "seenFinished = %u, wantFinished = %u", deviceState->seen, deviceProperties->fanin);
+				if(deviceState->seen == deviceProperties->fanin){
+					handler_exit(0);
+				}
+				]]></OnReceive>
+			</InputPin>
+
+			<ReadyToSend><![CDATA[
+			*readyToSend = 0;
+			]]></ReadyToSend>
+		</DeviceType>
+		</DeviceTypes>
+  </GraphType>
+</Graphs>

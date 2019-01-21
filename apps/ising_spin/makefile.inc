@@ -6,6 +6,7 @@ define ising_spin_instance_template
 # $1 = n
 # $2 = T
 # $3 = filters
+# $4 = render demo
 
 demos/ising_spin/ising_spin_$1.xml : apps/ising_spin/create_ising_spin_instance.py apps/ising_spin/ising_spin_graph_type.xml
 	mkdir -p $$(dir $$@)
@@ -15,6 +16,8 @@ demos/ising_spin/ising_spin_$1.snap : demos/ising_spin/ising_spin_$1.xml bin/epo
 	bin/epoch_sim --max-steps $2 --snapshots 1 $$@  demos/ising_spin/ising_spin_$1.xml
 
 ALL_ISING_SPIN_TESTS += demos/ising_spin/ising_spin_$1.snap
+
+ifneq ($4,)
 
 demos/ising_spin/ising_spin_$1.gif : demos/ising_spin/ising_spin_$1.xml demos/ising_spin/ising_spin_$1.snap
 	mkdir -p demos/ising_spin/ising_spin_$1.tmp
@@ -26,13 +29,16 @@ demos/ising_spin/ising_spin_$1.gif : demos/ising_spin/ising_spin_$1.xml demos/is
 
 ALL_ISING_SPIN_DEMOS += demos/ising_spin/ising_spin_$1.gif
 
+endif
+
 endef
 
 
 ISING_SPIN_FILTERS = \
 	--bind-dev "cell" "state" "spin" "color" "blend_colors( (255,255,0), (255,0,255), -1, +1, value)"
 
-$(eval $(call ising_spin_instance_template,16_2,50,$(ISING_SPIN_FILTERS)))
+$(eval $(call ising_spin_instance_template,3_1,50,$(ISING_SPIN_FILTERS)))
+$(eval $(call ising_spin_instance_template,16_2,50,$(ISING_SPIN_FILTERS),1))
 $(eval $(call ising_spin_instance_template,32_1,50,$(ISING_SPIN_FILTERS)))
 $(eval $(call ising_spin_instance_template,40_0.5,50,$(ISING_SPIN_FILTERS)))
 
@@ -47,6 +53,4 @@ ising_spin_demos : $(ALL_ISING_SPIN_DEMOS)
 ALL_TESTS += ising_spin_tests
 
 ALL_DEMOS += ising_spin_demos
-
-
 

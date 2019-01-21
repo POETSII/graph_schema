@@ -1,0 +1,530 @@
+<html>
+<head>
+<script src="scripts/jquery.min.js"></script>
+
+<script src="scripts/require.js"></script>
+
+<style>
+
+</style>
+
+</head>
+<body>
+
+<div style="height:20%">
+    <div>
+        <button id="reset">
+            Reset
+        </button>
+        <select id="topology">
+            <option value="file">File (Buggy)</option>
+            <option value="file2">File2 (Buggy)</option>
+            <option value="file4">File4 (Buggy)</option>
+        </select>
+        
+        <label>width: <input id="width" value="12"></input></label>
+        <select id="engine">
+            <option value="single">Single stepper (faithful blocking)</option>
+            <option value="batch">Batch stepper (fast)</option>
+        </select>
+    </div>
+
+    <div>
+        <button id="step">
+            Step
+        </button>
+        <button id="run">
+            Run
+        </button>
+            <button id="stop">
+                Stop
+        </button>
+        <label>
+            Steps/frame: 
+        <input id="step-size" value="1">
+        </input>
+        </label>
+        <label><input type="checkbox" id="force-pointer" checked="checked"></input>Force from Pointer</label>
+        <label><input type="checkbox" id="show-events" checked="checked"></input>Hide events</label>
+        <label><input type="checkbox" id="show-heat" checked="checked" ></input>Show time</label>
+        <span>Events: <span id="total-events">0</span></span>
+        <span>Events/sec: <span id="events-per-sec">0</span></span>
+    </div>
+</div>
+<div style="display:flex;       width:100%; height:80%;"    > 
+    <div id="container"  style="flex-basis:80%">
+        <div id="graph-container" style="width:100%; height:100%;"></div>
+    </div>
+    <div id="state-panel" style="flex-basis:20%; overflow-y:scroll">
+</div>
+
+<script>
+var runAnim=false;
+var C=null;
+var H=null;
+var G=null;
+var GUI=null;
+var s=null;
+var stepper=null;
+var SVG=null;
+var svgPanZoom=null;
+
+var polys={};
+var arrows={};
+var statePanel=null;
+
+function hex2(v)
+{
+    return ('00'+(v|0).toString(16)).substr(-2);
+}
+
+
+////////////////////////////////////////////
+// http://stackoverflow.com/a/17243070
+function HSVtoRGB(h, s, v) {
+    var r, g, b, i, f, p, q, t;
+    i = Math.floor(h * 6);
+    f = h * 6 - i;
+    p = v * (1 - s);
+    q = v * (1 - f * s);
+    t = v * (1 - (1 - f) * s);
+    switch (i % 6) {
+        case 0: r = v, g = t, b = p; break;
+        case 1: r = q, g = v, b = p; break;
+        case 2: r = p, g = v, b = t; break;
+        case 3: r = p, g = q, b = v; break;
+        case 4: r = t, g = p, b = v; break;
+        case 5: r = v, g = p, b = q; break;
+    }
+    return [
+        Math.round(r * 255),
+        Math.round(g * 255),
+        Math.round(b * 255)
+    ];
+}
+// http://stackoverflow.com/a/17243070
+//////////////////////////////////////////////
+
+function shade(v)
+{
+    var x=(v*256)|0;
+    if(x<=-255) x=-255;
+    if(x>=+255) x=+255;
+    var r=255, g=255, b=255;
+    if(x<0){
+        x=255+x;
+        b=x;
+    }else{
+        x=255-x;
+        r=x;
+        g=x;
+    }
+    r=hex2(r);
+    g=hex2(g);
+    b=hex2(b);
+    return "#"+r+g+b;
+}
+
+
+
+var totalEvents=0;
+var showEvents=true;
+var showTime=false;
+var useVoronoi=false;
+
+var pointerIsForcing=false;
+
+var timeLevels=10;
+var timeColors=[];
+for(let i=0; i<timeLevels; i++){
+    let rgb=HSVtoRGB(i/timeLevels/2, 1, 1);
+    timeColors.push( "#"+hex2(rgb[0])+hex2(rgb[1])+hex2(rgb[2]) );
+}
+
+var heatLevels=256;
+var heatColors=[];
+for(let i=0; i<heatLevels; i++){
+    let p=i/(1.0+heatLevels);
+    let rgb=HSVtoRGB(p*0.70 , 1.0, 1.0);
+    heatColors.push( "#"+hex2(rgb[0])+hex2(rgb[1])+hex2(rgb[2]) );
+}
+
+function vecAdd(a,b)
+{ return [a[0]+b[0], a[1]+b[1]]; }
+
+function vecSub(a,b)
+{ return [a[0]-b[0], a[1]-b[1]]; }
+
+function vecDistance(a,b)
+{ return Math.sqrt( (a[0]-b[0])*(a[0]-b[0]) + (a[1]-b[1])*(a[1]-b[1]) ); }
+
+function vecNormalise(x)
+{
+    let l=Math.sqrt(x[0]*x[0]+x[1]*x[1]);
+    return [ x[0] / l, x[1] / l];
+}
+
+function vecAngle(a,b,c)
+{
+    let ab=vecNormalise( [a[0]-b[0],a[1]-b[1]] );
+    let cb=vecNormalise( [c[0]-b[0],c[1]-b[1]] );
+    return Math.acos( ab[0]*cb[0] + ab[1]*cb[1] );
+}
+
+function vecRotate(x, theta)
+{
+    return [ Math.cos(theta)*x[0]-Math.sin(theta)*x[1],   Math.sin(theta)*x[0]+Math.cos(theta)*x[1] ];
+}
+
+function vecScale(x,s)
+{ return [x[0]*s,x[1]*s]; }
+
+function makeArrow(svg, e,b)
+{
+    // Midpoint between b and e
+    var m=[ (b[0]+e[0])/2,(b[1]+e[1])/2 ]
+
+    // Vector from b to m
+    var b_to_m= vecSub(m,b);
+    
+    // Vector from m to c (turn counter-clockwise by 90 degrees)
+    let theta=Math.PI*1.5;
+    var m_to_c= vecRotate(b_to_m, theta);
+
+    // Centre of the circle
+    var c=vecAdd(m,m_to_c);
+    var r=vecDistance(b,c);
+
+    // angle of b-c-m and m-c-e
+    let outer=vecAngle(b,c,m);
+
+    // Find the three points along the curve between the edges
+    let bp=vecAdd(vecRotate(vecSub(b,c), -outer*0.4),c);
+    let mp=vecAdd(vecRotate(vecSub(b,c), -outer),c);
+    let ep=vecAdd(vecRotate(vecSub(e,c), outer*0.4),c);
+
+    let arrAngle=0.05; // How much do the arrow ends trail the mid-point by?
+    let apL=vecAdd(vecRotate(vecSub(mp,c), +Math.PI*arrAngle),c);
+    let apT=vecAdd(vecRotate(vecSub(mp,c), -Math.PI*arrAngle),c);
+    let apT1=vecAdd(vecScale(vecSub(apT,c),0.8),c);
+    let apT2=vecAdd(vecScale(vecSub(apT,c),1.2),c);
+
+    //return svg.path("M "+b[0]+" "+b[1]+"  A "+r+" "+r+" 0 0 0 "+e[0]+" "+e[1]);
+
+    return svg.path("M "+bp[0]+" "+bp[1]
+                 +"  A "+r+" "+r+" 0 0 0 "+ep[0]+" "+ep[1]
+                 +"  M "+apT1[0]+" "+apT1[1]
+                 +"  L "+apL[0]+" "+apL[1]
+                 +"  L "+apT2[0]+" "+apT2[1]
+                 );
+    
+}
+
+function updateNodeStyleVor(d)
+{
+    var device=d
+    var poly=polys[device.id];
+    if(showEvents){
+        //poly.stroke(device.blocked() ? "#FF0000" : device.is_rts() ? "#00FF00" : "#808080");
+    }else{
+        //poly.stroke("#808080");
+    }
+    if(showTime){
+        let t = device.state.t % timeLevels;
+        let nv=timeColors[t];
+        let pv=poly.prev_fill;
+        if(pv!=nv){
+            poly.node.setAttribute("fill",nv);
+            poly.prev_fill=nv;
+        } 
+    }else{
+        let v=Math.max(-1,Math.min(+1, device.state.v));
+        let nv = heatColors[Math.floor((v + 1)/2 * heatLevels)];
+        //console.log(" v="+device.state.v+", v="+v);
+        //poly.fill(heatColors[v]);
+        let pv=poly.prev_fill;
+        if(pv!=nv){     
+            poly.node.setAttribute("fill",nv);
+            poly.prev_fill=nv;
+        }
+    }
+};
+
+function updateEdgeStyle(e)
+{
+    var edge=e;
+    var arrow=arrows[edge.id];
+    if(showEvents){
+        let ps=arrow.prev_stroke;
+        let ns=edge.empty() ? "#808080" : "#00FF00";
+        if(ps!=ns){
+            arrow.node.setAttribute('stroke', ns);
+            arrow.prev_stroke=ns;
+        }
+        //arrow.attr('stroke', edge.empty() ? "#808080" : "#00FF00");
+    }
+}
+
+function updateAllDevices(s)
+{
+    for(let d of G.enumDevices()){
+        updateNodeStyleVor(d);
+    }
+    
+}
+
+function updateAllEdges(s)
+{
+    for(let e of G.enumEdges()){
+        updateEdgeStyle(e);
+    }
+}
+
+function updateAllNodes(s)
+{
+    updateAllDevices();
+    if(showEvents){
+        updateAllEdges();
+    }
+    statePanel.update();
+}
+
+function animate()
+{
+
+    var k=0|$("#step-size").val();
+    
+    var tStart = (new Date()).getTime();
+        
+    var events=0;
+    var changes=[];
+    while(events < k){
+        var done=stepper.step();
+        events+=done[0];
+        changes=changes.concat(changes, done[1]);
+        if(done[0]==0)
+            break;
+        var tNow= (new Date()).getTime();
+        if(tNow-tStart > 250)
+            break;
+    }
+    stepper.history.splice(0,stepper.history.length);
+
+    totalEvents += events;
+    $("#total-events").text(totalEvents.toString());
+
+    var eventsPerSec = events / (tNow-tStart);
+    $("#events-per-sec").text(eventsPerSec.toFixed(1)+" KEvents/sec")
+
+    updateAllNodes(s);
+
+    if(runAnim && events>0){
+        requestAnimationFrame(animate);
+    }
+}
+
+function chooseStepper(doInit)
+{
+    if(stepper){
+        stepper.detach();
+    }
+    if($("#engine").val()=="batch"){
+        stepper=new C.BatchStepper();
+    }else{
+        stepper=new C.SingleStepper();
+    }
+    stepper.attach(G,doInit);
+}
+
+function resetGraph()
+{
+    console.log("Pre");
+    
+    var topology=$("#topology").val();
+    if(topology=="file"){
+        G=C.loadGraphFromUrl("/graphs/poets.xml");
+        useVoronoi=true;
+    }else if(topology=="file2"){
+        G=C.loadGraphFromUrl("/graphs/poets2.xml");
+        useVoronoi=true;
+    }else if(topology=="file4"){
+        G=C.loadGraphFromUrl("/graphs/poets4.xml");
+        useVoronoi=true;
+    }else{
+        G=0;
+    }
+    console.log("Post");
+
+    totalEvents=0;    
+    runAnim=false;
+
+    polys={};
+
+    var minX=+1e10;
+    var maxX=-1e10;
+    var minY=+1e10;
+    var maxY=-1e10;
+    
+    $("#graph-container").empty();
+    var svg=SVG('graph-container').size('100%', '100%')
+
+    
+    add=function(x,y){
+        minX=Math.min(minX,x);
+        minY=Math.min(minY,y);
+        maxX=Math.max(maxX,x);
+        maxY=Math.max(maxY,y);
+    };
+
+    var sumArea=0.0;
+    var numDevices=0;
+    for(var d of G.enumDevices()){
+        sumArea += d.metadata["area"];
+        numDevices++;
+    }
+    var meanArea=sumArea / numDevices;
+    var meanLength=Math.sqrt(meanArea);
+    var strokeWidth=meanLength/5;
+    
+    var devicesGroup=svg.group();
+    for(var d of G.enumDevices()){
+        m=d.metadata;
+        hull=m["hull"];
+        hull=hull.slice(0);
+        // TODO : HACK!
+        if(hull){
+            for(var dim=0;dim<3;dim++){
+                hull[dim][1]=-hull[dim][1];
+                console.log(`${dim[0]} ${dim[1]}`)    
+                add(hull[dim][0],hull[dim][1])
+                console.log(`  ${minX},${maxX}`)
+            }
+            add(hull[0][0],hull[0][1])
+        }
+        console.log(`  ${minX},${maxX}`)
+        hull.push(hull[0]); // Join the shape up
+        
+        var poly=devicesGroup.polyline( hull ).id('node-'+d.id);
+        polys[d.id]=poly;
+        poly.attr('stroke-width',strokeWidth); // Create a reasonable stroke width
+        poly.attr('stroke',null); // But don't want a stroke
+        poly.prev_fill="";
+        poly.device=d;
+        poly.selected=false;
+
+        poly.on('mouseover',function(){
+            this.selected=true;
+            if(pointerIsForcing){
+                this.device.state.v=-3;
+                this.device.state.force=true;
+            }
+            statePanel.attach(this.device);
+            
+            this.stroke("#FFFFFF");
+            this.node.parentNode.appendChild(poly.node); // Bring to the front
+        });
+        poly.on('mouseleave',function(){
+            this.selected=false;
+            this.device.state.force=false;
+            this.attr('stroke',null);
+        });
+    }
+
+    for(var e of G.enumEdges()){
+        var src=e.srcDev, dst=e.dstDev;
+        var cSrc=[src.metadata["x"],-src.metadata["y"]];
+        var cDst=[dst.metadata["x"],-dst.metadata["y"]];
+
+        if(cSrc && cDst){
+            var arrow=makeArrow(svg, cDst, cSrc);
+            arrow.attr('stroke-width', strokeWidth/2);
+            arrow.attr('fill','none');
+            arrow.style('pointer-events','none'); // Don't want to hit-test mouse on arrows
+            arrow.edge=e;
+            arrow.prev_stroke="";
+
+            arrows[e.id]=arrow;
+        }
+    }
+
+    svg.viewbox({ x: minX, y: minY, width: maxX-minX, height: maxY-minY })
+
+    panZoom = svgPanZoom(svg.node, {zoomScaleSensitivity: 0.3});
+    
+    chooseStepper(true);
+
+    updateAllNodes();
+    
+   
+}
+
+console.log("Pre load");
+
+require(['scripts/require_config'],function() {
+
+    require(['scripts/core/core','scripts/graphs/heat_graph', 'scripts/graphs/all','scripts/gui/gui', 'scripts/svg','svg-pan-zoom'], function(CC,HH,AG,GG,svg,pz){
+        C=CC;
+        H=HH;
+        GUI=GG;
+        SVG=svg;
+        svgPanZoom=pz;
+
+        AG.registerAllGraphTypes();
+
+        statePanel=new GUI.StatePanel( $("#state-panel")[0] );
+        
+        resetGraph();
+
+        $("#reset").click(function(){
+            runAnim=true;
+            resetGraph();
+        });
+
+        $("#run").click(function(){
+            runAnim=true;
+            requestAnimationFrame(animate);
+        });    
+
+        $("#step").click(function(){
+            var changes=stepper.step();
+            
+            updateAllNodes(s);
+        });
+
+        $("#stop").click(function(){
+            runAnim=false;
+        });
+
+        $("#show-events").change(function(){
+            showEvents=!!this.checked;
+            for(let d of G.enumEdges()){
+                if(showEvents){
+                    arrows[d.id].node.setAttribute('visibility','visible');
+                }else{
+                    arrows[d.id].node.setAttribute('visibility','hidden');
+                }
+            }
+            updateAllEdges(s);
+        });
+
+        $("#engine").change(function(){
+            chooseStepper(false);
+        });
+
+        $("#show-heat").change(function(){
+            showTime=!this.checked;
+            updateAllEdges(s);
+        });
+
+        $("#force-pointer").change(function(){
+            pointerIsForcing=!!this.checked;
+            updateAllNodes(s);
+        });
+    });
+});
+
+</script>
+
+</body> 
+
+</html> 

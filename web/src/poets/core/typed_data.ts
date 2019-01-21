@@ -57,7 +57,8 @@ export class ScalarDataType
 
     constructor(
         public name:string,
-        public type:"float"|"int"|"boolean"
+        public type:"float"|"int"|"boolean",
+        public defaultValue:any = 0
     )
     {}
 
@@ -75,14 +76,14 @@ export class ScalarDataType
     }
 }
 
-export function tFloat(name:string) : ScalarDataType
-{ return new ScalarDataType(name,"float");}
+export function tFloat(name:string, defaultValue:number=0.0) : ScalarDataType
+{ return new ScalarDataType(name,"float",defaultValue);}
 
-export function tInt(name:string) : ScalarDataType
-{ return new ScalarDataType(name,"int");}
+export function tInt(name:string, defaultValue:number=0.0) : ScalarDataType
+{ return new ScalarDataType(name,"int",defaultValue);}
 
-export function tBoolean(name:string) : ScalarDataType
-{ return new ScalarDataType(name,"boolean");}
+export function tBoolean(name:string,defaultValue:boolean=false) : ScalarDataType
+{ return new ScalarDataType(name,"boolean",defaultValue);}
 
 
 export class VectorDataType
@@ -262,6 +263,8 @@ function import_typed_data(spec:TypedDataSpec, data:any) : TypedData
         for(let e of spec.elementsByIndex){
             if(data.hasOwnProperty(e.name)){
                 res[e.name] = data[e.name];
+            }else if(e instanceof ScalarDataType){
+                res[e.name] = e.defaultValue;
             }else{
                 throw "NotImplemented";
             }

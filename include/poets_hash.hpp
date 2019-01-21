@@ -22,6 +22,14 @@ public:
         m_hash *= 0x100000001B3ull;
     }
 
+    void add(uint64_t x)
+    {
+        for(int i=0;i<8;i++){
+            add(x&0xFF);
+            x=x>>8;
+        }
+    }
+    
     void add(uint32_t x)
     {
         for(int i=0;i<4;i++){
@@ -35,6 +43,9 @@ public:
     
     void add(float x)
     { add( *(uint32_t*)&x ); }
+    
+    void add(double x)
+    { add( *(uint64_t*)&x ); }
     
     void add(const uint8_t *x, size_t s)
     {

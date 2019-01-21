@@ -1,0 +1,107 @@
+<?xml version="1.0"?>
+<Graphs xmlns="https://poets-project.org/schemas/virtual-graph-schema-v2">
+  <GraphType id="storm">
+	<Documentation>
+		A highly irregular and non-determinstic packet storm, but guaranteed to converge.
+
+		One node starts with all the credit. Each node has outgoing
+		pins with 1 and n edges. If a node has at least n credit it will randomly choose the
+		pin, otherwise it uses the single edge pin to drain the credit. Each node attempts
+		to lose credit as fast as possible.
+
+		The starting node initially distributes all but 1 credit, and never releases credit
+		again, so eventually all credit must return (though who knows how long it takes...)
+	</Documentation>
+
+    <MessageTypes>
+      <MessageType id="__init__">
+				<Documentation>This doesn't have any properties</Documentation>
+      </MessageType>
+
+			<MessageType id="exchange">
+				<Message>
+					<Scalar name="credit" type="uint32_t" />
+				</Message>
+      </MessageType>
+
+		</MessageTypes>
+    
+    <DeviceTypes>
+      <DeviceType id="node">
+			<Properties>
+				<Scalar type="uint32_t" name="degree"/>
+				<Scalar type="uint32_t" name="isRoot"/>
+			</Properties>
+
+			<State>
+				<Scalar type="uint32_t" name="credit" />
+				<Scalar type="uint32_t" name="totalCredit" />
+			</State>
+		
+		<ReadyToSend><![CDATA[
+			*readyToSend = 0; 
+			if(deviceProperties->isRoot){
+				if(deviceState->credit==0){
+					*readyToSend = OUTPUT_FLAG_wide;
+				}
+			}else{
+				if(deviceState->credit >= deviceProperties->degree){
+					uint32_t b=1664525*deviceState->credit+1013904223;
+					if( (b>>30)==0 ){
+				 		*readyToSend = OUTPUT_FLAG_wide;
+					}else{
+						*readyToSend = OUTPUT_FLAG_narrow;
+					}
+				}else if(deviceState->credit > 0 ){
+					*readyToSend = OUTPUT_FLAG_narrow;
+				}
+			}
+		]]></ReadyToSend>
+
+		<OutputPin name="wide" messageTypeId="exchange">
+		<OnSend><![CDATA[
+		if(deviceProperties->isRoot){
+			assert(deviceState->credit==0);
+			uint32_t perDevice=1;
+			while( perDevice * deviceProperties->degree < 0x10000000ul ){
+				perDevice *= 2;
+			}
+			message->credit=perDevice;
+			deviceState->credit=1;
+			deviceState->totalCredit=1+perDevice * deviceProperties->degree;
+		}else{
+			assert(deviceState->credit >= deviceProperties->degree );
+			uint32_t perDevice=1;
+			while( (perDevice * 2) * deviceProperties->degree <= deviceState->credit){
+				perDevice *= 2;
+			}
+			message->credit=perDevice;
+			deviceState->credit -= perDevice*deviceProperties->degree;
+		}
+		]]></OnSend>
+		</OutputPin>
+
+		<OutputPin name="narrow" messageTypeId="exchange">
+		<OnSend><![CDATA[
+		assert(!deviceProperties->isRoot);
+		assert(deviceState->credit > 0);
+		message->credit=(deviceState->credit+1)/2;
+		deviceState->credit -= message->credit;
+		]]></OnSend>
+		</OutputPin>
+		
+		<InputPin name="credit" messageTypeId="exchange">
+		  <OnReceive><![CDATA[
+		  deviceState->credit += message->credit;
+			if(deviceProperties->isRoot && deviceState->credit==deviceState->totalCredit){
+				handler_exit(0);
+			}
+		  ]]></OnReceive>
+		</InputPin>
+
+      </DeviceType>
+	
+	  </DeviceTypes>
+	</GraphType>
+</Graphs>
+

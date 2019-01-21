@@ -1,0 +1,446 @@
+<?xml version="1.0"?>
+<Graphs xmlns="https://poets-project.org/schemas/virtual-graph-schema-v2">
+  <GraphType id="apsp">
+	<Documentation><![CDATA[
+		Performs graph colouring using a randomised algorithm.
+        While randomised, the overall execution is deterministic, and should
+        always result in the same colour.
+
+        Based on:
+        Simple distributed \delta + 1-coloring of graphs
+        Ojvind Johansson
+
+        p=0..degree
+        status=invalid
+        notShared=1
+        activePeers=degree
+        u=0
+
+        def choose_u()
+        {
+            if(status==invalid){
+                u=random(len(p))
+                status=tentative
+            }
+            return u
+        }
+
+        while(status!=committed){
+
+            // Propose round
+            par{
+              send( (choose_u(),tentative) )
+
+                for(i in activePeers){
+                    recv( (u',status') )
+                    if( choose_u()==u' ){
+                    status=conflict;
+                    }    
+                }
+            }
+
+            // Device round
+
+            if( status==tentative ){
+                status=committed;
+            }else{
+                status=invalid;
+            }
+
+            {
+                send( (u,status) )
+
+            }
+            for(i in activePeers){
+                recv( (u',status') )
+                if( status' == committed ){
+                    remove(p, u');
+                    activePeers--;
+                }
+            }       
+        }
+        send( done )  # termination detection
+
+        This requires us to choose some maximum degree D that the graph can have,
+        as each node needs to be able to store a palette of up to D+1 colours.
+
+        D is arbitrarily chosen to be 255. This means that we can store the
+        palette in 256 entries, each of 1 byte.
+
+        ]]>
+	</Documentation>
+
+	<SharedCode><![CDATA[
+	  #include <algorithm>
+
+      uint32_t hash_create(uint32_t node, uint8_t colour)
+      {
+        uint32_t a=1 + colour + (uint32_t(colour)<<6); // 0 < a <= 0x40C0
+        uint32_t b=(node&0xFFFF)^(node>>16); 0 <= b < 0xFFFF
+        return a*b; // <= 0x40BFBF40 < 0x7FFFFFFF = 2^31-1
+      }
+
+      uint32_t hash_combine(uint32_t a, uint32_t b)
+      {
+        assert(a < 0x7FFFFFFFul);
+        assert(b < 0x7FFFFFFFul);
+        uint32_t x=a+b;
+        if(x>=0x7FFFFFFF){
+            x -= 0x7FFFFFFFul;
+        }
+        return x;
+      }
+	]]></SharedCode>
+
+    <MessageTypes>
+      <MessageType id="__init__">
+		<Documentation>This doesn't have any properties</Documentation>
+      </MessageType>
+
+      <MessageType id="exchange">
+        <Message>
+            <Scalar type="uint8_t" name="colour" />
+            <Scalar type="uint8_t" name="status" />
+        </Message>
+	  </MessageType>
+      
+      <MessageType id="complete">
+		<Message>
+            <Scalar type="uint32_t" name="count"><Documentation>Number of nodes this message represents.</Documentation></Scalar>
+            <Scalar type="uint32_t" name="hash"><Documentation>Combined hash of all nodes.</Documentation></Scalar>
+        </Message>
+      </MessageType>
+    </MessageTypes>
+    
+    <DeviceTypes>
+        <DeviceType id="node">
+            <SharedCode><![CDATA[
+                enum Phase{
+                    Phase_Proposing,
+                    Phase_Deciding,
+                    Phase_Completing,
+                    Phase_Done,
+                }
+ 
+                enum Status{
+                    Status_Invalid,
+                    Status_Tentative,
+                    Status_Abort,
+                    Status_Committed
+                };
+
+                void remove_colour(unsigned &paletteSize, uint8_t *paletteColours, uint8_t colour)
+                {
+                    unsigned size=paletteSize;
+                    for(unsigned i=0; i<size; i++){
+                        if(paletteColours[i]==colour){
+                            paletteColours[i]=paletteColours[size-1];
+                            break;
+                        }
+                    }
+                    paletteSize--;
+                }
+
+                uint32_t rng(uint32_t &seed)
+                {
+                    return ...
+                }
+
+                uint8_t choose_colour(unsigned paletteSize, unsigned paletteShift, uint8_t *paletteColours, uint32_t &seed)
+                {
+                    assert(paletteSize>0);
+                    while(1){
+                        uint32_t r=rng(seed) >> paletteShift;
+                        if(r < paletteSize){
+                            return r;
+                        }
+                    }
+                }
+            ]]></SharedCode>
+
+            <Properties>
+                <Scalar type="uint32_t" name="degree" />
+                <Scalar type="uint32_t" name="seed" />
+            </Properties>
+
+            <State>
+                <Scalar type="uint32_t" name="u" />
+                <Scalar type="uint32_t" name="status" />
+                <Scalar type="uint32_t" name="phase" />
+                <Scalar type="uint32_t" name="rngState" />
+
+                <Scalar type="uint32_t" name="activePeers" />
+                <Scalar type="uint32_t" name="proposalsSeen" />
+                <Scalar type="uint32_t" name="decisionsSeen" />
+
+                <Array type="uint8_t" name="palette" length="256" />
+
+            </State>
+
+            <ReadyToSend><![CDATA[
+            if(deviceState->requestValid){
+                assert(deviceState->responseSeen==0);
+                *readyToSend = RTS_FLAG_request_out;
+            }else if(deviceState->responseSeen==deviceProperties->degree){
+                *readyToSend = RTS_FLAG_response_out; 
+            }else{
+                *readyToSend = 0;
+            }
+            ]]></ReadyToSend>
+
+            <InputPin name="__init__" messageTypeId="__init__"><OnReceive><![CDATA[
+            deviceState->phase=Phase_Proposing;
+            deviceState->activePeers=deviceProperties->degree;
+            deviceState->proposalsSeen=0;
+            deviceState->decisionsSeen=0;
+
+            deviceState->status=Status_Tentative;
+            deviceState->u=choose_colour(deviceState->rngState);
+            ]]></InputPin>
+
+            <InputPin name="in" messageTypeId="exchange"><OnReceive><![CDATA[
+                if(message->status==Status_Tentative){
+                    if(deviceState->status==Status_Invalid){
+                        assert(!deviceState->shared);
+                        choose_u();
+                        assert(deviceState->status==Status_Tentative);
+                    }
+                    if( message->u == deviceState->u ){
+                        deviceState->status=Status_Conflict;
+                    }
+                    deviceState->proposalsSeen++;
+                }else if(deviceState->status==Status_Complete){
+                    // do nothing
+                }else{
+                    deviceState->decisionsSeen++;
+                }
+            ]]></OnReceive></InputPin>
+
+            <OutputPin name="request_out" messageTypeId="exchange"><OnSend><![CDATA[
+            assert(!deviceStatus->shared);
+            if(deviceState->status==Status_Invalid){
+                choose_u();
+            }
+            if(deviceState->status==Status_
+            
+            ]]></OnSend></OutputPin>
+
+            <InputPin name="response_in" messageTypeId="control_response"><OnReceive><![CDATA[
+            handler_log(3, "responseSeen=%d, degree=%d", deviceState->responseSeen, deviceProperties->degree);
+            assert(!deviceState->requestValid);
+            assert(deviceState->responseSeen<deviceProperties->degree);
+            assert(message->round==deviceState->round);
+            deviceState->responseSeen++;
+            deviceState->responseSentCount += message->sent;
+            deviceState->responseReceivedCount += message->received;
+            deviceState->responseSumDistance += message->sumDist;
+            deviceState->responseMaxDistance = std::max(deviceState->responseMaxDistance, message->maxDist);
+            ]]></OnReceive></InputPin>
+
+            <OutputPin name="response_out" messageTypeId="control_response"><OnSend><![CDATA[
+            assert(!deviceState->requestValid && deviceState->responseSeen==deviceProperties->degree);
+            deviceState->responseSeen=0;
+            message->sent = deviceState->responseSentCount;
+            message->received = deviceState->responseReceivedCount;
+            message->sumDist = deviceState->responseSumDistance;
+            message->maxDist = deviceState->responseMaxDistance;
+            message->round = deviceState->round;
+            deviceState->responseSentCount=0;
+            deviceState->responseReceivedCount=0;
+            deviceState->responseSumDistance=0;
+            deviceState->responseMaxDistance=0;
+            ]]></OnSend></OutputPin>
+        </DeviceType>
+
+
+      <DeviceType id="node">
+		<Properties>
+		  <Scalar type="uint32_t" name="index"><Documentation>The contiguous index of the graph node</Documentation></Scalar>
+          <Scalar type="uint32_t" name="degree"><Documentation>Number of outgoing edges for this node.</Documentation></Scalar>
+		</Properties>
+		
+		<State>
+		  <Scalar type="uint32_t" name="round" />
+
+          <Scalar type="uint32_t" name="sentCount" />
+          <Scalar type="uint32_t" name="receivedCount" />
+
+          <Scalar type="uint32_t" name="dist" />
+          <Scalar type="uint8_t" name="distDirty"><Documentation>Current distance has changed, but we haven't told neighbours yet.</Documentation></Scalar>
+          
+          <Scalar type="uint8_t" name="controlPending"><Documentation>A control request is outstanding.</Documentation></Scalar>
+		</State>
+		
+		<ReadyToSend><![CDATA[
+            if(deviceState->distDirty){
+                *readyToSend = OUTPUT_FLAG_dout;
+            }else if(deviceState->controlPending){
+                *readyToSend = OUTPUT_FLAG_response_out;
+            }else{
+                *readyToSend = 0;
+            }
+		]]></ReadyToSend>
+
+        <InputPin name="__init__" messageTypeId="__init__">
+          <OnReceive><![CDATA[
+          deviceState->round=0xFFFFFFFFul;
+		  ]]></OnReceive>
+		</InputPin>
+
+        <InputPin name="request_in" messageTypeId="control_request"><OnReceive><![CDATA[
+        assert(!deviceState->controlPending);
+        deviceState->controlPending=1;
+        if(deviceState->round != message->round){
+            deviceState->sentCount=0;
+            deviceState->receivedCount=0;
+            deviceState->round=message->round;
+            deviceState->dist=0xFFFFFFFFul;
+            if(deviceProperties->index == deviceState->round){
+                deviceState->dist=0;
+                deviceState->distDirty=1;
+            }
+            handler_log(2, "New round=%u", message->round);
+        }
+        ]]></OnReceive></InputPin>
+
+        <OutputPin name="response_out" messageTypeId="control_response"><OnSend><![CDATA[
+        assert(deviceState->controlPending && !deviceState->distDirty);
+        deviceState->controlPending=0;
+        message->sent = deviceState->sentCount;
+        message->received = deviceState->receivedCount;
+        message->sumDist = deviceState->dist;
+        message->maxDist = deviceState->dist;
+        message->round = deviceState->round;
+        ]]></OnSend></OutputPin>
+		
+		<OutputPin name="dout" messageTypeId="dist">
+		  <OnSend><![CDATA[
+          assert(deviceState->distDirty);
+
+		  message->round = deviceState->round;
+          message->distance = deviceState->dist;
+
+          deviceState->distDirty = 0;
+          deviceState->sentCount += deviceProperties->degree;
+		  ]]></OnSend>
+		</OutputPin>
+		
+		<InputPin name="din" messageTypeId="dist">
+            <Properties>
+                <Scalar type="uint32_t" name="w" default="1" />
+            </Properties>
+		  <OnReceive><![CDATA[
+          handler_log(2, "Got dist=%u, round=%u", message->distance, message->round);
+		  if(message->round!=deviceState->round){
+                deviceState->round=message->round;
+                deviceState->dist=0xFFFFFFFFul;
+                deviceState->sentCount=0;
+                deviceState->receivedCount=0;
+                handler_log(2, "New round=%u", message->round);
+          }
+          auto newDist=message->distance + edgeProperties->w;
+          if(newDist < deviceState->dist){
+                deviceState->dist = newDist;
+                deviceState->distDirty = true;
+                handler_log(2, "New dist=%u, ew=%u", deviceState->dist, edgeProperties->w);
+          }
+          deviceState->receivedCount++;
+		  ]]></OnReceive>
+		</InputPin>
+
+      </DeviceType>
+
+
+	<DeviceType id="controller">
+	  <Properties>
+	    <Scalar type="uint32_t" name="node_count"/>
+        <Scalar type="uint32_t" name="refSumMaxDist"/>
+        <Scalar type="uint32_t" name="refSumSumDist"/>
+	  </Properties>
+	  
+	  <State>
+
+        <Scalar type="uint32_t" name="round" />
+        <Scalar type="uint32_t" name="roundBegin" />
+        <Scalar type="uint32_t" name="controlPending" />
+
+        <Scalar type="uint32_t" name="prevSentCount" />
+        <Scalar type="uint32_t" name="prevReceivedCount" />
+
+        <Scalar type="uint32_t" name="maxDist" />
+        <Scalar type="uint32_t" name="sumDist" />
+
+        <Scalar type="uint32_t" name="sumMaxDist" />
+        <Scalar type="uint32_t" name="sumSumDist"></Scalar>
+	  </State>
+	  
+	  <ReadyToSend><![CDATA[
+      if(deviceState->controlPending){
+            *readyToSend = OUTPUT_FLAG_request_out;
+      }else{
+            *readyToSend = 0;
+      }
+	  ]]></ReadyToSend>
+
+        <InputPin name="__init__" messageTypeId="__init__">
+            <OnReceive><![CDATA[
+            // trigger first begin message
+            deviceState->round=0;
+            deviceState->roundBegin=1;
+            deviceState->controlPending=1;
+            ]]>
+            </OnReceive>
+        </InputPin>
+
+    <OutputPin name="request_out" messageTypeId="control_request">
+        <OnSend><![CDATA[
+        assert(deviceState->controlPending);
+        deviceState->controlPending=0;
+        message->round=deviceState->round;
+        message->isNewRound = deviceState->roundBegin;
+        ]]></OnSend>
+    </OutputPin>
+	  
+	  <InputPin name="response_in" messageTypeId="control_response">
+	    <OnReceive><![CDATA[
+        assert(!deviceState->controlPending);
+        
+        handler_log(2, "Round %u : sendCount=%u, recvCount=%u, messageRound=%u", deviceState->round, message->sent, message->received, message->round);
+        
+        assert(deviceState->round==message->round);
+
+        deviceState->controlPending=1;
+
+        if(deviceState->roundBegin){
+            // Always need to go round twice
+            deviceState->roundBegin=false;
+        }else{
+            if(message->sent==message->received && message->sent==deviceState->prevSentCount && message->received==deviceState->prevReceivedCount){
+                deviceState->sumMaxDist += message->maxDist;
+                deviceState->sumSumDist += message->sumDist;
+                
+                deviceState->round++;
+                deviceState->roundBegin=1;
+
+                if(deviceState->round==deviceProperties->node_count){
+                    handler_log(1, "refSumSumDist=%d, gotSumSumDist=%d", deviceProperties->refSumSumDist, deviceState->sumSumDist);
+                    handler_log(1, "refSumMaxDist=%d, gotSumMaxDist=%d", deviceProperties->refSumMaxDist, deviceState->sumMaxDist);
+                    deviceState->controlPending=0;
+                    auto ok=deviceState->sumSumDist==deviceProperties->refSumSumDist || deviceProperties->refSumSumDist==0;
+                    ok = ok && (deviceState->sumMaxDist==deviceProperties->refSumMaxDist || deviceProperties->refSumMaxDist==0);
+		    
+                    handler_exit(ok?0:1);
+                }
+            }
+        }
+        deviceState->prevSentCount=message->sent;
+        deviceState->prevReceivedCount=message->received;
+	    ]]></OnReceive>
+	  </InputPin>
+
+      </DeviceType>
+	  
+	  </DeviceTypes>
+	</GraphType>
+</Graphs>
+

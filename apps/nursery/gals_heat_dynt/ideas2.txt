@@ -1,0 +1,41 @@
+Assume a poisson style problem, with coefficient a.
+Let's assume that a varies temporally in some way.
+
+Assume each cell has an intrinsic simulation time t,
+and a coefficient a(t). From that we can determine
+the current time-step dt(t), and want to move forwards
+to dt(t)+t.
+
+To do that we need to know x(t,i) for all neighbours i \in N.
+
+Assume each event contains the following information:
+- tN : Time of next event
+- tC : Time of this event
+- xC : Value at this event
+- tP : Time of previous event
+- xP : Value at the previous event
+
+When we receive a message:
+
+  if msg.tP <= tCurr < msg.tC:
+    accCurr += coeffCurr * interp(msg.tP, msg.xP, msg.tN, msg.xN, (tCurr-msg.tP)/(msg.tC-msg.tP))
+    seenCurr += 1;
+  elif msg.tP <= tNext < msg.tC:
+    accNext += coeffNext * interp(msg.tP, msg.xP, msg.tN, msg.xN, (tNext-msg.tP)/(msg.tC-msg.tP))
+    seenNext += 1;
+  
+  haloNext[src] = msg.tN
+  
+
+We can send a message if:
+
+  seenCurr == nhoodSize
+  &&
+  tNext <= min(haloNext)
+
+
+NOPE : For someone stepping at a small time-step, they need to re-use
+an interval from a large-step neighbour multiple times, so they need
+to hold on to it.
+
+Solution? : Store gradients for each neighbour instead?

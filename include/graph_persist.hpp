@@ -3,7 +3,59 @@
 
 #include "rapidjson/document.h"
 
+
 #include "graph.hpp"
+
+#if 0
+// Boost not installed on keystone
+//#include <boost/filesystem.hpp>
+#else
+ #include <unistd.h>
+// HACK.
+struct filepath
+{
+  filepath(const std::string &p)
+    : path(p)
+  {}
+  
+  std::string path;
+  
+  const char *c_str() const
+  { return path.c_str(); }
+  
+  const std::string &native() const
+  { return path; }
+  
+  filepath parent_path() const
+  {
+    auto pos=path.find_last_of('/');
+    if(pos==std::string::npos){
+      return *this;
+    }
+    auto parent=path.substr(0, pos);
+    return parent;
+  }
+};
+
+filepath current_path()
+{
+  std::shared_ptr<char> p(getcwd(0,0),free);
+  return filepath(p.get());
+}
+
+filepath absolute(const filepath &relPath, const filepath &basePath=current_path())
+{
+  if(relPath.path.size()>0 && relPath.path[0]=='/'){
+    return relPath;
+  }
+  return basePath.native()+"/"+relPath.native();
+}
+
+bool exists(const filepath &p)
+{
+  return 0==access(p.path.c_str(), F_OK);
+}
+#endif
 
 /*!
   Metadata is represented as rapidjson structs, as they
@@ -40,20 +92,9 @@ public:
   virtual uint64_t onBeginGraphInstance(
     const GraphTypePtr &graph,
     const std::string &id,
-    const TypedDataPtr &properties
-  ) {
-    throw std::runtime_error("onBeginGraphInstance not implemented.");
-  }
-
-  //! Tells the consumer that a new graph is starting
-  virtual uint64_t onBeginGraphInstance(
-    const GraphTypePtr &graph,
-    const std::string &id,
     const TypedDataPtr &properties,
     rapidjson::Document &&metadata
-  ) {
-    return onBeginGraphInstance(graph, id, properties);
-  }
+  ) =0;
 
   //! The graph is now complete
   virtual void onEndGraphInstance(uint64_t /*graphToken*/)
@@ -75,24 +116,9 @@ public:
    uint64_t graphInst,
    const DeviceTypePtr &dt,
    const std::string &id,
-   const TypedDataPtr &properties
-  ) {
-    throw std::runtime_error("onDeviceInstance not implemented.");
-  }
-
-  // Tells the consumer that a new instance is being added
-  /*! The return value is a unique identifier that means something
-    to the consumer. */
-  virtual uint64_t onDeviceInstance
-  (
-   uint64_t graphInst,
-   const DeviceTypePtr &dt,
-   const std::string &id,
    const TypedDataPtr &properties,
-   rapidjson::Document &&metadata
-  ) {
-    return onDeviceInstance(graphInst, dt, id, properties);
-  }
+   rapidjson::Document &&metadata=rapidjson::Document()
+  ) =0;
 
     //! The edge instances within the graph instance will follow
   virtual void onBeginEdgeInstances(uint64_t /*graphToken*/)
@@ -102,20 +128,6 @@ public:
   virtual void onEndEdgeInstances(uint64_t /*graphToken*/)
   {}
 
-  //! Tells the consumer that the a new edge is being added
-  /*! It is required that both device instances have already been
-    added (otherwise the ids would not been known).
-  */
-  virtual void onEdgeInstance
-  (
-   uint64_t graphInst,
-   uint64_t dstDevInst, const DeviceTypePtr &dstDevType, const InputPortPtr &dstPort,
-   uint64_t srcDevInst,  const DeviceTypePtr &srcDevType, const OutputPortPtr &srcPort,
-   const TypedDataPtr &properties
-  ) {
-    throw std::runtime_error("onEdgeInstance not implemented.");
-  }
-
     //! Tells the consumer that the a new edge is being added
   /*! It is required that both device instances have already been
     added (otherwise the ids would not been known).
@@ -123,15 +135,13 @@ public:
   virtual void onEdgeInstance
   (
    uint64_t graphInst,
-   uint64_t dstDevInst, const DeviceTypePtr &dstDevType, const InputPortPtr &dstPort,
-   uint64_t srcDevInst,  const DeviceTypePtr &srcDevType, const OutputPortPtr &srcPort,
+   uint64_t dstDevInst, const DeviceTypePtr &dstDevType, const InputPinPtr &dstPin,
+   uint64_t srcDevInst,  const DeviceTypePtr &srcDevType, const OutputPinPtr &srcPin,
    const TypedDataPtr &properties,
-   rapidjson::Document &&metadata
-  ) {
-    onEdgeInstance(graphInst, dstDevInst, dstDevType, dstPort, srcDevInst, srcDevType, srcPort, properties);
-  }
+   rapidjson::Document &&metadata=rapidjson::Document()
+  ) =0;
 };
 
-extern "C" void loadGraph(Registry *registry, xmlpp::Element *elt, GraphLoadEvents *events);
+extern "C" void loadGraph(Registry *registry, const std::string &srcPath, xmlpp::Element *elt, GraphLoadEvents *events);
 
 #endif

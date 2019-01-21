@@ -17,6 +17,9 @@
 #include <sys/types.h>
 #include <dirent.h>
 
+#include "rapidjson/stringbuffer.h"
+#include "rapidjson/prettywriter.h"
+
 
 xmlpp::Element *find_single(xmlpp::Element *parent, const std::string &name, const xmlpp::Node::PrefixNsMap &ns=xmlpp::Node::PrefixNsMap())
 {
@@ -54,6 +57,21 @@ std::string get_attribute_optional(xmlpp::Element *eParent, const char *name)
   return a->get_value();
 }
 
+bool get_attribute_optional_bool(xmlpp::Element *eParent, const char *name)
+{
+  auto a=get_attribute_optional(eParent, name);
+  if(a.empty()){
+    return false;
+  }
+  if(a=="true" || a=="1"){
+    return true;
+  }
+  if(a=="false" || a=="0"){
+    return false;
+  }
+  throw std::runtime_error("Couldn't interpret '"+a+"' as a bool.");
+}
+
 template<class T>
 const T *cast_typed_properties(const typed_data_t *properties)
 {  return static_cast<const T *>(properties); }
@@ -63,24 +81,126 @@ T *cast_typed_data(typed_data_t *data)
 {  return static_cast<T *>(data); }
 
 
-class InputPortImpl
-  : public InputPort
+
+// Write a round-trippable number
+std::string float_to_string(float x)
+{
+  // https://randomascii.wordpress.com/2012/03/08/float-precisionfrom-zero-to-100-digits-2/
+  char buffer[16]={0};
+  snprintf(buffer, 15, "%.9g", x);
+  return buffer;
+}
+
+std::string float_to_string(double x)
+{
+  // https://randomascii.wordpress.com/2012/03/08/float-precisionfrom-zero-to-100-digits-2/
+  char buffer[32]={0};
+  snprintf(buffer, 31, "%.17g", x);
+  return buffer;
+}
+
+
+class TypedDataSpecImpl
+  : public TypedDataSpec
 {
 private:
-  DeviceTypePtr (*m_deviceTypeSrc)(); // Avoid circular initialisation with device type
+  TypedDataSpecElementTuplePtr m_type;
+  unsigned m_payloadSize;
+  unsigned m_totalSize;
+
+public:
+  TypedDataSpecImpl(TypedDataSpecElementTuplePtr elt=makeTuple("_", {}))
+    : m_type(elt)
+    , m_payloadSize(elt->getPayloadSize())
+    , m_totalSize(elt->getPayloadSize()+sizeof(typed_data_t))
+  {}
+
+  //! Gets the detailed type of the data spec
+  /*! For very lightweight implementations this may not be available
+  */
+  virtual TypedDataSpecElementTuplePtr getTupleElement()
+  {
+    return m_type;
+  }
+
+  //! Size of the actual content, not including typed_data_t header
+  virtual size_t payloadSize() const override
+  { return m_type->getPayloadSize(); }
+
+  //! Size of the entire typed_data_t instance, including standard header
+  virtual size_t totalSize() const override
+  { return m_totalSize; }
+
+  virtual TypedDataPtr create() const override
+  {
+    typed_data_t *p=(typed_data_t*)malloc(m_totalSize);
+    p->_ref_count=0;
+    p->_total_size_bytes=m_totalSize;
+
+    m_type->createBinaryDefault(((char*)p)+sizeof(typed_data_t), m_payloadSize);
+
+    return TypedDataPtr(p);
+  }
+
+  virtual TypedDataPtr load(xmlpp::Element *elt) const override
+  {
+    TypedDataPtr res=create();
+    if(elt){
+      std::string text="{"+elt->get_child_text()->get_content()+"}";
+      rapidjson::Document document;
+      document.Parse(text.c_str());
+      assert(document.IsObject());
+
+      m_type->JSONToBinary(document, (char*)res.payloadPtr(), m_payloadSize);
+    }
+    return res;
+  }
+
+  virtual void save(xmlpp::Element *parent, const TypedDataPtr &data) const override
+  {
+    parent->set_child_text(toJSON(data));
+  }
+
+  virtual std::string toJSON(const TypedDataPtr &data) const override
+  {
+    rapidjson::Document doc;
+    auto v=m_type->binaryToJSON((char*)data.payloadPtr(), data.payloadSize(), doc.GetAllocator());
+
+    rapidjson::StringBuffer buffer;
+    rapidjson::PrettyWriter<rapidjson::StringBuffer> writer(buffer);
+    v.Accept(writer);
+    return std::string(buffer.GetString());
+  }
+
+  virtual void addDataHash(const TypedDataPtr &data, POETSHash &hash) const
+  {
+    throw std::runtime_error("addDataHash - Not implemented for dynamic types yet.");
+  }
+
+};
+
+class InputPinImpl
+  : public InputPin
+{
+private:
+  std::function<DeviceTypePtr ()> m_deviceTypeSrc; // Avoid circular initialisation with device type
   mutable DeviceTypePtr m_deviceType;
   std::string m_name;
   unsigned m_index;
   MessageTypePtr m_messageType;
+  bool m_isApplication;
   TypedDataSpecPtr m_propertiesType;
   TypedDataSpecPtr m_stateType;
   std::string m_code;
+
+  rapidjson::Document m_metadata;
 protected:
-  InputPortImpl(
-    DeviceTypePtr (*deviceTypeSrc)(),
+  InputPinImpl(
+    std::function<DeviceTypePtr ()> deviceTypeSrc,
     const std::string &name,
     unsigned index,
     MessageTypePtr messageType,
+    bool isApplication,
     TypedDataSpecPtr propertiesType,
     TypedDataSpecPtr stateType,
     const std::string &code
@@ -89,11 +209,15 @@ protected:
     , m_name(name)
     , m_index(index)
     , m_messageType(messageType)
+    , m_isApplication(isApplication)
     , m_propertiesType(propertiesType)
     , m_stateType(stateType)
     , m_code(code)
-  {}
+  {
+    m_metadata.SetObject();
+  }
 public:
+
   virtual const DeviceTypePtr &getDeviceType() const override
   {
     if(!m_deviceType)
@@ -109,36 +233,48 @@ public:
 
   virtual const MessageTypePtr &getMessageType() const override
   { return m_messageType; }
+
+  virtual bool isApplication() const override
+  { return m_isApplication; }
 
   virtual const TypedDataSpecPtr &getPropertiesSpec() const override
   { return m_propertiesType; }
 
   virtual const TypedDataSpecPtr &getStateSpec() const override
   { return m_stateType; }
-  
+
   virtual const std::string &getHandlerCode() const override
   { return m_code; }
+
+  virtual rapidjson::Document &getMetadata() override
+  { return m_metadata; }
 };
 
 
-class OutputPortImpl
-  : public OutputPort
+class OutputPinImpl
+  : public OutputPin
 {
 private:
-  DeviceTypePtr (*m_deviceTypeSrc)(); // Avoid circular initialisation with device type
+  std::function<DeviceTypePtr ()> m_deviceTypeSrc; // Avoid circular initialisation with device type
   mutable DeviceTypePtr m_deviceType;
   std::string m_name;
   unsigned m_index;
   MessageTypePtr m_messageType;
+  bool m_isApplication;
   std::string m_code;
+
+  rapidjson::Document m_metadata;
 protected:
-  OutputPortImpl(DeviceTypePtr (*deviceTypeSrc)(), const std::string &name, unsigned index, MessageTypePtr messageType, const std::string &code)
+  OutputPinImpl(std::function<DeviceTypePtr ()> deviceTypeSrc, const std::string &name, unsigned index, MessageTypePtr messageType, bool isApplication, const std::string &code)
     : m_deviceTypeSrc(deviceTypeSrc)
     , m_name(name)
     , m_index(index)
     , m_messageType(messageType)
+    , m_isApplication(isApplication)
     , m_code(code)
-  {}
+  {
+    m_metadata.SetObject();
+  }
 public:
   virtual const DeviceTypePtr &getDeviceType() const override
   {
@@ -156,9 +292,14 @@ public:
   virtual const MessageTypePtr &getMessageType() const override
   { return m_messageType; }
 
+  virtual bool isApplication() const override
+  { return m_isApplication; }
+
   virtual const std::string &getHandlerCode() const override
   { return m_code; }
 
+  virtual rapidjson::Document &getMetadata() override
+  { return m_metadata; }
 };
 
 class MessageTypeImpl
@@ -168,18 +309,24 @@ private:
   std::string m_id;
   TypedDataSpecPtr m_message;
 
-protected:
+  rapidjson::Document m_metadata;
+public:
   MessageTypeImpl(const std::string &id, TypedDataSpecPtr message)
     : m_id(id)
     , m_message(message)
-  {}
-public:
+  {
+    m_metadata.SetObject();
+  }
+
   virtual const std::string &getId() const override
   { return m_id; }
 
 
   virtual const TypedDataSpecPtr &getMessageSpec() const override
   { return m_message; }
+
+  virtual rapidjson::Document &getMetadata() override
+  { return m_metadata; }
 };
 
 
@@ -192,20 +339,26 @@ private:
   TypedDataSpecPtr m_properties;
   TypedDataSpecPtr m_state;
 
-  std::vector<InputPortPtr> m_inputsByIndex;
-  std::map<std::string,InputPortPtr> m_inputsByName;
+  std::string m_readyToSendCode;
+  std::string m_sharedCode;
 
-  std::vector<OutputPortPtr> m_outputsByIndex;
-  std::map<std::string,OutputPortPtr> m_outputsByName;
+  std::vector<InputPinPtr> m_inputsByIndex;
+  std::map<std::string,InputPinPtr> m_inputsByName;
+
+  std::vector<OutputPinPtr> m_outputsByIndex;
+  std::map<std::string,OutputPinPtr> m_outputsByName;
+
+  rapidjson::Document m_metadata;
 
 protected:
-  DeviceTypeImpl(const std::string &id, TypedDataSpecPtr properties, TypedDataSpecPtr state, const std::vector<InputPortPtr> &inputs, const std::vector<OutputPortPtr> &outputs)
+  DeviceTypeImpl(const std::string &id, TypedDataSpecPtr properties, TypedDataSpecPtr state, const std::vector<InputPinPtr> &inputs, const std::vector<OutputPinPtr> &outputs)
     : m_id(id)
     , m_properties(properties)
     , m_state(state)
     , m_inputsByIndex(inputs)
     , m_outputsByIndex(outputs)
   {
+    m_metadata.SetObject();
     for(auto &i : inputs){
       m_inputsByName.insert(std::make_pair(i->getName(), i));
     }
@@ -224,39 +377,48 @@ public:
   virtual const TypedDataSpecPtr &getStateSpec() const override
   { return m_state; }
 
+  virtual const std::string &getReadyToSendCode() const override
+  { return m_readyToSendCode; }
+
+  virtual const std::string &getSharedCode() const override
+  { return m_sharedCode; }
+
   virtual unsigned getInputCount() const override
   { return m_inputsByIndex.size(); }
 
-  virtual const InputPortPtr &getInput(unsigned index) const override
+  virtual const InputPinPtr &getInput(unsigned index) const override
   { return m_inputsByIndex.at(index); }
 
-  virtual InputPortPtr getInput(const std::string &name) const override
+  virtual InputPinPtr getInput(const std::string &name) const override
   {
     auto it=m_inputsByName.find(name);
     if(it==m_inputsByName.end())
-      return InputPortPtr();
+      return InputPinPtr();
     return it->second;
   }
 
-  virtual const std::vector<InputPortPtr> &getInputs() const override
+  virtual const std::vector<InputPinPtr> &getInputs() const override
   { return m_inputsByIndex; }
 
   virtual unsigned getOutputCount() const override
   { return m_outputsByIndex.size(); }
 
-  virtual const OutputPortPtr &getOutput(unsigned index) const override
+  virtual const OutputPinPtr &getOutput(unsigned index) const override
   { return m_outputsByIndex.at(index); }
 
-  virtual OutputPortPtr getOutput(const std::string &name) const override
+  virtual OutputPinPtr getOutput(const std::string &name) const override
   {
     auto it=m_outputsByName.find(name);
     if(it==m_outputsByName.end())
-      return OutputPortPtr();
+      return OutputPinPtr();
     return it->second;
   }
 
-  virtual const std::vector<OutputPortPtr> &getOutputs() const override
+  virtual const std::vector<OutputPinPtr> &getOutputs() const override
   { return m_outputsByIndex; }
+
+  virtual rapidjson::Document &getMetadata() override
+  { return m_metadata; }
 };
 typedef std::shared_ptr<DeviceType> DeviceTypePtr;
 
@@ -277,12 +439,40 @@ private:
   std::unordered_map<std::string,DeviceTypePtr> m_deviceTypesById;
 
   std::string m_sharedCode;
+
+  rapidjson::Document m_metadata;
 protected:
   GraphTypeImpl(std::string id, TypedDataSpecPtr propertiesSpec)
     : m_id(id)
     , m_propertiesSpec(propertiesSpec)
-  {}
+  {
+    m_metadata.SetObject();
+  }
 
+  void addSharedCode(const std::string &code)
+  {
+    m_sharedCode=m_sharedCode+code;
+  }
+
+  void addMessageType(MessageTypePtr et)
+  {
+    if(m_messageTypesById.find(et->getId())!=m_messageTypesById.end()){
+      throw std::runtime_error("Duplicate message type '"+et->getId()+"'");
+    }
+    m_messageTypesByIndex.push_back(et);
+    m_messageTypesById[et->getId()]=et;
+  }
+
+  void addDeviceType(DeviceTypePtr et)
+  {
+    if(m_deviceTypesById.find(et->getId())!=m_deviceTypesById.end()){
+      throw std::runtime_error("Duplicate device type '"+et->getId()+"'");
+    }
+    m_deviceTypesByIndex.push_back(et);
+    m_deviceTypesById[et->getId()]=et;
+  }
+
+public:
   const std::string &getId() const override
   { return m_id; }
 
@@ -323,25 +513,13 @@ protected:
     return m_sharedCode;
   }
 
-  void addSharedCode(const std::string &code)
-  {
-    m_sharedCode=m_sharedCode+code;
-  }
+  virtual rapidjson::Document &getMetadata() override
+  { return m_metadata; }
 
-  void addMessageType(MessageTypePtr et)
-  {
-    m_messageTypesByIndex.push_back(et);
-    m_messageTypesById[et->getId()]=et;
-  }
-
-  void addDeviceType(DeviceTypePtr et)
-  {
-    m_deviceTypesByIndex.push_back(et);
-    m_deviceTypesById[et->getId()]=et;
-  }
 };
 
-class ReceiveOrchestratorServicesImpl
+
+class OrchestratorServicesImpl
   : public OrchestratorServices
 {
 private:
@@ -349,21 +527,38 @@ private:
   std::string m_prefix;
   const char *m_device;
   const char *m_input;
+  std::function<void (const char *,uint32_t,uint32_t)> m_onExportKeyValue;
+  std::function<void (const char *,int)> m_onApplicationExit;
+  std::function<void (const char *,uint32_t,bool,const char *)> m_onCheckpoint;
 public:
-  ReceiveOrchestratorServicesImpl(unsigned logLevel, FILE *dst, const char *device, const char *input)
+  OrchestratorServicesImpl(
+    const char *prefix,
+    unsigned logLevel, FILE *dst, const char *device, const char *input,
+    std::function<void (const char *, uint32_t,uint32_t)> onExportKeyValue, // It is up to application to manage sequence
+    std::function<void (const char *,int)> onApplicationExit,
+    std::function<void (const char *,uint32_t,bool,const char *)> onCheckpoint
+  )
     : OrchestratorServices(logLevel)
     , m_dst(dst)
-    , m_prefix("Recv: ")
+    , m_prefix(prefix)
     , m_device(device)
     , m_input(input)
+    , m_onExportKeyValue(onExportKeyValue)
+    , m_onApplicationExit(onApplicationExit)
+    , m_onCheckpoint(onCheckpoint)
   {}
+
+  static void onCheckpointDefault(const char *,uint32_t,bool,const char *)
+  {
+    // Do nothing
+  }
 
   void setPrefix(const char *prefix)
   {
     m_prefix=prefix;
   }
 
-  void setReceiver(const char *device, const char *input)
+  void setDevice(const char *device, const char *input)
   {
     m_device=device;
     m_input=input;
@@ -377,45 +572,64 @@ public:
       fprintf(m_dst, "\n");
     }
   }
+
+  virtual void vcheckpoint(bool preEvent, int level, const char *fmt, va_list args) override
+  {
+    char buffer[256]={0};
+    unsigned p=vsnprintf(buffer, sizeof(buffer)-1, fmt, args);
+    if(p>=sizeof(buffer)-2){
+      throw std::runtime_error("vcheckpoint buffer overflow");
+    }
+    m_onCheckpoint(m_device, preEvent, level, buffer);
+  }
+
+  virtual void export_key_value(uint32_t key, uint32_t value) override
+  {
+    m_onExportKeyValue(m_device, key, value);
+  }
+
+  virtual void application_exit(int code)
+  {
+    m_onApplicationExit(m_device, code);
+  }
 };
 
-class SendOrchestratorServicesImpl
-  : public OrchestratorServices
+
+class ReceiveOrchestratorServicesImpl
+  : public OrchestratorServicesImpl
 {
-private:
-  unsigned m_logLevel;
-  FILE *m_dst;
-  std::string m_prefix;
-  const char *m_device;
-  const char *m_output;
 public:
-  SendOrchestratorServicesImpl(unsigned logLevel, FILE *dst, const char *device, const char *output)
-    : OrchestratorServices(logLevel)
-    , m_dst(dst)
-    , m_prefix("Send: ")
-    , m_device(device)
-    , m_output(output)
+  ReceiveOrchestratorServicesImpl(
+    unsigned logLevel, FILE *dst, const char *device, const char *input,
+    std::function<void (const char *, uint32_t,uint32_t)> onExportKeyValue, // It is up to application to manage sequence
+    std::function<void (const char *,int)> onApplicationExit,
+    std::function<void (const char *,uint32_t,bool,const char *)> onCheckpoint = onCheckpointDefault
+  )
+    : OrchestratorServicesImpl(
+        "Recv : ",
+        logLevel,dst,device,input,
+        onExportKeyValue,onApplicationExit,onCheckpoint
+    )
   {}
+};
 
-  void setPrefix(const std::string &prefix)
-  {
-    m_prefix=m_prefix;
-  }
-
-  void setSender(const char *device, const char *output)
-  {
-    m_device=device;
-    m_output=output;
-  }
-
-  virtual void vlog(unsigned level, const char *msg, va_list args) override
-  {
-    if(m_logLevel >= level){
-      fprintf(m_dst, "%s%s:%s : ", m_prefix.c_str(), m_device, m_output);
-      vfprintf(m_dst, msg, args);
-      fprintf(m_dst, "\n");
-    }
-  }
+// TODO : Fold the services into one class. No reason for separation
+class SendOrchestratorServicesImpl
+  : public OrchestratorServicesImpl
+{
+public:
+  SendOrchestratorServicesImpl(
+    unsigned logLevel, FILE *dst, const char *device, const char *input,
+    std::function<void (const char *, uint32_t,uint32_t)> onExportKeyValue, // It is up to application to manage sequence
+    std::function<void (const char *,int)> onApplicationExit,
+    std::function<void (const char *,uint32_t,bool,const char *)> onCheckpoint = onCheckpointDefault
+  )
+    : OrchestratorServicesImpl(
+        "Send : ",
+        logLevel,dst,device,input,
+        onExportKeyValue,onApplicationExit,onCheckpoint
+    )
+    {}
 };
 
 class HandlerLogImpl
@@ -436,6 +650,56 @@ public:
       va_end(args);
     }
   }
+};
+
+class provider_assertion_error
+  : public std::runtime_error
+{
+private:
+  const char *m_file;
+  int m_line;
+  const char *m_assertFunc;
+  const char *m_cond;
+
+  static std::string make_what(const char *file, int line, const char *assertFunc,const char *cond)
+  {
+    std::stringstream tmp;
+    tmp<<file<<":"<<line<<": "<<assertFunc<<" Assertion `"<<cond<<"' failed.";
+    return tmp.str();
+  }
+public:
+  provider_assertion_error(const char *file, int line, const char *assertFunc,const char *cond)
+    : std::runtime_error(make_what(file,line,assertFunc,cond))
+    , m_file(file)
+    , m_line(line)
+    , m_assertFunc(assertFunc)
+    , m_cond(cond)
+  {
+
+  }
+};
+
+void handler_assert_func (const char *file, int line, const char *assertFunc,const char *cond)
+{
+  throw provider_assertion_error(file,line,assertFunc,cond);
+}
+
+#ifndef NDEBUG
+#define handler_assert(cond) if(!(cond)){ handler_assert_func(__FILE__,__LINE__,__FUNCTION__,#cond); }
+#else
+#define handler_assert(cond) (void)0
+#endif
+
+class unknown_graph_type_error
+  : public std::runtime_error
+{
+private:
+  std::string m_graphId;
+public:
+  unknown_graph_type_error(const std::string &graphId)
+    : std::runtime_error("Couldn't find graph type with id '"+graphId+"'")
+    , m_graphId(graphId)
+  {}
 };
 
 class RegistryImpl
@@ -491,17 +755,18 @@ private:
     }
   }
 public:
-  RegistryImpl()
+  RegistryImpl(bool disableImplicitLoad=false)
     : m_soExtension(".graph.so")
   {
-    const char * searchPath=getenv("POETS_PROVIDER_PATH");
-    std::shared_ptr<char> cwd;
-    if(searchPath==NULL){
-      cwd.reset(getcwd(0,0), free);
-      searchPath=cwd.get();
-    }
-    if(searchPath){
-      recurseLoad(searchPath);
+    if(!disableImplicitLoad){
+      const char * searchPath=getenv("POETS_PROVIDER_PATH");
+      if(searchPath){
+        recurseLoad(searchPath);
+      }else{
+        std::shared_ptr<char> cwd;
+        cwd.reset(getcwd(0,0), free);
+          recurseLoad(cwd.get()+std::string("/providers"));
+      }
     }
   }
 
@@ -509,7 +774,7 @@ public:
   {
     fprintf(stderr, "Loading provider '%s'\n", path.c_str());
     void *lib=dlopen(path.c_str(), RTLD_NOW|RTLD_LOCAL);
-    if(lib==0)  
+    if(lib==0)
       throw std::runtime_error("Couldn't load provider '"+path+" + '"+dlerror()+"'");
 
     // Mangled name of the export. TODO : A bit fragile.
@@ -533,11 +798,8 @@ public:
   {
     auto it=m_graphs.find(id);
     if(it==m_graphs.end()){
-      fprintf(stderr, "Couldn't find provide for '%s'", id.c_str());
-      for(auto i : m_graphs){
-	std::cerr<<"  "<<i.first<<" : "<<i.second<<"\n";
-      }
-      exit(1);
+      throw unknown_graph_type_error(id);
+
     }
     return it->second;
   }

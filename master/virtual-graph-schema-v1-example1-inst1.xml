@@ -34,7 +34,7 @@
     <DeviceInstances>
       <!-- Create a single device instance with unique instance
            id "x" and deviceTypeId "cell" -->
-      <DevI id="x" type="cell">
+      <DevI id="x" type="dev">
         <P>"leader":1</P> <!-- Set the "leader" property to
                                true. -->
       </DevI>

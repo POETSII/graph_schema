@@ -1,0 +1,18 @@
+<?xml version="1.0"?>
+<Graphs xmlns="https://poets-project.org/schemas/virtual-graph-schema-v2">
+  <GraphTypeReference
+        id="sf306_graph_schema_externals"
+        src="virtual-graph-schema-v2.2-example-externals.xml"
+  />
+    
+  <GraphInstance id="inst1" graphTypeId="sf306_graph_schema_externals">
+    <DeviceInstances>
+      <DevI id="dtX" type="dev" />
+      <ExtI id="etX" type="extern_dev"/>
+    </DeviceInstances>
+    <EdgeInstances>
+      <EdgeI path="etX:to_extern-dtX:devout"/>
+      <EdgeI path="dtX:devin-etX:to_device"/>
+    </EdgeInstances>
+  </GraphInstance>
+</Graphs>

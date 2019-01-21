@@ -3,6 +3,8 @@
 
 #include "graph.hpp"
 
+#include "rapidjson/rapidjson.h"
+
 #include <random>
 
 class Partitioner
@@ -36,16 +38,23 @@ private:
         cost_t weight; // Weight, e.g. due to reduced communication frequency
         node_t *src; // Weak (non-owning) pointers
         node_t *dst;
+        OutputPinPtr srcPin;
+        InputPinPtr dstPin;
+        TypedDataPtr properties;
+        rapidjson::Document metadata;
     };
 
     struct node_t
     {
         std::string id;
+        unsigned index;
+        DeviceTypePtr deviceType;
         cost_t cost;
         partition_t *partition; // Weak.
         std::vector<edge_ptr_t> inputs;
         std::vector<edge_ptr_t> outputs;
-        std::vector<double> location;
+        TypedDataPtr properties;
+        rapidjson::Document metadata;
     };
 
     struct partition_t
@@ -55,6 +64,9 @@ private:
     };
 
     GraphTypePtr m_graphType;
+    std::string m_graphId;
+    TypedDataPtr m_graphProperties;
+    rapidjson::Document m_metadata;
 
     std::vector<node_ptr_t> m_nodes;
     std::vector<edge_ptr_t> m_edges;
@@ -86,18 +98,31 @@ private:
         return acc * m_imbalanceWeight;
     }
 
+    virtual bool parseMetaData() const override
+    { return true; }
 
-    virtual void onBeginGraphInstance(const GraphTypePtr &graphType, const std::string&, const TypedDataPtr&) override
+    uint64_t onBeginGraphInstance(
+        const GraphTypePtr &graphType,
+        const std::string &graphId,
+        const TypedDataPtr &graphProperties,
+        rapidjson::Document &&metadata
+    ) override
     {
         std::cerr<<"onBeginGraphINnstance\n";
         m_graphType=graphType;
-    }
+        m_graphId=graphId;
+        m_graphProperties=graphProperties;
+        m_metadata=std::move(metadata);
+        
+        return 1;
+    }   
 
     virtual uint64_t onDeviceInstance(
+        uint64_t gId,
         const DeviceTypePtr &dt,
         const std::string &id,
         const TypedDataPtr &properties,
-        const double *nativeLocation
+        rapidjson::Document &&metadata
     ) override
     {
         //std::cerr<<"Device : "<<id<<"\n";
@@ -108,19 +133,18 @@ private:
         std::vector<edge_ptr_t> empty;
         node_ptr_t n(new node_t);
         n->id=id;
+        n->index=index;
+        n->deviceType=dt;
         n->cost=0;
         n->partition=partition;
-        if(nativeLocation){
-            for(unsigned i=0;i<m_graphType->getNativeDimension();i++){
-                n->location.push_back(nativeLocation[i]);
-            }
-        }
-        m_nodes.push_back(n);
+        n->properties=properties;
+        n->metadata=std::move(metadata);
+        m_nodes.push_back(std::move(n));
         partition->nodeCount++;
         return index;
     }
 
-    virtual void onEndGraphInstance() override
+    virtual void onEndGraphInstance(uint64_t gId) override
     {
         m_targetCount=m_nodes.size() / m_partitions.size();
         for(unsigned i=0;i<m_partitions.size();i++){
@@ -129,7 +153,7 @@ private:
 
     }
 
-    cost_t calcEdgeWeight(const EdgeTypePtr &e, const TypedDataPtr &properties)
+    cost_t calcEdgeWeight(const MessageTypePtr &e, const TypedDataPtr &properties)
     {
         return m_crossingWeight;
     }
@@ -147,14 +171,16 @@ private:
     }
 
     virtual void onEdgeInstance(
-        uint64_t dstDevInst, const DeviceTypePtr &dstDevType, const InputPortPtr &dstPort,
-        uint64_t srcDevInst,  const DeviceTypePtr &srcDevType, const OutputPortPtr &srcPort,
-        const TypedDataPtr &properties
+        uint64_t gId,
+        uint64_t dstDevInst, const DeviceTypePtr &dstDevType, const InputPinPtr &dstPin,
+        uint64_t srcDevInst,  const DeviceTypePtr &srcDevType, const OutputPinPtr &srcPin,
+        const TypedDataPtr &properties,
+        rapidjson::Document &&metadata
     ) override
     {
         //std::cerr<<"Edge : "<<srcDevInst<<" -> "<<dstDevInst<<"\n";
 
-        auto weight=calcEdgeWeight(dstPort->getEdgeType(), properties);
+        auto weight=calcEdgeWeight(dstPin->getMessageType(), properties);
 
         node_t *src=m_nodes.at(srcDevInst).get();
         node_t *dst=m_nodes.at(dstDevInst).get();
@@ -162,7 +188,7 @@ private:
         if(src==dst)
             return;
 
-        m_edges.push_back(std::make_shared<edge_t>(edge_t{weight,src,dst}));
+        m_edges.push_back(std::make_shared<edge_t>(edge_t{weight,src,dst,srcPin,dstPin,properties,std::move(metadata)}));
         auto e=m_edges.back();
         src->outputs.push_back(e);
         dst->inputs.push_back(e);
@@ -285,6 +311,7 @@ public:
             bool accept = ureal(m_urng) < thresh;
 
             if(0==(i%100000)){
+                std::cerr.precision(6);
                 std::cerr<<"  "<<i<<" : T="<<T<<", cost="<<m_globalCost<<", delta="<<delta<<", thresh="<<thresh<<", accept="<<accept<<"\n";
             //std::cerr<<"  recalc="<<recalcCost()<<"\n";
             }
@@ -339,6 +366,7 @@ public:
             bool accept = ureal(m_urng) < thresh;
 
             if(0==(i%10000)){
+                std::cerr.precision(6);
                 std::cerr<<"  "<<i<<" : T="<<T<<", cost="<<m_globalCost<<", delta="<<delta<<", thresh="<<thresh<<", accept="<<accept<<"\n";
             }
 
@@ -351,8 +379,91 @@ public:
             T=T*alpha;
         }
     }
+    
+    template<class TAlloc>
+    rapidjson::Value &GetOrAddMemberAsObject(rapidjson::Value &parent, const std::string &name, TAlloc &allocator)
+    {
+        if(!parent.HasMember(name.c_str())){
+            parent.AddMember(std::move(rapidjson::Value(name.c_str(),allocator)), std::move(rapidjson::Value(rapidjson::kObjectType)), allocator);
+        }
+        auto &x=parent[name.c_str()];
+        if(!x.IsObject())
+            throw std::runtime_error("Expected an object.");
+        return x;
+    }
+    
+    std::string createKey(rapidjson::Document &graphMeta)
+    {
+        auto &allocator =graphMeta.GetAllocator();
+        
+        if(!graphMeta.HasMember("device.keys")){
+            graphMeta.AddMember("device.keys", std::move(rapidjson::Value(rapidjson::kObjectType)), allocator);
+        }
+        rapidjson::Value &keys=graphMeta["device.keys"];
+        if(!keys.IsObject())
+            throw std::runtime_error("Corrupt device.keys metadata.");
+        
+        std::string key;
+        unsigned i=0;
+        while(true){
+            ++i;
+            key="p"+std::to_string(i);
+            if(!keys.HasMember(key.c_str()))
+                break;
+        }
+        
+        rapidjson::Value vKey(key.c_str(), allocator);
+        rapidjson::Value vValue("device.keys", allocator);
+        keys.AddMember(std::move(vKey), std::move(vValue), allocator);
+        
+        rapidjson::Value &dt10Partitions=GetOrAddMemberAsObject(graphMeta, "dt10.partitions", allocator);
+        rapidjson::Value &N=GetOrAddMemberAsObject(graphMeta, std::to_string(m_partitions.size()), allocator);
+        
+        rapidjson::Value counts(rapidjson::kArrayType);
+        for(auto p : m_partitions){
+            counts.PushBack( p->nodeCount , allocator);
+        }
+        N.AddMember("counts", std::move(counts), allocator);
+        
+        N.AddMember("key", std::move(rapidjson::Value(key.c_str(),allocator)), allocator);
+        
+        return key;
+    }
+    
+    void write(GraphLoadEvents *dst)
+    {
+        std::string key=createKey(m_metadata);
+        
+        dst->onGraphType(m_graphType);
+        
+        auto gId=dst->onBeginGraphInstance(m_graphType, m_graphId, m_graphProperties, std::move(m_metadata));
+        
+        std::vector<uint64_t> nHandles;
+        nHandles.resize(m_nodes.size());
+        dst->onBeginDeviceInstances(gId);
+        for(auto n : m_nodes){
+            rapidjson::Value vKey(key.c_str(), n->metadata.GetAllocator());
+            rapidjson::Value vVal(n->partition->index);
+            n->metadata.AddMember(std::move(vKey), std::move(vVal), n->metadata.GetAllocator());
+            
+            
+            nHandles[n->index]=dst->onDeviceInstance(gId, n->deviceType, n->id, n->properties, std::move(n->metadata));
+        }
+        dst->onEndDeviceInstances(gId);
+        dst->onBeginEdgeInstances(gId);
+        for(auto e : m_edges){
+            dst->onEdgeInstance(gId, 
+                nHandles[e->dst->index], e->dst->deviceType, e->dstPin,
+                nHandles[e->src->index], e->src->deviceType, e->srcPin,
+                e->properties,
+                std::move(e->metadata)
+            );
+        }
+        dst->onEndEdgeInstances(gId);
+        dst->onEndGraphInstance(gId);
+    }
 
-    void dump_dot(bool showClusters=true)
+    void dump_dot(std::ostream &dst, bool showClusters=true)
     {
         std::array<const char*,8> colours{"blue","green","gray","yellow","blue4","red4","red","green4"};
 
@@ -372,17 +483,14 @@ public:
 
         auto nodePrint = [&](node_t *n, const std::string &fillColour)
         {
-            std::cout<<" \""<<n->id<<"\" [";
+            dst<<" \""<<n->id<<"\" [";
             if(fillColour.size()){
-                std::cout<<" style=\"filled\" fillcolor=\""<<fillColour<<"\"";
+                dst<<" style=\"filled\" fillcolor=\""<<fillColour<<"\"";
             }
-            if(n->location.size()){
-                std::cout<<" pos=\"" << n->location.at(0)*100<<","<<n->location.at(1)*100<<"\"";
-            }
-            std::cout<<"];\n";
+            dst<<"];\n";
         };
 
-        std::cout<<"digraph partitioned{\n";
+        dst<<"digraph partitioned{\n";
         //std::cout<<"overlap=false;\n";
         //std::cout<<"spline=true;\n";
 
@@ -397,26 +505,26 @@ public:
             }
 
             for(const auto &p : partitions){
-                std::cout<<" subgraph cluster_"<<p.first->index<<" {\n";
+                dst<<" subgraph cluster_"<<p.first->index<<" {\n";
 
                 for(const auto &n : p.second){
                    nodePrint(n, n->cost > 0 ? "red" : "");
                 }
 
-                std::cout<<"}\n";
+                dst<<"}\n";
             }
         }
         for(const auto &e : m_edges){
-            std::cout<<" \""<<e->src->id<<"\" -> \""<<e->dst->id<<"\" [";
+            dst<<" \""<<e->src->id<<"\" -> \""<<e->dst->id<<"\" [";
             if(e->src->partition!=e->dst->partition){
-                std::cout<<" color=\"red\"";
+                dst<<" color=\"red\"";
             }else{
-                std::cout<<" color=\"#00000040\"";
+                dst<<" color=\"#00000040\"";
             }
-            std::cout<<"];\n";
+            dst<<"];\n";
         }
 
-        std::cout<<"}\n";
+        dst<<"}\n";
     }
 };
 

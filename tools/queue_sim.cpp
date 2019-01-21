@@ -11,6 +11,7 @@
 #include <thread>
 #include <condition_variable>
 #include <mutex>
+#include <chrono>
 #include <queue>
 
 #include <boost/lockfree/queue.hpp>
@@ -20,6 +21,14 @@
 
 static unsigned  logLevel=2;
 
+static double g_timeNowBase=0.0;
+
+double getNow()
+{
+  struct timespec tp;
+  clock_gettime(CLOCK_REALTIME , &tp);
+  return tp.tv_sec+1e-9*tp.tv_nsec - g_timeNowBase;
+}
 
 
 struct QueueSim
@@ -60,12 +69,14 @@ struct QueueSim
       : message(0)
     {}
     
-    broadcast_t(unsigned _bid, TypedDataPtr _message) // Note that the message is by-value to ensure a reference
+    broadcast_t(unsigned _bid, uint64_t _mid, TypedDataPtr _message) // Note that the message is by-value to ensure a reference
       : bid(_bid)
+      , mid(_mid)
       , message(_message.detach())
     {}
     
     unsigned bid; // Represent a bundle of devices in the target queue
+    uint64_t mid; // Unique id of message
     typed_data_t *message;
   };
 
@@ -81,23 +92,24 @@ struct QueueSim
   struct edge_t
   {
     device_t *device;
-    InputPortPtr port;
+    InputPinPtr pin;
     TypedDataPtr state;
     TypedDataPtr properties;
-    const char *portName;
-    const char *endpointName; // Endpoint name in id:port format. Probably a waste of memory, shoudl construct on the fly
+    const char *pinName;
+    const char *endpointName; // Endpoint name in id:pin format. Probably a waste of memory, shoudl construct on the fly
   };
 
 
 
   
-  struct output_port_t
+  struct output_pin_t
   {
-    const char *id; // Name in id:port format. Probably a waste of memory, better to strcat in local buffer?
-    OutputPortPtr port;
+    const char *id; // Name in id:pin format. Probably a waste of memory, better to strcat in local buffer?
+    OutputPinPtr pin;
     TypedDataSpecPtr spec; // Used to allocate messages
     std::vector<edge_bundle_id_t> batches; // Bundle to deliver to each queue.
     std::vector<edge_t> local; // edges to deliver to this queue
+    unsigned fanout=0;
   };
 
 
@@ -126,6 +138,7 @@ struct QueueSim
       , readyIndex(-1)
       , readyPrev(0)
       , readyNext(0)
+      , logSeq(0)
     {}
     
     const char *id;
@@ -138,7 +151,7 @@ struct QueueSim
     uint32_t rtsFlags;
 
     unsigned outputCount;
-    std::vector<output_port_t> outputs;
+    std::vector<output_pin_t> outputs;
     
     // Each device is threaded onto a free list so that we can find
     // devices ready to send in O(1) time
@@ -146,6 +159,8 @@ struct QueueSim
     int readyIndex; // -1 means not ready, anything else is guaranteed to be a ready slot
     device_t *readyPrev;
     device_t *readyNext;
+
+    uint32_t logSeq;
   };
 
 
@@ -158,7 +173,7 @@ struct QueueSim
     
     unsigned index; // Unique index of the queue
 
-    // Maps "sourceDevice:outputPort" -> bundleId
+    // Maps "sourceDevice:outputPin" -> bundleId
     std::unordered_map< const char* , unsigned > findBatchId;
     std::vector<edge_bundle_t> edge_bundles; // Batches of places to deliver messages to
 
@@ -172,7 +187,23 @@ struct QueueSim
     //    std::queue<broadcast_t> m_broadcasts;
     std::unique_ptr<boost::lockfree::queue<broadcast_t> > m_broadcasts;
 
+    uint64_t m_eventIdCounter;
+    
+    uint64_t nextEventId()
+    {
+      return m_eventIdCounter++;
+    }
+
+    std::shared_ptr<LogWriter> m_log;
+    std::vector<std::unique_ptr<LogWriter::event_t> > m_events;
+
     uint64_t sentinelB=0x23456781;
+
+    std::function<void(const char*, unsigned int, unsigned int)> onKeyValue=[](const char *device, unsigned int key, unsigned int value){
+      // TODO!
+      //fprintf(stderr,   "key-value, %s, %u, %u\n", device, key, value);
+    };
+    
 
     queue_t() = delete;
     queue_t(const queue_t &)=delete;
@@ -180,7 +211,7 @@ struct QueueSim
 
     queue_t(queue_t &&)=default;
 
-    queue_t(QueueSim *_parent, unsigned _index)
+    queue_t(QueueSim *_parent, unsigned _index, std::shared_ptr<LogWriter> pLog)
       : parent(_parent)
       , index(_index)
       , readyBegin(0)
@@ -188,7 +219,13 @@ struct QueueSim
       , readyCount(0)
       , m_pMutex(new mutex_t())
       , m_broadcasts(new boost::lockfree::queue<broadcast_t>(0))
-    {    }
+      , m_eventIdCounter( uint64_t(_index)<<48)
+      , m_log(pLog)
+    {
+      if(_index >= 0x8000 ){
+        throw std::runtime_error("Can't have more than 2^16 queues, due to event id distribution method.");
+      }
+    }
 
     ~queue_t()
     {
@@ -201,15 +238,15 @@ struct QueueSim
       unsigned bid;
       auto it=findBatchId.find(srcEndpoint);
       if(it!=findBatchId.end()){
-	bid=it->second;
-	newBundle=false;
+        bid=it->second;
+        newBundle=false;
       }else{
-	bid=edge_bundles.size();
-	edge_bundle_t eb;
-	eb.bid=bid;
-	edge_bundles.push_back(eb);
-	findBatchId[srcEndpoint]=bid;
-	newBundle=true;
+        bid=edge_bundles.size();
+        edge_bundle_t eb;
+        eb.bid=bid;
+        edge_bundles.push_back(eb);
+        findBatchId[srcEndpoint]=bid;
+        newBundle=true;
       }
       return edge_bundles[bid];
     }
@@ -219,7 +256,7 @@ struct QueueSim
     void readyAdd(device_t *device)
     {
       if(logLevel>4){
-	fprintf(stderr, "      readyAdd(%s), count=%d\n", device->id, readyCount);
+        fprintf(stderr, "      readyAdd(%s), count=%d\n", device->id, readyCount);
       }
       
       assert(!device->isOnReady);
@@ -232,13 +269,13 @@ struct QueueSim
       device->isOnReady=true;
 
       if(readyEnd==0){
-	readyBegin=device;
-	readyEnd=device;
+        readyBegin=device;
+        readyEnd=device;
       }else{
-	device->readyPrev=readyEnd;
-	assert(readyEnd->readyNext==0);
-	readyEnd->readyNext=device;
-	readyEnd=device;
+        device->readyPrev=readyEnd;
+        assert(readyEnd->readyNext==0);
+        readyEnd->readyNext=device;
+        readyEnd=device;
       }
 
       readyCount++;
@@ -250,7 +287,7 @@ struct QueueSim
     void readyRemove(device_t *device)
     {
       if(logLevel>4){
-	fprintf(stderr, "      readyRem(%s), count=%d\n", device->id, readyCount);
+        fprintf(stderr, "      readyRem(%s), count=%d\n", device->id, readyCount);
       }
       
       assert(device->isOnReady);
@@ -259,23 +296,23 @@ struct QueueSim
       assert(readyCount>0);
 
       if(device->readyPrev==0){
-	assert(readyBegin==device);
-	readyBegin=device->readyNext;
+        assert(readyBegin==device);
+        readyBegin=device->readyNext;
       }else{
-	device->readyPrev->readyNext = device->readyNext;
+        device->readyPrev->readyNext = device->readyNext;
       }
       if(device->readyNext==0){
-	assert(readyEnd==device);
-	readyEnd=device->readyPrev;
+        assert(readyEnd==device);
+        readyEnd=device->readyPrev;
       }else{
-	device->readyNext->readyPrev = device->readyPrev;
+        device->readyNext->readyPrev = device->readyPrev;
       }
 
       readyCount--;
 
       device->readyPrev=0;
       device->readyNext=0;
-      device->isOnReady=true;
+      device->isOnReady=false;
 
       assert( (readyBegin==0) == (readyEnd==0) );
     }
@@ -283,14 +320,14 @@ struct QueueSim
     device_t *readyPop()
     {
       if(logLevel>4){
-	fprintf(stderr, "      readyPop(head=%s), count=%d, totalQueued=%u\n", readyBegin ? readyBegin->id : "<null>", readyCount, (unsigned)parent->m_queuedMessages);
+        fprintf(stderr, "      readyPop(head=%s), count=%d, totalQueued=%u\n", readyBegin ? readyBegin->id : "<null>", readyCount, (unsigned)parent->m_queuedMessages);
       }
       
       assert( (readyBegin==0) == (readyEnd==0) );
       
       device_t *device=readyBegin;
       if(device==0)
-	return 0;
+        return 0;
 
       assert(device->readyIndex!=-1);
       assert(device->isOnReady==true);
@@ -299,8 +336,8 @@ struct QueueSim
 
       readyBegin=readyBegin->readyNext;
       if(readyBegin==0){
-	readyEnd=0;
-	assert(readyCount==1);
+        readyEnd=0;
+        assert(readyCount==1);
       }
       readyCount--;
 
@@ -313,24 +350,24 @@ struct QueueSim
       return device;
     }
 
-    void post(unsigned bid, const TypedDataPtr &message)
+    void post(unsigned bid, uint64_t mid, const TypedDataPtr &message)
     {
       //      lock_t lock(*m_pMutex);
       //m_broadcasts.emplace(bid, message);
       assert(m_broadcasts);
-      bool ok=m_broadcasts->push(broadcast_t{bid, message});
+      bool ok=m_broadcasts->push(broadcast_t{bid, mid, message});
       if(!ok){
-	fprintf(stderr, "Push failed.\n");
-	exit(1);
+        fprintf(stderr, "Push failed.\n");
+        exit(1);
       }
     }
 
-    bool pop(unsigned &bid, TypedDataPtr &message)
+    bool pop(unsigned &bid, uint64_t &mid, TypedDataPtr &message)
     {
       
       //lock_t lock(*m_pMutex);
       /*if(m_broadcasts.empty())
-	return false;
+        return false;
       
       bid=m_broadcasts.front().bid;
       message=m_broadcasts.front().message;
@@ -341,59 +378,87 @@ struct QueueSim
       broadcast_t res;
       assert(m_broadcasts);
       if(!m_broadcasts->pop(res))
-	return false;
+        return false;
       bid=res.bid;
+      mid=res.mid;
       message.attach(res.message);
       return true;
     }
 
-    void deliver(unsigned bid, const TypedDataPtr &message)
+    void deliver(unsigned bid, uint64_t mid, const TypedDataPtr &message)
     {
-    	assert(bid < edge_bundles.size());
+      assert(bid < edge_bundles.size());
 
-	edge_bundle_t &bundle=edge_bundles[bid];
+      edge_bundle_t &bundle=edge_bundles[bid];
 
-	deliver(bundle.edges, message);
+      deliver(bundle.edges, mid, message);
     }
 
 
-    void deliver(std::vector<edge_t> &edges, const TypedDataPtr &message)
+    void deliver(std::vector<edge_t> &edges, uint64_t mid, const TypedDataPtr &message)
     {
-	const typed_data_t *graphPropertiesPtr=parent->m_graphProperties.get();
-	
-	ReceiveOrchestratorServicesImpl services(logLevel, stderr, 0, 0);
+      const typed_data_t *graphPropertiesPtr=parent->m_graphProperties.get();
+  
+      ReceiveOrchestratorServicesImpl services(logLevel, stderr, 0, 0, onKeyValue, parent->onHandlerExit);
 
-	for(edge_t &e : edges){
-	  device_t *device=e.device;
+      std::string idSendStr;
+      if(m_log){
+        idSendStr=std::to_string(mid);
+      }
 
-	  services.setReceiver(device->id, e.portName);
-	  
-	  e.port->onReceive(&services, graphPropertiesPtr,
-			  device->properties.get(), device->state.get(),
-			  e.properties.get(), e.state.get(),
-			  message.get()
-			    );
+      for(edge_t &e : edges){
+        device_t *device=e.device;
 
-	  device->rtsFlags = device->type->calcReadyToSend(&services,
-						     graphPropertiesPtr,
-						     device->properties.get(),
-						     device->state.get()
-						     );
-						     
+        //services.setReceiver(device->id, e.pinName);
+        
+        e.pin->onReceive(&services, graphPropertiesPtr,
+            device->properties.get(), device->state.get(),
+            e.properties.get(), e.state.get(),
+            message.get()
+              );
 
-	  if( (device->rtsFlags!=0) == (device->readyIndex!=-1)){
-	    // do nothing. It is eiter still ready or still not ready
-	  }else if(device->readyIndex==-1){
-	    // it was previously not ready
-        assert(device->rtsFlags);
-	    device->readyIndex = lmo(device->rtsFlags);
-	    readyAdd(device);
-	  }else{
-	    // it was previously not ready
-	    device->readyIndex = -1;
-	    readyRemove(device);
-	  }
-	}
+        device->rtsFlags = device->type->calcReadyToSend(&services,
+                    graphPropertiesPtr,
+                    device->properties.get(),
+                    device->state.get()
+                    );
+                    
+
+        if( (device->rtsFlags!=0) == (device->readyIndex!=-1)){
+          // do nothing. It is eiter still ready or still not ready
+        }else if(device->readyIndex==-1){
+          // it was previously not ready
+            assert(device->rtsFlags);
+          device->readyIndex = lmo(device->rtsFlags);
+          readyAdd(device);
+        }else{
+          // it was previously not ready
+          device->readyIndex = -1;
+          readyRemove(device);
+        }
+
+        if(m_log){
+          std::string idRecvStr=std::to_string(nextEventId());
+          m_events.emplace_back(new LogWriter::recv_event_t(
+            idRecvStr.c_str(),
+            getNow(),
+            0.0,
+            std::vector<std::pair<bool,std::string> >(),
+            device->type,
+            device->id,
+            device->rtsFlags,
+            device->logSeq++,
+            std::vector<std::string>(),
+            device->state,
+            e.pin,
+            idSendStr.c_str()
+          ));
+          if(m_events.size()>=64){
+            m_log->onEvents(m_events);
+            m_events.clear();
+          }
+        }
+      }
     }
     
     void send(device_t *device)
@@ -404,11 +469,14 @@ struct QueueSim
       assert(device->readyIndex < (int)device->outputs.size());
       auto &output=device->outputs[device->readyIndex];
 
-      SendOrchestratorServicesImpl services(logLevel, stderr, device->id, output.port->getName().c_str());
+      SendOrchestratorServicesImpl services(logLevel, stderr, device->id, output.pin->getName().c_str(), onKeyValue, parent->onHandlerExit);
+
+      uint64_t mid=nextEventId();
+      double now=getNow();
 
       TypedDataPtr message=output.spec->create();
       bool doSend=true;
-      output.port->onSend(&services, parent->m_graphProperties.get(), device->properties.get(), device->state.get(), message.get(), &doSend);
+      output.pin->onSend(&services, parent->m_graphProperties.get(), device->properties.get(), device->state.get(), message.get(), &doSend);
 
       if(logLevel>3){
         fprintf(stderr, "  Send %s\n", device->id);
@@ -424,7 +492,30 @@ struct QueueSim
         readyAdd(device);
       }
 
-      
+      if(m_log){
+        std::string idSendStr=std::to_string(mid);
+        m_events.emplace_back(new LogWriter::send_event_t(
+          idSendStr.c_str(),
+          getNow(),
+          0.0,
+          std::vector<std::pair<bool,std::string> >(),
+          device->type,
+          device->id,
+          device->rtsFlags,
+          device->logSeq++,
+          std::vector<std::string>(),
+          device->state,
+          output.pin,
+          !doSend,
+          doSend ? output.fanout : 0,
+          message
+        ));
+        if(m_events.size()>=64){
+          m_log->onEvents(m_events);
+          m_events.clear();
+        }
+      }
+     
       if(!doSend){
         if(logLevel>3){
           fprintf(stderr, "    Cancelled\n");
@@ -436,14 +527,14 @@ struct QueueSim
 
       // Send remote batches
       for(auto &x : output.batches){
-	if(logLevel>3){
-	  fprintf(stderr, "    post %u\n", x.bid);
-	}
-	parent->m_queues[x.queue].post(x.bid, message);
+        if(logLevel>3){
+          fprintf(stderr, "    post %u\n", x.bid);
+        }
+        parent->m_queues[x.queue].post(x.bid,mid,  message);
       }
 
       // deliver locally
-      deliver(output.local, message);
+      deliver(output.local, mid, message);
     }
   };
 
@@ -451,6 +542,10 @@ struct QueueSim
   GraphTypePtr m_graphType;
   std::string m_id;
   TypedDataPtr m_graphProperties;
+  rapidjson::Document m_graphMetadata;
+
+  unsigned m_graphPartitionThreads=0;
+  std::string m_graphPartitionKey;
 
   // This is all the devices in one list. We use a list so that
   // pointers stay valid (!!! Idiot)
@@ -477,27 +572,51 @@ struct QueueSim
   std::condition_variable m_idleCondition;
 
   bool m_quit;
+  int m_exitCode=0;
+  bool m_exitCodeSet=false;
 
-  QueueSim(unsigned nQueues)
+  std::function<void(const char*, int)> onHandlerExit=[=](const char *device, int code){
+    fprintf(stderr, "Device exit from %s, code =%d\n", device, code);
+    onExit(device, code);
+  };
+
+  QueueSim(unsigned nQueues, std::shared_ptr<LogWriter> pLog)
   {
     
     m_queuedMessages=0;
     for(unsigned i=0;i<nQueues;i++){
-      m_queues.emplace_back(this, i);
+      m_queues.emplace_back(this, i, pLog);
     }
     m_quit=false;
   }
 
   void dump()
   {
-    ReceiveOrchestratorServicesImpl services(0, stderr, 0, "__print__");
+    std::function<void(const char*, unsigned int, unsigned int)> onKeyValue=[](const char *device, unsigned int key, unsigned int value){
+      fprintf(stderr,   "ERROR: key-value during __print__, %s, %u, %u\n", device, key, value);
+    };
+    std::function<void(const char*, int)> onHandlerExit=[](const char *device, int code){
+      fprintf(stderr, "ERROR: Device exit from %s during __print__, code =%d\n", device, code);
+      exit(1);
+    };
+
+    ReceiveOrchestratorServicesImpl services(0, stderr, 0, "__print__", onKeyValue, onHandlerExit);
     for(auto *device : m_devices){
       auto print=device->type->getInput("__print__");
       if(print){
-	    fprintf(stderr, "Dump\n");
-	services.setReceiver(device->id, "__print__");
-	print->onReceive(&services, m_graphProperties.get(), device->properties.get(), device->state.get(), 0, 0, 0);
+        fprintf(stderr, "Dump\n");
+        services.setDevice(device->id, "__print__");
+        print->onReceive(&services, m_graphProperties.get(), device->properties.get(), device->state.get(), 0, 0, 0);
       }
+    }
+  }
+
+  void onExit(const char *device, int code){
+    if(!m_exitCodeSet){
+      m_exitCodeSet=true;
+      m_exitCode=code;
+      m_quit=true;
+      m_idleCondition.notify_all();
     }
   }
   
@@ -511,7 +630,10 @@ struct QueueSim
     // despatching received messages yet, so this must be the
     // first thing they get
     for(auto *device : queue.devices){
-      ReceiveOrchestratorServicesImpl services(logLevel, stderr, device->id, "__init__");
+      ReceiveOrchestratorServicesImpl services(logLevel, stderr, device->id, "__init__", queue.onKeyValue, onHandlerExit);
+
+      uint64_t mid=queue.nextEventId();
+      double now=getNow();
       
       if(logLevel>3){
         fprintf(stderr, "  queue %u: trying __init__ on %p=%s, type=%p\n", queue.index, device, device->id, device->type.get());
@@ -527,7 +649,6 @@ struct QueueSim
         }
 
         init->onReceive(&services, graphPropertiesPtr, device->properties.get(), device->state.get(), 0, 0, 0);
-
       }
       device->rtsFlags = device->type->calcReadyToSend( &services, graphPropertiesPtr, device->properties.get(), device->state.get());
       if(device->rtsFlags){
@@ -541,6 +662,26 @@ struct QueueSim
       if(device->readyIndex!=-1){
         queue.readyAdd(device);
       }
+
+      if(queue.m_log){
+        std::string idRecvStr=std::to_string(mid);
+        queue.m_events.emplace_back(new LogWriter::init_event_t(
+          idRecvStr.c_str(),
+          now,
+          0.0,
+          std::vector<std::pair<bool,std::string> >(),
+          device->type,
+          device->id,
+          device->rtsFlags,
+          device->logSeq++,
+          std::vector<std::string>(),
+          device->state
+        ));
+        if(queue.m_events.size()>=64){
+          queue.m_log->onEvents(queue.m_events);
+          queue.m_events.clear();
+        }
+      }
     }
 
     uint32_t rng=0;
@@ -552,92 +693,145 @@ struct QueueSim
 
     while(!m_quit){
       if(logLevel>2){
-	fprintf(stderr, "\n==========================================================\n");
-	fprintf(stderr, "q = %u, steps = %u\n", queue.index, steps);
+        fprintf(stderr, "\n==========================================================\n");
+        fprintf(stderr, "q = %u, steps = %u\n", queue.index, steps);
       }
       steps++;
       
       unsigned bid;
+      uint64_t mid;
       TypedDataPtr message;
 
-      if(queue.pop(bid, message)){
-	queue.deliver(bid, message);
-	m_queuedMessages--;
+      device_t *device=queue.readyPop();
+      if(device){
+        assert(device->owner==self);
+        assert(device->readyIndex!=-1);
+        assert( (device->rtsFlags >> device->readyIndex) & 1 );
+
+        queue.send(device);
+        
+        for(unsigned i=0;i<256;i++){
+          device=queue.readyPop();
+          if(!device)
+            break;
+          queue.send(device);
+        }
+
+        // inefficient
+        m_idleCondition.notify_all();
+      }else if(queue.pop(bid, mid, message)){
+        queue.deliver(bid, mid, message);
+        m_queuedMessages--;
       }else{
-	device_t *device=queue.readyPop();
-	if(device){
-	  assert(device->owner==self);
-	  assert(device->readyIndex!=-1);
-	  assert( (device->rtsFlags >> device->readyIndex) & 1 );
+        if(idleSteps < idleCheckDelta){
+          idleSteps++;
+          std::this_thread::yield();
+        }else{
+          lock_t idleLock(m_idleMutex);
 
-	  queue.send(device);
-	  
-	  for(unsigned i=0;i<64;i++){
-	    device=queue.readyPop();
-	    if(!device)
-	      break;
-	    queue.send(device);
-	  }
+          if(logLevel>3){
+            fprintf(stderr, "  idle : %d\n", queue.index);
+          }
+          
+          m_busyCount--;
+          
+          if(m_busyCount==0 && m_queuedMessages==0){
+            m_idleCondition.notify_all();
+            if(logLevel>2){
+              fprintf(stderr,"  queue exit : %d\n", queue.index);
+            }
+            break;
+          }
+          
+          m_idleCondition.wait_for(idleLock, std::chrono::milliseconds(100));
+        
+          m_busyCount++;
 
-	  // inefficient
-	  m_idleCondition.notify_all();
-	}else{
-	  if(idleSteps < idleCheckDelta){
-	    idleSteps++;
-	    std::this_thread::yield();
-	  }else{
-	    lock_t idleLock(m_idleMutex);
-
-	    if(logLevel>3){
-	      fprintf(stderr, "  idle : %d\n", queue.index);
-	    }
-	    
-	    m_busyCount--;
-	    
-	    if(m_busyCount==0 && m_queuedMessages==0){
-	      m_idleCondition.notify_all();
-	      if(logLevel>2){
-		fprintf(stderr,"  queue exit : %d\n", queue.index);
-	      }
-	      return;
-	    }
-	    
-	    m_idleCondition.wait_for(idleLock, std::chrono::milliseconds(100));
-	  
-	    m_busyCount++;
-
-	    idleSteps=0;
-	  }
-	}
+          idleSteps=0;
+        }
       }
+    }
+
+    if(queue.m_events.size()>0){
+      queue.m_log->onEvents(queue.m_events);
+      queue.m_events.clear();
     }
   }
 
-  virtual uint64_t onBeginGraphInstance(const GraphTypePtr &graphType, const std::string &id, const TypedDataPtr &graphProperties) override
+
+  virtual bool parseMetaData() const override
+  { return true; }
+
+  virtual uint64_t onBeginGraphInstance(
+    const GraphTypePtr &graphType, const std::string &id, const TypedDataPtr &graphProperties,
+    rapidjson::Document &&metadata
+  ) override
   {
     m_graphType=graphType;
     m_id=id;
     m_graphProperties=graphProperties;
+    m_graphMetadata=std::move(metadata);
+
+    std::string key="dt10.partitions."+std::to_string(m_queues.size());
+
+    if(m_graphMetadata.HasMember(key.c_str())){
+      fprintf(stderr, "Loading partition information from graph.\n");
+      m_graphPartitionThreads=m_queues.size();
+      auto &info=m_graphMetadata[key.c_str()];
+      m_graphPartitionKey=info["key"].GetString();
+    }
+
     return 0;
+  }
+
+  virtual void onEndGraphInstance(uint64_t token) override
+  {
+    for(unsigned i=0; i<m_queues.size(); i++){
+      auto &q=m_queues[i];
+
+      fprintf(stderr, "queue %u : %u devices\n", i, (unsigned)q.devices.size());
+
+    }
+    //exit(1);
   }
 
   unsigned chooseOwner(const char *id)
   {
     assert(id==intern(id));
     
-    std::hash<const char *> hf;
-    return hf(id) % m_queues.size();
+    std::hash<std::string> hf;
+    auto x=hf(id);
+    //fprintf(stderr, "%s, %p, %u, %u\n", id, id, x, x % m_queues.size());
+    return x % m_queues.size();
   }
 
-  virtual uint64_t onDeviceInstance(uint64_t gId, const DeviceTypePtr &dt, const std::string &id, const TypedDataPtr &deviceProperties) override
+  virtual uint64_t onDeviceInstance(
+    uint64_t gId, const DeviceTypePtr &dt, const std::string &id, const TypedDataPtr &deviceProperties,
+    rapidjson::Document &&_metadata
+   ) override
   {
     unsigned index=-1;
-    
+
+    rapidjson::Document metadata=std::move(_metadata);
     {
       const char *pid=intern(id);
       
-      unsigned owner=chooseOwner(pid);
+      unsigned owner;
       
+      if(m_graphPartitionThreads>0){
+
+        if(!metadata.HasMember(m_graphPartitionKey.c_str())){
+          rapidjson::StringBuffer buffer;
+          rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
+          metadata.Accept(writer);
+
+          std::cerr << buffer.GetString() << std::endl;
+          throw std::runtime_error("device instance "+id+" is missing partition key "+m_graphPartitionKey);
+        }
+        owner=metadata[m_graphPartitionKey.c_str()].GetUint();
+      }else{
+        owner=chooseOwner(pid);
+      }      
       
       TypedDataPtr state=dt->getStateSpec()->create();
       device_t d;
@@ -649,12 +843,12 @@ struct QueueSim
       d.outputCount=dt->getOutputCount();
       d.rtsFlags=0;
       for(unsigned i=0; i<d.outputCount; i++){
-	output_port_t out;
-	out.port=dt->getOutput(i);
-	std::string pid=id+":"+out.port->getName();
-	out.id=intern(pid.c_str());
-	out.spec=out.port->getMessageType()->getMessageSpec();
-	d.outputs.push_back(out);
+        output_pin_t out;
+        out.pin=dt->getOutput(i);
+        std::string pid=id+":"+out.pin->getName();
+        out.id=intern(pid.c_str());
+        out.spec=out.pin->getMessageType()->getMessageSpec();
+        d.outputs.push_back(out);
       }
       d.readyIndex=-1;
       d.isOnReady=false;
@@ -669,7 +863,7 @@ struct QueueSim
       m_idToDevice[d.id] = device;
 
       if(logLevel>2){
-	fprintf(stderr, " q[%d].add(%p=%s), type=%p\n", d.owner, device, device->id, device->type.get());
+        fprintf(stderr, " q[%d].add(%p=%s), type=%p\n", d.owner, device, device->id, device->type.get());
       }
       m_queues.at(d.owner).devices.push_back(device);
    
@@ -679,7 +873,7 @@ struct QueueSim
     return index;
   }
 
-  void onEdgeInstance(uint64_t gId, uint64_t dstDevIndex, const DeviceTypePtr &dstDevType, const InputPortPtr &dstInput, uint64_t srcDevIndex, const DeviceTypePtr &srcDevType, const OutputPortPtr &srcOutput, const TypedDataPtr &properties) override
+  void onEdgeInstance(uint64_t gId, uint64_t dstDevIndex, const DeviceTypePtr &dstDevType, const InputPinPtr &dstInput, uint64_t srcDevIndex, const DeviceTypePtr &srcDevType, const OutputPinPtr &srcOutput, const TypedDataPtr &properties, rapidjson::Document &&) override
   {
     device_t *dstDevice=m_devices.at(dstDevIndex);
     device_t *srcDevice=m_devices.at(srcDevIndex);
@@ -689,16 +883,16 @@ struct QueueSim
     
     edge_t edge;
     edge.endpointName=dstEp;
-    edge.portName=intern(dstInput->getName());
+    edge.pinName=intern(dstInput->getName());
     edge.device=dstDevice;
-    edge.port=dstInput;
+    edge.pin=dstInput;
     edge.state=dstInput->getStateSpec()->create();
     edge.properties=properties;
 
     unsigned dstQueue=dstDevice->owner;
     unsigned srcQueue=srcDevice->owner;
 
-    output_port_t &out=srcDevice->outputs[srcOutput->getIndex()];
+    output_pin_t &out=srcDevice->outputs[srcOutput->getIndex()];
     
     if(dstQueue==srcQueue){
       // local
@@ -710,9 +904,10 @@ struct QueueSim
       eb.edges.push_back(edge); // Woo!
       
       if(newBundle){
-	out.batches.emplace_back(edge_bundle_id_t{dstQueue, eb.bid});
+        out.batches.emplace_back(edge_bundle_id_t{dstQueue, eb.bid});
       }
     }
+    out.fanout++;
   }
 
 
@@ -725,15 +920,15 @@ struct QueueSim
     /*
     for(auto &dev : m_devices){
         dst->writeDeviceInstance(dev.type, dev.name, dev.state, dev.readyToSend.get());
-	for(unsigned i=0; i<dev.inputs.size(); i++){
-	  const auto &et=dev.type->getInput(i)->getEdgeType();
-	  for(auto &slot : dev.inputs[i]){
-	    dst->writeEdgeInstance(et, slot.id, slot.state, slot.firings, 0, 0);
-	    slot.firings=0;
-	  }
-	}
-	}*/
-	  
+  for(unsigned i=0; i<dev.inputs.size(); i++){
+    const auto &et=dev.type->getInput(i)->getEdgeType();
+    for(auto &slot : dev.inputs[i]){
+      dst->writeEdgeInstance(et, slot.id, slot.state, slot.firings, 0, 0);
+      slot.firings=0;
+    }
+  }
+  }*/
+    
     dst->endSnapshot();
   }
 
@@ -748,16 +943,35 @@ void usage()
   fprintf(stderr, "queue_sim [options] sourceFile?\n");
   fprintf(stderr, "\n");
   fprintf(stderr, "  --log-level n\n");
-  fprintf(stderr, "  --max-steps n\n");
   fprintf(stderr, "  --snapshots interval destFile\n");
   fprintf(stderr, "  --prob-send probability\n");
+  fprintf(stderr, "  --log-events destFile\n");
   fprintf(stderr, "  --threads count (default is number of cpus).\n");
+  exit(1);
+}
+
+std::shared_ptr<LogWriter> g_pLog; // for flushing purposes on exit
+
+void atexit_close_log()
+{
+  if(g_pLog){
+    g_pLog->close();
+  }
+}
+
+void onsignal_close_log (int)
+{
+  if(g_pLog){
+    g_pLog->close();
+  }
   exit(1);
 }
 
 int main(int argc, char *argv[])
 {
   try{
+
+    g_timeNowBase=getNow();
 
     std::string srcFilePath="-";
 
@@ -766,7 +980,7 @@ int main(int argc, char *argv[])
 
     unsigned statsDelta=1;
 
-    int maxSteps=INT_MAX;
+    std::string logSinkName;
 
     double probSend=0.9;
 
@@ -777,20 +991,13 @@ int main(int argc, char *argv[])
     int ia=1;
     while(ia < argc){
       if(!strcmp("--help",argv[ia])){
-	usage();
+        usage();
       }else if(!strcmp("--log-level",argv[ia])){
         if(ia+1 >= argc){
           fprintf(stderr, "Missing argument to --log-level\n");
           usage();
         }
         logLevel=strtoul(argv[ia+1], 0, 0);
-        ia+=2;
-      }else if(!strcmp("--max-steps",argv[ia])){
-        if(ia+1 >= argc){
-          fprintf(stderr, "Missing argument to --max-steps\n");
-          usage();
-        }
-        maxSteps=strtoul(argv[ia+1], 0, 0);
         ia+=2;
       }else if(!strcmp("--snapshots",argv[ia])){
         if(ia+2 >= argc){
@@ -800,6 +1007,13 @@ int main(int argc, char *argv[])
         snapshotDelta=strtoul(argv[ia+1], 0, 0);
         snapshotSinkName=argv[ia+2];
         ia+=3;
+      }else if(!strcmp("--log-events",argv[ia])){
+        if(ia+1 >= argc){
+          fprintf(stderr, "Missing two arguments to --log-events destination \n");
+          usage();
+        }
+        logSinkName=argv[ia+1];
+        ia+=2;
       }else if(!strcmp("--threads",argv[ia])){
         if(ia+1 >= argc){
           fprintf(stderr, "Missing argument to --threads\n");
@@ -813,35 +1027,43 @@ int main(int argc, char *argv[])
       }
     }
 
-    RegistryImpl registry;
 
-    std::istream *src=&std::cin;
-    std::ifstream srcFile;
-
-    if(srcFilePath!="-"){
-      if(logLevel>1){
-        fprintf(stderr,"Reading from '%s'\n", srcFilePath.c_str());
-      }
-      srcFile.open(srcFilePath.c_str());
-      if(!srcFile.is_open())
-        throw std::runtime_error(std::string("Couldn't open '")+srcFilePath+"'");
-      src=&srcFile;
+    if(!logSinkName.empty()){
+      g_pLog.reset(new LogWriterToFile(logSinkName.c_str()));
+      atexit(atexit_close_log);
+      signal(SIGABRT, onsignal_close_log);
+      signal(SIGINT, onsignal_close_log);
     }
 
+
+    RegistryImpl registry;
+    
     xmlpp::DomParser parser;
 
-    if(logLevel>1){
-      fprintf(stderr, "Parsing XML\n");
+    filepath srcPath(current_path());
+
+    if(srcFilePath!="-"){
+      filepath p(srcFilePath);
+      p=absolute(p);
+      if(logLevel>1){
+        fprintf(stderr,"Parsing XML from '%s' ( = '%s' absolute)\n", srcFilePath.c_str(), p.c_str());
+      }
+      srcPath=p.parent_path();
+      parser.parse_file(p.c_str());
+    }else{
+      if(logLevel>1){
+        fprintf(stderr, "Parsing XML from stdin (this will fail if it is compressed\n");
+      }
+      parser.parse_stream(std::cin);
     }
-    parser.parse_stream(*src);
     if(logLevel>1){
       fprintf(stderr, "Parsed XML\n");
     }
 
 
-    QueueSim graph(nQueues);
+    QueueSim graph(nQueues, g_pLog);
 
-    loadGraph(&registry, parser.get_document()->get_root_node(), &graph);
+    loadGraph(&registry, srcPath, parser.get_document()->get_root_node(), &graph);
     if(logLevel>1){
       fprintf(stderr, "Loaded\n");
     }
@@ -851,22 +1073,24 @@ int main(int argc, char *argv[])
       snapshotWriter.reset(new SnapshotWriterToFile(snapshotSinkName.c_str()));
     }
 
-    //graph.m_busyCount++;
-    //graph.loop(0);
+    if(nQueues==1){
+      graph.m_busyCount++;
+      graph.loop(0);
+    }else{
 
-    graph.m_busyCount+=nQueues;
-    std::vector<std::thread> threads;
-    for(unsigned i=0; i<nQueues;i++){
-      unsigned ii=i;
-      threads.emplace_back([=,&graph](){ graph.loop(ii); });
-    }
+      graph.m_busyCount+=nQueues;
+      std::vector<std::thread> threads;
+      for(unsigned i=0; i<nQueues;i++){
+        unsigned ii=i;
+        threads.emplace_back([=,&graph](){ graph.loop(ii); });
+      }
 
-    for(unsigned i=0;i<nQueues;i++){
-      threads[i].join();
-    }
-   
+      for(unsigned i=0;i<nQueues;i++){
+        threads[i].join();
+      }
+    }   
     
-    graph.dump();
+    //graph.dump();
 
     if(logLevel>1){
       fprintf(stderr, "Done\n");

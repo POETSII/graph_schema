@@ -14,10 +14,12 @@ public:
   TypedDataPtr properties;
   rapidjson::Document metadata;
 
+  bool quiet=false;
+
   struct edge
   {
     uint64_t dstDevice;
-    unsigned dstPort;
+    unsigned dstPin;
     TypedDataPtr properties;
     rapidjson::Document metadata;
   };
@@ -83,7 +85,9 @@ public:
    const TypedDataPtr &properties,
    rapidjson::Document &&metadata
    ) override {
-    fprintf(stderr, "  onDeviceInstance(%s)\n", id.c_str());
+     if(!quiet){
+      fprintf(stderr, "  onDeviceInstance(%s)\n", id.c_str());
+     }
 
     std::vector<output> outputs;
     for(auto &o : dt->getOutputs()){
@@ -110,8 +114,8 @@ public:
   virtual void onEdgeInstance
   (
    uint64_t graphInst,
-   uint64_t dstDevInst, const DeviceTypePtr &dstDevType, const InputPortPtr &dstPort,
-   uint64_t srcDevInst,  const DeviceTypePtr &srcDevType, const OutputPortPtr &srcPort,
+   uint64_t dstDevInst, const DeviceTypePtr &dstDevType, const InputPinPtr &dstPin,
+   uint64_t srcDevInst,  const DeviceTypePtr &srcDevType, const OutputPinPtr &srcPin,
    const TypedDataPtr &properties,
   rapidjson::Document &&metadata
   ) override
@@ -119,13 +123,15 @@ public:
     auto &dst=instances.at(dstDevInst);
     auto &src=instances.at(srcDevInst);
 
+  if(!quiet){
     fprintf(stderr, "  onEdgeInstance(%s.%s <- %s.%s)\n",
-	    dst.id.c_str(), dstPort->getName().c_str(),
-	    src.id.c_str(), srcPort->getName().c_str());
+	    dst.id.c_str(), dstPin->getName().c_str(),
+	    src.id.c_str(), srcPin->getName().c_str());
+  }
 
 
-    edge e{ dstDevInst, srcPort->getIndex(), properties, rapidjson::Document() };
-    src.outputs.at(srcPort->getIndex()).edges.emplace_back(std::move(e));
+    edge e{ dstDevInst, srcPin->getIndex(), properties, rapidjson::Document() };
+    src.outputs.at(srcPin->getIndex()).edges.emplace_back(std::move(e));
   }
 };
 
@@ -133,29 +139,38 @@ public:
 int main(int argc, char *argv[])
 {
   try{
+    fprintf(stderr, "Initialising registry.\n");
     RegistryImpl registry;
+    fprintf(stderr, "Parsing.\n");
 
     xmlpp::DomParser parser;
 
-    std::istream *src=&std::cin;
-    std::ifstream srcFile;
+    filepath srcPath(current_path());
+    filepath srcFileName("-");
 
     if(argc>1){
-      fprintf(stderr,"Reading from '%s'\n", argv[1]);
-      srcFile.open(argv[1]);
-      if(!srcFile.is_open())
-	throw std::runtime_error(std::string("Couldn't open '")+argv[1]+"'");
-      src=&srcFile;
-
+      srcFileName=std::string(argv[1]);
+      if(srcFileName.native()!="-"){      
+        srcFileName=absolute(srcFileName);
+        fprintf(stderr,"Reading from '%s' ( = '%s' absolute)\n", argv[1], srcFileName.c_str());
+        srcPath=srcFileName.parent_path();
+      }
     }
 
     fprintf(stderr, "Parsing XML\n");
-    parser.parse_stream(*src);
+    if(srcFileName.native()=="-"){
+      parser.parse_stream(std::cin);
+    }else{
+      parser.parse_file(srcFileName.native());
+    }
     fprintf(stderr, "Parsed XML\n");
 
     GraphInfo graph;
+    if(argc>2){
+      graph.quiet=atoi(argv[2]);
+    }
 
-    loadGraph(&registry, parser.get_document()->get_root_node(), &graph);
+    loadGraph(&registry, srcPath, parser.get_document()->get_root_node(), &graph);
 
     fprintf(stderr, "Done\n");
 

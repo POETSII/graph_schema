@@ -1,0 +1,144 @@
+<?xml version="1.0"?>
+<Graphs xmlns="https://poets-project.org/schemas/virtual-graph-schema-v2">
+  <!-- The "xmlns" declaration specifies the namespace of the
+       document, and is what identifies this as a POETS graph
+       container. -->
+  <!-- This type of element is a comment, and will be stripped
+       by the parser -->
+  <!-- In this document the comments are used as meta-comments,
+       so they are talking about the format, rather than the
+       graph type being described -->
+  <GraphType id="dt10_graph_schema_example">
+    <!-- The id of the graph type is "dt10_graph_schema_example",
+         which should uniquely identify this graph type. Graph
+         instances will refer to this id in order to declare
+         what kind of graph they are. -->
+
+    <!-- The documentation elements are used to describe the
+         behaviour of the graph type in a human readable way.
+         The content itself is markdown. Unlike comments (like
+         this one), they may be used by the tool-chain, for
+         example in order to display information to the
+         user about the graph semantics-->
+    <Documentation>
+    This is a simple example of a graph type with a single
+    device type called "dev". The devices pass around a token.
+    When a device receives a pulse it will broadcast it on
+    to the connected device, which will then pass it on, and
+    so on.
+    </Documentation>
+
+    <MetaData>
+    "wibble.wobble":1
+    </MetaData>
+
+    <!-- This element contains all message types used in
+         this particular graph type. The message ids are
+         indicating meaning as well as structure. For example,
+         both messages here are structurally identical,
+         but you wouldn't want to accidentally connect an
+         init pin to a transfer pin. -->
+    <MessageTypes>
+        <MessageType id="__init__">
+            <!-- An init message is simply a pulse -->
+        </MessageType>
+        <MessageType id="transfer">
+            <Documentation>
+            Used to notify connected devices that they are
+            receiving the token. There is no information
+            associated with the pulse.
+            </Documentation>
+        </MessageType>
+    </MessageTypes>
+
+    <DeviceTypes>
+      <DeviceType id="dev">
+          <Documentation>
+          Each device has:
+          - a init input pin (called __init__)
+          - one input pin called "in"
+          - one output pin called "out"
+          - a single boolean property called "leader"
+          - a single boolean state variable called "hot"
+
+          Graphically, the cell looks something like this:
+          ````
+                  type:"dev"
+              +----------------+
+              |   input:"in"   +->
+              +----------------+
+              |P  leader:int8_t|
+              |S  hot:int8_t   |
+              +----------------+
+            ->|   output:"out" |
+              +----------------+
+          ````
+
+          In terms of behaviour:
+          - A cell is hot when hot==true, and cold when
+            hot==false
+          - A cell is intialised to hot if leader==true
+          - When a cell is hot, it will send a message
+            of type "transfer" on pin "out", then go
+            cold.
+          - When a cell receives a "transfer" message on
+            "in", it will go hot.
+          - The "out" pin is ready to send iff the cell
+            is hot
+
+          The state machine is then:
+          ````
+                __init__          +-----------+
+                leader=1  .------>| hot=1     |
+                        /         | rts={out} |
+          +---------+  /          +---------+-+
+          | startup +-'            ^        | send/out
+          | hot=0   |              |        |
+          | rts={}  +-.            |        |
+          +---------+  \   recv/in |        v
+                        \        +-+----------+
+                __init__ '------>| hot=0      |
+                leader=0         | rts={}     |
+                                 +------------+
+          ````
+          (Notice that the __init__ message is not associated
+          with the receipt of any data, so the only thing
+          it can use is the graph and device properties.
+          The init can be calculated ahead of time if desired,
+          then the pre-initialised stateloaded instead)
+
+          If no device instance is set up to be leader, the
+          entire graph will remain quiescent forever.
+          </Documentation>
+
+          <MetaData>
+          "wibble.wobble":[3,4,5]
+          </MetaData>
+
+          <Properties>
+            <Scalar type="int8_t" name="leader" />
+          </Properties>
+
+          <State>
+            <Scalar type="int8_t" name="hot" />
+          </State>
+
+          <InputPin name="in" messageTypeId="transfer">
+            <OnReceive><![CDATA[
+            deviceState->hot=1;
+            ]]></OnReceive>
+          </InputPin>
+
+          <OutputPin name="out" messageTypeId="transfer">
+            <OnSend><![CDATA[
+            deviceState->hot=0;
+            ]]></OnSend>
+          </OutputPin>
+
+          <ReadyToSend><![CDATA[
+          *readyToSend = deviceState->hot ? RTS_INDEX_out : 0;
+          ]]></ReadyToSend>
+      </DeviceType>
+    </DeviceTypes>
+  </GraphType>
+</Graphs>

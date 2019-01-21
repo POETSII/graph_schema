@@ -1,0 +1,15 @@
+Assume a poisson style problem, with coefficient a.
+Let's assume that a varies temporally in some way.
+
+Assume each cell has an intrinsic simulation time t,
+and a coefficient a(t). From that we can determine
+the current time-step dt(t), and want to move forwards
+to dt(t)+t.
+
+To do that we need to know x(t,i) for all neighbours i \in N.
+
+Assume each event contains the following information:
+- tN : Time of next event
+- tC : Time of this event
+- xC : Value at this event
+- dC : dx/dt at this event

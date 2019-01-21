@@ -36,6 +36,8 @@ datatypes xsd = "http://www.w3.org/2001/XMLSchema-datatypes"
 # If a breaking change is made to the graph specification,
 # then the namespace identifier will change.
 default namespace = "http://TODO.org/POETS/virtual-graph-schema-v1"
+# TODO: Final namespace should be
+# https://poets-project.org/schemas/virtual-graph-schema-v2
 
 # Here begins the actual grammar itself
 grammar {
@@ -112,6 +114,8 @@ grammar {
       graphInstance *
       &
       graphInstanceReference *
+      &
+      graphInstanceMetadataPatch *
     }
 
   graphType =
@@ -784,6 +788,9 @@ grammar {
     ## Zero or more DeviceInstance elements.
     element DeviceInstances {
 
+      ## If present and true, then the edge instances are sorted lexically by instance id.
+      attribute sorted { xsd:boolean } ? ,
+
       ## Each DevI creates a single device instance of a given device type.
       ##
       ## Every device instance must have a unique id within the set
@@ -814,6 +821,9 @@ grammar {
 
     ## Zero or more edge instance elements
     element EdgeInstances {
+      ## If present and true, then the edge instances are sorted lexically by effective id.
+      attribute sorted { xsd:boolean } ? ,
+
 
       ## Each EdgeI specifies a single connection between two device instances.
       ##
@@ -869,6 +879,46 @@ grammar {
      ## connect it up (for example, the id is a well-known GUID or an URN).
      attribute src { string } ?
    }
+
+  graphInstanceMetadataPatch =
+   ## This is a metadata patch against an existing graph (in this file or another)
+   element GraphInstanceMetadataPatch {
+
+    ## Id of the graph it is talking about
+    attribute id { identifier },
+
+    ## Patch against the graph metadata
+    element MetaData {
+      metaDataValue
+    } ? ,
+
+    element DeviceInstances {
+
+      element DevI {
+        ## A unique string
+        attribute id { identifier },
+
+        ## Any meta-data associated with the instance
+        element M {
+          metaDataValue
+        } ?
+      } *
+    },
+
+    element EdgeInstances {
+
+      element EdgeI {
+        attribute path { xsd:string { pattern="[_a-zA-Z0-9]*:[_a-zA-Z0-9]+-[_a-zA-Z0-9]*:[_a-zA-Z0-9]+" } } ?,
+
+        element M {
+          metaDataValue
+        } ?
+      } *
+    }
+  }
+
+
+
 
   #
   # Typed Data Specifications

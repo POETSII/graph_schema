@@ -162,7 +162,9 @@ var G=null;
 var GUI=null;
 var s=null;
 var stepper=null;
+var SVG=null;
 
+var polys={};
 var statePanel=null;
 
 function hex2(v)
@@ -222,6 +224,7 @@ function shade(v)
 var totalEvents=0;
 var showEvents=true;
 var showTime=false;
+var useVoronoi=false;
 
 var timeLevels=10;
 var timeColors=[];
@@ -255,6 +258,25 @@ function updateNodeStyle(n)
         n.color = heatColors[v]; 
     }
 };
+function updateNodeStyleVor(d)
+{
+    var device=d
+    var poly=polys[device.id];
+    if(showEvents){
+        //poly.stroke(device.blocked() ? "#FF0000" : device.is_rts() ? "#00FF00" : "#808080");
+    }else{
+        //poly.stroke("#808080");
+    }
+    if(showTime){
+        let t = device.state.t % timeLevels;
+        poly.fill(timeColors[t]); 
+    }else{
+        let v = Math.floor((device.state.v + 1)/2 * heatLevels);
+        console.log(" v="+device.state.v+", v="+v);
+        poly.fill(heatColors[v]); 
+    }
+};
+
 function updateEdgeStyle(e)
 {
     var edge=e.edge;
@@ -267,14 +289,19 @@ function updateEdgeStyle(e)
 
 function updateAllNodes(s)
 {
-    for(let d of s.graph.nodes()){
-        updateNodeStyle(d);
+    if(useVoronoi){
+        for(let d of G.enumDevices()){
+            updateNodeStyleVor(d);
+        }
+    }else{
+        for(let d of s.graph.nodes()){
+            updateNodeStyle(d);
+        }
+        for(let e of s.graph.edges()){
+            updateEdgeStyle(e);
+        }
+        s.refresh({skipIndexation: true});
     }
-    for(let e of s.graph.edges()){
-        updateEdgeStyle(e);
-    }
-    s.refresh({skipIndexation: true});
-
     statePanel.update();
 }
 
@@ -323,7 +350,8 @@ function resetGraph()
     if(topology=="hex"){
         G=H.makeGridHex(w,h*2);
     }else if(topology=="file"){
-        G=C.loadGraphFromUrl("/graphs/heat_rect_8x8.xml");
+        //G=C.loadGraphFromUrl("/graphs/heat_rect_8x8.xml");
+        G=C.loadGraphFromUrl("/graphs/poets.xml");
     }else{
         G=H.makeGrid(w,h);
     }
@@ -338,52 +366,90 @@ function resetGraph()
         $("#graph-container").empty();
         s=null;
     }
-
-    s = new sigma({
-        renderer: {
-            container: document.getElementById('graph-container'),
-            type: $("#renderer").val()
-        },
-        settings: {
-            drawLabels: false,
-            maxNodeSize: 10,
-            minNodeSize: 0.25,
-            minEdgeSize: 0.5,
-            maxEdgeSize: 3
+    
+    if(useVoronoi){
+        polys={};
+    
+        var minX=+1e10;
+        var maxX=-1e10;
+        var minY=+1e10;
+        var maxY=-1e10;
+        
+        $("#graph-container").empty();
+        var svg=SVG('graph-container').size('100%', '100%')
+        
+        add=function(x,y){
+            minX=Math.min(minX,x);
+            minY=Math.min(minY,y);
+            maxX=Math.max(maxX,x);
+            maxY=Math.max(maxY,y);
+        };
+        
+        for(var d of G.enumDevices()){
+            m=d.metadata;
+            hull=m["hull"];
+            if(hull){
+                for(var dim=0;dim<3;dim++){
+                    console.log(`${dim[0]} ${dim[1]}`)    
+                    add(hull[dim][0],hull[dim][1])
+                    console.log(`  ${minX},${maxX}`)
+                }
+            }
+            console.log(`  ${minX},${maxX}`)
+            
+            var poly=svg.polyline( hull ).id('node-'+d.id);
+            polys[d.id]=poly;
         }
-    });
+        svg.viewbox({ x: minX, y: minY, width: maxX-minX, height: maxY-minY })
+    }else{
+        // Sigma
+        
+        s = new sigma({
+            renderer: {
+                container: document.getElementById('graph-container'),
+                type: $("#renderer").val()
+            },
+            settings: {
+                drawLabels: false,
+                maxNodeSize: 10,
+                minNodeSize: 0.25,
+                minEdgeSize: 0.5,
+                maxEdgeSize: 3
+            }
+        });
 
-    for(var d of G.enumDevices()){
-        s.graph.addNode({
-            id:d.id,
-            label:d.id,
-            x:d.metadata["x"]*50,
-            y:d.metadata["y"]*50,
-            size:0.5,
-            color:"#FFFFFF",
-            type: d.deviceType.id=="cell" ? "circle" : "square",
-            borderColor:"#000000",
-            device:d
-        });
-    }
-    for(var n of s.graph.nodes()){
-        n.device.gNode=n;
-        updateNodeStyle(n);
-    }
-    for(var e of G.enumEdges()){
-        s.graph.addEdge({
-            id:e.id,
-            source:e.srcDev.id,
-            target:e.dstDev.id,
-             type: "curvedArrow",
-             size:1,
-             color:"#000000",
-             edge:e
-        });
-    }
-    for(var e of s.graph.edges()){
-        e.edge.gEdge=e;
-        updateEdgeStyle(e);
+        for(var d of G.enumDevices()){
+            s.graph.addNode({
+                id:d.id,
+                label:d.id,
+                x:d.metadata["x"]*50,
+                y:d.metadata["y"]*50,
+                size:0.5,
+                color:"#FFFFFF",
+                type: d.deviceType.id=="cell" ? "circle" : "square",
+                borderColor:"#000000",
+                device:d
+            });
+        }
+        for(var n of s.graph.nodes()){
+            n.device.gNode=n;
+            updateNodeStyle(n);
+        }
+        for(var e of G.enumEdges()){
+            s.graph.addEdge({
+                id:e.id,
+                source:e.srcDev.id,
+                target:e.dstDev.id,
+                 type: "curvedArrow",
+                 size:1,
+                 color:"#000000",
+                 edge:e
+            });
+        }
+        for(var e of s.graph.edges()){
+            e.edge.gEdge=e;
+            updateEdgeStyle(e);
+        }
     }
     
     if($("#engine").val()=="batch"){
@@ -392,28 +458,34 @@ function resetGraph()
         stepper=new C.SingleStepper();
     }
     stepper.attach(G,true);
-    s.refresh();
-
     
-    updateAllNodes(s);
+    if(useVoronoi){
+    
+    }else{
+        s.refresh();
+        updateAllNodes(s);
+        
+         s.bind('clickNode', function(e) {
+            //console.log(e.type, e.data.node.label, e.data.captor);
+            var node=e.data.node;
+            var device=node.device;
 
-    s.bind('clickNode', function(e) {
-        //console.log(e.type, e.data.node.label, e.data.captor);
-        var node=e.data.node;
-        var device=node.device;
-
-        statePanel.attach(device);
-    });
+            statePanel.attach(device);
+        });
+    }
+    
+   
 }
 
 console.log("Pre load");
 
 require(['scripts/require_config'],function() {
 
-    require(['scripts/core/core','scripts/graphs/heat_graph', 'scripts/graphs/all','scripts/gui/gui'], function(CC,HH,AG,GG){
+    require(['scripts/core/core','scripts/graphs/heat_graph', 'scripts/graphs/all','scripts/gui/gui', 'scripts/svg'], function(CC,HH,AG,GG,svg){
         C=CC;
         H=HH;
         GUI=GG;
+        SVG=svg;
 
         AG.registerAllGraphTypes();
 

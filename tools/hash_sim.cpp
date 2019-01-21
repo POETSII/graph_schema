@@ -51,20 +51,20 @@ struct HashSim
       : edge(_edge)
       , message(_message)
     
-    message_state(uint32_t targetDevice, uint32_t targetPort, uint32_t sourceDevice, uint32_t sourcePort, interned_typed_data_t _message)
-      : targetEndpoint( (targetDevice<<(5+11+5)) | (targetPort<<(11+5) | (sourceDevice<<(11) | sourcePort )
+    message_state(uint32_t targetDevice, uint32_t targetPin, uint32_t sourceDevice, uint32_t sourcePin, interned_typed_data_t _message)
+      : targetEndpoint( (targetDevice<<(5+11+5)) | (targetPin<<(11+5) | (sourceDevice<<(11) | sourcePin )
       , message(_message)
     {
       assert(targetDevice<2048);
       assert(sourceDevice<2048);
-      assert(targetPort<32);
-      assert(sourcePort<32);
+      assert(targetPin<32);
+      assert(sourcePin<32);
     }
     
     uint32_t getTargetDevice() const
     { return (edge>>(5+11+5))&3FF; }
     
-    uint32_t getTargetPort() const
+    uint32_t getTargetPin() const
     { return (edge>>(11+5))&0x1F; }
     
     uint32_t getSourceDevice() const
@@ -194,7 +194,7 @@ struct HashSim
         DeviceTypePtr devType=devInfo.deviceType;
         
         TypedDataPtr state=devType->getStateSpec()->create();
-        InputPortPtr init=devType->getInputPort("__init__");
+        InputPinPtr init=devType->getInputPin("__init__");
         if(init){
           init->onRecv(&receiveServices, topology.graphProps, devProps->devProps, state);
         }
@@ -246,7 +246,7 @@ struct HashSim
   {
   private:
     uint32_t deviceIndex;
-    uint32_t portIndex;
+    uint32_t pinIndex;
     interned_typed_data_t preState;
     uint32_t preRTS;
   
@@ -262,27 +262,27 @@ struct HashSim
       const world_topology &topology,
       world_state_t &state,
       uint32_t _deviceIndex,
-      uint32_t _portIndex
+      uint32_t _pinIndex
     )
       : Event( state.getHash(), parent)
       , deviceIndex(_deviceIndex)
-      , portIndex(_portIndex)
+      , pinIndex(_pinIndex)
     {
       state.setDirty();
       
       auto &ds=state.devices.at(deviceIndex);
-      assert( (ds.rts >> portIndex ) & 1 );
+      assert( (ds.rts >> pinIndex ) & 1 );
       
       preState=ds.state;
       preRTS=ds.rts;
       
       const auto &deviceInfo=topology.devices.at(deviceIndex);
       auto deviceType=deviceInfo.deviceType;
-      const auto &outputPort=dt.getOutput(_portIndex);
+      const auto &outputPin=dt.getOutput(_pinIndex);
       
       TypedDataPtr state=uninternFresh(ds.state);
       assert(state.is_unique());
-      TypedDataPtr message=outputPort->getMessageType()->getMessageSpec()->create();
+      TypedDataPtr message=outputPin->getMessageType()->getMessageSpec()->create();
       
       cancelled=false;
       op->onSend(
@@ -304,7 +304,7 @@ struct HashSim
       ds.state=postState;
       ds.rts=postRTS;
       if(!cancelled){
-        for(uint32_t edge : deviceInfo.outputs.at(portIndex).edges){
+        for(uint32_t edge : deviceInfo.outputs.at(pinIndex).edges){
           state.messages.insert( message_state(edge,message) );
         }
       }
@@ -323,7 +323,7 @@ struct HashSim
       ds.state=postState;
       ds.rts=postRTS;
       if(!cancelled){
-        for(uint32_t edge : deviceInfo.outputs.at(portIndex).edges){
+        for(uint32_t edge : deviceInfo.outputs.at(pinIndex).edges){
           state.messages.insert( message_state(edge,message) );
         }
       }
@@ -342,7 +342,7 @@ struct HashSim
       ds.state=preState;
       ds.rts=preRTS;
       if(!cancelled){
-        for(uint32_t edge : deviceInfo.outputs.at(portIndex).edges){
+        for(uint32_t edge : deviceInfo.outputs.at(pinIndex).edges){
           auto it=state.messages.find( message_state(edge,message) );
           assert(it!=state.messages.end());
           state.messages.erase(it);
@@ -382,7 +382,7 @@ struct HashSim
       assert(itMsg!=state.messages.end());
       
       unsigned deviceIndex=msg.getTargetDevice();
-      unsigned portIndex=msg.getTargetPort();
+      unsigned pinIndex=msg.getTargetPin();
       auto &ds=state.devices.at(deviceIndex);
       
       preState=ds.state;
@@ -390,7 +390,7 @@ struct HashSim
       
       const auto &deviceInfo=topology.devices.at(deviceIndex);
       auto deviceType=deviceInfo.deviceType;
-      const auto &outputPort=dt.getOutput(_portIndex);
+      const auto &outputPin=dt.getOutput(_pinIndex);
       
       TypedDataPtr state=uninternFresh(ds.state);
       assert(state.is_unique());
@@ -462,8 +462,8 @@ struct HashSim
     DeviceTypePtr type;
     TypedDataPtr properties;
     
-    std::vector< std::vector<uint32_t> > outputs; // portIndex -> [ (dstDev&dstPort&srcDev&srcPort) ]
-    std::vector< std::vector<TypedDataPtr> > inputs; // portIndex -> [ edgeProperties ]
+    std::vector< std::vector<uint32_t> > outputs; // pinIndex -> [ (dstDev&dstPin&srcDev&srcPin) ]
+    std::vector< std::vector<TypedDataPtr> > inputs; // pinIndex -> [ edgeProperties ]
   };
   
   struct world_topology
@@ -509,7 +509,7 @@ struct HashSim
     return info.index;
   }
 
-  void onEdgeInstance(uint64_t gId, uint64_t dstDevIndex, const DeviceTypePtr &dstDevType, const InputPortPtr &dstInput, uint64_t srcDevIndex, const DeviceTypePtr &srcDevType, const OutputPortPtr &srcOutput, const TypedDataPtr &properties) override
+  void onEdgeInstance(uint64_t gId, uint64_t dstDevIndex, const DeviceTypePtr &dstDevType, const InputPinPtr &dstInput, uint64_t srcDevIndex, const DeviceTypePtr &srcDevType, const OutputPinPtr &srcOutput, const TypedDataPtr &properties) override
   {
     topology.at(dstDevIndex).inputs.at(dstInput->getIndex()).push_back(properties);
     
@@ -533,7 +533,7 @@ struct HashSim
       unsigned index=0;
       while(rts){
         if(rts&1){
-          EventPtr send=std::make_shared<SendEvent>(curr, topology, state, devIndex, portIndex);
+          EventPtr send=std::make_shared<SendEvent>(curr, topology, state, devIndex, pinIndex);
           eventQueue.add(send); // Checks for cycles, and adds it to the known events. Pushes onto queue if not seen.
           send->undo(topology, state);
         }
