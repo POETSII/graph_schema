@@ -212,10 +212,11 @@ def save_graph_type(parent, graph):
     gn = etree.SubElement(parent,toNS("p:GraphType"))
     gn.attrib["id"]=graph.id
     
-    tdn=etree.Element(toNS("p:Types"))
-    gn.append(tdn)
-    for td in graph.typedefs_by_index:
-        save_type_def(tdn,td)
+    if len(graph.typedefs_by_index)>0:
+        tdn=etree.Element(toNS("p:Types"))
+        gn.append(tdn)
+        for td in graph.typedefs_by_index:
+            save_type_def(tdn,td)
 
     save_typed_struct_spec(gn, toNS("p:Properties"), graph.properties)
 
