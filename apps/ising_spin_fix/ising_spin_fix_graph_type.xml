@@ -309,9 +309,9 @@
 	if(deviceState->times[0] == 0xFFFFFFFFul){
 		*readyToSend = 0;
 	}else if(deviceState->times[0] >= graphProperties->endTime){
-		*readyToSend = RTS_FLAG_cell_finished;
+		*readyToSend = RTS_FLAG_finished;
 	}else if(deviceState->isEarliest){
-		*readyToSend = RTS_FLAG_cell_out;
+		*readyToSend = RTS_FLAG_out;
 	}else{
 		*readyToSend = 0;
 	}
