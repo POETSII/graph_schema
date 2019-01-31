@@ -162,9 +162,9 @@
 		
 		<ReadyToSend><![CDATA[
             if(deviceState->distDirty){
-                *readyToSend = OUTPUT_FLAG_dout;
+                *readyToSend = RTS_FLAG_dout;
             }else if(deviceState->controlPending){
-                *readyToSend = OUTPUT_FLAG_response_out;
+                *readyToSend = RTS_FLAG_response_out;
             }else{
                 *readyToSend = 0;
             }
@@ -265,7 +265,7 @@
 	  
 	  <ReadyToSend><![CDATA[
       if(deviceState->controlPending){
-            *readyToSend = OUTPUT_FLAG_request_out;
+            *readyToSend = RTS_FLAG_request_out;
       }else{
             *readyToSend = 0;
       }

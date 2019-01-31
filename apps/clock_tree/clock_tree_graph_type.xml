@@ -53,9 +53,9 @@
 		<ReadyToSend><![CDATA[
 			*readyToSend = 0; 
 			if(deviceState->doExport){
-				*readyToSend = OUTPUT_FLAG_root_output;
+				*readyToSend = RTS_FLAG_output;
 			}else if(deviceState->pending==0){
-			 	*readyToSend = OUTPUT_FLAG_root_tick_out;
+			 	*readyToSend = RTS_FLAG_tick_out;
 			}
 		]]></ReadyToSend>
 		
@@ -115,9 +115,9 @@
 			if(deviceState->status==0){
 				*readyToSend=0;
 			}else if(deviceState->status==1){
-				*readyToSend = OUTPUT_FLAG_branch_tick_out;
+				*readyToSend = RTS_FLAG_tick_out;
 			}else if(deviceState->status==2){
-				*readyToSend = OUTPUT_FLAG_branch_ack_out;
+				*readyToSend = RTS_FLAG_ack_out;
 			}else{
 				*readyToSend=0;
 			}
@@ -156,7 +156,7 @@
 		</State>
 		
 		<ReadyToSend><![CDATA[
-		*readyToSend = deviceState->ready ? OUTPUT_FLAG_leaf_ack_out : 0;
+		*readyToSend = deviceState->ready ? RTS_FLAG_ack_out : 0;
 		]]></ReadyToSend>
 	
 		  <InputPin name="tick_in" messageTypeId="tick">
