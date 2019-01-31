@@ -57,11 +57,9 @@ Vagrant.configure(2) do |config|
   #   # Display the VirtualBox GUI when booting the machine
   #   vb.gui = true
   #
-  #  
-  
-    vcpu = Etc.nprocessors > 4 ? 4 : ( Etc.nprocessors > 1 ? Etc.nprocessors - 1 : 1 )
-    
-    vb.cpus = vcpu
+  vcpu = Etc.nprocessors > 4 ? 4 : ( Etc.nprocessors > 1 ? Etc.nprocessors - 1 : 1 )
+   
+   vb.cpus = vcpu
   
    # Customize the amount of memory on the VM:
    # 1  hcpu -> 1 vcpu : 5GB
@@ -71,8 +69,8 @@ Vagrant.configure(2) do |config|
    # 5+ hcpu -> 4 vcpu : 8GB
     vb.memory = 4000 + vcpu * 1000     
   
-    # If clock drifts more than 500ms, then force it (instead of smooth adjust)
-    vb.customize ["guestproperty","set", :id, "/VirtualBox/GuestAdd/VBoxService/--timesync-set-threshold", "500"]
+   # If clock drifts more than 500ms, then force it (instead of smooth adjust)
+   vb.customize ["guestproperty","set", :id, "/VirtualBox/GuestAdd/VBoxService/--timesync-set-threshold", "500"]
 
     # Turn off audio, so that VM doesn't keep machine awake
     vb.customize ["modifyvm", :id, "--audio", "none"]
@@ -83,39 +81,6 @@ Vagrant.configure(2) do |config|
   # Enable provisioning with a shell script. Additional provisioners such as
   # Puppet, Chef, Ansible, Salt, and Docker are also available. Please see the
   # documentation for more information about their specific syntax and use.
-  config.vm.provision "shell", inline: <<-SHELL
-	sudo apt-get update
-
-     sudo apt-get install -y libxml2-dev gdb g++ git make libxml++2.6-dev libboost-dev python3.4 zip default-jre-headless python3-lxml curl mpich rapidjson-dev
-     sudo apt-get install -y libxml2-dev gdb g++ git make libxml++2.6-dev libboost-dev libboost-filesystem-dev python3 zip default-jre-headless python3-lxml curl mpich rapidjson-dev
-
-     # RISC-V toolchain (not sure exactly how much is needed)
-      sudo apt-get install -y autoconf automake autotools-dev curl libmpc-dev libmpfr-dev libgmp-dev gawk build-essential bison flex texinfo gperf libtool patchutils bc zlib1g-dev
-
-     # Graph partitioning
-     sudo apt-get install -y metis
-
-     # Visualisation
-     sudo apt-get install -y graphviz imagemagick ffmpeg
-
-     # Editors
-     sudo apt-get install -y emacs-nox screen
-
-     # Algebraic multigrid, plus others
-     sudo apt-get install -y python3-pip python3-numpy python3-scipy python3-ujson
-     sudo pip3 install pyamg
-     sudo pip3 install svgwrite
-
-     # Creating meshes
-     sudo apt-get install -y octave octave-msh octave-geometry hdf5-tools
-     # Fix a bug in geometry package for svg.
-     # Note that sed is _not_ using extended regular expressions (no "-r")
-     sudo sed -i -e 's/,{0},/,"{0}",/g' -e 's/,{1},/,"{1}",/g'  /usr/share/octave/packages/geometry-2.1.0/io/@svg/parseSVGData.py
-     
-     # Used to support generation of documentation from schema
-     sudo apt-get install -y xsltproc ant libsaxon-java docbook docbook-xsl-ns pandoc
-
-  SHELL
-
+  config.vm.provision "shell", path: "provision_ubuntu16.sh"
 
 end

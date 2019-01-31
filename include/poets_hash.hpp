@@ -42,10 +42,18 @@ public:
     { add( *(uint32_t*)&x ); }
     
     void add(float x)
-    { add( *(uint32_t*)&x ); }
+    {
+        uint32_t tmp;
+        memcpy(&tmp, &x, 4);
+        add( tmp );
+    }
     
     void add(double x)
-    { add( *(uint64_t*)&x ); }
+    { 
+        uint64_t tmp;
+        memcpy(&tmp, &x, 8);
+        add( tmp );
+    }
     
     void add(const uint8_t *x, size_t s)
     {

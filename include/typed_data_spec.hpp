@@ -43,7 +43,7 @@ protected:
 
     void setBinaryDefault(const std::vector<char> &binaryDefault)
     {
-        std::cerr<<"binaryDefault.size() = "<<binaryDefault.size()<<"\n";
+        //std::cerr<<"binaryDefault.size() = "<<binaryDefault.size()<<"\n";
 
         assert(!m_defaultSet);
         m_defaultSet=true;
@@ -228,14 +228,14 @@ public:
         , m_typeString(typeName)
     {
         unsigned cb=scalarTypeWidthBytes(m_type);
-        std::cerr<<"cb = "<<cb<<"\n";
+        //std::cerr<<"cb = "<<cb<<"\n";
         std::vector<char> tmp(cb, 0);
         if(!defaultValue.empty()){
             rapidjson::Document doc;
             doc.Parse(defaultValue.c_str());
             JSONToBinary(doc, &tmp[0], cb, true);
         }
-        std::cerr<<"cb = "<<cb<<"\n";
+        //std::cerr<<"cb = "<<cb<<"\n";
         setBinaryDefault(tmp);
     }
 

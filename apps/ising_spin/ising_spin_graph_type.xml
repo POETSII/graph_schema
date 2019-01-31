@@ -15,6 +15,24 @@
       <Array name="probabilities" length="10" type="float" />
     </Properties>
 
+		<SharedCode><![CDATA[
+#ifdef POETS_LEGACY_HAS_HANDLER_EXIT
+#define _do_handler_exit(code) handler_exit(code)
+#else
+#define _do_handler_exit(code) ((void)0)
+#endif
+
+#define fake_handler_exit(code) \
+{ \
+    if((code)==0){ \
+        handler_log(0, "_HANDLER_EXIT_SUCCESS_9be65737_"); \
+    }else{ \
+        handler_log(0, "_HANDLER_EXIT_FAIL_9be65737_"); \
+    } \
+    _do_handler_exit(code); \
+}
+]]></SharedCode>
+
     <SharedCode><![CDATA[
 
 	#include <cmath>
@@ -189,8 +207,9 @@
 
 	  // Check if simulation has finished. If so do nothing
 	  if(deviceState->times[0] >= graphProperties->endTime){
-	    *doSend=false;
-		deviceState->rts=0;
+			*doSend=false;
+			deviceState->rts=0;
+			fake_handler_exit(0);
 	  }
 
 	  float prevTime=deviceState->times[0];
