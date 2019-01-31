@@ -37,6 +37,9 @@ VARIANTS = cluster random furthest_order nearest_order random_order
 %.simulate.out : %.xml.gz
 	POETS_PROVIDER_PATH=$(GS_ROOT)/providers $(GS_ROOT)/bin/epoch_sim --log-level 0 --stats-delta 1000 $< 2>&1 | tee $@
 
+%.no-assert.xml.gz : %.xml.gz
+	gzip -d -c $< | sed -e 's|\s*assert[(].*| // removed assert for orchestrator|g' | gzip -9 > $@
+
 
 
 ###########################################
@@ -178,6 +181,8 @@ FILES += ising_spin_fix_64k.xml.gz
 ################################################
 
 all_xml : $(FILES)
+
+all_xml_no_assert :$(subst .xml.gz,.no-assert.xml.gz,$(FILES))
 
 all_elf : $(subst .xml.gz,.elf,$(FILES))
 
