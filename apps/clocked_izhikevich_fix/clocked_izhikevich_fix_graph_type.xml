@@ -297,9 +297,9 @@
         <ReadyToSend><![CDATA[
         *readyToSend=0;
         if(deviceState->Icount==deviceProperties->fanin && !deviceState->waitTick && deviceState->sentSpike ){
-            *readyToSend |= OUTPUT_FLAG_tick_out;
+            *readyToSend |= RTS_FLAG_tick_out;
         }else if(!deviceState->waitTick && !deviceState->sentSpike){
-            *readyToSend |= OUTPUT_FLAG_spike_out;
+            *readyToSend |= RTS_FLAG_spike_out;
         }
         ]]></ReadyToSend>
 
@@ -420,7 +420,7 @@
         </InputPin>
 
         <ReadyToSend><![CDATA[
-        *readyToSend = deviceState->waitCount==0 && (deviceState->totalTicks < graphProperties->maxTicks) ? OUTPUT_FLAG_tick_out : 0;
+        *readyToSend = deviceState->waitCount==0 && (deviceState->totalTicks < graphProperties->maxTicks) ? RTS_FLAG_tick_out : 0;
         ]]></ReadyToSend>
 
         <InputPin name="tick_in" messageTypeId="tick">

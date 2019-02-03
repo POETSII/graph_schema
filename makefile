@@ -198,6 +198,7 @@ ALL_SOFTSWITCH := $(ALL_SOFTSWITCH) $(SOFTSWITCH_DIR)/generated/apps/$1_threads$
 
 endef
 
+include apps/hello_world/makefile.inc
 include apps/clock_tree/makefile.inc
 include apps/ising_spin/makefile.inc
 include apps/ising_spin_fix/makefile.inc
