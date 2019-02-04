@@ -373,6 +373,12 @@ grammar {
         ## when the handler code is compiled, so for different devices there will be
         ## different identifiers in scope.
         ##
+        ## Flags are also available globally through a flag of the form:
+        ## `RTS_FLAG_{device_type}_{name}` and `RTS_INDEX_{device_type}_{name}`.
+        ## This allows for the use of flags outside device scope (sometimes it
+        ## is useful to work with them in the graph shared code, but it is difficult
+        ## to work out what numbers they will have).
+        ##
         ## The index of a pin determines its priority, with the lowest value having
         ## the highest priority. By default the priorities will be assigned in the
         ## order that outputs appear in the device type, with the compute handler
@@ -641,6 +647,12 @@ grammar {
           ##   `const ${GRAPH_PROPERTIES_T} *graphProperties` :  Read-only pointer to the graph properties
           ##   `const ${DEVICE_PROPERTIES_T} *deviceProperties` : Read-only pointer to the device properties
           ##   `${DEVICE_STATE_T} *deviceState` : Read-write pointer to the device state
+          ##
+          ## If the init handler is not presence it should implicitly have an empty body (though an
+          ## implementation can optimise that out).
+          ##
+          ## m8pple: Why not OnEvent? It is the first event that happens in the life-cycle of a device,
+          ## regardless of whether it happens in x86 land (pre-computed) or in the actual hardware.
           element Init {
             cxxSourceCode
           } ?
@@ -651,6 +663,12 @@ grammar {
           ## messages are in flight.
           ## This could be included in alternative idle detection, but as of schema v3, this uses the
           ## hardware idle detection as available in tinsel 0.5.
+          ## m8pple: What happens if some device types have on idle but others don't? Is there an implicit
+          ## empty on-idle in each device type?
+          ## If OnIdle is not present, then it is assumed to be an empty handler, and it is valid to mix
+          ## devices with an OnIdle with those with an implicit empty OnIdle. If there are no OnIdle
+          ## handlers an implementation may omit the OnIdle machinery, but this is not detectible/visible
+          ## by the application.
           element OnIdle {
             cxxSourceCode
           } ?
@@ -769,6 +787,8 @@ grammar {
     ##
     ## If this attribute is not specified, the first supervisor
     ## device type is chosen.
+    ##
+    ## m8pple: check people know about this
     attribute supervisorDeviceTypeId { identifier } ? ,
 
     element Documentation {
@@ -1127,6 +1147,7 @@ grammar {
 
             ## Must be meaningfully convertible to array type
             ##
+            ## m8pple: Maybe bring in the wording for array initialisation, or refer to it.
             ## TODO: what exactly are the semantics here?
             ##
             ## Special case for an array of char, where the string will be converted to chars
