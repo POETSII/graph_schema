@@ -644,6 +644,17 @@ grammar {
           element Init {
             cxxSourceCode
           } ?
+
+          &
+
+          ## Code which runs when the hardware detects that all devices on all threads are idle, and no
+          ## messages are in flight.
+          ## This could be included in alternative idle detection, but as of schema v3, this uses the
+          ## hardware idle detection as available in tinsel 0.5.
+          element OnIdle {
+            cxxSourceCode
+          } ?
+
         } *
 
        &
