@@ -1,8 +1,9 @@
 #ifndef graph_persist_dom_reader_hpp
 #define graph_persist_dom_reader_hpp
 
-#include "graph_persist.hpp"
 #include "graph_provider_helpers.hpp"
+#include "graph_persist.hpp"
+
 
 //#include <boost/filesystem.hpp>
 #include <libxml++/parsers/domparser.h>

@@ -2,6 +2,7 @@
 #define graph_core_hpp
 
 #include <libxml++/nodes/element.h>
+#include <libxml++/document.h>
 #include "libxml/xmlwriter.h"
 #include <cstdarg>
 
@@ -233,6 +234,15 @@ public:
     }
   }
 
+  uint8_t *payloadPtr()
+  {
+    if(m_p){
+      return ((uint8_t*)m_p)+sizeof(typed_data_t);
+    }else{
+      return 0;
+    }
+  }
+
   size_t payloadSize() const
   {
     if(m_p){
@@ -357,9 +367,31 @@ public:
 
   virtual void save(xmlpp::Element *parent, const TypedDataPtr &data) const=0;
 
+  /*! This returns a "full" JSON string, i.e. it is has surrounding curly brackets */
   virtual std::string toJSON(const TypedDataPtr &data) const=0;
 
   virtual void addDataHash(const TypedDataPtr &data, POETSHash &hash) const=0;
+
+  /*! This consumes a "full" JSON string, i.e. it is has surrounding curly brackets */
+  virtual TypedDataPtr fromJSON(const std::string &str) const
+  {
+    // TODO: For efficiencies sake load(xmlpp::Element) should be defined in terms of this. Currently
+    // This is a legacy thing, which was a bad decision. At the moment implementors could override
+    // both for efficiency until it is globally fixed.
+    const char *ws=" \t\n\r";
+    auto nw=str.find_first_not_of(ws);
+    if(nw==std::string::npos){
+      return create(); // Empty string
+    }
+    auto lw=str.find_last_not_of(ws);
+    if(str[nw]!='{' || str[lw]!='}'){
+      throw std::runtime_error("Attempt to convert non-JSON or not full JSON document (doesn't start / end with '{' / '}')");
+    }
+    xmlpp::Document doc;
+    auto elt=doc.create_root_node("D");
+    elt->set_child_text(str.substr(nw, lw-nw));
+    return load(elt);
+  }
 
   POETSHash::hash_t getDataHash(const TypedDataPtr &data) const
   {

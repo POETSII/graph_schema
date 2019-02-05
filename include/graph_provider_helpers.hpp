@@ -1,7 +1,8 @@
 #ifndef graph_provider_helpers_hpp
 #define graph_provider_helpers_hpp
 
-#include "graph.hpp"
+#include "graph_core.hpp"
+#include "graph_persist.hpp"
 
 #include <unordered_map>
 #include <cassert>
@@ -115,6 +116,10 @@ public:
     , m_totalSize(elt->getPayloadSize()+sizeof(typed_data_t))
   {}
 
+  TypedDataSpecImpl(const std::initializer_list<TypedDataSpecElementPtr> &elts)
+    : TypedDataSpecImpl( makeTuple("_", elts) )
+  {}
+
   //! Gets the detailed type of the data spec
   /*! For very lightweight implementations this may not be available
   */
@@ -158,7 +163,9 @@ public:
 
   virtual void save(xmlpp::Element *parent, const TypedDataPtr &data) const override
   {
-    parent->set_child_text(toJSON(data));
+    std::string tmp=toJSON(data);
+    assert(!tmp.empty() && tmp.front()=='{' && tmp.back()=='}');
+    parent->set_child_text(tmp.substr(1, tmp.size()-2));
   }
 
   virtual std::string toJSON(const TypedDataPtr &data) const override
@@ -172,6 +179,19 @@ public:
     return std::string(buffer.GetString());
   }
 
+  virtual TypedDataPtr fromJSON(const std::string &str) const override
+  {
+    TypedDataPtr res=create();
+    if(!str.empty()){
+      rapidjson::Document document;
+      document.Parse(str.c_str());
+      assert(document.IsObject());
+
+      m_type->JSONToBinary(document, (char*)res.payloadPtr(), m_payloadSize);
+    }
+    return res;
+  }
+
   virtual void addDataHash(const TypedDataPtr &data, POETSHash &hash) const
   {
     throw std::runtime_error("addDataHash - Not implemented for dynamic types yet.");
@@ -183,6 +203,10 @@ class InputPinImpl
   : public InputPin
 {
 private:
+  // BUG: There is a reference cycle between input pin and device. Really it should be
+  // a weak pointer, but as long as you don't create millions of device types it should
+  // be ok for now.
+
   std::function<DeviceTypePtr ()> m_deviceTypeSrc; // Avoid circular initialisation with device type
   mutable DeviceTypePtr m_deviceType;
   std::string m_name;
@@ -380,6 +404,10 @@ public:
     m_metadata.SetObject();
   }
 
+  MessageTypeImpl(const std::string &id, const std::initializer_list<TypedDataSpecElementPtr> &elts)
+    : MessageTypeImpl(id, std::make_shared<TypedDataSpecImpl>(elts))
+  {}
+
   virtual const std::string &getId() const override
   { return m_id; }
 
@@ -415,7 +443,14 @@ private:
   rapidjson::Document m_metadata;
 
 protected:
-  DeviceTypeImpl(const std::string &id, TypedDataSpecPtr properties, TypedDataSpecPtr state, const std::vector<InputPinPtr> &inputs, const std::vector<OutputPinPtr> &outputs, bool isExternal)
+  DeviceTypeImpl(
+      const std::string &id,
+      TypedDataSpecPtr properties,
+      TypedDataSpecPtr state,
+      const std::vector<InputPinPtr> &inputs,
+      const std::vector<OutputPinPtr> &outputs,
+      bool isExternal
+  )
     : m_id(id)
     , m_properties(properties)
     , m_state(state)

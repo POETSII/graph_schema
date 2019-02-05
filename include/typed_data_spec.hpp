@@ -569,4 +569,14 @@ TypedDataSpecElementArrayPtr makeArray(const std::string &name, unsigned n, Type
     return std::make_shared<TypedDataSpecElementArray>(name, n, elt);
 }
 
+TypedDataSpecElementArrayPtr makeArray(const std::string &name, unsigned n, const std::string &scalarType)
+{
+    return std::make_shared<TypedDataSpecElementArray>(name, n, makeScalar("_", scalarType));
+}
+
+TypedDataSpecElementArrayPtr makeArray(const std::string &name, unsigned n, const char *scalarType)
+{
+    return std::make_shared<TypedDataSpecElementArray>(name, n, makeScalar("_", scalarType));
+}
+
 #endif

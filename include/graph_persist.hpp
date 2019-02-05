@@ -4,7 +4,7 @@
 #include "rapidjson/document.h"
 
 
-#include "graph.hpp"
+#include "graph_core.hpp"
 
 #if 0
 // Boost not installed on keystone
