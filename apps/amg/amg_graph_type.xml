@@ -700,7 +700,7 @@
             <OnReceive><![CDATA[
             deviceState->seen++;
             if(deviceState->seen==deviceProperties->nodes){
-                handler_exit(0);
+                handler_log(0, "__FAKE_HALT__");
             }
             ]]></OnReceive>
         </InputPin>

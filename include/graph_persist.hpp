@@ -72,13 +72,13 @@ public:
   virtual ~GraphLoadEvents()
   {}
 
-  virtual void onGraphType(const GraphTypePtr &graph)
+  virtual void onGraphType(const GraphTypePtr &/*graph*/)
   {}
 
-  virtual void onDeviceType(const DeviceTypePtr &device)
+  virtual void onDeviceType(const DeviceTypePtr &/*device*/)
   {}
 
-  virtual void onMessageType(const MessageTypePtr &edge)
+  virtual void onMessageType(const MessageTypePtr &/*edge*/)
   {}
 
   // Should meta-data be parsed and extracted?

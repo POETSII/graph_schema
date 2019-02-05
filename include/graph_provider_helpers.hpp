@@ -192,7 +192,7 @@ public:
     return res;
   }
 
-  virtual void addDataHash(const TypedDataPtr &data, POETSHash &hash) const
+  virtual void addDataHash(const TypedDataPtr &/*data*/, POETSHash &/*hash*/) const
   {
     throw std::runtime_error("addDataHash - Not implemented for dynamic types yet.");
   }
@@ -690,31 +690,17 @@ private:
   std::string m_prefix;
   const char *m_device;
   const char *m_input;
-  std::function<void (const char *,uint32_t,uint32_t)> m_onExportKeyValue;
-  std::function<void (const char *,int)> m_onApplicationExit;
-  std::function<void (const char *,uint32_t,bool,const char *)> m_onCheckpoint;
 public:
   OrchestratorServicesImpl(
     const char *prefix,
-    unsigned logLevel, FILE *dst, const char *device, const char *input,
-    std::function<void (const char *, uint32_t,uint32_t)> onExportKeyValue, // It is up to application to manage sequence
-    std::function<void (const char *,int)> onApplicationExit,
-    std::function<void (const char *,uint32_t,bool,const char *)> onCheckpoint
+    unsigned logLevel, FILE *dst, const char *device, const char *input
   )
     : OrchestratorServices(logLevel)
     , m_dst(dst)
     , m_prefix(prefix)
     , m_device(device)
     , m_input(input)
-    , m_onExportKeyValue(onExportKeyValue)
-    , m_onApplicationExit(onApplicationExit)
-    , m_onCheckpoint(onCheckpoint)
   {}
-
-  static void onCheckpointDefault(const char *,uint32_t,bool,const char *)
-  {
-    // Do nothing
-  }
 
   void setPrefix(const char *prefix)
   {
@@ -736,25 +722,7 @@ public:
     }
   }
 
-  virtual void vcheckpoint(bool preEvent, int level, const char *fmt, va_list args) override
-  {
-    char buffer[256]={0};
-    unsigned p=vsnprintf(buffer, sizeof(buffer)-1, fmt, args);
-    if(p>=sizeof(buffer)-2){
-      throw std::runtime_error("vcheckpoint buffer overflow");
-    }
-    m_onCheckpoint(m_device, preEvent, level, buffer);
-  }
 
-  virtual void export_key_value(uint32_t key, uint32_t value) override
-  {
-    m_onExportKeyValue(m_device, key, value);
-  }
-
-  virtual void application_exit(int code)
-  {
-    m_onApplicationExit(m_device, code);
-  }
 };
 
 
@@ -763,15 +731,11 @@ class ReceiveOrchestratorServicesImpl
 {
 public:
   ReceiveOrchestratorServicesImpl(
-    unsigned logLevel, FILE *dst, const char *device, const char *input,
-    std::function<void (const char *, uint32_t,uint32_t)> onExportKeyValue, // It is up to application to manage sequence
-    std::function<void (const char *,int)> onApplicationExit,
-    std::function<void (const char *,uint32_t,bool,const char *)> onCheckpoint = onCheckpointDefault
+    unsigned logLevel, FILE *dst, const char *device, const char *input
   )
     : OrchestratorServicesImpl(
         "Recv : ",
-        logLevel,dst,device,input,
-        onExportKeyValue,onApplicationExit,onCheckpoint
+        logLevel,dst,device,input
     )
   {}
 };
@@ -782,15 +746,11 @@ class SendOrchestratorServicesImpl
 {
 public:
   SendOrchestratorServicesImpl(
-    unsigned logLevel, FILE *dst, const char *device, const char *input,
-    std::function<void (const char *, uint32_t,uint32_t)> onExportKeyValue, // It is up to application to manage sequence
-    std::function<void (const char *,int)> onApplicationExit,
-    std::function<void (const char *,uint32_t,bool,const char *)> onCheckpoint = onCheckpointDefault
+    unsigned logLevel, FILE *dst, const char *device, const char *input
   )
     : OrchestratorServicesImpl(
         "Send : ",
-        logLevel,dst,device,input,
-        onExportKeyValue,onApplicationExit,onCheckpoint
+        logLevel,dst,device,input
     )
     {}
 };

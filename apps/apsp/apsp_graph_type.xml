@@ -318,7 +318,9 @@
                     auto ok=deviceState->sumSumDist==deviceProperties->refSumSumDist || deviceProperties->refSumSumDist==0;
                     ok = ok && (deviceState->sumMaxDist==deviceProperties->refSumMaxDist || deviceProperties->refSumMaxDist==0);
 		    
-                    handler_exit(ok?0:1);
+                    // TODO: output whether it passed or failed :)
+                    handler_log(0, "__FAKE_HALT__");
+                    //handler_exit(ok?0:1);
                 }
             }
         }

@@ -267,11 +267,6 @@
 			deviceState->t += deviceProperties->dt;
 			deviceState->v=deviceState->ca;
 
-			// TODO : move this out of the send handler into compute
-			if( (deviceState->t & graphProperties->exportDeltaMask)==0 ){
-				handler_export_key_value(0, 0x800000ul+(uint32_t)(int32_t)(deviceState->v*65536));
-			}
-
 			deviceState->ca = deviceProperties->wSelf * deviceState->v + deviceState->na;
 			deviceState->cs = deviceState->ns;
 
@@ -305,7 +300,7 @@
 				<OnReceive><![CDATA[
 				deviceState->done++;
 				if(deviceState->done == deviceProperties->fanin){
-					handler_exit(0);
+					handler_log(0, "__FAKE_HALT__");
 				}
 				]]></OnReceive>
 			</InputPin>

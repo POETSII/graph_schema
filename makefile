@@ -4,10 +4,24 @@ export PYTHONPATH = tools
 
 SHELL=/bin/bash
 
+ifeq ($(POETS_INTERFACE_SPEC_ROOT),)
+	POETS_INTERFACE_SPEC_ROOT = $(wildcard ../external_interface_spec)
+endif
+ifeq ($(POETS_INTERFACE_SPEC_ROOT),)
+	POETS_INTERFACE_SPEC_ROOT = $(wildcard /POETS/external_interface_spec)
+endif
+
 CPPFLAGS += -I include -W -Wall -Wno-unused-parameter -Wno-unused-variable
 CPPFLAGS += $(shell pkg-config --cflags libxml++-2.6)
 CPPFLAGS += -Wno-unused-local-typedefs
 CPPFLAGS += -I providers
+
+ifneq ($(POETS_INTERFACE_SPEC_ROOT),)
+	HAVE_POETS_INTERFACE_SPEC = 1
+	CPPFLAGS += -DHAVE_POETS_INTERFACE_SPEC=1 -I "$(POETS_INTERFACE_SPEC_ROOT)/include"
+
+	LDLIBS += $(abspath $(POETS_INTERFACE_SPEC_ROOT)/lib/poets_protocol.a)
+endif
 
 LDLIBS += $(shell pkg-config --libs-only-l libxml++-2.6)
 LDFLAGS += $(shell pkg-config --libs-only-L --libs-only-other libxml++-2.6)

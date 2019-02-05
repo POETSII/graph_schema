@@ -362,7 +362,7 @@ public:
   }
 };
 
-GraphTypePtr loadGraphTypeElement(const filepath &srcPath, xmlpp::Element *eGraphType, GraphLoadEvents *events)
+GraphTypePtr loadGraphTypeElement(const filepath &/*srcPath*/, xmlpp::Element *eGraphType, GraphLoadEvents *events)
 {
   xmlpp::Node::PrefixNsMap ns;
   ns["g"]="https://poets-project.org/schemas/virtual-graph-schema-v2";

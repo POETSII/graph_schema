@@ -278,7 +278,6 @@
 			// TODO : move this out of the send handler into compute
 			if( (deviceState->t>0) && (deviceState->t & graphProperties->exportDeltaMask)==0 ){
 				handler_log(2, "export %u", deviceState->v);
-				handler_export_key_value(0, 0x80000000ul+(uint32_t)(deviceState->v));
 			}
 
 			deviceState->t += deviceProperties->dt;
@@ -320,7 +319,7 @@
 				deviceState->done++;
 				handler_log(2, "done=0x%x, fanin=0x%x", deviceState->done, deviceProperties->fanin);
 				if(deviceState->done == deviceProperties->fanin){
-					handler_exit(0);
+					handler_log(0, "__FAKE_HALT__");
 				}
 				]]></OnReceive>
 			</InputPin>

@@ -402,7 +402,10 @@
         </InputPin>
 
         <ReadyToSend><![CDATA[
-        *readyToSend = deviceState->waitCount==0 ? RTS_FLAG_tick_out : 0;
+        *readyToSend = 0;
+        if(deviceState->totalTicks <= graphProperties->maxTicks){
+          deviceState->waitCount==0 ? RTS_FLAG_tick_out : 0;
+        }
         ]]></ReadyToSend>
 
         <InputPin name="tick_in" messageTypeId="tick">
@@ -418,10 +421,9 @@
           <OnSend><![CDATA[
           handler_log(2,"tick : waitCount = %d, totalTicks=%u, maxTicks=%u, totalFirings=%u\n", deviceState->waitCount, deviceState->totalTicks, graphProperties->maxTicks, deviceState->totalFirings);
           assert(deviceState->waitCount==0);
-          handler_export_key_value(0, deviceState->totalFirings);
           deviceState->totalFirings=0;
-          if(deviceState->totalTicks >= graphProperties->maxTicks){
-             handler_exit(0);
+          if(deviceState->totalTicks == graphProperties->maxTicks){
+             handler_log(0, "__FAKE_HALT__");
              *doSend=false;
           }else{
              deviceState->waitCount=deviceProperties->fanin;

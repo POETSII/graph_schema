@@ -390,6 +390,8 @@ public:
         unsigned off=0;
         for(const auto &e : m_elementsByIndex)
         {
+            assert(off<cbBinary);
+
             auto val=e->binaryToJSON(pBinary+off, e->getPayloadSize(), alloc);
             res.AddMember(e->getNameValue(), val, alloc);
 
@@ -469,6 +471,7 @@ public:
         unsigned cb=m_eltType->getPayloadSize();
         for(unsigned i=0; i<m_eltCount; i++)
         {
+            assert(off<cbBinary);
             auto val=m_eltType->binaryToJSON(pBinary+off, cb, alloc);
             res.PushBack(val, alloc);
 

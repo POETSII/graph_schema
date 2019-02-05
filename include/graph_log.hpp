@@ -138,13 +138,11 @@ public:
             // event
             const char *_eventId,
             double _time,
-            double _elapsed,
-            std::vector<std::pair<bool,std::string> > &&_tags
+            double _elapsed
         )
             : eventId(_eventId)
             , time(_time)
             , elapsed(_elapsed)
-            , tags(std::move(_tags))
         {}
 
         std::string eventId;
@@ -164,12 +162,6 @@ public:
             dst.writeAttribute("eventId", eventId);
             dst.writeFormatAttribute("time", "%g", time);
             dst.writeFormatAttribute("elapsed", "%g", elapsed);
-            for(auto &t : tags){
-                dst.startElement("T");
-                dst.writeAttribute("key",t.second);
-                dst.writeFormatAttribute("pre","%u",t.first?1:0);
-                dst.endElement("T");
-            }
         }
     };    
     
@@ -191,7 +183,6 @@ public:
             const char *eventId,
             double time,
             double elapsed,
-            std::vector<std::pair<bool,std::string> > &&_tags,
             // device event
             const DeviceTypePtr &dt,
             const char *_dev,
@@ -200,7 +191,7 @@ public:
             const std::vector<std::string> &_logs,
             const TypedDataPtr &_state
         )
-            : event_t(eventId, time, elapsed,std::move(_tags))
+            : event_t(eventId, time, elapsed)
             , dev(_dev)
             , rts(_rts)
             , seq(_seq)
@@ -235,7 +226,6 @@ public:
             const char *eventId,
             double time,
             double elapsed,
-            std::vector<std::pair<bool,std::string> > &&_tags,
             // device event
             const DeviceTypePtr &dt,
             const char *dev,
@@ -244,7 +234,7 @@ public:
             const std::vector<std::string> &logs,
             const TypedDataPtr &state
         )
-            : device_event_t(eventId, time, elapsed, std::move(_tags), dt, dev, rts, seq, logs, state)
+            : device_event_t(eventId, time, elapsed, dt, dev, rts, seq, logs, state)
         {}
 
         virtual event_type type() const override
@@ -270,7 +260,6 @@ public:
             const char *eventId,
             double time,
             double elapsed,
-            std::vector<std::pair<bool,std::string> > &&_tags,
             // device event
             const DeviceTypePtr &dt,
             const char *dev,
@@ -281,7 +270,7 @@ public:
             // message event
             const PinPtr &pin
         )
-            : device_event_t(eventId, time, elapsed, std::move(_tags), dt, dev, rts, seq, logs, state)
+            : device_event_t(eventId, time, elapsed, dt, dev, rts, seq, logs, state)
             , pin(pin->getName())
         {}
     public:
@@ -314,7 +303,6 @@ public:
             const char *eventId,
             double time,
             double elapsed,
-            std::vector<std::pair<bool,std::string> > &&_tags,
             // device event
             const DeviceTypePtr &dt,
             const char *dev,
@@ -329,7 +317,7 @@ public:
             unsigned _fanout,
             const TypedDataPtr &_msg
         )
-            : message_event_t(eventId, time, elapsed, std::move(_tags), dt, dev, rts, seq, logs, state, pin)
+            : message_event_t(eventId, time, elapsed, dt, dev, rts, seq, logs, state, pin)
             , cancel(_cancel)
             , fanout(_fanout)
             , M(toStr(pin->getMessageType()->getMessageSpec(), _msg))
@@ -369,7 +357,6 @@ public:
             const char *eventId,
             double time,
             double elapsed,
-            std::vector<std::pair<bool,std::string> > &&_tags,
             // device event
             const DeviceTypePtr &dt,
             const char *dev,
@@ -382,7 +369,7 @@ public:
             // send event
             const char *_sendEventId
         )
-            : message_event_t(eventId, time, elapsed, std::move(_tags), dt, dev, rts, seq, logs, state, pin )
+            : message_event_t(eventId, time, elapsed, dt, dev, rts, seq, logs, state, pin )
             , sendEventId(_sendEventId)
         {}
 
@@ -431,7 +418,6 @@ public:
         const char *eventId,
         double time,
         double elapsed,
-        std::vector<std::pair<bool,std::string> > &&_tags,
         // device event
         const DeviceTypePtr &dt,
         const char *dev,
@@ -445,7 +431,6 @@ public:
         ev.eventId=eventId;
         ev.time=time;
         ev.elapsed=elapsed;
-        ev.tags=std::move(_tags);
         // device event
         ev.dev=dev;
         ev.rts=rts;
@@ -461,7 +446,6 @@ public:
         const char *eventId,
         double time,
         double elapsed,
-        std::vector<std::pair<bool,std::string> > &&_tags,
         // device event
         const DeviceTypePtr &dt,
         const char *dev,
@@ -481,7 +465,6 @@ public:
         ev.eventId=eventId;
         ev.time=time;
         ev.elapsed=elapsed;
-        ev.tags=std::move(_tags);
         // device event
         ev.dev=dev;
         ev.rts=rts;
@@ -503,7 +486,6 @@ public:
         const char *eventId,
         double time,
         double elapsed,
-        std::vector<std::pair<bool,std::string> > &&_tags,
         // device event
         const DeviceTypePtr &dt,
         const char *dev,
@@ -521,7 +503,6 @@ public:
         ev.eventId=eventId;
         ev.time=time;
         ev.elapsed=elapsed;
-        ev.tags=std::move(_tags);
         // device event
         ev.dev=dev;
         ev.rts=rts;

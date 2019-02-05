@@ -48,7 +48,7 @@
         <OnReceive><![CDATA[
 				deviceState->done++;
 				if(deviceState->done == deviceProperties->fanin){
-					handler_exit(0);
+          handler_log(0, "__FAKE_HALT__");
 				}
 				]]></OnReceive>
       </InputPin>

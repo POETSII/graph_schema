@@ -331,7 +331,7 @@
 				deviceState->seen++;
 				handler_log(2, "seenFinished = %u, wantFinished = %u", deviceState->seen, deviceProperties->fanin);
 				if(deviceState->seen == deviceProperties->fanin){
-					handler_exit(0);
+					handler_log(0, "__FAKE_HALT__");
 				}
 				]]></OnReceive>
 			</InputPin>
