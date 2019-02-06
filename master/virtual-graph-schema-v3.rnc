@@ -1084,6 +1084,23 @@ grammar {
         ## it may need more than a single value for it's default, JSON can be used for this.
         ## Attributes don't accept " on, and a large JSON strings in an attribute can be messy
         ## therefore, a Default tag can be used instead.
+        ## Example:
+        ## A typedef is declared as:
+        ## <TypeDef id="tup_test">
+        ##   <Tuple name="_">
+        ##     <Scalar type="float" name="a"/>
+        ##     <Scalar type="uint8_t" name="b"/>
+        ##   </Tuple>
+        ## </TypeDef>
+        ##
+        ## An instance of this typedef is declared, with a default, as:
+        ## <Scalar type="tup_test" name="x">
+        ##   <Default>
+                "a": 2.4, "b": -1
+        ##   </Default>
+        ## </Scalar>
+        ##
+        ## See TypedDataMembers for how other data types can be defaulted using the <Default> tag.
         (
           (
             attribute default { text } ?
@@ -1106,6 +1123,29 @@ grammar {
 
         typedDataMember +,
 
+        ## This is an optional default tag for providing default values to members of this Tuple.
+        ## It accepts a JSON string which can be used to identify and set the values of the individual
+        ## members of this tuple.
+        ##
+        ## Example:
+        ## A tuple is declared as containing three floats and another tuple, and includes a <Default>:
+        ## <Tuple name="pos3D">
+        ##   <Scalar type="float" name="x"/>
+        ##   <Scalar type="float" name="y"/>
+        ##   <Scalar type="float" name="z"/>
+        ##   <Tuple name="type">
+        ##     <Scalar type="uint8_t" name="type_id"/>
+        ##     <Scalar type="int8_t" name="force"/>
+        ##   </Tuple>
+        ##   <Default>
+        ##     "z": 2.4, "y": 0.01, "type": { "type_id": 1, "force": -1 }
+        ##   </Default>
+        ## </Tuple>
+        ##
+        ## Any members of the tuple not defaulted in the JSON string is automatically defaulted to 0.
+        ## This example clearly shows that a tuple within a tuple (or other nested elements) can be
+        ## defaulted by nesting JSON strings within.
+        ##
         element Default {
           typedDataValue
         } ?,
@@ -1141,7 +1181,36 @@ grammar {
           )
         ),
 
-        ## Allows for a JSON string to be used to provide defaults to arrays.
+        ## JSON strings can be used to provide default values to Arrays
+        ## This can be done in two ways:
+        ##   1. Filling the array from the front (from the 0th element).
+        ##   2. Providing elements by index.
+        ##
+        ## Example:
+        ## We have an array of 10 integers. If we want to default fill this array
+        ## from the front, we can default this in this way:
+        ## <Array name="int_array" length="10">
+        ##   <Scalar type="int32_t" name="_"/>
+        ##   <Default>
+        ##     [ 44, -243, 1000, 99, 0, 45]
+        ##   </Default>
+        ## </Array>
+        ##
+        ## Elements 0 to 6 in this array will be filled in by default. Elements 7 to 9 will
+        ## be defaulted to 0 automatically.
+        ##
+        ## Alternatively, the array may only need certain elements filled by default.
+        ## In this case, the JSON can provide the indexes which are to be filled.
+        ## This is done as follows:
+        ## <Array name="int_array" length="10">
+        ##   <Scalar type="int32_t" name="_"/>
+        ##   <Default>
+        ##     "0": 964, "9": -469
+        ##   </Default>
+        ## </Array>
+        ##
+        ## Only the first and last elements of this array will have default non-zero values in this case.
+        ##
         element Default {
           typedDataValue
         } ?,
