@@ -336,6 +336,11 @@ grammar {
 
             typedDataSpec
           } ?
+
+          &
+
+          functionLevelHash*
+
         } *
       }
 
@@ -673,6 +678,10 @@ grammar {
             cxxSourceCode
           } ?
 
+          &
+
+          functionLevelHash*
+
         } *
 
        &
@@ -752,9 +761,192 @@ grammar {
            } ?
         } ?
 
+        &
+
+        ## ExternalType has unknown function
+        structureLevelHash*
+
        } *
 
+       &
+
+       element SupervisorDeviceType {
+
+          ## Must be unique amongst all device types
+          attribute id { identifier }
+
+          &
+
+          ## TODO: This was inferred from the Soton part of examplar. What does it mean?
+          attribute requiresPersistentLocalDeviceInfo { "no" }
+          
+          &
+          
+          ## TODO: This was inferred from the Soton part of examplar. What does it mean?
+          attribute requiresLocalDeviceProperties { "no" }
+
+          &
+          
+          ## TODO: This was inferred from the Soton part of examplar. What does it mean?
+          attribute requiresLocalEdgeEndpoints { "no" }
+
+          &
+
+          element Documentation {
+            documentation
+          } ?
+
+          &
+
+          element SharedCode {
+            cxxSourceCode
+          } *
+
+          &
+
+          ## TODO: These are shared amongst all supervisors are run-time?
+          element Properties {
+            ## Used to specify what the C type name is for the properties structure.
+            ## The default is "{graphTypeId}_{deviceTypeId}_properties_t".
+            ##
+            ## The properties type will be available within handlers as DEVICE_PROPERTIES_T
+
+            attribute cTypeName { identifier } ? ,
+
+            typedDataSpec
+          } ?
+
+          &
+
+          ## Free-form data to attach to the supervisor device type.
+          element MetaData {
+            metaDataValue
+          } ?
+
+          &
+
+          ## An input pin that appears on the device type.
+          element InputPin {
+
+            ## Name of the pin, must be unique within the device type
+            attribute name { identifier }
+
+            &
+
+            ## Identifies the message type for this pin
+            ## A pin can only be connected to an output of the same type (not just structurally,
+            ## they must have the same messageTypeId)
+            attribute messageTypeId { identifier }
+
+            &
+
+            element Documentation {
+              documentation
+            } ?
+
+            &
+
+            ## Free-form data to attach to the input pin type.
+            element MetaData {
+              metaDataValue
+            } ?
+
+            &
+
+            ## Indicates read-only properties associated with each edge. This will be
+            ## delivered along-side messages which arrive along that edge
+            ## An input pin may have no properties, in which case this element will not exist.
+            element Properties {
+              ## Used to specify what the C type name is for the properties structure.
+              ## The default is "{graphTypeId}_{deviceTypeId}_{pinName}_properties_t".
+              ##
+              ## The properties type will be available within handlers as ${PORT_PROPERTIES_T}
+              attribute cTypeName { identifier } ?,
+
+              typedDataSpec
+            } ?
+
+            &
+
+            ## Indicates mutable state associated with an edge.
+            element State {
+              ## Used to specify what the global C type name is for the properties structure.
+              ## The default is "{graphTypeId}_{deviceTypeId}_{pinName}_state_t".
+              ##
+              ## The properties type will be available within handlers as ${PORT_STATE_T}
+              attribute cTypeName { identifier } ?,
+
+              typedDataSpec
+            } ?
+
+            # TODO: The Soton part of examplar has no receive handlers. Correct?
+          } *
+
+          &
+
+          ## An output pin that appear on the device type.
+          element OutputPin {
+            ## Name of the pin, must be unique within the device type
+            (
+              attribute name { identifier },
+
+              ## This is an indicator of whether this output pin performs an "Indexed Sends" PIP-0002
+              ## If so, then the message produced will be able to send to a single device based on index
+              attribute indexed { xsd:boolean } ?
+            )
+
+            &
+
+            ## Optionally specify the outputPinIndex for this particular pin.
+            ##
+            ## If not specified, the index will be automatically calculated
+            ## to provide a contiguous range.
+            ##
+            ## Either way, the outputPinIndex for the pin will be available
+            ## within the device handlers as `RTS_INDEX_{name}`,
+            ## while a bit-mask version is available as `RTS_FLAG_{name}`.
+            attribute priority { xsd:integer } ?
+
+            &
+
+            ## Identifies the message type for this pin.
+            ##
+            ## A pin can only be connected to a pin of the same type (not just structurally,
+            ## they must have the same messageTypeId)
+            attribute messageTypeId { string }
+
+            &
+
+            element Documentation {
+              documentation
+            } ?
+
+            &
+
+            ## Free-form data to attach to the input pin type.
+            element MetaData {
+              metaDataValue
+            } ?
+
+            &
+
+            ## TODO: Why is this code rather than a handler of some sort? What are the semantics
+            element Code {
+              cxxSourceCode
+            }
+          } *
+
+          &
+
+          functionLevelHash*
+
+        } *
+
       } *
+
+      &
+
+      functionLevelHash*
 
    }
 
@@ -770,7 +962,10 @@ grammar {
        ## path, or an absolute URL.
        ## If this may be missing, it is assumed some other mechanism will
        ## connect it up (for example, the id is a well-known GUID or an URN).
-       attribute src { string } ?
+       attribute src { string } ?,
+
+
+       functionLevelHash*
      }
 
   graphInstance =
@@ -791,19 +986,30 @@ grammar {
     ## m8pple: check people know about this
     attribute supervisorDeviceTypeId { identifier } ? ,
 
-    element Documentation {
-      documentation
-    } ? ,
+    (
 
-    ## Read-only data associated with the entire graph
-    element Properties {
-      typedDataValue
-    } ? ,
+      element Documentation {
+        documentation
+      } ?
 
-    ## Any meta-data associated with the graph instance
-    element MetaData {
-      metaDataValue
-    } ? ,
+      &
+
+      ## Read-only data associated with the entire graph
+      element Properties {
+        typedDataValue
+      } ?
+
+      &
+
+      ## Any meta-data associated with the graph instance
+      element MetaData {
+        metaDataValue
+      } ?
+
+      &
+
+      instanceLevelHash*
+    ),
 
     ## Zero or more DeviceInstance elements.
     element DeviceInstances {
@@ -926,7 +1132,10 @@ grammar {
           metaDataValue
         } ?
       } *
-    }
+    },
+
+    ## Streaming generators may put hashes last to make generation easier
+    instanceLevelHash*
   }
 
   graphInstanceReference =
@@ -940,7 +1149,9 @@ grammar {
      ## path, or an absolute URL.
      ## If this may be missing, it is assumed some other mechanism will
      ## connect it up (for example, the id is a well-known GUID or an URN).
-     attribute src { string } ?
+     attribute src { string } ?,
+
+    instanceLevelHash*
    }
 
   graphInstanceMetadataPatch =
@@ -949,6 +1160,8 @@ grammar {
 
     ## Id of the graph it is talking about
     attribute id { identifier },
+
+    instanceLevelHash *,
 
     ## Patch against the graph metadata
     element MetaData {
@@ -980,7 +1193,22 @@ grammar {
     }
   }
 
+  structureLevelHash = element HashDigest {
+      attribute type { "structural" },
+      attribute hash { xsd:string { pattern = "[0-9a-zA-Z]{16,16}"  } }
+  }
 
+  functionLevelHash = element HashDigest {
+      attribute type { "functional" | "structural" },
+      attribute hash { xsd:string { pattern = "[0-9a-zA-Z]{16,16}"  } }
+  }
+
+  ## We have no easy way of saying there should be no more than hash of each
+  ## type in the grammar, so the parser needs to do something sensible to check them.
+  instanceLevelHash = element HashDigest {
+      attribute type { "instance" | "functional" | "structural" },
+      attribute hash { xsd:string { pattern = "[0-9a-zA-Z]{16,16}"  } }
+  }
 
 
   #

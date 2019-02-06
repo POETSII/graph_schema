@@ -79,7 +79,7 @@ graph_library : $(wildcard tools/graph/*.py)
 derived/%.rng derived/%.xsd : master/%.rnc $(TRANG) $(JING) $(wildcard master/%-example*.xml)
 	# Check the claimed examples in order to make sure that
 	# they validate
-	for i in master/$*-example*.xml; do \
+	for i in master/$*-example*.xml master/$*-exemplar*.xml ; do \
 		echo "Checking file $$i"; \
 		java -jar $(JING) -c master/$*.rnc $$i; \
 	done
