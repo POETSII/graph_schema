@@ -700,6 +700,18 @@ grammar {
            documentation
          } ?
 
+        ## Indicates read-only properties associated with an external instance.
+        ## This is useful to embed in the graph as it can be used to tell ExternalTypes
+        ## what type of thing they should be, e.g. to configure frame-rate for a video,
+        ## or describe protocol properties such as the buffer depth of a native device
+        ## they are connected to. So it's a bit more than meta-data, as it does actually
+        ## change how the application operates, just not in a way that is known to the
+        ## standard tools. It doesn't have a c type name etc. as that all happens
+        ## outside. 
+        element Properties {
+          typedDataSpec
+        } ?
+
          &
 
          ## Free-form data to attach to the device type.
