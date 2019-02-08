@@ -1096,7 +1096,7 @@ grammar {
         ## An instance of this typedef is declared, with a default, as:
         ## <Scalar type="tup_test" name="x">
         ##   <Default>
-                "a": 2.4, "b": -1
+        ##        "a": 2.4, "b": -1
         ##   </Default>
         ## </Scalar>
         ##
