@@ -336,6 +336,11 @@ grammar {
 
             typedDataSpec
           } ?
+
+          &
+
+          functionLevelHash*
+
         } *
       }
 
@@ -372,6 +377,12 @@ grammar {
         ## `RTC_FLAG`. These values will be injected as C++ identifiers
         ## when the handler code is compiled, so for different devices there will be
         ## different identifiers in scope.
+        ##
+        ## Flags are also available globally through a flag of the form:
+        ## `RTS_FLAG_{device_type}_{name}` and `RTS_INDEX_{device_type}_{name}`.
+        ## This allows for the use of flags outside device scope (sometimes it
+        ## is useful to work with them in the graph shared code, but it is difficult
+        ## to work out what numbers they will have).
         ##
         ## The index of a pin determines its priority, with the lowest value having
         ## the highest priority. By default the priorities will be assigned in the
@@ -641,6 +652,12 @@ grammar {
           ##   `const ${GRAPH_PROPERTIES_T} *graphProperties` :  Read-only pointer to the graph properties
           ##   `const ${DEVICE_PROPERTIES_T} *deviceProperties` : Read-only pointer to the device properties
           ##   `${DEVICE_STATE_T} *deviceState` : Read-write pointer to the device state
+          ##
+          ## If the init handler is not presence it should implicitly have an empty body (though an
+          ## implementation can optimise that out).
+          ##
+          ## m8pple: Why not OnEvent? It is the first event that happens in the life-cycle of a device,
+          ## regardless of whether it happens in x86 land (pre-computed) or in the actual hardware.
           element Init {
             cxxSourceCode
           } ?
@@ -651,9 +668,19 @@ grammar {
           ## messages are in flight.
           ## This could be included in alternative idle detection, but as of schema v3, this uses the
           ## hardware idle detection as available in tinsel 0.5.
+          ## m8pple: What happens if some device types have on idle but others don't? Is there an implicit
+          ## empty on-idle in each device type?
+          ## If OnIdle is not present, then it is assumed to be an empty handler, and it is valid to mix
+          ## devices with an OnIdle with those with an implicit empty OnIdle. If there are no OnIdle
+          ## handlers an implementation may omit the OnIdle machinery, but this is not detectible/visible
+          ## by the application.
           element OnIdle {
             cxxSourceCode
           } ?
+
+          &
+
+          functionLevelHash*
 
         } *
 
@@ -672,6 +699,18 @@ grammar {
          element Documentation {
            documentation
          } ?
+
+        ## Indicates read-only properties associated with an external instance.
+        ## This is useful to embed in the graph as it can be used to tell ExternalTypes
+        ## what type of thing they should be, e.g. to configure frame-rate for a video,
+        ## or describe protocol properties such as the buffer depth of a native device
+        ## they are connected to. So it's a bit more than meta-data, as it does actually
+        ## change how the application operates, just not in a way that is known to the
+        ## standard tools. It doesn't have a c type name etc. as that all happens
+        ## outside. 
+        element Properties {
+          typedDataSpec
+        } ?
 
          &
 
@@ -734,9 +773,192 @@ grammar {
            } ?
         } ?
 
+        &
+
+        ## ExternalType has unknown function
+        structureLevelHash*
+
        } *
 
+       &
+
+       element SupervisorDeviceType {
+
+          ## Must be unique amongst all device types
+          attribute id { identifier }
+
+          &
+
+          ## TODO: This was inferred from the Soton part of examplar. What does it mean?
+          attribute requiresPersistentLocalDeviceInfo { "no" }
+          
+          &
+          
+          ## TODO: This was inferred from the Soton part of examplar. What does it mean?
+          attribute requiresLocalDeviceProperties { "no" }
+
+          &
+          
+          ## TODO: This was inferred from the Soton part of examplar. What does it mean?
+          attribute requiresLocalEdgeEndpoints { "no" }
+
+          &
+
+          element Documentation {
+            documentation
+          } ?
+
+          &
+
+          element SharedCode {
+            cxxSourceCode
+          } *
+
+          &
+
+          ## TODO: These are shared amongst all supervisors are run-time?
+          element Properties {
+            ## Used to specify what the C type name is for the properties structure.
+            ## The default is "{graphTypeId}_{deviceTypeId}_properties_t".
+            ##
+            ## The properties type will be available within handlers as DEVICE_PROPERTIES_T
+
+            attribute cTypeName { identifier } ? ,
+
+            typedDataSpec
+          } ?
+
+          &
+
+          ## Free-form data to attach to the supervisor device type.
+          element MetaData {
+            metaDataValue
+          } ?
+
+          &
+
+          ## An input pin that appears on the device type.
+          element InputPin {
+
+            ## Name of the pin, must be unique within the device type
+            attribute name { identifier }
+
+            &
+
+            ## Identifies the message type for this pin
+            ## A pin can only be connected to an output of the same type (not just structurally,
+            ## they must have the same messageTypeId)
+            attribute messageTypeId { identifier }
+
+            &
+
+            element Documentation {
+              documentation
+            } ?
+
+            &
+
+            ## Free-form data to attach to the input pin type.
+            element MetaData {
+              metaDataValue
+            } ?
+
+            &
+
+            ## Indicates read-only properties associated with each edge. This will be
+            ## delivered along-side messages which arrive along that edge
+            ## An input pin may have no properties, in which case this element will not exist.
+            element Properties {
+              ## Used to specify what the C type name is for the properties structure.
+              ## The default is "{graphTypeId}_{deviceTypeId}_{pinName}_properties_t".
+              ##
+              ## The properties type will be available within handlers as ${PORT_PROPERTIES_T}
+              attribute cTypeName { identifier } ?,
+
+              typedDataSpec
+            } ?
+
+            &
+
+            ## Indicates mutable state associated with an edge.
+            element State {
+              ## Used to specify what the global C type name is for the properties structure.
+              ## The default is "{graphTypeId}_{deviceTypeId}_{pinName}_state_t".
+              ##
+              ## The properties type will be available within handlers as ${PORT_STATE_T}
+              attribute cTypeName { identifier } ?,
+
+              typedDataSpec
+            } ?
+
+            # TODO: The Soton part of examplar has no receive handlers. Correct?
+          } *
+
+          &
+
+          ## An output pin that appear on the device type.
+          element OutputPin {
+            ## Name of the pin, must be unique within the device type
+            (
+              attribute name { identifier },
+
+              ## This is an indicator of whether this output pin performs an "Indexed Sends" PIP-0002
+              ## If so, then the message produced will be able to send to a single device based on index
+              attribute indexed { xsd:boolean } ?
+            )
+
+            &
+
+            ## Optionally specify the outputPinIndex for this particular pin.
+            ##
+            ## If not specified, the index will be automatically calculated
+            ## to provide a contiguous range.
+            ##
+            ## Either way, the outputPinIndex for the pin will be available
+            ## within the device handlers as `RTS_INDEX_{name}`,
+            ## while a bit-mask version is available as `RTS_FLAG_{name}`.
+            attribute priority { xsd:integer } ?
+
+            &
+
+            ## Identifies the message type for this pin.
+            ##
+            ## A pin can only be connected to a pin of the same type (not just structurally,
+            ## they must have the same messageTypeId)
+            attribute messageTypeId { string }
+
+            &
+
+            element Documentation {
+              documentation
+            } ?
+
+            &
+
+            ## Free-form data to attach to the input pin type.
+            element MetaData {
+              metaDataValue
+            } ?
+
+            &
+
+            ## TODO: Why is this code rather than a handler of some sort? What are the semantics
+            element Code {
+              cxxSourceCode
+            }
+          } *
+
+          &
+
+          functionLevelHash*
+
+        } *
+
       } *
+
+      &
+
+      functionLevelHash*
 
    }
 
@@ -752,7 +974,10 @@ grammar {
        ## path, or an absolute URL.
        ## If this may be missing, it is assumed some other mechanism will
        ## connect it up (for example, the id is a well-known GUID or an URN).
-       attribute src { string } ?
+       attribute src { string } ?,
+
+
+       functionLevelHash*
      }
 
   graphInstance =
@@ -769,21 +994,34 @@ grammar {
     ##
     ## If this attribute is not specified, the first supervisor
     ## device type is chosen.
+    ##
+    ## m8pple: check people know about this
     attribute supervisorDeviceTypeId { identifier } ? ,
 
-    element Documentation {
-      documentation
-    } ? ,
+    (
 
-    ## Read-only data associated with the entire graph
-    element Properties {
-      typedDataValue
-    } ? ,
+      element Documentation {
+        documentation
+      } ?
 
-    ## Any meta-data associated with the graph instance
-    element MetaData {
-      metaDataValue
-    } ? ,
+      &
+
+      ## Read-only data associated with the entire graph
+      element Properties {
+        typedDataValue
+      } ?
+
+      &
+
+      ## Any meta-data associated with the graph instance
+      element MetaData {
+        metaDataValue
+      } ?
+
+      &
+
+      instanceLevelHash*
+    ),
 
     ## Zero or more DeviceInstance elements.
     element DeviceInstances {
@@ -906,7 +1144,10 @@ grammar {
           metaDataValue
         } ?
       } *
-    }
+    },
+
+    ## Streaming generators may put hashes last to make generation easier
+    instanceLevelHash*
   }
 
   graphInstanceReference =
@@ -920,7 +1161,9 @@ grammar {
      ## path, or an absolute URL.
      ## If this may be missing, it is assumed some other mechanism will
      ## connect it up (for example, the id is a well-known GUID or an URN).
-     attribute src { string } ?
+     attribute src { string } ?,
+
+    instanceLevelHash*
    }
 
   graphInstanceMetadataPatch =
@@ -929,6 +1172,8 @@ grammar {
 
     ## Id of the graph it is talking about
     attribute id { identifier },
+
+    instanceLevelHash *,
 
     ## Patch against the graph metadata
     element MetaData {
@@ -960,7 +1205,22 @@ grammar {
     }
   }
 
+  structureLevelHash = element HashDigest {
+      attribute type { "structural" },
+      attribute hash { xsd:string { pattern = "[0-9a-zA-Z]{16,16}"  } }
+  }
 
+  functionLevelHash = element HashDigest {
+      attribute type { "functional" | "structural" },
+      attribute hash { xsd:string { pattern = "[0-9a-zA-Z]{16,16}"  } }
+  }
+
+  ## We have no easy way of saying there should be no more than hash of each
+  ## type in the grammar, so the parser needs to do something sensible to check them.
+  instanceLevelHash = element HashDigest {
+      attribute type { "instance" | "functional" | "structural" },
+      attribute hash { xsd:string { pattern = "[0-9a-zA-Z]{16,16}"  } }
+  }
 
 
   #
@@ -1167,6 +1427,7 @@ grammar {
 
             ## Must be meaningfully convertible to array type
             ##
+            ## m8pple: Maybe bring in the wording for array initialisation, or refer to it.
             ## TODO: what exactly are the semantics here?
             ##
             ## Special case for an array of char, where the string will be converted to chars

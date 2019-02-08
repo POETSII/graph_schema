@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
 <Graphs xmlns="https://poets-project.org/schemas/virtual-graph-schema-v3">
-	<GraphType id="everything_test">
+	<GraphType id="v3_everything_test">
 		<Documentation>
 		  Created by Alex Rast.
 
@@ -102,11 +102,12 @@
 				<Message>
 					<Scalar name="upd_payload" type="msg_update_t"/>
 				</Message>
+				<HashDigest type="structural" hash="f9480fe5fd17947a" />
 			</MessageType>
 	    </MessageTypes>
 
 	    <DeviceTypes>
-			<DeviceType id="start">
+			<DeviceType id="start" >
 				<Documentation>
 					A control node to start the application and interface with the user.
 				</Documentation>
@@ -118,6 +119,9 @@
 						</Documentation>
 					</Scalar>
 				</State>
+
+				<HashDigest type="structural" hash="f9480fe5fd17947a" />
+				<HashDigest type="functional" hash="abc80fe5fd17947a" />
 
 				<ReadyToSend><![CDATA[
 					if (deviceState->go_stop != 0)
@@ -343,6 +347,8 @@
 					}
 				]]></OnCompute>
 
+				<HashDigest type="structural" hash="f9480fe5fd17947a" />
+
 				<InputPin name="tick_in"  messageTypeId="tick">
 					<OnReceive><![CDATA[
 						deviceState->work_state.val1 = 1;
@@ -458,7 +464,7 @@
 					</Properties>
 				</InputPin>
 
-				<OutputPin name="worker_cancel_out" messageTypeId="prod"/>
+				<OutputPin name="worker_cancel_out" messageTypeId="prod">
 					<Code><![CDATA[
 						P_Sup_Msg_t msg;
 						In->Get<P_Sup_Msg_t>(0, &msg);                                // receive a request for reset,
@@ -470,6 +476,10 @@
 						output_msg.messageTag=0;                                      // as a reset signal,
 						Out->Put<P_Msg_t>(0, output_msg);                             // and send it on its way
 					]]></Code>
+				</OutputPin>
+
+				<HashDigest type="structural" hash="45680fe5fd17947a" />
+				<HashDigest type="functional" hash="89180fe5fd17947a" />
 			</SupervisorDeviceType>
 
 			<ExternalType id="user_ctl">
@@ -488,13 +498,21 @@
 					    This issues the 'go' signal to the start device
 					</Documentation>
 				</OutputPin>
+
+				<HashDigest type="structural" hash="45680fe5fd17991a" />
 			</ExternalType>
 	    </DeviceTypes>
+
+		<HashDigest type="functional" hash="45680fe5fd17991a" />
 
 	</GraphType>
    <GraphTypeReference id="ro" src="./ro-1.xml"/>
 
    <GraphInstanceReference id="graph1" src="./ro-1.xml"/>
+   <GraphInstanceReference id="graph10" src="./ro-10.xml">
+   		<HashDigest type="functional" hash="45680fe5fd17991a" />
+   </GraphInstanceReference>
+
    <GraphInstance id="XMLTest1" graphTypeId="everything_test" supervisorDeviceTypeId="supervisor">
 		<Properties>
 		"max_ticks": 100
@@ -503,6 +521,8 @@
 		<MetaData>
 		"Num_workers": 3
 		</MetaData>
+
+		<HashDigest type="functional" hash="45680f456d17991a" />
 
 		<DeviceInstances>
 			<DevI id="start_0" type="start"/>
@@ -530,9 +550,13 @@
 			<EdgeI path="relay_0:indexed_send-start_0:indexed_send" sendIndex="0"/>
 			<EdgeI path="relay_1:indexed_send-start_0:indexed_send" sendIndex="1"/>
 		</EdgeInstances>
+
+		<HashDigest type="instance" hash="45680fe5fd17991a" />
 	</GraphInstance>
 
 	<GraphInstanceMetadataPatch id="XMLTest1">
+		<HashDigest type="instance" hash="45680fe5fd17991a" />
+
 		<MetaData> "Num_internal_devices": 5 </MetaData>
 
 		<DeviceInstances>
