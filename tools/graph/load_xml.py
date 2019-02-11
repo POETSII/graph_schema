@@ -250,7 +250,9 @@ def load_message_type(parent,dt, namedTypes, namespace=None, loadDocumentation=F
     except Exception as e:
         raise XMLSyntaxError("Error while parsing message {}".format(id),dt,e)
 
-def load_external_type(graph,dtNode,sourceFile,loadDocumentation=False):
+def load_external_type(graph,dtNode,sourceFile, namespace=None, loadDocumentation=False):
+    if namespace==None:
+        namespace=ns
     id=get_attrib(dtNode,"id")
     state=None
     properties=None
