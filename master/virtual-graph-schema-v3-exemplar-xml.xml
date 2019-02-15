@@ -163,6 +163,11 @@
 					</Documentation>
 				</OutputPin>
 
+                <OnHardwareIdle><![CDATA[
+                    // The hardware has signalled that every device is idle, and no messages are in flight.
+                    // The code in this hander indicates what I should do in this circumstance.
+                    ]]></OnHardwareIdle>
+
 			</DeviceType>
 
 			<DeviceType id="relay">
@@ -269,6 +274,12 @@
 							write_upd_msg(deviceProperties,message,deviceState->tick_count%4);
 					]]></OnSend>
 				</OutputPin>
+
+                <OnThreadIdle><![CDATA[
+                    // All devices on the thread I am on are idle. No messages to receive, no messages to send.
+                    // The code in this hander indicates what I should do in this circumstance.
+                    ]]></OnThreadIdle>
+
 			</DeviceType>
 
 			<DeviceType id="worker">
@@ -331,11 +342,13 @@
 						*readyToSend |= RTS_ACK;
 				]]></ReadyToSend>
 
-				<Init><![CDATA[
+				<OnInit><![CDATA[
 					deviceState->dev2_state_t.recvd_wd.data_byte = 255;
-				]]></Init>
+				]]></OnInit>
 
-				<OnCompute><![CDATA[
+				<OnDeviceIdle><![CDATA[
+                    // I alone am idle, I have no messages to send, I have no messages to receive.
+                    // The code in this hander indicates what I should do in this circumstance.
 					for (uint32_t i = 0; i < deviceProperties->env_len; i++)
 					{
 						if (deviceProperties->type == 0)
@@ -345,7 +358,7 @@
 						if (deviceProperties->type == 2)
 							deviceState->work_env[i].data_half *= (1.0+1.0/i);
 					}
-				]]></OnCompute>
+				]]></OnDeviceIdle>
 
 				<HashDigest type="structural" hash="f9480fe5fd17947a" />
 
@@ -454,18 +467,58 @@
 
 	       </DeviceType>
 
-			<SupervisorDeviceType id="supervisor" requiresPersistentLocalDeviceInfo="no" requiresLocalDeviceProperties="no" requiresLocalEdgeEndpoints="no">
+			<SupervisorType id="supervisor" requiresPersistentLocalDeviceInfo="no" requiresLocalDeviceProperties="no" requiresLocalEdgeEndpoints="no">
+				<SharedCode><![CDATA[
+						// CODE WHICH CAN BE SHARED BY ALL HANDLERS IN THIS SUPERVISOR
+					]]></SharedCode>
+
+				<Properties>
+					<Tuple name="sup_tup">
+						<Scalar type="uint8_t" name="x"/>
+						<Scalar type="uint8_t" name="y"/>
+						<Array type="uint8_t" name="z" length="10">
+							<Default>[1, 2, 3, 9, 6, 2]</Default>
+						</Array>
+					</Tuple>
+				</Properties>
+
+				<State>
+					<Array name="tup_arr" length="5">
+						<Tuple name="_">
+							<Scalar type="uint8_t" name="type"/>
+							<Scalar type="float" name="distance"/>
+						</Tuple>
+						<Default>{ "0": { "type": 2, "distance": 1.2 } }</Default>
+					</Array>
+				</State>
+
+				<MetaData>something</MetaData>
+
+				<OnInit><![CDATA[
+					for (int i = 0; i < 5; i++) {
+						deviceState->tup_arr[i].type = 2;
+						deviceState->tup_arr[i].distance = deviceProperties->sup_tup.z[i] * deviceProperties->sup_tup.z[10 - i];
+					}
+				]]></OnInit>
+
 				<InputPin name="worker_cancel_in" messageTypeId="prod">
 					<Documentation>
 						Receives messages from workers asking to be reset
 					</Documentation>
+					<MetaData>something else</MetaData>
 					<Properties>
 						<Scalar name="supervisorID" type="uint32_t" default="0"/>
 					</Properties>
+					<State>
+						<Scalar name="cycles" type="uint32_t" default="0"/>
+					</State>
+					<OnReceive><![CDATA[
+						// CODE WHICH EXECUTES WHEN THIS SUPERVISOR RECEIVES A MESSAGE
+					]]></OnReceive>
 				</InputPin>
 
 				<OutputPin name="worker_cancel_out" messageTypeId="prod">
-					<Code><![CDATA[
+					<OnSend><![CDATA[
 						P_Sup_Msg_t msg;
 						In->Get<P_Sup_Msg_t>(0, &msg);                                // receive a request for reset,
 						P_Msg_t output_msg;                                           // turn the packet around
@@ -475,12 +528,20 @@
 						output_msg.messageLenBytes=12;
 						output_msg.messageTag=0;                                      // as a reset signal,
 						Out->Put<P_Msg_t>(0, output_msg);                             // and send it on its way
-					]]></Code>
+					]]></OnSend>
 				</OutputPin>
+
+				<SupervisorCompute><![CDATA[
+					// CODE TO EXECUTE TO TAKE ADVANTAGE OF SUPERVISOR IDLE TIME
+				]]></SupervisorCompute>
+
+				<OnStop><![CDATA[
+					// CODE TO EXECUTE WHEN THE "/stop" COMMAND IS EXECUTED
+				]]></OnStop>
 
 				<HashDigest type="structural" hash="45680fe5fd17947a" />
 				<HashDigest type="functional" hash="89180fe5fd17947a" />
-			</SupervisorDeviceType>
+			</SupervisorType>
 
 			<ExternalType id="user_ctl">
 				<Documentation>
@@ -513,7 +574,7 @@
    		<HashDigest type="functional" hash="45680fe5fd17991a" />
    </GraphInstanceReference>
 
-   <GraphInstance id="XMLTest1" graphTypeId="everything_test" supervisorDeviceTypeId="supervisor">
+   <GraphInstance id="XMLTest1" graphTypeId="everything_test" supervisorTypeId="supervisor">
 		<Properties>
 		"max_ticks": 100
 		</Properties>
@@ -528,10 +589,21 @@
 			<DevI id="start_0" type="start"/>
 			<DevI id="relay_0" type="relay"/>
 			<DevI id="relay_1" type="relay"/>
-			<DevI id="worker_0" type="worker"><P>"devID": 0, "type": 0</P><M>"val2_init":"192.168.0.1"</M></DevI>
-			<DevI id="worker_1" type="worker"><P>"devID": 1, "type": 1, "dev_type": "Type 1"</P><S>"work_state": {"received_wd.data_long_long": 1}, "work_env": ["env_var.data_float": 1.0,"env_var.data_float": 1.0,"env_var.data_float": 1.0,]</S></DevI>
-			<DevI id="worker_2" type="worker"><P>"devID": 2, "type": 2, "dev_type": "Type 2", "env_len": 4</P><S>"work_state": {"val1": 0, "field2": {"val2_high": 192, "val2_midh": 168, "val2_midl": 0, "val2.low": 3}, "received_wd.data_long_long": 54}, "work_env": ["env_var.data_float": 1.0,"env_var.data_half": 2.0,"env_var.data_half": 3.0,"env_var.data_half": 4.0]</S><M>"val2_init":"192.168.0.3"</M></DevI>
+			<DevI id="worker_0" type="worker">
+				<P>"devID": 0, "type": 0</P>
+				<M>"val2_init":"192.168.0.1"</M>
+			</DevI>
+			<DevI id="worker_1" type="worker">
+				<P>"devID": 1, "type": 1, "dev_type": "Type 1"</P>
+				<S>"work_state": {"received_wd.data_long_long": 1}, "work_env": ["env_var.data_float": 1.0,"env_var.data_float": 1.0,"env_var.data_float": 1.0,]</S>
+			</DevI>
+			<DevI id="worker_2" type="worker">
+				<P>"devID": 2, "type": 2, "dev_type": "Type 2", "env_len": 4</P>
+				<S>"work_state": {"val1": 0, "field2": {"val2_high": 192, "val2_midh": 168, "val2_midl": 0, "val2.low": 3}, "received_wd.data_long_long": 54}, "work_env": ["env_var.data_float": 1.0,"env_var.data_half": 2.0,"env_var.data_half": 3.0,"env_var.data_half": 4.0]</S>
+				<M>"val2_init":"192.168.0.3"</M>
+			</DevI>
 			<DevI id="user_0" type="user_ctl"></DevI>
+			<ExtI id="ext_0" type="user_ctl"/>
 		</DeviceInstances>
 
 		<EdgeInstances>
@@ -543,8 +615,14 @@
 			<EdgeI path="worker_1:tick_in-relay_0:tick_out" />
 			<EdgeI path="worker_2:tick_in-relay_0:tick_out" />
 			<EdgeI path="worker_0:update_in-relay_0:update_out"></EdgeI>
-			<EdgeI path="worker_1:update_in-relay_0:update_out"><P>"upd_pin_low":2</P><M>"upd_pin_init":"192.168.0.2"</M></EdgeI>
-			<EdgeI path="worker_2:update_in-relay_0:update_out"><P>"upd_pin_high":192, "upd_pin_midh":168, "upd_pin_midl":0, "upd_pin_low":3</P><S>"parity":1</S></EdgeI>
+			<EdgeI path="worker_1:update_in-relay_0:update_out">
+				<P>"upd_pin_low":2</P>
+				<M>"upd_pin_init":"192.168.0.2"</M>
+			</EdgeI>
+			<EdgeI path="worker_2:update_in-relay_0:update_out">
+				<P>"upd_pin_high":192, "upd_pin_midh":168, "upd_pin_midl":0, "upd_pin_low":3</P>
+				<S>"parity":1</S>
+			</EdgeI>
 			<EdgeI path="start_0:reset-user_ctl:app_start" />
 			<EdgeI path="user_ctl:app_notify-start_0:prod_out" />
 			<EdgeI path="relay_0:indexed_send-start_0:indexed_send" sendIndex="0"/>
