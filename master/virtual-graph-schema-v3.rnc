@@ -379,9 +379,8 @@ grammar {
         ##
         ## For an output pin called {name}, the requestIndex will be available within
         ## handlers and device shared code as `RTS_INDEX_{name}`, and the
-        ## equivalent bit-mask as `RTS_FLAG_{name}`. The compute handler
-        ## (if there is one) will have an equivalent `RTC_INDEX` and
-        ## `RTC_FLAG`. These values will be injected as C++ identifiers
+        ## equivalent bit-mask as `RTS_FLAG_{name}`.
+        ## These values will be injected as C++ identifiers
         ## when the handler code is compiled, so for different devices there will be
         ## different identifiers in scope.
         ##
@@ -621,6 +620,7 @@ grammar {
           ##   `const ${DEVICE_PROPERTIES_T} *deviceProperties` : Read-only pointer to the device properties
           ##   `const ${DEVICE_STATE_T} *deviceState` : Read-only pointer to the device state
           ##   uint32_t *readyToSend : Used to specify the bit-mask indicating which pins want to send
+          ##   `uint32_t *requestIdle` : Indicates whether the device wishes to do OnDeviceIdle computation when there is idle compute time.
           element ReadyToSend {
             cxxSourceCode
           }
@@ -666,13 +666,10 @@ grammar {
           ## OnThreadIdle is executed when all devices on a thread have no messages to receive, and
           ## all ReadyToSends are 0. This can be used as a computation opportunity for the thread when
           ## idling.
-          ##
-          ## The things which will be available within scope are:
-          ##
-          ##   `const ${GRAPH_PROPERTIES_T} *graphProperties` :  Read-only pointer to the graph properties
-          ##   `const ${DEVICE_PROPERTIES_T} *deviceProperties` : Read-only pointer to the device properties
-          ##   `${DEVICE_STATE_T} *deviceState` : Mutable pointer to the device state
-          ## TODO: This would probably need access to properties and state (read-only) of all devices on the thread.
+          ## WARNING: This is currently a placeholder for parsers, as it does not have well-defined semantics.
+          ## There is currently no concept of a "thread" at this level, nor is there any way of accessing
+          ## thread contexts. It is not clear how this would work in heterogeneous thread systems where there are
+          ## multiple device types in a thread.
           element OnThreadIdle {
             cxxSourceCode
           } ?
