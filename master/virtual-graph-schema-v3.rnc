@@ -40,7 +40,7 @@
 # ### Changes from 2.2 -> 3.0
 # For more information, see PIP-0017
 #
-# Optional Init handler added
+# Optional OnInit handler added
 # <S> tag added to DevI to allow individual setting of device instance states.
 # Optional Default tag has been added to Scalar, Array, Tuple, and Union
 # Optional attribute "indexed" in OutputPin added:
@@ -50,7 +50,14 @@
 # DeviceSharedCode removed
 # Fix incorrect definition for TypeDef (typedDataSpec -> typedDataMember)
 # TypeDef can now contain documentation
-
+# Dense or Sparse array initialisation provided for Arrays.
+# Digest hashes for types and instances added
+# Added <SupervisorType>, renamed from <SupervisorDeviceType> in previous versions.
+# GraphInstance attribute "supervisorTypeId" changed from "supervisorDeviceTypeId"
+# Updated SupervisorType to the specification discussed with Southampton
+# <OnCompute> and <OnIdle> tags are to be entirely removed
+#   These are replaced by optional <OnHardwareIdle>, <OnDeviceIdle> and <OnThreadIdle>.
+#   This provides more detailed descriptions of when these handlers are executed
 
 
 
@@ -604,31 +611,6 @@ grammar {
 
           &
 
-          ## Event handler for compute opportunities this device. The body will
-          ## be a fragment of C. It should probably be wrapped in a CDATA section.
-          ##
-          ## The things which will be available within scope are:
-          ##
-          ##   `const ${GRAPH_PROPERTIES_T} *graphProperties` :  Read-only pointer to the graph properties
-          ##   `const ${DEVICE_PROPERTIES_T} *deviceProperties` : Read-only pointer to the device properties
-          ##   `${DEVICE_STATE_T} *deviceState` : Mutable pointer to the device state
-          element OnCompute {
-            ## Optionally specify the requestIndex for this particular pin.
-            ##
-            ## If not specified, the index will be automatically calculated
-            ## to provide a contiguous range.
-            ##
-            ## Either way, the outputPinIndex for the pin will be available within
-            ## the source code for this device type.
-            ## as `RTC_INDEX` for the index, and `RTC_FLAG` for
-            ## the bit flag.
-            attribute priority { xsd:integer } ? ,
-
-            cxxSourceCode
-          } ?
-
-          &
-
           ## Used to determine which output pins are ready to send.
           ##
           ## This fragment returns a bit-mask indicating which pins currently
@@ -655,26 +637,58 @@ grammar {
           ##
           ## If the init handler is not presence it should implicitly have an empty body (though an
           ## implementation can optimise that out).
-          ##
-          ## m8pple: Why not OnEvent? It is the first event that happens in the life-cycle of a device,
-          ## regardless of whether it happens in x86 land (pre-computed) or in the actual hardware.
-          element Init {
+          element OnInit {
             cxxSourceCode
           } ?
 
           &
 
           ## Code which runs when the hardware detects that all devices on all threads are idle, and no
-          ## messages are in flight.
-          ## This could be included in alternative idle detection, but as of schema v3, this uses the
-          ## hardware idle detection as available in tinsel 0.5.
-          ## m8pple: What happens if some device types have on idle but others don't? Is there an implicit
-          ## empty on-idle in each device type?
-          ## If OnIdle is not present, then it is assumed to be an empty handler, and it is valid to mix
-          ## devices with an OnIdle with those with an implicit empty OnIdle. If there are no OnIdle
-          ## handlers an implementation may omit the OnIdle machinery, but this is not detectible/visible
-          ## by the application.
-          element OnIdle {
+          ## messages are in flight. The hardware provides a signal to all device to run this handler.
+          ##
+          ## If OnHardwareIdle is not present, then it is assumed to be an empty handler, and it is valid to mix
+          ## devices with an OnHardwareIdle with those with an implicit empty OnHardwareIdle.
+          ## A device with no OnHardwareIdle will not block a device which does have OnHardwareIdle.
+          ## If there are no OnHardwareIdle handlers an implementation may omit the OnHardwareIdle machinery,
+          ## but this is not detectible/visible by the application.
+          ##
+          ## The things which will be available within scope are:
+          ##
+          ##   `const ${GRAPH_PROPERTIES_T} *graphProperties` :  Read-only pointer to the graph properties
+          ##   `const ${DEVICE_PROPERTIES_T} *deviceProperties` : Read-only pointer to the device properties
+          ##   `${DEVICE_STATE_T} *deviceState` : Mutable pointer to the device state
+          element OnHardwareIdle {
+            cxxSourceCode
+          } ?
+
+          &
+
+          ## OnThreadIdle is executed when all devices on a thread have no messages to receive, and
+          ## all ReadyToSends are 0. This can be used as a computation opportunity for the thread when
+          ## idling.
+          ##
+          ## The things which will be available within scope are:
+          ##
+          ##   `const ${GRAPH_PROPERTIES_T} *graphProperties` :  Read-only pointer to the graph properties
+          ##   `const ${DEVICE_PROPERTIES_T} *deviceProperties` : Read-only pointer to the device properties
+          ##   `${DEVICE_STATE_T} *deviceState` : Mutable pointer to the device state
+          ## TODO: This would probably need access to properties and state (read-only) of all devices on the thread.
+          element OnThreadIdle {
+            cxxSourceCode
+          } ?
+
+          &
+
+          ## This event handler will execute when is it detected that a single device has no
+          ## messages to be received, and its readyToSend value is 0, indicating nothing to be sent.
+          ##
+          ## The things which will be available within scope are:
+          ##
+          ##   `const ${GRAPH_PROPERTIES_T} *graphProperties` :  Read-only pointer to the graph properties
+          ##   `const ${DEVICE_PROPERTIES_T} *deviceProperties` : Read-only pointer to the device properties
+          ##   `${DEVICE_STATE_T} *deviceState` : Mutable pointer to the device state
+          element OnDeviceIdle {
+
             cxxSourceCode
           } ?
 
@@ -700,17 +714,19 @@ grammar {
            documentation
          } ?
 
-        ## Indicates read-only properties associated with an external instance.
-        ## This is useful to embed in the graph as it can be used to tell ExternalTypes
-        ## what type of thing they should be, e.g. to configure frame-rate for a video,
-        ## or describe protocol properties such as the buffer depth of a native device
-        ## they are connected to. So it's a bit more than meta-data, as it does actually
-        ## change how the application operates, just not in a way that is known to the
-        ## standard tools. It doesn't have a c type name etc. as that all happens
-        ## outside. 
-        element Properties {
-          typedDataSpec
-        } ?
+         &
+
+         ## Indicates read-only properties associated with an external instance.
+         ## This is useful to embed in the graph as it can be used to tell ExternalTypes
+         ## what type of thing they should be, e.g. to configure frame-rate for a video,
+         ## or describe protocol properties such as the buffer depth of a native device
+         ## they are connected to. So it's a bit more than meta-data, as it does actually
+         ## change how the application operates, just not in a way that is known to the
+         ## standard tools. It doesn't have a c type name etc. as that all happens
+         ## outside.
+         element Properties {
+           typedDataSpec
+         } ?
 
          &
 
@@ -782,7 +798,7 @@ grammar {
 
        &
 
-       element SupervisorDeviceType {
+       element SupervisorType {
 
           ## Must be unique amongst all device types
           attribute id { identifier }
@@ -791,14 +807,14 @@ grammar {
 
           ## TODO: This was inferred from the Soton part of examplar. What does it mean?
           attribute requiresPersistentLocalDeviceInfo { "no" }
-          
+
           &
-          
+
           ## TODO: This was inferred from the Soton part of examplar. What does it mean?
           attribute requiresLocalDeviceProperties { "no" }
 
           &
-          
+
           ## TODO: This was inferred from the Soton part of examplar. What does it mean?
           attribute requiresLocalEdgeEndpoints { "no" }
 
@@ -816,10 +832,9 @@ grammar {
 
           &
 
-          ## TODO: These are shared amongst all supervisors are run-time?
           element Properties {
             ## Used to specify what the C type name is for the properties structure.
-            ## The default is "{graphTypeId}_{deviceTypeId}_properties_t".
+            ## The default is "{graphTypeId}_{supervisorTypeId}_properties_t".
             ##
             ## The properties type will be available within handlers as DEVICE_PROPERTIES_T
 
@@ -830,9 +845,39 @@ grammar {
 
           &
 
+          element State {
+            ## Used to specify what the C type name is for the state structure.
+            ## The default is "{graphTypeId}_{supervisorTypeId}_state_t".
+            ##
+            ## The properties type will be available within handlers as DEVICE_STATE_T
+
+            attribute cTypeName { identifier } ? ,
+
+            typedDataSpec
+          } ?
+
+          &
+
           ## Free-form data to attach to the supervisor device type.
+          ## TODO: This may need removing if it doesn't fit with Southampton's specification
           element MetaData {
             metaDataValue
+          } ?
+
+          &
+
+          ## Code to run on the device before any other handler runs (this replaces the
+          ## old __init__ pin).
+          ## The things which will be available within scope are:
+          ##
+          ##   `const ${GRAPH_PROPERTIES_T} *graphProperties` :  Read-only pointer to the graph properties
+          ##   `const ${DEVICE_PROPERTIES_T} *deviceProperties` : Read-only pointer to the device properties
+          ##   `${DEVICE_STATE_T} *deviceState` : Read-write pointer to the device state
+          ##
+          ## If the OnInit handler is not presence it should implicitly have an empty body (though an
+          ## implementation can optimise that out).
+          element OnInit {
+            cxxSourceCode
           } ?
 
           &
@@ -891,7 +936,27 @@ grammar {
               typedDataSpec
             } ?
 
-            # TODO: The Soton part of examplar has no receive handlers. Correct?
+            &
+
+            ## Event handler for when a message arrives on this device. The body will
+            ## be a fragment of C. It should probably be wrapped in a CDATA section,
+            ## but that is up to you. The code should be a statement or sequence of
+            ## statements, and does not contain any function header.
+            ##
+            ## Rationale: why a fragment? It forces the implementer to not use globals etc.,
+            ## and means we have control over the type names of the various structs.
+            ##
+            ## Variables which will be in scope are:
+            ##   `const ${GRAPH_PROPERTIES_T} *_graphProperties` : Read-only pointer to the graph properties
+            ##   `const ${DEVICE_PROPERTIES_T} *deviceProperties` : Read-only pointer to the device state
+            ##   `${DEVICE_STATE_T} *deviceState : Mutable pointer to the device state
+            ##   `const ${PORT_PROPERTIES_T} *edgeProperties` : Read-only pointer to the edge state
+            ##   ${PORT_STATE_T} *edgeState : Mutable pointer to the edge state
+            ##   `const ${MESSAGE_T} message : Read-only pointer to the message payload
+            element OnReceive {
+              cxxSourceCode
+            }
+
           } *
 
           &
@@ -942,11 +1007,55 @@ grammar {
 
             &
 
-            ## TODO: Why is this code rather than a handler of some sort? What are the semantics
-            element Code {
+            ## Event handler for sending a message on this device. The body will
+            ## be a fragment of C. It should probably be wrapped in a CDATA section.
+            ##
+            ## The things which will be available within scope are:
+            ##
+            ##   `const ${GRAPH_PROPERTIES_T} *graphProperties` :  Read-only pointer to the graph properties
+            ##   `const ${DEVICE_PROPERTIES_T} *deviceProperties` : Read-only pointer to the device properties
+            ##   `${DEVICE_STATE_T} *deviceState` : Mutable pointer to the device state
+            ##   `${MESSAGE_T} *message` : A mutable pointer to payload associate with the edge
+            ##   `bool *doSend` : A mutable pointer to control whether the message is sent. By default it is true.
+            element OnSend {
               cxxSourceCode
             }
+
           } *
+
+          &
+
+          ## Supervisor specific handler to execute when this supervisor device has no messages to receive
+          ## and nothing to send. This supervisor will be idle, and can perform other tasks.
+          ##
+          ## If the SupervisorCompute handler is empty, it should implicitly be an empty.
+          ## (An implementation could optimise this out however)
+          ##
+          ## The things which will be available within scope are:
+          ##
+          ##   `const ${GRAPH_PROPERTIES_T} *graphProperties` :  Read-only pointer to the graph properties
+          ##   `const ${DEVICE_PROPERTIES_T} *deviceProperties` : Read-only pointer to the device properties
+          ##   `${DEVICE_STATE_T} *deviceState` : Mutable pointer to the device state
+          ## TODO: This is assumed, no discussion of exactly what a supervisor would need in this handler has been mentioned
+          element SupervisorCompute {
+            cxxSourceCode
+          } ?
+
+          &
+
+          ## Supervisor specific handler to execute when the "/stop" command is called from the orchestrator.
+          ## This can be used to perform final calculations before tearing down the application currently on
+          ## the hardware.
+          ##
+          ## The things which will be available within scope are:
+          ##
+          ##   `const ${GRAPH_PROPERTIES_T} *graphProperties` :  Read-only pointer to the graph properties
+          ##   `const ${DEVICE_PROPERTIES_T} *deviceProperties` : Read-only pointer to the device properties
+          ##   `${DEVICE_STATE_T} *deviceState` : Mutable pointer to the device state
+          ## TODO: This is assumed, no discussion of exactly what a supervisor would need in this handler has been mentioned
+          element OnStop {
+            cxxSourceCode
+          } ?
 
           &
 
@@ -994,9 +1103,7 @@ grammar {
     ##
     ## If this attribute is not specified, the first supervisor
     ## device type is chosen.
-    ##
-    ## m8pple: check people know about this
-    attribute supervisorDeviceTypeId { identifier } ? ,
+    attribute supervisorTypeId { identifier } ? ,
 
     (
 
@@ -1052,7 +1159,6 @@ grammar {
           typedDataValue
         } ? ,
 
-        ## NEW TO V3
         ## This element is used to set the state of a deviceInstance instead of setting
         ## a value through Device Properties, and using the init handler to set the state
         element S {
@@ -1339,11 +1445,24 @@ grammar {
         attribute type { typeName },
 
         ## Gives the default for this thing
-        ## If this is an int/uint/float then a single value can be provided in the tag.
+        ## If this is an int/uint/float then a single value can be provided in the tag,
+        ## or provided in the "default" attribute.
         ## However, if this is a declaration of a Typedef,
-        ## it may need more than a single value for it's default, JSON can be used for this.
+        ## it may need more than a single value for it's default, JSON is used for this.
         ## Attributes don't accept " on, and a large JSON strings in an attribute can be messy
         ## therefore, a Default tag can be used instead.
+        ##
+        ## For a Typedef, the JSON is parsed based on the first non-whitespace character.
+        ## This could be in multiple forms. If 'C' is the first non-whitespace character, the
+        ## default value could be:
+        ##
+        ## Scalar: Should always produce a JSON scalar: number or bool:
+        ## Array: should always parse directly, producing an array or dict:
+        ##      if C='[' - This is a dense array of initialisers, filling the target array from the front
+        ##      if C='{' - This is a sparse array of initialisers, filling the target array based on the given index
+        ## Tuple(-like): always add curly brackets at beginning and end, then parse as JSON
+        ##        if C="": If there exists a non-whitespace char, it must start the first key
+        ##
         ## Example:
         ## A typedef is declared as:
         ## <TypeDef id="tup_test">
@@ -1387,6 +1506,11 @@ grammar {
         ## It accepts a JSON string which can be used to identify and set the values of the individual
         ## members of this tuple.
         ##
+        ## When parsing a JSON string used to default a Tuple, always add curly brackets at the
+        ## beginning and end of the string, then parse as JSON.
+        ## This JSON string (after curly bracket) should expect that the first non-whitespace character
+        ## is the start of the first key.
+        ##
         ## Example:
         ## A tuple is declared as containing three floats and another tuple, and includes a <Default>:
         ## <Tuple name="pos3D">
@@ -1427,9 +1551,6 @@ grammar {
 
             ## Must be meaningfully convertible to array type
             ##
-            ## m8pple: Maybe bring in the wording for array initialisation, or refer to it.
-            ## TODO: what exactly are the semantics here?
-            ##
             ## Special case for an array of char, where the string will be converted to chars
             attribute default { text } ?
           )
@@ -1444,8 +1565,15 @@ grammar {
 
         ## JSON strings can be used to provide default values to Arrays
         ## This can be done in two ways:
-        ##   1. Filling the array from the front (from the 0th element).
-        ##   2. Providing elements by index.
+        ##   1. Filling the array from the front (from the 0th element) - Dense
+        ##   2. Providing elements by index - Sparse
+        ##
+        ## Dense initialisation:
+        ##
+        ## For dense initialisers, parsing JSON string expects the first non-whitespace
+        ## character is '['. This will then have any number of elements, up to n, where
+        ## n is the size of the array being initialised. This will then be used to fill
+        ## the array from the front
         ##
         ## Example:
         ## We have an array of 10 integers. If we want to default fill this array
@@ -1460,9 +1588,16 @@ grammar {
         ## Elements 0 to 6 in this array will be filled in by default. Elements 7 to 9 will
         ## be defaulted to 0 automatically.
         ##
+        ## Sparse initialisation:
+        ##
         ## Alternatively, the array may only need certain elements filled by default.
-        ## In this case, the JSON can provide the indexes which are to be filled.
-        ## This is done as follows:
+        ## Sparse initialisation expects that the first non-whitespace character is '{'.
+        ## Following this, it must have keys which are integers only, with a value no
+        ## larger than the length of the target array. These keys then have the value
+        ## associated with that index following them.
+        ##
+        ## Example:
+        ## With the same array as before, we can default it in the following way
         ## <Array name="int_array" length="10">
         ##   <Scalar type="int32_t" name="_"/>
         ##   <Default>
