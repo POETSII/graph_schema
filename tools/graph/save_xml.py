@@ -224,11 +224,40 @@ def save_device_type(parent,dt):
 
     return n
 
+def save_external_type(parent,dt):
+    n=etree.SubElement(parent,toNS("p:ExternalType"))
+
+    n.attrib["id"]=dt.id
+    if dt.documentation is not None:
+        doc = etree.SubElement(n, toNS("p:Documentation"))
+        doc.text = dt.documentation
+
+    for p in dt.inputs_by_index:
+        pn=etree.SubElement(n,toNS("p:InputPin"))
+        pn.attrib["name"]=p.name
+        pn.attrib["messageTypeId"]=p.message_type.id
+        if p.documentation is not None:
+            doc = etree.SubElement(pn, toNS("p:Documentation"))
+            doc.text = p.documentation
+
+    for p in dt.outputs_by_index:
+        pn=etree.SubElement(n,toNS("OutputPin"))
+        pn.attrib["name"]=p.name
+        pn.attrib["messageTypeId"]=p.message_type.id
+
+        if p.documentation is not None:
+            doc = etree.SubElement(pn, toNS("p:Documentation"))
+            doc.text = p.documentation
+        save_metadata(pn, "p:MetaData", p.metadata)
+
+    return n
 
 _device_instance_tag_type=toNS("p:DevI")
 _device_instance_properties_type=toNS("p:P")
 _device_instance_state_type=toNS("p:S")
 _device_instance_metadata_type=toNS("p:M")
+
+_external_instance_tag_type=toNS("p:ExtI")
 
 
 def reduce_typed_data(default, typed, result=None):
@@ -242,41 +271,46 @@ def reduce_typed_data(default, typed, result=None):
     elif isinstance(default, dict):
         res = {}
         for i in default:
-            r = reduce_typed_data(default[i], typed[i], res)
-            if r != [] and r != {} and r != 0:
-                res[i] = r
+            if i in typed:
+                r = reduce_typed_data(default[i], typed[i], res)
+                if r != [] and r != {} and r != 0:
+                    res[i] = r
         return res
     elif isinstance(default, list):
         res = []
         diff = []
         for i in range(0, len(default)):
-            r = reduce_typed_data(default[i], typed[i], res)
-            if r == [] or r == {} or r == 0:
-                diff.append(r)
-            else:
-                diff.append(r)
-                res = []
-                for l in range(0, len(diff)):
-                    res.append(diff[l])
+            if i < len(typed):
+                r = reduce_typed_data(default[i], typed[i], res)
+                if r == [] or r == {} or r == 0:
+                    diff.append(r)
+                else:
+                    diff.append(r)
+                    res = []
+                    for l in range(0, len(diff)):
+                        res.append(diff[l])
         return res
     else:
         return typed
 
 
 def save_device_instance(parent, di):
-    n=etree.SubElement(parent, _device_instance_tag_type, {"id":di.id,"type":di.device_type.id} )
+    if di.device_type.isExternal:
+        n = etree.SubElement(parent, _external_instance_tag_type, {"id":di.id,"type":di.device_type.id} )
+    else:
+        n = etree.SubElement(parent, _device_instance_tag_type, {"id":di.id,"type":di.device_type.id} )
 
-    defaultProperties = di.device_type.properties.create_default()
-    if di.properties is not None:
-        differingProperties = reduce_typed_data(defaultProperties, di.properties)
-        save_typed_struct_instance(n, _device_instance_properties_type, di.device_type.properties, differingProperties)
+        defaultProperties = di.device_type.properties.create_default()
+        if di.properties is not None:
+            differingProperties = reduce_typed_data(defaultProperties, di.properties)
+            save_typed_struct_instance(n, _device_instance_properties_type, di.device_type.properties, differingProperties)
 
-    defaultState = di.device_type.state.create_default()
-    if di.state is not None:
-        differingState = reduce_typed_data(defaultState, di.state)
-        save_typed_struct_instance(n, _device_instance_state_type, di.device_type.state, differingState)
+        defaultState = di.device_type.state.create_default()
+        if di.state is not None:
+            differingState = reduce_typed_data(defaultState, di.state)
+            save_typed_struct_instance(n, _device_instance_state_type, di.device_type.state, differingState)
 
-    save_metadata(n, _device_instance_metadata_type, di.metadata)
+        save_metadata(n, _device_instance_metadata_type, di.metadata)
 
     return n
 
@@ -325,7 +359,10 @@ def save_graph_type(parent, graph):
     dtn = etree.Element(toNS("p:DeviceTypes"))
     gn.append(dtn)
     for dt in graph.device_types.values():
-        save_device_type(dtn,dt)
+        if dt.isExternal:
+            save_external_type(dtn, dt)
+        else:
+            save_device_type(dtn,dt)
 
     return gn
 
