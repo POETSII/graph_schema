@@ -41,8 +41,8 @@
 							Some struct that looks like an IP address format.
 						</Documentation>
 					</Tuple>
-					<Union name="recvd_wd" tagName="received">
-						<Scalar name="data_long_long" type="uint64_t"/>
+					<Union name="recvd_wd">
+						<Scalar name="data_long_long" type="uint32_t"/>
 						<Scalar name="data_long" type="uint32_t"/>
 						<Scalar name="data_short" type="uint16_t"/>
 						<Scalar name="data_byte" type="uint8_t"/>
@@ -57,7 +57,7 @@
 				<Union name="fvalue">
 					<Scalar name="data_double" type="double"/>
 					<Scalar name="data_float" type="float"/>
-					<Scalar name="data_half" type="half"/>
+					<Scalar name="data_half" type="float"/>
 					<Documentation>
 						 A union to contain a type-specific floating-point value.
 						 Again, the "fvalue" name of this union is ignored. This union is referenced
@@ -200,10 +200,10 @@
 
 				<Properties cTypeName="relay_out_t">
 					<Tuple name="relay_out">
-						<Scalar name="r_long_long" type="uint64_t" default="0x3FFFFFFFF"/>
-						<Scalar name="r_long" type="uint32_t" default="0x3FFFF"/>
-						<Scalar name="r_short" type="uint16_t" default="0x3FF"/>
-						<Scalar name="r_byte" type = "uint8_t" default="0x3"/>
+						<Scalar name="r_long_long" type="uint32_t" default="262143"/>
+						<Scalar name="r_long" type="uint32_t" default="262143"/>
+						<Scalar name="r_short" type="uint16_t" default="1023"/>
+						<Scalar name="r_byte" type = "uint8_t" default="3"/>
 					</Tuple>
 				</Properties>
 
@@ -300,7 +300,7 @@
 					<Scalar type="uint32_t" name="type">
 			            <Documentation> type gives the active union member for the float array 0: data_double, 1: data_float, 2: data_half </Documentation>
 			          </Scalar>
-					<Array type="char" length="8" name="dev_type" default="Type 0"/>
+					<Array type="uint8_t" length="8" name="dev_type" default="Type 0"/>
 					<Scalar type="uint32_t" name="env_len" default="3"/>
 				</Properties>
 
@@ -315,7 +315,7 @@
 					<Array length="3" name="work_env">
 					    <Scalar type="dev2_float_u_t" name="env_var">
 					    	<Default>
-					    		"data_double:" 1.0
+					    		"data_double": 1.0
 					    	</Default>
 					    </Scalar>
 						<Documentation>
@@ -567,14 +567,14 @@
 		<HashDigest type="functional" hash="45680fe5fd17991a" />
 
 	</GraphType>
-   <GraphTypeReference id="ro" src="./ro-1.xml"/>
+<!--    <GraphTypeReference id="ro" src="./ro-1.xml"/>
 
    <GraphInstanceReference id="graph1" src="./ro-1.xml"/>
    <GraphInstanceReference id="graph10" src="./ro-10.xml">
    		<HashDigest type="functional" hash="45680fe5fd17991a" />
-   </GraphInstanceReference>
+   </GraphInstanceReference> -->
 
-   <GraphInstance id="XMLTest1" graphTypeId="everything_test" supervisorTypeId="supervisor">
+   <GraphInstance id="XMLTest1" graphTypeId="v3_everything_test" supervisorTypeId="supervisor">
 		<Properties>
 		"max_ticks": 100
 		</Properties>
@@ -595,11 +595,11 @@
 			</DevI>
 			<DevI id="worker_1" type="worker">
 				<P>"devID": 1, "type": 1, "dev_type": "Type 1"</P>
-				<S>"work_state": {"received_wd.data_long_long": 1}, "work_env": ["env_var.data_float": 1.0,"env_var.data_float": 1.0,"env_var.data_float": 1.0,]</S>
+				<S>"work_state": {"recvd_wd": {"data_long_long": 1}}, "work_env": [{"data_float": 1.0}, {"data_float": 1.0}, {"data_float": 1.0}]</S>
 			</DevI>
 			<DevI id="worker_2" type="worker">
 				<P>"devID": 2, "type": 2, "dev_type": "Type 2", "env_len": 4</P>
-				<S>"work_state": {"val1": 0, "field2": {"val2_high": 192, "val2_midh": 168, "val2_midl": 0, "val2.low": 3}, "received_wd.data_long_long": 54}, "work_env": ["env_var.data_float": 1.0,"env_var.data_half": 2.0,"env_var.data_half": 3.0,"env_var.data_half": 4.0]</S>
+				<S>"work_state": {"val1": 0, "field2": {"val2_high": 192, "val2_midh": 168, "val2_midl": 0, "val2_low": 3}, "recvd_wd": {"data_long_long": 54}}, "work_env": [{"data_half": 2.0}, {"data_half": 3.0} , {"data_half": 4.0}]</S>
 				<M>"val2_init":"192.168.0.3"</M>
 			</DevI>
 			<DevI id="user_0" type="user_ctl"></DevI>
@@ -623,10 +623,10 @@
 				<P>"upd_pin_high":192, "upd_pin_midh":168, "upd_pin_midl":0, "upd_pin_low":3</P>
 				<S>"parity":1</S>
 			</EdgeI>
-			<EdgeI path="start_0:reset-user_ctl:app_start" />
-			<EdgeI path="user_ctl:app_notify-start_0:prod_out" />
-			<EdgeI path="relay_0:indexed_send-start_0:indexed_send" sendIndex="0"/>
-			<EdgeI path="relay_1:indexed_send-start_0:indexed_send" sendIndex="1"/>
+			<EdgeI path="start_0:reset-ext_0:app_start" />
+			<EdgeI path="ext_0:app_notify-start_0:prod_out" />
+			<EdgeI path="relay_0:prod_in-start_0:indexed_send" sendIndex="0"/>
+			<EdgeI path="relay_1:prod_in-start_0:indexed_send" sendIndex="1"/>
 		</EdgeInstances>
 
 		<HashDigest type="instance" hash="45680fe5fd17991a" />
