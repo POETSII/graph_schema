@@ -80,7 +80,7 @@ class ScalarTypedDataSpec(TypedDataSpec):
             assert False, "Unknown data type {}.".format(self.type)
         return res
 
-    def __init__(self,name,type,default=None):
+    def __init__(self,name,type,default=None,documentation=None):
         TypedDataSpec.__init__(self,name)
         assert isinstance(type,Typedef) or (type in ScalarTypedDataSpec._primitives), "Didn't understand type parameter {}".format(type)
         self.type=type
@@ -96,6 +96,7 @@ class ScalarTypedDataSpec(TypedDataSpec):
         if isinstance(self.default,list):
             self.default=tuple(self.default) # make it hashable
         self._hash = hash(self.name) ^ hash(self.type) ^ hash(self.default)
+        self.documentation=None
 
     def visit_subtypes(self,visitor):
         if isinstance(self.type,Typedef):
@@ -146,7 +147,7 @@ class ScalarTypedDataSpec(TypedDataSpec):
             return "{}:{}={}".format(self.type,self.name,self.default)
 
 class TupleTypedDataSpec(TypedDataSpec):
-    def __init__(self,name,elements,default=None):
+    def __init__(self,name,elements,default=None,documentation=None):
         TypedDataSpec.__init__(self,name)
         self._elts_by_name={}
         self._elts_by_index=[]
@@ -160,6 +161,7 @@ class TupleTypedDataSpec(TypedDataSpec):
             self._elts_by_name[e.name]=e
             self._elts_by_index.append(e)
             self._hash = self._hash ^ hash(e)
+        self.documentation = documentation
 
     @property
     def elements_by_name(self):
@@ -231,7 +233,7 @@ class TupleTypedDataSpec(TypedDataSpec):
 
 
 class ArrayTypedDataSpec(TypedDataSpec):
-    def __init__(self,name,length,type,default=None):
+    def __init__(self,name,length,type,default=None,documentation=None):
         TypedDataSpec.__init__(self,name)
         self.type=type
         assert length>0, "Lengths must be greater than 0, as per PIP0007"
@@ -240,6 +242,7 @@ class ArrayTypedDataSpec(TypedDataSpec):
         if self.default is not None:
             self.default=self.expand(self.default)
         self._hash=hash(name) ^ hash(type) + length
+        self.documentation = documentation
 
     def __eq__(self, o):
         return isinstance(o, ArrayTypedDataSpec) and self.name==o.name and self.length==o.length and self.type==o.type

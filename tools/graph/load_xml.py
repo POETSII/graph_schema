@@ -95,18 +95,23 @@ def load_typed_data_spec(dt, namedTypes={}, namespace=None, loadDocumentation=Fa
     if tag=="p:Tuple":
         elts=[]
         default=None
+        documentation=None
         for eltNode in dt.findall("p:*",namespace): # Anything from this namespace must be a member
-            if not deNS(eltNode.tag) == "p:Default":
+            if deNS(eltNode.tag) == "p:Documentation":
+                if loadDocumentation:
+                    documentation = eltNode.text
+            elif not deNS(eltNode.tag) == "p:Default":
                 elt=load_typed_data_spec(eltNode, namedTypes,namespace,loadDocumentation)
                 elts.append(elt)
             else:
                 default = json.loads('{'+eltNode.text+'}')
-        member = TupleTypedDataSpec(name,elts,default)
+        member = TupleTypedDataSpec(name,elts,default,documentation)
         # return TupleTypedDataSpec(name,elts,default)
     elif tag=="p:Array":
         length=int(get_attrib(dt,"length"))
         type=get_attrib_optional(dt, "type")
         default=None
+        documentation = None
         d=dt.find("p:Default", namespace)
         if d is not None:
             if d.text.strip().startswith('['):
@@ -120,7 +125,13 @@ def load_typed_data_spec(dt, namedTypes={}, namespace=None, loadDocumentation=Fa
             else:
                 type=ScalarTypedDataSpec("_",type)
         else:
-            subs=dt.findall("p:*",namespace) # Anything from this namespace must be the sub-type other than <Default>
+            subs=dt.findall("p:*", namespace) # Anything from this namespace must be the sub-type other than <Default>
+            d = dt.find("p:Documentation", namespace)
+            if d is not None:
+                if loadDocumentation:
+                    documentation = d.text
+                subs.remove(d)
+            d = dt.find("p:Default", namespace)
             if default:
                 if len(subs)!=2:
                     raise RuntimeError("If there is no type attribute, there should be exactly one sub-type element.")
@@ -132,7 +143,7 @@ def load_typed_data_spec(dt, namedTypes={}, namespace=None, loadDocumentation=Fa
                 raise RuntimeError("If there is no type attribute, there should be exactly one sub-type element.")
             else:
                 type=load_typed_data_spec(subs[0], namedTypes, namespace, loadDocumentation)
-        member = ArrayTypedDataSpec(name,length,type,default)
+        member = ArrayTypedDataSpec(name,length,type,default,documentation)
         # return ArrayTypedDataSpec(name,length,type,default)
     elif tag=="p:Scalar":
         type=get_attrib(dt, "type")
@@ -149,11 +160,21 @@ def load_typed_data_spec(dt, namedTypes={}, namespace=None, loadDocumentation=Fa
                     default=json.loads('{"'+name+'": {'+d.text+'} }')
                 default=default[name]
 
+        documentation = None
+        if loadDocumentation:
+            d=dt.find("p:Documentation", namespace)
+            if d is not None:
+                documentation = d.text
+
         sys.stderr.write("namedTypes={}\n".format(namedTypes))
         if type in namedTypes:
             type=namedTypes[type]
-        member = ScalarTypedDataSpec(name,type,default)
+        member = ScalarTypedDataSpec(name,type,default,documentation)
         # return ScalarTypedDataSpec(name,type,default)
+    elif tag=="p:Union":
+        # TODO: Implement unions
+        # pass
+        raise RuntimeError("Unions have not yet been implemented")
     else:
         raise XMLSyntaxError("Unknown data type '{}'.".format(tag), dt)
     if loadDocumentation:
@@ -333,8 +354,8 @@ def load_device_type(graph,dtNode,sourceFile,namespace=None,loadDocumentation=Fa
 
     dt=DeviceType(graph,id,properties,state,metadata,shared_code,isExternal=False,documentation=documentation)
 
-    if dtNode.find("p:Init",namespace) is not None:
-        (handler,sourceLine)=get_child_text(dtNode,"p:Init", namespace)
+    if dtNode.find("p:OnInit",namespace) is not None:
+        (handler,sourceLine)=get_child_text(dtNode,"p:OnInit", namespace)
         dt.init_handler=handler
         dt.init_source_line=sourceLine
         dt.init_source_file=sourceFile
@@ -396,6 +417,20 @@ def load_device_type(graph,dtNode,sourceFile,namespace=None,loadDocumentation=Fa
     dt.ready_to_send_source_line=sourceLine
     dt.ready_to_send_source_file=sourceFile
 
+    # Tags with no implementation
+
+    i = dtNode.find("p:OnHardwareIdle", namespace)
+    if i is not None:
+        raise RuntimeError("OnHardwareIdle has not been implemented")
+
+    i = dtNode.find("p:OnThreadIdle", namespace)
+    if i is not None:
+        raise RuntimeError("OnThreadIdle has not been implemented")
+
+    i = dtNode.find("p:OnDeviceIdle", namespace)
+    if i is not None:
+        raise RuntimeError("OnDeviceIdle has not been implemented")
+
     return dt
 
 def load_graph_type(graphNode, sourcePath, namespace=None, loadDocumentation=False):
@@ -451,6 +486,8 @@ def load_graph_type(graphNode, sourcePath, namespace=None, loadDocumentation=Fal
             et=load_external_type(graphType,dtNode,sourcePath, namespace)
             graphType.add_device_type(et)
             sys.stderr.write("    Added external device type {}\n".format(et.id))
+        elif dtNode.tag == ("{{{}}}SupervisorType".format(namespace["p"])):
+            raise RuntimeError("Supervisor Types have not been implemented")
 
     return graphType
 
@@ -507,7 +544,6 @@ def load_device_instance(graph,diNode,namespace=None):
     mTag = "{{{}}}M".format(namespace["p"])
 
     id=get_attrib(diNode,"id")
-
     device_type_id=get_attrib(diNode,"type")
     if device_type_id not in graph.graph_type.device_types:
         raise XMLSyntaxError("Unknown device type id {}, known devices = [{}]".format(device_type_id,
@@ -536,7 +572,6 @@ def load_device_instance(graph,diNode,namespace=None):
 
             spec=device_type.state
             assert spec is not None, "Can't have state value for device with no state spec"
-
             value=json.loads("{"+n.text+"}")
             assert spec.is_refinement_compatible(value), "Spec = {}, value= {}".format(spec,value)
 
@@ -572,7 +607,7 @@ def load_edge_instance(graph,eiNode):
     dst_device=graph.device_instances[dst_device_id]
     src_device=graph.device_instances[src_device_id]
 
-    assert dst_pin_name in dst_device.device_type.inputs, "Couldn't find input pin called '{}' in device type '{}'. Inputs are [{}]".format(dst_pin_name,dst_device.device_type.id, [p.name for p in dst_device.device_type.inputs])
+    assert dst_pin_name in dst_device.device_type.inputs, "Couldn't find input pin called '{}' in device type '{}'. Inputs are [{}]".format(dst_pin_name,dst_device.device_type.id, [p for p in dst_device.device_type.inputs])
     assert src_pin_name in src_device.device_type.outputs
 
     properties=None

@@ -655,7 +655,7 @@ def render_input_pin_as_cpp(ip,dst):
     if ip.source_line and ip.source_file:
         subs["preProcLinePragma"]= '#line {} "{}"\n'.format(ip.source_line-1,ip.source_file)
     else:
-        subst["preProcLinePragma"]="// No line/file information for handler"
+        subs["preProcLinePragma"]="// No line/file information for handler"
 
     dst.write(
 """
@@ -758,7 +758,7 @@ def render_output_pin_as_cpp(op,dst):
     if op.source_line and op.source_file:
         subs["preProcLinePragma"]= '#line {} "{}"\n'.format(op.source_line-1,op.source_file)
     else:
-        subst["preProcLinePragma"]="// No line/file information for handler"
+        subs["preProcLinePragma"]="// No line/file information for handler"
 
 
     #dst.write('MessageTypePtr {}_Spec_get();\n\n'.format(op.message_type.id))
