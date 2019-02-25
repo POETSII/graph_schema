@@ -33,7 +33,7 @@ neuronType=graphType.device_types["neuron"]
 
 instName="sparse_{}_{}_{}".format(Ne,Ni,K)
 
-properties={}
+properties=None
 res=GraphInstance(instName, graphType, properties)
 
 nodes=[None]*N
@@ -61,7 +61,7 @@ for dst in range(N):
     random.shuffle(free)
     for i in range(K):
         src=free[i]
-        
+
         if src<Ne:
             S=0.5*urand()
         else:

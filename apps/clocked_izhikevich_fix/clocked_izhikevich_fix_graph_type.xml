@@ -1,27 +1,26 @@
-<?xml version="1.0"?>
-<Graphs xmlns="https://poets-project.org/schemas/virtual-graph-schema-v2">
+<?xml version='1.0' encoding='ASCII'?>
+<Graphs xmlns="https://poets-project.org/schemas/virtual-graph-schema-v3">
   <GraphType id="clocked_izhikevich_fix">
-
+    <Types/>
     <Properties>
-      <Scalar name="maxTicks" type="uint32_t" default="10" />
+      <Scalar name="maxTicks" type="uint32_t" default="10"/>
     </Properties>
-
     <SharedCode><![CDATA[
-#ifdef POETS_LEGACY_HAS_HANDLER_EXIT
-#define _do_handler_exit(code) handler_exit(code)
-#else
-#define _do_handler_exit(code) ((void)0)
-#endif
+        #ifdef POETS_LEGACY_HAS_HANDLER_EXIT
+        #define _do_handler_exit(code) handler_exit(code)
+        #else
+        #define _do_handler_exit(code) ((void)0)
+        #endif
 
-#define fake_handler_exit(code) \
-{ \
-    if((code)==0){ \
-        handler_log(0, "_HANDLER_EXIT_SUCCESS_9be65737_"); \
-    }else{ \
-        handler_log(0, "_HANDLER_EXIT_FAIL_9be65737_"); \
-    } \
-    _do_handler_exit(code); \
-}
+        #define fake_handler_exit(code) \
+        { \
+            if((code)==0){ \
+                handler_log(0, "_HANDLER_EXIT_SUCCESS_9be65737_"); \
+            }else{ \
+                handler_log(0, "_HANDLER_EXIT_FAIL_9be65737_"); \
+            } \
+            _do_handler_exit(code); \
+        }
 ]]></SharedCode>
 
     <SharedCode><![CDATA[
@@ -42,7 +41,7 @@
 			assert( -2147483648 <= xy && xy <= 2147483647 );
 			return (int32_t)(xy);
 		}
-    
+
     int32_t fix_mul(int32_t a, int32_t b, int32_t c)
     { return fix_mul(fix_mul(a,b),c); }
 
@@ -112,25 +111,18 @@
     }
 
     ]]></SharedCode>
-
     <MessageTypes>
-      <MessageType id="__init__">
-        <!-- This doesn't have any properties -->
-      </MessageType>
-
       <MessageType id="spike">
         <Message>
-          <Scalar type="int8_t" name="fired" />
-       </Message>
-    </MessageType>
-
+          <Scalar name="fired" type="int8_t"/>
+        </Message>
+      </MessageType>
       <MessageType id="tick">
         <Message>
-          <Scalar type="uint32_t" name="firings" />
+          <Scalar name="firings" type="uint32_t"/>
         </Message>
       </MessageType>
     </MessageTypes>
-
     <DeviceTypes>
       <DeviceType id="spike_fanout">
         <State>
@@ -138,12 +130,7 @@
             <Documentation>0 = idle, 1 = emptyPending, 2 = fullPending</Documentation>
           </Scalar>
         </State>
-
-      <ReadyToSend><![CDATA[
-          *readyToSend = deviceState->state ? RTS_FLAG_spike_out: 0;
-      ]]></ReadyToSend>
-
-        <InputPin name="spike_in" messageTypeId="spike">    
+        <InputPin name="spike_in" messageTypeId="spike">
           <OnReceive><![CDATA[
           assert(deviceState->state==0);
           if(message->fired){
@@ -153,7 +140,6 @@
           }
           ]]></OnReceive>
         </InputPin>
-
         <OutputPin name="spike_out" messageTypeId="spike">
           <OnSend><![CDATA[
           assert(deviceState->state!=0);
@@ -161,22 +147,18 @@
           deviceState->state=0;
           ]]></OnSend>
         </OutputPin>
-
+        <ReadyToSend><![CDATA[
+          *readyToSend = deviceState->state ? RTS_FLAG_spike_out: 0;
+      ]]></ReadyToSend>
       </DeviceType>
-
       <DeviceType id="tick_fanin">
         <Properties>
-          <Scalar name="fanin" type="uint32_t" />
+          <Scalar name="fanin" type="uint32_t"/>
         </Properties>
         <State>
-          <Scalar name="seen" type="uint32_t" />
-          <Scalar name="firingsTotal" type="uint32_t" />
+          <Scalar name="seen" type="uint32_t"/>
+          <Scalar name="firingsTotal" type="uint32_t"/>
         </State>
-
-        <ReadyToSend><![CDATA[
-        *readyToSend = deviceState->seen==deviceProperties->fanin ? RTS_FLAG_tick_out: 0;
-        ]]></ReadyToSend>
-        
         <InputPin name="tick_in" messageTypeId="tick">
           <OnReceive><![CDATA[
         assert(deviceState->seen < deviceProperties->fanin);
@@ -184,9 +166,7 @@
         deviceState->firingsTotal+=message->firings;
         handler_log(3, "seen' = %u, firingsTotal' = %u",  deviceState->seen, deviceState->firingsTotal);
         ]]></OnReceive>
-
         </InputPin>
-
         <OutputPin name="tick_out" messageTypeId="tick">
           <OnSend><![CDATA[
           handler_log(3, "seen = %u, firingsTotal = %u",  deviceState->seen, deviceState->firingsTotal);
@@ -196,17 +176,17 @@
           deviceState->seen=0;
           ]]></OnSend>
         </OutputPin>
-
+        <ReadyToSend><![CDATA[
+        *readyToSend = deviceState->seen==deviceProperties->fanin ? RTS_FLAG_tick_out: 0;
+        ]]></ReadyToSend>
       </DeviceType>
-
       <DeviceType id="neuron">
-
-          <Documentation><![CDATA[
+        <Documentation>
 
         Overall neuron flow is:
 
         while(1){
-            // ICount==fanin && !waitTick && sentSpike
+            // ICount==fanin &amp;&amp; !waitTick &amp;&amp; sentSpike
             RTS={tick}
 
             send tick [
@@ -216,67 +196,57 @@
               waitTick=true;
             ]
 
-            // ICount==0 && waitTick  && !sentSpike
+            // ICount==0 &amp;&amp; waitTick  &amp;&amp; !sentSpike
             RTS={}
 
             par{
                 seq{
-                    // waitTick && !sentSpike
+                    // waitTick &amp;&amp; !sentSpike
                     RTS={}
                     recv tick [
                       waitTick=false;
                     ]
-                    // !waitTick && !sentSpike
+                    // !waitTick &amp;&amp; !sentSpike
                     RTS={spike}
                     send spike [
                         sentSpike =true;
                     ]
-                    // !waitTick && sentSpike
+                    // !waitTick &amp;&amp; sentSpike
                     RTS={}
                 }
 
                 // Icount==0
-                while(incomingSpikes < fanIn){
-                    // Icount<fanin
+                while(incomingSpikes &lt; fanIn){
+                    // Icount&lt;fanin
                     nextPotential += [recv spike]
                 }
                 // Icount==fanin
             }
 
-            // ICount==fanin && !waitTick && sentSpike
+            // ICount==fanin &amp;&amp; !waitTick &amp;&amp; sentSpike
         }
 
-        ]]></Documentation>
-
+        </Documentation>
         <Properties>
-          <Scalar type="uint32_t" name="seed" />
-
-          <Scalar type="int32_t" name="a" default="0" />
-          <Scalar type="int32_t" name="b" default="0" />
-          <Scalar type="int32_t" name="c" default="0" />
-          <Scalar type="int32_t" name="d" default="0" />
-          <Scalar type="int32_t" name="Ir" />
-
-          <Scalar type="uint32_t" name="fanin" />
+          <Scalar name="seed" type="uint32_t"/>
+          <Scalar name="a" type="int32_t"/>
+          <Scalar name="b" type="int32_t"/>
+          <Scalar name="c" type="int32_t"/>
+          <Scalar name="d" type="int32_t"/>
+          <Scalar name="Ir" type="int32_t"/>
+          <Scalar name="fanin" type="uint32_t"/>
         </Properties>
-
         <State>
-          <Scalar type="uint32_t" name="rng" />
-
-          <Scalar type="int32_t" name="u" />
-          <Scalar type="int32_t" name="v" />
-
-          <Scalar name="I" type="int32_t" />
-          <Scalar name="Icount" type="uint32_t" />
-          <Scalar name="fireValue" type="int8_t" />
-
-          <Scalar name="waitTick" type="int8_t" />
-          <Scalar name="sentSpike" type="int8_t" />
+          <Scalar name="rng" type="uint32_t"/>
+          <Scalar name="u" type="int32_t"/>
+          <Scalar name="v" type="int32_t"/>
+          <Scalar name="I" type="int32_t"/>
+          <Scalar name="Icount" type="uint32_t"/>
+          <Scalar name="fireValue" type="int8_t"/>
+          <Scalar name="waitTick" type="int8_t"/>
+          <Scalar name="sentSpike" type="int8_t"/>
         </State>
-
-
-        <InputPin name="__init__" messageTypeId="__init__">
-          <OnReceive><![CDATA[
+        <OnInit><![CDATA[
           deviceState->rng = deviceProperties->seed;
 
           deviceState->v=fix_from_int(-65);
@@ -290,19 +260,33 @@
           deviceState->sentSpike=true;
 
           handler_log(3, "sentSpike=%d, waitTick=%d, Icount = %d, fanin=%d", deviceState->sentSpike, deviceState->waitTick, deviceState->Icount, deviceProperties->fanin);
-          ]]>
-          </OnReceive>
+
+          ]]></OnInit>
+        <InputPin name="tick_in" messageTypeId="tick">
+          <OnReceive><![CDATA[
+          handler_log(3, "sentSpike=%d, waitTick=%d, Icount = %d, fanin=%d", deviceState->sentSpike, deviceState->waitTick, deviceState->Icount, deviceProperties->fanin);
+
+          assert(deviceState->waitTick);
+          assert(!deviceState->sentSpike);
+          deviceState->waitTick=false;
+          ]]></OnReceive>
         </InputPin>
+        <InputPin name="spike_in" messageTypeId="spike">
+          <Properties>
+            <Scalar name="weight" type="int32_t"/>
+          </Properties>
+          <OnReceive><![CDATA[
+          handler_log(3, "Icount = %d, fanin=%d", deviceState->Icount, deviceProperties->fanin);
+          assert(deviceState->Icount < deviceProperties->fanin);
 
-        <ReadyToSend><![CDATA[
-        *readyToSend=0;
-        if(deviceState->Icount==deviceProperties->fanin && !deviceState->waitTick && deviceState->sentSpike ){
-            *readyToSend |= OUTPUT_FLAG_tick_out;
-        }else if(!deviceState->waitTick && !deviceState->sentSpike){
-            *readyToSend |= OUTPUT_FLAG_spike_out;
-        }
-        ]]></ReadyToSend>
+          deviceState->Icount++;
+          if(message->fired){
+            deviceState->I = fix_add(deviceState->I , edgeProperties->weight);
+          }
 
+          handler_log(3, "sentSpike=%d, waitTick=%d, Icount = %d, fanin=%d", deviceState->sentSpike, deviceState->waitTick, deviceState->Icount, deviceProperties->fanin);
+          ]]></OnReceive>
+        </InputPin>
         <OutputPin name="tick_out" messageTypeId="tick">
           <OnSend><![CDATA[
           assert(deviceState->Icount==deviceProperties->fanin);
@@ -358,17 +342,6 @@
 
           ]]></OnSend>
         </OutputPin>
-
-        <InputPin name="tick_in" messageTypeId="tick">
-          <OnReceive><![CDATA[
-          handler_log(3, "sentSpike=%d, waitTick=%d, Icount = %d, fanin=%d", deviceState->sentSpike, deviceState->waitTick, deviceState->Icount, deviceProperties->fanin);
-
-          assert(deviceState->waitTick);
-          assert(!deviceState->sentSpike);
-          deviceState->waitTick=false;
-          ]]></OnReceive>
-        </InputPin>
-
         <OutputPin name="spike_out" messageTypeId="spike">
           <OnSend><![CDATA[
           handler_log(3, "sentSpike=%d, waitTick=%d, Icount = %d, fanin=%d", deviceState->sentSpike, deviceState->waitTick, deviceState->Icount, deviceProperties->fanin);
@@ -379,50 +352,29 @@
           deviceState->sentSpike=true;
           ]]></OnSend>
         </OutputPin>
-
-        <InputPin name="spike_in" messageTypeId="spike">
-            <Properties>
-                <Scalar type="int32_t" name="weight" />
-            </Properties>
-
-          <OnReceive><![CDATA[
-          handler_log(3, "Icount = %d, fanin=%d", deviceState->Icount, deviceProperties->fanin);
-          assert(deviceState->Icount < deviceProperties->fanin);
-
-          deviceState->Icount++;
-          if(message->fired){
-            deviceState->I = fix_add(deviceState->I , edgeProperties->weight);
-          }
-
-          handler_log(3, "sentSpike=%d, waitTick=%d, Icount = %d, fanin=%d", deviceState->sentSpike, deviceState->waitTick, deviceState->Icount, deviceProperties->fanin);
-          ]]></OnReceive>
-        </InputPin>
-
+        <ReadyToSend><![CDATA[
+        *readyToSend=0;
+        if(deviceState->Icount==deviceProperties->fanin && !deviceState->waitTick && deviceState->sentSpike ){
+            *readyToSend |= OUTPUT_FLAG_tick_out;
+        }else if(!deviceState->waitTick && !deviceState->sentSpike){
+            *readyToSend |= OUTPUT_FLAG_spike_out;
+        }
+        ]]></ReadyToSend>
       </DeviceType>
-
       <DeviceType id="clock">
         <Properties>
-          <Scalar type="uint32_t" name="neuronCount" />
-          <Scalar type="uint32_t" name="fanin" />
+          <Scalar name="neuronCount" type="uint32_t"/>
+          <Scalar name="fanin" type="uint32_t"/>
         </Properties>
-
         <State>
-          <Scalar type="uint32_t" name="waitCount" />
-          <Scalar type="uint32_t" name="totalTicks" />
-          <Scalar type="uint32_t" name="totalFirings" />
+          <Scalar name="waitCount" type="uint32_t"/>
+          <Scalar name="totalTicks" type="uint32_t"/>
+          <Scalar name="totalFirings" type="uint32_t"/>
         </State>
-
-        <InputPin name="__init__" messageTypeId="__init__">
-          <OnReceive><![CDATA[
+        <OnInit><![CDATA[
           deviceState->waitCount = deviceProperties->fanin;
           handler_log(3,"waitCount=%d, fanin=%d, neuronCount=%d", deviceState->waitCount, deviceProperties->fanin, deviceProperties->neuronCount);
-          ]]></OnReceive>
-        </InputPin>
-
-        <ReadyToSend><![CDATA[
-        *readyToSend = deviceState->waitCount==0 && (deviceState->totalTicks < graphProperties->maxTicks) ? OUTPUT_FLAG_tick_out : 0;
-        ]]></ReadyToSend>
-
+          ]]></OnInit>
         <InputPin name="tick_in" messageTypeId="tick">
           <OnReceive><![CDATA[
           assert(deviceState->waitCount > 0);
@@ -431,7 +383,6 @@
           handler_log(3,"tock : waitCount = %d\n", deviceState->waitCount);
           ]]></OnReceive>
         </InputPin>
-
         <OutputPin name="tick_out" messageTypeId="tick">
           <OnSend><![CDATA[
           handler_log(2,"tick : waitCount = %d, totalTicks=%u, maxTicks=%u, totalFirings=%u\n", deviceState->waitCount, deviceState->totalTicks, graphProperties->maxTicks, deviceState->totalFirings);
@@ -446,7 +397,9 @@
           }
           ]]></OnSend>
         </OutputPin>
-
+        <ReadyToSend><![CDATA[
+        *readyToSend = deviceState->waitCount==0 && (deviceState->totalTicks < graphProperties->maxTicks) ? OUTPUT_FLAG_tick_out : 0;
+        ]]></ReadyToSend>
       </DeviceType>
     </DeviceTypes>
   </GraphType>

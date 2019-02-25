@@ -5,7 +5,7 @@ def add_properties(a,b):
     for (k,v) in b.items():
         r[k]=v
     return r
-    
+
 def make_graph_type_properties(gt):
     return {
         "GRAPH_TYPE_ID" : gt.id,
@@ -15,10 +15,14 @@ def make_graph_type_properties(gt):
     }
 
 def make_device_type_properties(dt):
-    if dt.ready_to_send_source_line and dt.ready_to_send_source_file: 
-        preProc = '#line {} "{}"\n'.format(dt.ready_to_send_source_line-1,dt.ready_to_send_source_file) 
+    if dt.ready_to_send_source_line and dt.ready_to_send_source_file:
+        rtsPreProc = '#line {} "{}"\n'.format(dt.ready_to_send_source_line-1,dt.ready_to_send_source_file)
     else:
-        preProc = "// No line/file information for handler"
+        rtsPreProc = "// No line/file information for handler"
+    if dt.init_source_line and dt.init_source_file:
+        initPreProc = '#line {} "{}"\n'.format(dt.init_source_line-1,dt.init_source_file)
+    else:
+        initPreProc = "// No line/file information for init handler"
 
     return add_properties(make_graph_type_properties(dt.parent),{
         "DEVICE_TYPE_ID" : dt.id,
@@ -28,32 +32,34 @@ def make_device_type_properties(dt):
         "DEVICE_TYPE_STATE_T" : "{}_{}_state_t".format(dt.parent.id,dt.id),
         "DEVICE_TYPE_INPUT_COUNT" : len(dt.inputs),
         "DEVICE_TYPE_OUTPUT_COUNT" : len(dt.outputs),
+        "DEVICE_TYPE_INIT_HANDLER" : dt.init_handler,
+        "DEVICE_TYPE_INIT_HANDLER_SOURCE_LOCATION" : initPreProc,
         "DEVICE_TYPE_RTS_HANDLER" : dt.ready_to_send_handler,
-        "DEVICE_TYPE_RTS_HANDLER_SOURCE_LOCATION" : preProc,
+        "DEVICE_TYPE_RTS_HANDLER_SOURCE_LOCATION" : rtsPreProc,
         "DEVICE_TYPE_IS_EXTERNAL" : 1 if dt.isExternal else 0
-        
+
     })
-    
+
 def make_message_type_properties(mt):
     return add_properties(make_graph_type_properties(mt.parent),{
         "MESSAGE_TYPE_ID" : mt.id,
         "MESSAGE_TYPE_FULL_ID" : "{}_{}".format(mt.parent.id,mt.id),
         "MESSAGE_TYPE_T" : "{}_{}_message_t".format(mt.parent.id,mt.id)
     })
-    
+
 def make_input_pin_properties(ip):
-    if ip.source_line and ip.source_file: 
-        preProc = '#line {} "{}"\n'.format(ip.source_line-1,ip.source_file) 
+    if ip.source_line and ip.source_file:
+        preProc = '#line {} "{}"\n'.format(ip.source_line-1,ip.source_file)
     else:
         preProc = "// No line/file information for handler"
-    
+
     # names smaller than this get optimised by the compiler, breaking sending string addrs to host
     name = ip.name
     if len(ip.name) <= 4:
         spaces=' '
         for i in range(4 - len(ip.name)):
-            spaces = spaces + ' ' 
-        name = ip.name + spaces 
+            spaces = spaces + ' '
+        name = ip.name + spaces
 
     return add_properties(make_device_type_properties(ip.parent),{
         "INPUT_PORT_NAME" : name,
@@ -66,20 +72,20 @@ def make_input_pin_properties(ip):
         "INPUT_PORT_RECEIVE_HANDLER_SOURCE_LOCATION" : preProc,
         "IS_APPLICATION" : 1 if ip.is_application else 0
     })
-    
+
 def make_output_pin_properties(op):
-    if op.source_line and op.source_file: 
-        preProc = '#line {} "{}"\n'.format(op.source_line-1,op.source_file) 
+    if op.source_line and op.source_file:
+        preProc = '#line {} "{}"\n'.format(op.source_line-1,op.source_file)
     else:
         preProc = "// No line/file information for handler"
-    
+
     # names smaller than this get optimised by the compiler, breaking sending string addrs to host
     name = op.name
     if len(op.name) <= 4:
         spaces=' '
         for i in range(4 - len(op.name)):
-            spaces = spaces + ' ' 
-        name = op.name + spaces 
+            spaces = spaces + ' '
+        name = op.name + spaces
 
     return add_properties(make_device_type_properties(op.parent),{
         "OUTPUT_PORT_NAME" : name,
@@ -91,5 +97,5 @@ def make_output_pin_properties(op):
         "IS_APPLICATION" : 1 if op.is_application else 0,
         "MESSAGETYPE_NUMID" : op.message_type.numid
     })
-    
-    
+
+

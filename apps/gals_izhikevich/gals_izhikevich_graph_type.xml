@@ -1,17 +1,7 @@
-<?xml version="1.0"?>
-<Graphs xmlns="https://poets-project.org/schemas/virtual-graph-schema-v2">
+<?xml version='1.0' encoding='ASCII'?>
+<Graphs xmlns="https://poets-project.org/schemas/virtual-graph-schema-v3">
   <GraphType id="gals_izhikevich">
-    <!-- This is not a true simulation as it does not guarantee that spikes will
-	 be integrated in the same time interval. An unfair orchestrator could
-	 also spin some neurons ahead, as each neuron only depends on the total
-	 number of updates, not on whether it is received an update from each
-	 neuron.
-    -->
-
-
-    <Properties>
-    </Properties>
-
+    <Types/>
     <SharedCode><![CDATA[
     uint32_t urng(uint32_t &state)
     {
@@ -35,51 +25,34 @@
     }
 
     ]]></SharedCode>
-
     <MessageTypes>
-      <MessageType id="__init__">
-	<!-- This doesn't have any properties -->
-      </MessageType>
-
       <MessageType id="synapse">
-		<Message>
-		  <Scalar type="int8_t" name="fired" />
-		</Message>
+        <Message>
+          <Scalar name="fired" type="int8_t"/>
+        </Message>
       </MessageType>
-
     </MessageTypes>
-
     <DeviceTypes>
       <DeviceType id="neuron">
-		<Properties>
-		  <Scalar type="uint32_t" name="seed" />
-
-		  <Scalar type="float" name="a" default="0" />
-		  <Scalar type="float" name="b" default="0" />
-		  <Scalar type="float" name="c" default="0" />
-		  <Scalar type="float" name="d" default="0" />
-		  <Scalar type="float" name="Ir" />
-
-		  <Scalar type="uint32_t" name="fanin" />
-		</Properties>
-
-		<State>
-		  <Scalar type="uint32_t" name="rng" />
-
-		  <Scalar type="float" name="u" />
-		  <Scalar type="float" name="v" />
-
-		  <Scalar name="I" type="float" />
-		  <Scalar name="Icount" type="uint32_t" />
-
-		  <Scalar name="pendingFires" type="uint32_t" />
-
-		  <Scalar name="rts" type="uint32_t" />
-		</State>
-
-		<InputPin name="__init__" messageTypeId="__init__">
-
-		  <OnReceive><![CDATA[
+        <Properties>
+          <Scalar name="seed" type="uint32_t"/>
+          <Scalar name="a" type="float" default="0.0"/>
+          <Scalar name="b" type="float" default="0.0"/>
+          <Scalar name="c" type="float" default="0.0"/>
+          <Scalar name="d" type="float" default="0.0"/>
+          <Scalar name="Ir" type="float"/>
+          <Scalar name="fanin" type="uint32_t"/>
+        </Properties>
+        <State>
+          <Scalar name="rng" type="uint32_t"/>
+          <Scalar name="u" type="float"/>
+          <Scalar name="v" type="float"/>
+          <Scalar name="I" type="float"/>
+          <Scalar name="Icount" type="uint32_t"/>
+          <Scalar name="pendingFires" type="uint32_t"/>
+          <Scalar name="rts" type="uint32_t"/>
+        </State>
+        <OnInit><![CDATA[
 		  deviceState->rng = deviceProperties->seed;
 
 		  deviceState->v=-65;
@@ -91,12 +64,27 @@
 		  deviceState->pendingFires=1;
 
 		  deviceState->rts = RTS_FLAG_fire;
-		  ]]>
-		  </OnReceive>
-		</InputPin>
+		  
+		  ]]></OnInit>
+        <InputPin name="input" messageTypeId="synapse">
+          <Properties>
+            <Scalar name="weight" type="float"/>
+          </Properties>
+          <OnReceive><![CDATA[
+		  deviceState->Icount++;
+		  if(message->fired){
+			deviceState->I += edgeProperties->weight;
+			}
 
-		<OutputPin name="fire" messageTypeId="synapse">
-		  <OnSend><![CDATA[
+		  if(deviceState->Icount == deviceProperties->fanin){
+			deviceState->pendingFires++;
+			deviceState->Icount=0;
+		  }
+		  handler_log(3, "Icount = %d, fanin=%d", deviceState->Icount, deviceProperties->fanin);
+		  ]]></OnReceive>
+        </InputPin>
+        <OutputPin name="fire" messageTypeId="synapse">
+          <OnSend><![CDATA[
 		  assert(deviceState->pendingFires > 0);
 
 		  float &v=deviceState->v;
@@ -120,33 +108,11 @@
 
 		  handler_log(3, "fanin=%d", deviceProperties->fanin);
 		  ]]></OnSend>
-		</OutputPin>
-
-		<InputPin name="input" messageTypeId="synapse">
-			<Properties>
-			<Scalar type="float" name="weight" />
-			</Properties>
-
-
-		  <OnReceive><![CDATA[
-		  deviceState->Icount++;
-		  if(message->fired){
-			deviceState->I += edgeProperties->weight;
-			}
-
-		  if(deviceState->Icount == deviceProperties->fanin){
-			deviceState->pendingFires++;
-			deviceState->Icount=0;
-		  }
-		  handler_log(3, "Icount = %d, fanin=%d", deviceState->Icount, deviceProperties->fanin);
-		  ]]></OnReceive>
-		</InputPin>
-
-		<ReadyToSend><![CDATA[
+        </OutputPin>
+        <ReadyToSend><![CDATA[
 		*readyToSend = (deviceState->pendingFires > 0) ? RTS_FLAG_fire : 0;
 		]]></ReadyToSend>
       </DeviceType>
-
     </DeviceTypes>
   </GraphType>
 </Graphs>
