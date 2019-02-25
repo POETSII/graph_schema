@@ -177,7 +177,7 @@ def save_device_type(parent,dt):
             sn.text=etree.CDATA(s)
 
     if dt.init_handler:
-        pn=etree.Element(toNS("p:Init"))
+        pn=etree.Element(toNS("p:OnInit"))
         pn.text=etree.CDATA(dt.init_handler)
         n.append(pn)
 

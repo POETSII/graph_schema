@@ -22,7 +22,7 @@ destPath="[XML-file]"
 
 # LOAD XML
 (types,instances)=load_graph_types_and_instances(source, sourcePath, {"p":"https://poets-project.org/schemas/virtual-graph-schema-v2"}, True)
-assert len(types) == 1, "Only one graph type can be converted at once"
+assert len(types) == 1, "Only one graph type can be converted at once, this contains {} graph types".format(len(types))
 for t in types:
     graphType = types[t]
 
