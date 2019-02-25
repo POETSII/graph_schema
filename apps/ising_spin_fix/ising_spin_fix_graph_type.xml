@@ -1,46 +1,14 @@
-<?xml version="1.0"?>
-<Graphs xmlns="https://poets-project.org/schemas/virtual-graph-schema-v2">
+<?xml version='1.0' encoding='ASCII'?>
+<Graphs xmlns="https://poets-project.org/schemas/virtual-graph-schema-v3">
   <GraphType id="ising_spin_fix">
-    <!-- This is supposed to implement the method from [lubachevsky-87-asynchronous-ising-spin-models]:
-	 "Efficient Parallel Simulations of Asynchronous Cellular Arrays", 1987, Boris D. Lubachevsky
-	 
-	 The main difference with ising_spin is that this uses fixed point.
-
-	 We are also more careful to ensure that there is a definite least time within
-	 a neighbourhood. Every cell is given a tag, such that no two tags are the
-	 same for neighbouring cells - in practise this can just be a number from [0..9)
-
-	 0 1 2 0 1 2     0 1 2   0 0 0
-	 3 4 5 3 4 5  =  0 1 2 + 3 3 3
-	 6 7 8 6 7 8     0 1 2   6 6 6
-	 0 1 2 0 1 2
-	 3 4 5 3 4 5
-	 6 7 8 6 7 8 
-
-	 tag = (x%3)+(y%3)*3
-
-	 The tag then forms the 4 LSBs of the generated time, so that there is always
-	 a definitive least time within a neighbourhood.
-
-	 The erng has a mean of 2^17, and a maximum step of 2^22-1. Including the tag,
-	 that means each step moves (on average) 2^20, and the biggest step is 2^25-1.
-
-	 So we must have maxTime less than 2^32 - 2^25 to avoid wrap-around.
-
-	 Choosing maxStep=2^24 gives about 16 steps per device (for testing purposes, need more for relaxation)
-	 -->
-
-    <MetaData>
-      "nativeDimension":2
-    </MetaData>
-
+    <Types/>
     <Properties>
-      <Scalar type="uint32_t" name="endTime" default="16777216" />
-      <Scalar type="uint32_t" name="width" />
-      <Scalar type="uint32_t" name="height" />
-      <Array name="probabilities" length="10" type="uint32_t" />
+      <Scalar name="endTime" type="uint32_t" default="16777216"/>
+      <Scalar name="width" type="uint32_t"/>
+      <Scalar name="height" type="uint32_t"/>
+      <Array name="probabilities" length="10" type="uint32_t"/>
     </Properties>
-
+    <MetaData>"nativeDimension": 2</MetaData>
     <SharedCode><![CDATA[
 
     uint32_t mod(uint32_t x, uint32_t y)
@@ -138,57 +106,35 @@
       }
 
     ]]></SharedCode>
-
     <MessageTypes>
-      <MessageType id="__init__">
-	<!-- This doesn't have any properties -->
-      </MessageType>
-
-      <MessageType id="__print__">
-				<!-- This doesn't have any properties -->
-      </MessageType>
-
-			<MessageType id="finished">
-				<!-- This doesn't have any properties -->
-      </MessageType>
-
+      <MessageType id="__print__"/>
+      <MessageType id="finished"/>
       <MessageType id="update">
-				<Message>
-					<Scalar type="uint32_t" name="time" default="0" />
-					<Scalar type="uint32_t" name="spin" /> <!-- By implication, it had the opposite spin before-hand -->
-				</Message>
+        <Message>
+          <Scalar name="time" type="uint32_t"/>
+          <Scalar name="spin" type="uint32_t"/>
+        </Message>
       </MessageType>
     </MessageTypes>
-
     <DeviceTypes>
       <DeviceType id="cell">
-
-			<SharedCode><![CDATA[
+        <Properties>
+          <Scalar name="x" type="uint32_t"/>
+          <Scalar name="y" type="uint32_t"/>
+        </Properties>
+        <State>
+          <Scalar name="rng" type="uint32_t"/>
+          <Array name="spins" length="5" type="int32_t"/>
+          <Array name="times" length="5" type="uint32_t"/>
+          <Scalar name="spin" type="int32_t"/>
+          <Scalar name="lastFlipTime" type="uint32_t"/>
+          <Scalar name="isEarliest" type="uint32_t"/>
+          <Scalar name="tag" type="uint32_t"/>
+        </State>
+        <SharedCode><![CDATA[
 			
 			]]></SharedCode>
-
-	<Properties>
-	  <Scalar type="uint32_t" name="x" default="0" />
-	  <Scalar type="uint32_t" name="y" default="0" />
-	</Properties>
-
-	<State>
-	  <Scalar type="uint32_t" name="rng" />
-
-	  <!-- Track time and spins in neighbourhood. Index 0 is this device -->
-	  <Array name="spins" length="5" type="int32_t" />
-	  <Array name="times" length="5" type="uint32_t" />
-
-	  <Scalar name="spin" type="int32_t" /> <!-- This is a copy for ease of printing -->
-	  <Scalar name="lastFlipTime" type="uint32_t" />
-
-	  <Scalar name="isEarliest" type="uint32_t" />
-
-		<Scalar name="tag" type="uint32_t" />
-	</State>
-
-	<InputPin name="__init__" messageTypeId="__init__">
-	  <OnReceive><![CDATA[
+        <OnInit><![CDATA[
 	  // Initialise RNG and choose random starting spin
 	  uint32_t seed;
 	  uint32_t x=deviceProperties->x, y=deviceProperties->y;
@@ -223,24 +169,20 @@
 	    }
 	  }
 		handler_log(3, "tag=%u", deviceState->tag);
-	  ]]>
-	  </OnReceive>
-	</InputPin>
-
-	<InputPin name="__print__" messageTypeId="__print__">
-	  <OnReceive><![CDATA[
+	  
+	  ]]></OnInit>
+        <InputPin name="__print__" messageTypeId="__print__">
+          <OnReceive><![CDATA[
 	  handler_log(0, "isEarliest=%x, times={%u,%u,%u,%u,%u}",
 	    deviceState->isEarliest,
 	    deviceState->times[0], deviceState->times[1], deviceState->times[2], deviceState->times[3], deviceState->times[4]);
 	  ]]></OnReceive>
-	</InputPin>
-
-	<InputPin name="in" messageTypeId="update">
-	  <Properties>
-	    <Scalar type="uint32_t" name="direction" /> <!-- 1=Up, 2=Right, 3=Down, 4=Left -->
-	  </Properties>
-
-	  <OnReceive><![CDATA[
+        </InputPin>
+        <InputPin name="in" messageTypeId="update">
+          <Properties>
+            <Scalar name="direction" type="uint32_t"/>
+          </Properties>
+          <OnReceive><![CDATA[
 	  uint32_t nx, ny;
 	  
 	  if(message->time >= deviceState->times[edgeProperties->direction]){
@@ -264,10 +206,9 @@
 	handler_log(4, "isEarliest = %x, time=%u", deviceState->isEarliest, deviceState->times[0]);
 
 	  ]]></OnReceive>
-	</InputPin>
-
-	<OutputPin name="out" messageTypeId="update">
-	  <OnSend><![CDATA[
+        </InputPin>
+        <OutputPin name="out" messageTypeId="update">
+          <OnSend><![CDATA[
 	        uint32_t nx, ny;
 
 		uint32_t prevTime=deviceState->times[0];
@@ -295,17 +236,14 @@
 		}
 		handler_log(3, "isEarliest = %x, time=%u, send-finished=%x", deviceState->isEarliest, deviceState->times[0], deviceState->times[0] >= graphProperties->endTime );
 	  ]]></OnSend>
-	</OutputPin>
-
-
-	<OutputPin name="finished" messageTypeId="finished">
-	  <OnSend><![CDATA[
+        </OutputPin>
+        <OutputPin name="finished" messageTypeId="finished">
+          <OnSend><![CDATA[
 		deviceState->times[0] = 0xFFFFFFFFul;
 		handler_log(4, "Finshed");
 	  ]]></OnSend>
-	</OutputPin>
-
-	<ReadyToSend><![CDATA[
+        </OutputPin>
+        <ReadyToSend><![CDATA[
 	if(deviceState->times[0] == 0xFFFFFFFFul){
 		*readyToSend = 0;
 	}else if(deviceState->times[0] >= graphProperties->endTime){
@@ -317,29 +255,26 @@
 	}
 	]]></ReadyToSend>
       </DeviceType>
-
-		<DeviceType id="exit_node">
-			<Properties>
-				<Scalar name="fanin" type="uint32_t" />
-			</Properties>
-			<State>
-				<Scalar name="seen" type="uint32_t" />
-			</State>
-
-			<InputPin name="finished" messageTypeId="finished">
-				<OnReceive><![CDATA[
+      <DeviceType id="exit_node">
+        <Properties>
+          <Scalar name="fanin" type="uint32_t"/>
+        </Properties>
+        <State>
+          <Scalar name="seen" type="uint32_t"/>
+        </State>
+        <InputPin name="finished" messageTypeId="finished">
+          <OnReceive><![CDATA[
 				deviceState->seen++;
 				handler_log(2, "seenFinished = %u, wantFinished = %u", deviceState->seen, deviceProperties->fanin);
 				if(deviceState->seen == deviceProperties->fanin){
 					handler_exit(0);
 				}
 				]]></OnReceive>
-			</InputPin>
-
-			<ReadyToSend><![CDATA[
+        </InputPin>
+        <ReadyToSend><![CDATA[
 			*readyToSend = 0;
 			]]></ReadyToSend>
-		</DeviceType>
-		</DeviceTypes>
+      </DeviceType>
+    </DeviceTypes>
   </GraphType>
 </Graphs>

@@ -933,7 +933,7 @@ def render_device_type_as_cpp(dt,dst):
       ) const override {{
         auto graphProperties=cast_typed_properties<{graphPropertiesStructName}>(gGraphProperties);
         auto deviceProperties=cast_typed_properties<{devicePropertiesStructName}>(gDeviceProperties);
-        auto deviceState=cast_typed_properties<{deviceStateStructName}>(gDeviceState);
+        auto deviceState=cast_typed_data<{deviceStateStructName}>(gDeviceState);
         HandlerLogImpl handler_log(orchestrator);
         auto handler_exit=[&](int code) -> void {{ orchestrator->application_exit(code); }};
         auto handler_export_key_value=[&](uint32_t key, uint32_t value) -> void {{ orchestrator->export_key_value(key, value); }};
@@ -962,7 +962,7 @@ def render_device_type_as_cpp(dt,dst):
       ) const override {{
         auto graphProperties=cast_typed_properties<{graphPropertiesStructName}>(gGraphProperties);
         auto deviceProperties=cast_typed_properties<{devicePropertiesStructName}>(gDeviceProperties);
-        auto deviceState=cast_typed_properties<{deviceStateStructName}>(gDeviceState);
+        auto deviceState=cast_typed_data<{deviceStateStructName}>(gDeviceState);
         HandlerLogImpl handler_log(orchestrator);
         auto handler_exit=[&](int code) -> void {{ orchestrator->application_exit(code); }};
         auto handler_export_key_value=[&](uint32_t key, uint32_t value) -> void {{ orchestrator->export_key_value(key, value); }};

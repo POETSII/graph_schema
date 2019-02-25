@@ -1,7 +1,7 @@
-<?xml version="1.0"?>
-<Graphs xmlns="https://poets-project.org/schemas/virtual-graph-schema-v2">
+<?xml version='1.0' encoding='ASCII'?>
+<Graphs xmlns="https://poets-project.org/schemas/virtual-graph-schema-v3">
   <GraphType id="storm">
-	<Documentation>
+    <Documentation>
 		A highly irregular and non-determinstic packet storm, but guaranteed to converge.
 
 		One node starts with all the credit. Each node has outgoing
@@ -12,54 +12,34 @@
 		The starting node initially distributes all but 1 credit, and never releases credit
 		again, so eventually all credit must return (though who knows how long it takes...)
 	</Documentation>
-
+    <Types/>
     <MessageTypes>
-      <MessageType id="__init__">
-				<Documentation>This doesn't have any properties</Documentation>
+      <MessageType id="exchange">
+        <Message>
+          <Scalar name="credit" type="uint32_t"/>
+        </Message>
       </MessageType>
-
-			<MessageType id="exchange">
-				<Message>
-					<Scalar name="credit" type="uint32_t" />
-				</Message>
-      </MessageType>
-
-		</MessageTypes>
-    
+    </MessageTypes>
     <DeviceTypes>
       <DeviceType id="node">
-			<Properties>
-				<Scalar type="uint32_t" name="degree"/>
-				<Scalar type="uint32_t" name="isRoot"/>
-			</Properties>
-
-			<State>
-				<Scalar type="uint32_t" name="credit" />
-				<Scalar type="uint32_t" name="totalCredit" />
-			</State>
-		
-		<ReadyToSend><![CDATA[
-			*readyToSend = 0; 
-			if(deviceProperties->isRoot){
-				if(deviceState->credit==0){
-					*readyToSend = OUTPUT_FLAG_wide;
-				}
-			}else{
-				if(deviceState->credit >= deviceProperties->degree){
-					uint32_t b=1664525*deviceState->credit+1013904223;
-					if( (b>>30)==0 ){
-				 		*readyToSend = OUTPUT_FLAG_wide;
-					}else{
-						*readyToSend = OUTPUT_FLAG_narrow;
-					}
-				}else if(deviceState->credit > 0 ){
-					*readyToSend = OUTPUT_FLAG_narrow;
-				}
+        <Properties>
+          <Scalar name="degree" type="uint32_t"/>
+          <Scalar name="isRoot" type="uint32_t"/>
+        </Properties>
+        <State>
+          <Scalar name="credit" type="uint32_t"/>
+          <Scalar name="totalCredit" type="uint32_t"/>
+        </State>
+        <InputPin name="credit" messageTypeId="exchange">
+          <OnReceive><![CDATA[
+		  deviceState->credit += message->credit;
+			if(deviceProperties->isRoot && deviceState->credit==deviceState->totalCredit){
+				handler_exit(0);
 			}
-		]]></ReadyToSend>
-
-		<OutputPin name="wide" messageTypeId="exchange">
-		<OnSend><![CDATA[
+		  ]]></OnReceive>
+        </InputPin>
+        <OutputPin name="wide" messageTypeId="exchange">
+          <OnSend><![CDATA[
 		if(deviceProperties->isRoot){
 			assert(deviceState->credit==0);
 			uint32_t perDevice=1;
@@ -79,29 +59,35 @@
 			deviceState->credit -= perDevice*deviceProperties->degree;
 		}
 		]]></OnSend>
-		</OutputPin>
-
-		<OutputPin name="narrow" messageTypeId="exchange">
-		<OnSend><![CDATA[
+        </OutputPin>
+        <OutputPin name="narrow" messageTypeId="exchange">
+          <OnSend><![CDATA[
 		assert(!deviceProperties->isRoot);
 		assert(deviceState->credit > 0);
 		message->credit=(deviceState->credit+1)/2;
 		deviceState->credit -= message->credit;
 		]]></OnSend>
-		</OutputPin>
-		
-		<InputPin name="credit" messageTypeId="exchange">
-		  <OnReceive><![CDATA[
-		  deviceState->credit += message->credit;
-			if(deviceProperties->isRoot && deviceState->credit==deviceState->totalCredit){
-				handler_exit(0);
+        </OutputPin>
+        <ReadyToSend><![CDATA[
+			*readyToSend = 0; 
+			if(deviceProperties->isRoot){
+				if(deviceState->credit==0){
+					*readyToSend = OUTPUT_FLAG_wide;
+				}
+			}else{
+				if(deviceState->credit >= deviceProperties->degree){
+					uint32_t b=1664525*deviceState->credit+1013904223;
+					if( (b>>30)==0 ){
+				 		*readyToSend = OUTPUT_FLAG_wide;
+					}else{
+						*readyToSend = OUTPUT_FLAG_narrow;
+					}
+				}else if(deviceState->credit > 0 ){
+					*readyToSend = OUTPUT_FLAG_narrow;
+				}
 			}
-		  ]]></OnReceive>
-		</InputPin>
-
+		]]></ReadyToSend>
       </DeviceType>
-	
-	  </DeviceTypes>
-	</GraphType>
+    </DeviceTypes>
+  </GraphType>
 </Graphs>
-
