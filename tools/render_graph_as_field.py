@@ -35,7 +35,7 @@ minY=100000000000000
 maxY=-100000000000000
 
 for di in graph.device_instances.values():
-    if not "loc" in di.metadata:
+    if not di.metadata or  not "loc" in di.metadata:
         continue
     loc=di.metadata["loc"]
     minX=min(minX,loc[0])
@@ -87,7 +87,7 @@ def render_graph(dstPath, graph,devStates):
         state=stateTuple[0]
         rts=stateTuple[1]
         
-        if "loc" not in di.metadata:
+        if di.metadata==None or "loc" not in di.metadata:
             continue
         
         loc=di.metadata["loc"]

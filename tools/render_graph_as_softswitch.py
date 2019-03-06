@@ -364,23 +364,24 @@ def output_device_pins_addr_connected_to_an_external(gi, device_to_thread, threa
              dst.write("""{}_{},in,{},{},{},{}_{}\n""".format(dev_connected_2_ext, dev_connected_2_ext_pin, thread_id, device_offset, pin_index, ext_connected_2_dev, ext_connected_2_dev_pin))
 
 
+# DT10 : Safe to remove?
 # creates a list of the device_instance application pins and their corrosponding address in the 
 # POETS system (sf306: essentially I believe this is acting as a temporary nameserver for the executive)
-def output_device_instance_addresses(gi,device_to_thread, thread_to_devices, dst): 
-    # format deviceName_inAppPinName, thread addr, dev addr, pinIndex
-    for d in gi.device_instances.values(): # iterate through all devices
-        deviceName = d.id
-        threadId = device_to_thread[d.id]
-        for ip in d.device_type.inputs.values():
-            if ip.is_application == True: #application input pin, so we print the addr 
-                deviceOffset = thread_to_devices[threadId].index(d.id)
-                pinIndex = ip.parent.inputs_by_index.index(ip)
-                dst.write("""{}_{},in,{},{},{}\n""".format(deviceName, ip.name,threadId,deviceOffset, pinIndex)) 
-        for op in d.device_type.outputs.values():
-            if op.is_application == True: #application output pin, so we print the addr
-                deviceOffset = thread_to_devices[threadId].index(d.id)
-                pinIndex = op.parent.outputs_by_index.index(op)
-                dst.write("""{}_{},out,{},{},{}\n""".format(deviceName, op.name,threadId,deviceOffset, pinIndex)) 
+#def output_device_instance_addresses(gi,device_to_thread, thread_to_devices, dst): 
+#    # format deviceName_inAppPinName, thread addr, dev addr, pinIndex
+#    for d in gi.device_instances.values(): # iterate through all devices
+#        deviceName = d.id
+#        threadId = device_to_thread[d.id]
+#        for ip in d.device_type.inputs.values():
+#            if ip.is_application == True: #application input pin, so we print the addr 
+#                deviceOffset = thread_to_devices[threadId].index(d.id)
+#                pinIndex = ip.parent.inputs_by_index.index(ip)
+#                dst.write("""{}_{},in,{},{},{}\n""".format(deviceName, ip.name,threadId,deviceOffset, pinIndex)) 
+#        for op in d.device_type.outputs.values():
+#            if op.is_application == True: #application output pin, so we print the addr
+#                deviceOffset = thread_to_devices[threadId].index(d.id)
+#                pinIndex = op.parent.outputs_by_index.index(op)
+#                dst.write("""{}_{},out,{},{},{}\n""".format(deviceName, op.name,threadId,deviceOffset, pinIndex)) 
 
 def render_graph_type_as_softswitch_decls(gt,dst):
     gtProps=make_graph_type_properties(gt)
@@ -1052,7 +1053,7 @@ parser.add_argument('--destination-ordering', dest="destinationOrdering", help="
 parser.add_argument('--measure', help="Destination for measured properties", default="tinsel.render_softswitch.csv")
 parser.add_argument('--message-types', help="a file that prints the message types and their enumerated values. This is used to decode messages at the executive", default="messages.csv")
 parser.add_argument('--app-pins-addr-map', help="a file that gives the address map of the input pins, used by the executive to send messages to devices", default="appPinInMap.csv")
-parser.add_argument('--externals', help="if set true we are using the externals UserI/O other wise we are using application pins for I/O", type=bool, default=False)
+parser.add_argument('--externals', help="if set true we are using the externals UserI/O other wise we are using application pins for I/O", type=bool, default=True)
 
 args = parser.parse_args()
 
@@ -1191,6 +1192,7 @@ if(len(instances)>0):
     if args.externals:
         output_device_pins_addr_connected_to_an_external(inst, device_to_thread, thread_to_devices, deviceAddrMap)
     else:
-        output_device_instance_addresses(inst, device_to_thread, thread_to_devices, deviceAddrMap) 
+        assert False, "Application pins deprecated."
+        #output_device_instance_addresses(inst, device_to_thread, thread_to_devices, deviceAddrMap) 
 
     render_graph_instance_as_softswitch(inst,destInst,hwThreads,device_to_thread)

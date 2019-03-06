@@ -13,7 +13,7 @@ import random
 import os
 appBase=os.path.dirname(os.path.realpath(__file__))
 
-src=appBase+"/relaxation_heat_graph_type.xml"
+src=appBase+"/relaxation_heat_noterm_graph_type.xml"
 (graphTypes,graphInstances)=load_graph_types_and_instances(src,src)
 
 colours=[
@@ -36,7 +36,7 @@ if len(sys.argv)>1:
 
 assert n>=2
 
-graphType=graphTypes["relaxation_heat"]
+graphType=graphTypes["relaxation_heat_noterm"]
 cellType=graphType.device_types["cell"]
 mergerType=graphType.device_types["merger"]
 rootType=graphType.device_types["root"]
@@ -56,12 +56,6 @@ for x in range(0,n):
         meta={"loc":[x,y],"hull":[ [x-0.5,y-0.5], [x+0.5,y-0.5], [x+0.5,y+0.5], [x-0.5,y+0.5] ]}
         boundary=0
         initial=0
-        if x==0 or y==0:
-            boundary=1
-            initial=-127
-        if x==n-1 or y==n-1:
-            boundary=1
-            initial=127
         colour=cell_colour(x,y)
         
         props={ "initial_boundary":boundary, "initial_heat":initial, "colour":colour, "neighbours":0, "x":x, "y":y } # We will update neighbours later
@@ -158,6 +152,6 @@ else:
 
     recurse_fanout(nodes,root,"modification_out", 0, n, 0, n, 1)
 
-    
+res.add_edge_instance(EdgeInstance(res, root,"tick_in",root,"tick_out"))
 
 save_graph(res,sys.stdout)        

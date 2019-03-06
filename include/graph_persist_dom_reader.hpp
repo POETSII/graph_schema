@@ -129,12 +129,11 @@ public:
     const std::string &name,
     unsigned index,
     MessageTypePtr messageType,
-    bool isApplication,
     TypedDataSpecPtr propertiesType,
     TypedDataSpecPtr stateType,
     const std::string &code
   )
-  : InputPinImpl(deviceTypeSrc, name, index, messageType, isApplication, propertiesType, stateType, code)
+  : InputPinImpl(deviceTypeSrc, name, index, messageType, propertiesType, stateType, code)
   {}
 
   virtual void onReceive(OrchestratorServices*, const typed_data_t*, const typed_data_t*, typed_data_t*, const typed_data_t*, typed_data_t*, const typed_data_t*) const override
@@ -152,10 +151,9 @@ public:
     const std::string &name,
     unsigned index,
     MessageTypePtr messageType,
-    bool isApplication,
     const std::string &code
   )
-  : OutputPinImpl(deviceTypeSrc, name, index, messageType, isApplication, code)
+  : OutputPinImpl(deviceTypeSrc, name, index, messageType, code)
   {}
 
   virtual void onSend(OrchestratorServices*, const typed_data_t*, const typed_data_t*, typed_data_t*, typed_data_t*, bool*) const
@@ -168,8 +166,8 @@ class DeviceTypeDynamic
   : public DeviceTypeImpl
 {
 public:
-  DeviceTypeDynamic(const std::string &id, TypedDataSpecPtr properties, TypedDataSpecPtr state, const std::vector<InputPinPtr> &inputs, const std::vector<OutputPinPtr> &outputs)
-    : DeviceTypeImpl(id, properties, state, inputs, outputs)
+  DeviceTypeDynamic(const std::string &id, TypedDataSpecPtr properties, TypedDataSpecPtr state, const std::vector<InputPinPtr> &inputs, const std::vector<OutputPinPtr> &outputs, bool isExternal)
+    : DeviceTypeImpl(id, properties, state, inputs, outputs, isExternal)
   {
     for(auto i : inputs){
       std::cerr<<"  input : "<<i->getName()<<"\n";
@@ -217,6 +215,11 @@ DeviceTypePtr loadDeviceTypeElement(
   std::string id=get_attribute_required(eDeviceType, "id");
   rapidjson::Document metadata=parse_meta_data(eDeviceType, "./g:MetaData", ns);
   
+  bool isExternal=false;
+  if(eDeviceType->get_name()=="ExternalType"){
+    isExternal=true;
+  }
+
   std::cerr<<"Loading "<<id<<"\n";
   
   std::vector<std::string> sharedCode;
@@ -247,7 +250,6 @@ DeviceTypePtr loadDeviceTypeElement(
     
     std::string name=get_attribute_required(e, "name");
     std::string messageTypeId=get_attribute_required(e, "messageTypeId");
-    bool isApplication=get_attribute_optional_bool(e, "application");
     
     if(messageTypes.find(messageTypeId)==messageTypes.end()){
       throw std::runtime_error("Unknown messageTypeId '"+messageTypeId+"'");
@@ -284,7 +286,6 @@ DeviceTypePtr loadDeviceTypeElement(
       name, 
       inputs.size(),
       messageType,
-      isApplication,
       inputProperties,
       inputState,
       onReceive
@@ -304,7 +305,6 @@ DeviceTypePtr loadDeviceTypeElement(
       throw std::runtime_error("Unknown messageTypeId '"+messageTypeId+"'");
     }
     auto messageType=messageTypes.at(messageTypeId);
-    bool isApplication=get_attribute_optional_bool(e, "application");
     
     rapidjson::Document outputMetadata=parse_meta_data(e, "./g:MetaData", ns);
  
@@ -320,13 +320,12 @@ DeviceTypePtr loadDeviceTypeElement(
       name, 
       outputs.size(),
       messageType,
-      isApplication,
       onSend
     ));
   }
   
   auto res=std::make_shared<DeviceTypeDynamic>(
-    id, properties, state, inputs, outputs
+    id, properties, state, inputs, outputs, isExternal
   );
   
   // Lazily fill in the thing that delayedSrc points to
@@ -401,7 +400,7 @@ GraphTypePtr loadGraphTypeElement(const filepath &srcPath, xmlpp::Element *eGrap
   }
   
   auto *eDeviceTypes=find_single(eGraphType, "./g:DeviceTypes", ns);
-  for(auto *nDeviceType : eDeviceTypes->find("./g:DeviceType", ns)){
+  for(auto *nDeviceType : eDeviceTypes->find("./g:DeviceType|g:ExternalType", ns)){
     auto dt=loadDeviceTypeElement(messageTypesById, (xmlpp::Element*)nDeviceType);
     
     std::cerr<<"device type = "<<dt->getId()<<"\n";
@@ -549,7 +548,7 @@ void loadGraph(Registry *registry, const filepath &srcPath, xmlpp::Element *pare
 
   events->onBeginDeviceInstances(gId);
 
-  for(auto *nDevice : eDeviceInstances->find("./g:DevI", ns)){
+  for(auto *nDevice : eDeviceInstances->find("./g:DevI|g:ExtI", ns)){
     auto *eDevice=(xmlpp::Element *)nDevice;
 
     std::string id=get_attribute_required(eDevice, "id");
@@ -603,8 +602,17 @@ void loadGraph(Registry *registry, const filepath &srcPath, xmlpp::Element *pare
       dstPinName=get_attribute_required(eEdge, "dstPinName");
     }
 
-    auto &srcDevice=devices.at(srcDeviceId);
-    auto &dstDevice=devices.at(dstDeviceId);
+    auto srcDeviceIt=devices.find(srcDeviceId);
+    if(srcDeviceIt==devices.end()){
+      throw std::runtime_error("No source device called '"+srcDeviceId+"' for edge path '"+path+"'");
+    }
+    auto &srcDevice=srcDeviceIt->second;
+    
+    auto dstDeviceIt=devices.find(dstDeviceId);
+    if(dstDeviceIt==devices.end()){
+      throw std::runtime_error("No source device called '"+dstDeviceId+"' for edge path '"+path+"'");
+    }
+    auto &dstDevice=dstDeviceIt->second;
     
     auto srcPin=srcDevice.second->getOutput(srcPinName);
     auto dstPin=dstDevice.second->getInput(dstPinName);
@@ -614,12 +622,6 @@ void loadGraph(Registry *registry, const filepath &srcPath, xmlpp::Element *pare
     }
     if(!dstPin){
       throw std::runtime_error("No sink pin called '"+dstPinName+"' on device '"+dstDeviceId);
-    }
-    if(srcPin->isApplication()){
-      throw std::runtime_error("Attempt to connect to application output pin '"+srcPinName+"' on device '"+srcDeviceId);
-    }
-    if(dstPin->isApplication()){
-      throw std::runtime_error("Attempt to connect to application input pin '"+dstPinName+"' on device '"+dstDeviceId);
     }
 
     if(srcPin->getMessageType()!=dstPin->getMessageType())

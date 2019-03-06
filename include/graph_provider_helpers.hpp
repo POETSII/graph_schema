@@ -188,7 +188,6 @@ private:
   std::string m_name;
   unsigned m_index;
   MessageTypePtr m_messageType;
-  bool m_isApplication;
   TypedDataSpecPtr m_propertiesType;
   TypedDataSpecPtr m_stateType;
   std::string m_code;
@@ -200,7 +199,6 @@ protected:
     const std::string &name,
     unsigned index,
     MessageTypePtr messageType,
-    bool isApplication,
     TypedDataSpecPtr propertiesType,
     TypedDataSpecPtr stateType,
     const std::string &code
@@ -209,7 +207,6 @@ protected:
     , m_name(name)
     , m_index(index)
     , m_messageType(messageType)
-    , m_isApplication(isApplication)
     , m_propertiesType(propertiesType)
     , m_stateType(stateType)
     , m_code(code)
@@ -234,9 +231,6 @@ public:
   virtual const MessageTypePtr &getMessageType() const override
   { return m_messageType; }
 
-  virtual bool isApplication() const override
-  { return m_isApplication; }
-
   virtual const TypedDataSpecPtr &getPropertiesSpec() const override
   { return m_propertiesType; }
 
@@ -251,6 +245,47 @@ public:
 };
 
 
+class InputPinDelegate
+  : public InputPin
+{
+private:
+  InputPinPtr m_base;
+protected:
+  InputPinDelegate(
+    InputPinPtr base
+  )
+    : m_base(base)
+  {  }
+public:
+  InputPinPtr getBase() const
+  { return m_base; }
+
+  virtual const DeviceTypePtr &getDeviceType() const override
+  { return m_base->getDeviceType(); }
+
+  virtual const std::string &getName() const override
+  { return m_base->getName(); }
+
+  virtual unsigned getIndex() const override
+  { return m_base->getIndex(); }
+
+  virtual const MessageTypePtr &getMessageType() const override
+  { return m_base->getMessageType(); }
+
+  virtual const TypedDataSpecPtr &getPropertiesSpec() const override
+  { return m_base->getPropertiesSpec(); }
+
+  virtual const TypedDataSpecPtr &getStateSpec() const override
+  { return m_base->getStateSpec(); }
+
+  virtual const std::string &getHandlerCode() const override
+  { return m_base->getHandlerCode(); }
+
+  virtual rapidjson::Document &getMetadata() override
+  { return m_base->getMetadata(); }
+};
+
+
 class OutputPinImpl
   : public OutputPin
 {
@@ -260,17 +295,15 @@ private:
   std::string m_name;
   unsigned m_index;
   MessageTypePtr m_messageType;
-  bool m_isApplication;
   std::string m_code;
 
   rapidjson::Document m_metadata;
 protected:
-  OutputPinImpl(std::function<DeviceTypePtr ()> deviceTypeSrc, const std::string &name, unsigned index, MessageTypePtr messageType, bool isApplication, const std::string &code)
+  OutputPinImpl(std::function<DeviceTypePtr ()> deviceTypeSrc, const std::string &name, unsigned index, MessageTypePtr messageType, const std::string &code)
     : m_deviceTypeSrc(deviceTypeSrc)
     , m_name(name)
     , m_index(index)
     , m_messageType(messageType)
-    , m_isApplication(isApplication)
     , m_code(code)
   {
     m_metadata.SetObject();
@@ -292,14 +325,43 @@ public:
   virtual const MessageTypePtr &getMessageType() const override
   { return m_messageType; }
 
-  virtual bool isApplication() const override
-  { return m_isApplication; }
-
   virtual const std::string &getHandlerCode() const override
   { return m_code; }
 
   virtual rapidjson::Document &getMetadata() override
   { return m_metadata; }
+};
+
+class OutputPinDelegate
+  : public OutputPin
+{
+private:
+  OutputPinPtr m_base;
+protected:
+  OutputPinDelegate(OutputPinPtr base)
+    : m_base(base)
+  {}
+public:
+  OutputPinPtr getBase() const
+  { return m_base; }
+
+  virtual const DeviceTypePtr &getDeviceType() const override
+  { return m_base->getDeviceType();  }
+
+  virtual const std::string &getName() const override
+  { return m_base->getName(); }
+
+  virtual unsigned getIndex() const override
+  { return m_base->getIndex(); }
+
+  virtual const MessageTypePtr &getMessageType() const override
+  { return m_base->getMessageType(); }
+
+  virtual const std::string &getHandlerCode() const override
+  { return m_base->getHandlerCode(); }
+
+  virtual rapidjson::Document &getMetadata() override
+  { return m_base->getMetadata(); }
 };
 
 class MessageTypeImpl
@@ -342,6 +404,8 @@ private:
   std::string m_readyToSendCode;
   std::string m_sharedCode;
 
+  bool m_isExternal;
+
   std::vector<InputPinPtr> m_inputsByIndex;
   std::map<std::string,InputPinPtr> m_inputsByName;
 
@@ -351,10 +415,11 @@ private:
   rapidjson::Document m_metadata;
 
 protected:
-  DeviceTypeImpl(const std::string &id, TypedDataSpecPtr properties, TypedDataSpecPtr state, const std::vector<InputPinPtr> &inputs, const std::vector<OutputPinPtr> &outputs)
+  DeviceTypeImpl(const std::string &id, TypedDataSpecPtr properties, TypedDataSpecPtr state, const std::vector<InputPinPtr> &inputs, const std::vector<OutputPinPtr> &outputs, bool isExternal)
     : m_id(id)
     , m_properties(properties)
     , m_state(state)
+    , m_isExternal(isExternal)
     , m_inputsByIndex(inputs)
     , m_outputsByIndex(outputs)
   {
@@ -376,6 +441,9 @@ public:
 
   virtual const TypedDataSpecPtr &getStateSpec() const override
   { return m_state; }
+
+  virtual bool isExternal() const override
+  { return m_isExternal; }
 
   virtual const std::string &getReadyToSendCode() const override
   { return m_readyToSendCode; }
@@ -421,6 +489,66 @@ public:
   { return m_metadata; }
 };
 typedef std::shared_ptr<DeviceType> DeviceTypePtr;
+
+
+class DeviceTypeDelegate
+  : public DeviceType
+{
+private:
+  DeviceTypePtr m_base;
+
+protected:
+  DeviceTypeDelegate(DeviceTypePtr base)
+    : m_base(base)
+  {}
+
+public:
+  virtual const std::string &getId() const override
+  { return m_base->getId(); }
+
+  virtual const TypedDataSpecPtr &getPropertiesSpec() const override
+  { return m_base->getPropertiesSpec(); }
+
+  virtual const TypedDataSpecPtr &getStateSpec() const override
+  { return m_base->getStateSpec(); }
+
+  virtual bool isExternal() const override
+  { return m_base->isExternal(); }
+
+  virtual const std::string &getReadyToSendCode() const override
+  { return m_base->getReadyToSendCode(); }
+
+  virtual const std::string &getSharedCode() const override
+  { return m_base->getSharedCode(); }
+
+  virtual unsigned getInputCount() const override final
+  { return getInputs().size(); }
+
+  virtual const InputPinPtr &getInput(unsigned index) const override final
+  { return getInputs().at(index); }
+
+    virtual unsigned getOutputCount() const override final
+  { return getOutputs().size(); }
+
+  virtual const OutputPinPtr &getOutput(unsigned index) const override final
+  { return getOutputs().at(index); }
+
+
+  virtual InputPinPtr getInput(const std::string &name) const override
+  { return m_base->getInput(name); }
+
+  virtual const std::vector<InputPinPtr> &getInputs() const override
+  { return m_base->getInputs(); }
+
+  virtual OutputPinPtr getOutput(const std::string &name) const override
+  { return m_base->getOutput(name); }
+
+  virtual const std::vector<OutputPinPtr> &getOutputs() const override
+  { return m_base->getOutputs(); }
+
+  virtual rapidjson::Document &getMetadata() override
+  { return m_base->getMetadata(); }
+};
 
 
 class GraphTypeImpl : public GraphType
