@@ -81,6 +81,9 @@ int main(int argc, char *argv[])
             }
             probSend=strtod(argv[ia+1], 0);
             ia+=2;
+        }else if(!strcmp("--set-seed",argv[ia])){
+            urng.seed(atoi(argv[ia+1]));
+            ia+=2;    
         }else if(!strcmp("--random-seed",argv[ia])){
             std::mt19937::result_type seeds[16];
             seeds[0]=time(NULL);
@@ -160,13 +163,7 @@ int main(int argc, char *argv[])
     std::shared_ptr<SimulationEngine> engine;
 
 
-    if(logSinkName.empty()) {
-        engine = std::make_shared<SimulationEngineFast>();
-    }else{
-        fprintf(stderr, "Log sink not supported yet.");
-        exit(1);
-    }
-
+    engine = std::make_shared<SimulationEngineFast>(g_pLog);
 
     loadGraph(&registry, srcPath, parser.get_document()->get_root_node(), engine.get());
     if(logLevel>1){
@@ -192,6 +189,7 @@ int main(int argc, char *argv[])
         //fprintf(stderr, "Stepped\n");
         ++steps;
     }
+    fprintf(stderr, "Application has gone idle.\n");
 
     return 0;
 }
