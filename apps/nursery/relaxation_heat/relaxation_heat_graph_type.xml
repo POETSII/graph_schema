@@ -80,6 +80,31 @@
   {
     return (a>b) ? a-b : b-a;
   }
+
+      uint32_t rand(uint32_t &x)
+      {
+        x=x*1664525+1013904223;
+        return x;
+      }
+
+      unsigned rand_range(uint32_t &state, unsigned maxExclusive)
+      {
+        assert(0 < maxExclusive  &&  maxExclusive < (1<<30) );
+        unsigned pow2=1;
+        while( pow2 <= maxExclusive ){
+          pow2=pow2<<1;
+        }
+
+        unsigned mask=pow2-1;
+        while(1){
+          uint32_t x=rand(state) & mask;
+          if(x < maxExclusive){
+            return x;
+          }
+        }
+      }
+
+
   ]]>
   </SharedCode>
 
@@ -458,28 +483,6 @@
     </State>
 
     <SharedCode><![CDATA[
-      uint32_t rand(uint32_t &x)
-      {
-        x=x*1664525+1013904223;
-        return x;
-      }
-
-      unsigned rand_range(uint32_t &state, unsigned maxExclusive)
-      {
-        assert(0 < maxExclusive  &&  maxExclusive < (1<<30) );
-        unsigned pow2=1;
-        while( pow2 <= maxExclusive ){
-          pow2=pow2<<1;
-        }
-
-        unsigned mask=pow2-1;
-        while(1){
-          uint32_t x=rand(state) & mask;
-          if(x < maxExclusive){
-            return x;
-          }
-        }
-      }
     ]]></SharedCode>
 
     <ReadyToSend><![CDATA[
