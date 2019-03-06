@@ -1,7 +1,7 @@
-<?xml version="1.0"?>
-<Graphs xmlns="https://poets-project.org/schemas/virtual-graph-schema-v2" formatMinorVersion="1">
-  <GraphType id="gals_heat" >
-	<Documentation><![CDATA[
+<?xml version='1.0' encoding='ASCII'?>
+<Graphs xmlns="https://poets-project.org/schemas/virtual-graph-schema-v3">
+  <GraphType id="gals_heat">
+    <Documentation>
     Locally synchronous heat.
 
 	 Each cell i has a time t, and all cells start at t=0.
@@ -27,29 +27,29 @@
          So at a given time t we need to deal with messages for both t=1 and t=2,
          and essentially need two copies. When we advance, the t+1 copy becomes
 	 the t version and t+1 is empty.
-    ]]></Documentation>
-	
+    </Documentation>
+
 		<MetaData>
 			"location.dimension" : 2
 		</MetaData>
 
-<SharedCode><![CDATA[
-#ifdef POETS_LEGACY_HAS_HANDLER_EXIT
-#define _do_handler_exit(code) handler_exit(code)
-#else
-#define _do_handler_exit(code) ((void)0)
-#endif
+    <SharedCode><![CDATA[
+        #ifdef POETS_LEGACY_HAS_HANDLER_EXIT
+        #define _do_handler_exit(code) handler_exit(code)
+        #else
+        #define _do_handler_exit(code) ((void)0)
+        #endif
 
-#define fake_handler_exit(code) \
-{ \
-    if((code)==0){ \
-        handler_log(0, "_HANDLER_EXIT_SUCCESS_9be65737_"); \
-    }else{ \
-        handler_log(0, "_HANDLER_EXIT_FAIL_9be65737_"); \
-    } \
-    _do_handler_exit(code); \
-}
-]]></SharedCode>
+        #define fake_handler_exit(code) \
+        { \
+            if((code)==0){ \
+                handler_log(0, "_HANDLER_EXIT_SUCCESS_9be65737_"); \
+            }else{ \
+                handler_log(0, "_HANDLER_EXIT_FAIL_9be65737_"); \
+            } \
+            _do_handler_exit(code); \
+        }
+    ]]></SharedCode>
 
 		<!--<Types>
 			<TypeDef id="update_t">
@@ -63,93 +63,59 @@
 	<Properties>
       <Scalar type="uint32_t" name="maxTime" default="65" />
 			<Scalar type="uint32_t" name="exportDeltaMask" default="15">
-				<Documentation><![CDATA[
+				<Documentation>
 				Controls the rate at which values are exported. Interior cells will
-				export when (t & exportDeltaMask)==0
-				]]></Documentation>
-			</Scalar>
+				export when (t &amp; exportDeltaMask)==0
+				</Documentation>
+      </Scalar>
     </Properties>
-
     <SharedCode><![CDATA[
     #include <cmath>
     ]]></SharedCode>
-
     <MessageTypes>
-      <MessageType id="__init__">
-				<!-- This doesn't have any properties -->
-      </MessageType>
-
-			<MessageType id="finished">
-			</MessageType>
-
+      <MessageType id="finished"/>
       <MessageType id="update">
-				<Message>
-					<!--<Scalar type="update_t" name="v" />-->
-					<Tuple name="v">
-						<Scalar type="uint32_t" name="t" />
-						<Scalar type="float" name="v" />
-					</Tuple>
-				</Message>
+        <Message>
+          <Tuple name="v">
+            <Scalar name="t" type="uint32_t"/>
+            <Scalar name="v" type="float"/>
+          </Tuple>
+        </Message>
       </MessageType>
     </MessageTypes>
-
     <DeviceTypes>
-
-
-
-
       <DeviceType id="dirichlet_variable">
-		<Properties>
-			<Scalar type="int32_t" name="dt" default="1" />
-
-		  <Scalar type="float" name="amplitude" />
-		  <Scalar type="float" name="phase" />
-		  <Scalar type="float" name="frequency" />
-		  <Scalar type="float" name="bias" />
-
-		  <Scalar type="uint32_t" name="neighbours" /> <!-- We need to know the neighbour count in order to sync -->
-		</Properties>
-
-		<State>
-		  <Scalar type="float" name="v" />
-		  <Scalar type="uint32_t" name="t" />
-
-		  <Scalar type="uint32_t" name="cs" />
-		  <Scalar type="uint32_t" name="ns" />
-		</State>
-
-		<ReadyToSend><![CDATA[
-		*readyToSend		= 0;
-		if(deviceState->t < graphProperties->maxTime){
-			if(deviceState->cs==deviceProperties->neighbours){
-				*readyToSend = RTS_FLAG_out;
-			}
-		}else if(deviceState->t == graphProperties->maxTime){
-			*readyToSend=RTS_FLAG_finished;
-		}
-		]]></ReadyToSend>
-
-		<InputPin name="__init__" messageTypeId="__init__">
-		  <OnReceive><![CDATA[
+        <Properties>
+          <Scalar name="dt" type="int32_t" default="1"/>
+          <Scalar name="amplitude" type="float"/>
+          <Scalar name="phase" type="float"/>
+          <Scalar name="frequency" type="float"/>
+          <Scalar name="bias" type="float"/>
+          <Scalar name="neighbours" type="uint32_t"/>
+        </Properties>
+        <State>
+          <Scalar name="v" type="float"/>
+          <Scalar name="t" type="uint32_t"/>
+          <Scalar name="cs" type="uint32_t"/>
+          <Scalar name="ns" type="uint32_t"/>
+        </State>
+        <OnInit><![CDATA[
 		  deviceState->t=0;
 		  deviceState->cs=deviceProperties->neighbours;
 		  deviceState->ns=0;
 
 		  deviceState->v=deviceProperties->bias + deviceProperties->amplitude
 			     * sin(deviceProperties->phase + deviceProperties->frequency * deviceState->t);
-		  ]]></OnReceive>
-		</InputPin>
-
-		<InputPin name="__print__" messageTypeId="__init__">
-		  <OnReceive><![CDATA[
+		  ]]></OnInit>
+<!--         <InputPin name="__print__" messageTypeId="__init__">
+          <OnReceive><![CDATA[
 		  handler_log(0, "t = %d, v=%8g (seenNow=%d, seenNext=%d)", deviceState->t, deviceState->v, deviceState->cs, deviceState->ns);
 		  ]]></OnReceive>
-		</InputPin>
-
-		<InputPin name="in" messageTypeId="update">
-		  <OnReceive><![CDATA[
+        </InputPin> -->
+        <InputPin name="in" messageTypeId="update">
+          <OnReceive><![CDATA[
 			handler_log(3, "m=(t=%d,v=%.4f) tNow=%d, sNow=%d, aNow=%.4f, sNext=%d, aNext=%f", message->v.t, message->v.v, deviceState->t, deviceState->cs, deviceState->ns);
-		  
+
 			if(message->v.t==deviceState->t){
 				deviceState->cs++;
 		  }else{
@@ -162,10 +128,9 @@
 				);
 		  }
 		  ]]></OnReceive>
-		</InputPin>
-
-		<OutputPin name="out" messageTypeId="update">
-		  <OnSend><![CDATA[
+        </InputPin>
+        <OutputPin name="out" messageTypeId="update">
+          <OnSend><![CDATA[
 			assert(deviceState->t < graphProperties->maxTime);
 			assert(deviceState->cs==deviceProperties->neighbours);
 
@@ -179,53 +144,41 @@
 			message->v.t = deviceState->t;
 			message->v.v = deviceState->v;
 		  ]]></OnSend>
-		</OutputPin>
-
-		<OutputPin name="finished" messageTypeId="finished">
-			<OnSend><![CDATA[
+        </OutputPin>
+        <OutputPin name="finished" messageTypeId="finished">
+          <OnSend><![CDATA[
 			assert(deviceState->t==graphProperties->maxTime);
 			deviceState->t++; // We advance beyond the end of time and go idle
 			// And send an empty pulse to exit node
 			]]></OnSend>
-		</OutputPin>
-
-
-	</DeviceType>
-
-      <DeviceType id="cell">
-		<!-- This is a common-or-garden 2d cell, with no boundary stuff -->
-		<Properties>
-		  <Scalar type="float" name="iv" />
-		  <Scalar type="uint32_t" name="nhood" />
-		  <Scalar type="float" name="wSelf" />
-		  <Scalar type="uint32_t" name="dt" default="1" />
-		</Properties>
-
-		<State>
-		  <Scalar type="float" name="v" />
-		  <Scalar type="uint32_t" name="t" />
-
-		  <Scalar type="float" name="ca" /> <!-- w_self * s_self + sum( w_o * s_o for o in seenNow)  -->
-		  <Scalar type="uint32_t" name="cs" />
-
-		  <Scalar type="float" name="na" /> <!-- sum(w_o * s_o for o in seenNext) -->
-		  <Scalar type="uint32_t" name="ns" />
-		</State>
-
-		<ReadyToSend><![CDATA[
-		*readyToSend = 0;
+        </OutputPin>
+        <ReadyToSend><![CDATA[
+		*readyToSend		= 0;
 		if(deviceState->t < graphProperties->maxTime){
-			if(deviceState->cs==deviceProperties->nhood){
+			if(deviceState->cs==deviceProperties->neighbours){
 				*readyToSend = RTS_FLAG_out;
 			}
 		}else if(deviceState->t == graphProperties->maxTime){
-			*readyToSend = RTS_FLAG_finished;
+			*readyToSend=RTS_FLAG_finished;
 		}
 		]]></ReadyToSend>
-
-
-		<InputPin name="__init__" messageTypeId="__init__">
-		  <OnReceive><![CDATA[
+      </DeviceType>
+      <DeviceType id="cell">
+        <Properties>
+          <Scalar name="iv" type="float"/>
+          <Scalar name="nhood" type="uint32_t"/>
+          <Scalar name="wSelf" type="float"/>
+          <Scalar name="dt" type="uint32_t" default="1"/>
+        </Properties>
+        <State>
+          <Scalar name="v" type="float"/>
+          <Scalar name="t" type="uint32_t"/>
+          <Scalar name="ca" type="float"/>
+          <Scalar name="cs" type="uint32_t"/>
+          <Scalar name="na" type="float"/>
+          <Scalar name="ns" type="uint32_t"/>
+        </State>
+        <OnInit><![CDATA[
 		  deviceState->v=0;
 		  deviceState->t=0;
 		  deviceState->ca = deviceProperties->iv;
@@ -235,22 +188,17 @@
 		  deviceState->na=0;
 
 		  handler_log(3, "value = %f", deviceState->v);
-		  ]]></OnReceive>
-		</InputPin>
-
-		<InputPin name="__print__" messageTypeId="__init__">
-		  <OnReceive><![CDATA[
+		  ]]></OnInit>
+<!--         <InputPin name="__print__" messageTypeId="__init__">
+          <OnReceive><![CDATA[
 		  handler_log(0, "t = %d, v=%8g (seenNow=%d, seenNext=%d)", deviceState->t, deviceState->v, deviceState->cs, deviceState->ns);
 		  ]]></OnReceive>
-		</InputPin>
-
-
-		<InputPin name="in" messageTypeId="update">
-			<Properties>
-				<Scalar type="float" name="w" />
-			</Properties>
-
-		  <OnReceive><![CDATA[
+        </InputPin> -->
+        <InputPin name="in" messageTypeId="update">
+          <Properties>
+            <Scalar name="w" type="float"/>
+          </Properties>
+          <OnReceive><![CDATA[
 			handler_log(3, "m=(t=%d,v=%.4f) tNow=%d, sNow=%d, aNow=%.4f, sNext=%d, aNext=%f", message->v.t, message->v.v, deviceState->t, deviceState->cs, deviceState->ca, deviceState->ns, deviceState->na);
 		  if(message->v.t==deviceState->t){
 				deviceState->ca += edgeProperties->w * message->v.v;
@@ -266,17 +214,15 @@
 				);
 			}
 		]]></OnReceive>
-		</InputPin>
-
-		<OutputPin name="finished" messageTypeId="finished">
-			<OnSend><![CDATA[
+        </InputPin>
+        <OutputPin name="finished" messageTypeId="finished">
+          <OnSend><![CDATA[
 			deviceState->t++; // We advance beyond the end of time and go idle
 			// And send an empty pulse to exit node
 			]]></OnSend>
-		</OutputPin>
-
-		<OutputPin name="out" messageTypeId="update">
-		  <OnSend><![CDATA[
+        </OutputPin>
+        <OutputPin name="out" messageTypeId="update">
+          <OnSend><![CDATA[
 
 		  handler_log(3, "tNow=%d, sNow=%d, aNow=%.4f, sNext=%d, aNext=%f", deviceState->t, deviceState->cs, deviceState->ca, deviceState->ns, deviceState->na);
 
@@ -302,33 +248,37 @@
 			// It is possible that all our neighbours are ahead and have broadcast, so
 			// we could immediately be ready to go.
 		  ]]></OnSend>
-		</OutputPin>
-		</DeviceType>
-
-
-		<DeviceType id="exit_node">
-			<Properties>
-				<Scalar name="fanin" type="uint32_t" />
-			</Properties>
-			
-			<State>
-				<Scalar name="done" type="uint32_t" />
-			</State>
-			
-			<ReadyToSend><![CDATA[
-			*readyToSend=0;
-			]]></ReadyToSend>
-
-			<InputPin name="done" messageTypeId="finished">
-				<OnReceive><![CDATA[
+        </OutputPin>
+        <ReadyToSend><![CDATA[
+		*readyToSend = 0;
+		if(deviceState->t < graphProperties->maxTime){
+			if(deviceState->cs==deviceProperties->nhood){
+				*readyToSend = RTS_FLAG_out;
+			}
+		}else if(deviceState->t == graphProperties->maxTime){
+			*readyToSend = RTS_FLAG_finished;
+		}
+		]]></ReadyToSend>
+      </DeviceType>
+      <DeviceType id="exit_node">
+        <Properties>
+          <Scalar name="fanin" type="uint32_t"/>
+        </Properties>
+        <State>
+          <Scalar name="done" type="uint32_t"/>
+        </State>
+        <InputPin name="done" messageTypeId="finished">
+          <OnReceive><![CDATA[
 				deviceState->done++;
 				if(deviceState->done == deviceProperties->fanin){
 					fake_handler_exit(0);
 				}
 				]]></OnReceive>
-			</InputPin>
-		</DeviceType>
-
+        </InputPin>
+        <ReadyToSend><![CDATA[
+			*readyToSend=0;
+			]]></ReadyToSend>
+      </DeviceType>
     </DeviceTypes>
   </GraphType>
 </Graphs>

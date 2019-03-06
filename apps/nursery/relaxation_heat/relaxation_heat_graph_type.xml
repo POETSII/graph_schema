@@ -1,12 +1,12 @@
-<?xml version="1.0"?>
-<Graphs xmlns="https://poets-project.org/schemas/virtual-graph-schema-v2" formatMinorVersion="1">
-  <GraphType id="relaxation_heat" >
-	<Documentation><![CDATA[
+<?xml version='1.0' encoding='ASCII'?>
+<Graphs xmlns="https://poets-project.org/schemas/virtual-graph-schema-v3">
+  <GraphType id="relaxation_heat">
+    <Documentation>
 		Supposed to broadly match spinnaker experiments.
 
 		Each cell has a current heat h, and four neighbours n[0..3]. When an update
 		arrives the cell will store it in n[x], the calculate h'=sum(n)/4. If
-		|h' - h| > 3 then it will update its neighbours.
+		|h' - h| &gt; 3 then it will update its neighbours.
 
 		This is designed not to use edge properties, so it uses a strictly cartesian
 		grid and colours the devices:
@@ -25,68 +25,43 @@
 		get routed to a unique position in the array.
 
 
-    ]]></Documentation>
-	
-		<MetaData>
-			"location.dimension" : 2
-		</MetaData>
-
-  <SharedCode>
-  <![CDATA[
+    </Documentation>
+    <Types/>
+    <Properties>
+      <Scalar name="maxTime" type="uint32_t" default="65"/>
+    </Properties>
+    <MetaData>"location.dimension": 2</MetaData>
+    <SharedCode><![CDATA[
+  
   int32_t abs_diff(int32_t a, int32_t b)
   {
     return (a>b) ? a-b : b-a;
   }
-  ]]>
-  </SharedCode>
-
-	<Properties>
-      <Scalar type="uint32_t" name="maxTime" default="65" />
-    </Properties>
-
+  
+  ]]></SharedCode>
     <MessageTypes>
-      <MessageType id="__init__">
-				<!-- This doesn't have any properties -->
-      </MessageType>
-
-			<MessageType id="share">
+      <MessageType id="share">
         <Message>
-         <Scalar type="uint32_t" name="version" />
-			   <Scalar type="uint8_t" name="colour" />
-         <Scalar type="uint8_t" name="temperature" />
+          <Scalar name="version" type="uint32_t"/>
+          <Scalar name="colour" type="uint8_t"/>
+          <Scalar name="temperature" type="uint8_t"/>
         </Message>
-			</MessageType>
-
+      </MessageType>
     </MessageTypes>
-
     <DeviceTypes>
-
       <DeviceType id="cell">
         <Properties>
-          <Scalar type="int32_t" name="initial" default="127" />
-          
-          <Scalar type="int32_t" name="boundary" />
-          <Scalar type="uint8_t" name="colour"/>
+          <Scalar name="initial" type="int32_t" default="127"/>
+          <Scalar name="boundary" type="int32_t"/>
+          <Scalar name="colour" type="uint8_t"/>
         </Properties>
-
         <State>
-          <Scalar name="version" type="uint32_t" />
-
-          <Scalar name="currHeat" type="uint8_t" />
-          <Scalar name="nextHeat" type="uint8_t" />
-
-          <Array name="nhood" type="uint8_t" length="4" />
+          <Scalar name="version" type="uint32_t"/>
+          <Scalar name="currHeat" type="uint8_t"/>
+          <Scalar name="nextHeat" type="uint8_t"/>
+          <Array name="nhood" length="4" type="uint8_t"/>
         </State>
-
-		<ReadyToSend><![CDATA[
-		*readyToSend		= 0;
-		if( abs_diff(deviceState->currHeat,deviceState->nextHeat) > 3 ){
-       *readyToSend=RTS_FLAG_share_out;
-    }
-		]]></ReadyToSend>
-
-		<InputPin name="__init__" messageTypeId="__init__">
-		  <OnReceive><![CDATA[
+        <OnInit><![CDATA[
 		  deviceState->version=0;
       for(unsigned i=0; i<4; i++){
          deviceState->nhood[i]=127;
@@ -94,11 +69,9 @@
 
       deviceState->currHeat=deviceProperties->initial;
       deviceState->nextHeat=deviceState->currHeat+128; // Trigger a share
-		  ]]></OnReceive>
-		</InputPin>
-
-		<InputPin name="share_in" messageTypeId="share">
-		  <OnReceive><![CDATA[
+		  ]]></OnInit>
+        <InputPin name="share_in" messageTypeId="share">
+          <OnReceive><![CDATA[
       if( !deviceProperties->boundary ){
         deviceState->nhood[message->colour] = message->temperature;
 
@@ -110,10 +83,9 @@
         deviceState->nextHeat = sum/4;
       }
 		  ]]></OnReceive>
-		</InputPin>
-
-		<OutputPin name="share_out" messageTypeId="share">
-		  <OnSend><![CDATA[
+        </InputPin>
+        <OutputPin name="share_out" messageTypeId="share">
+          <OnSend><![CDATA[
 			assert(deviceState->nextHeat != deviceState->currHeat);
       ++deviceState->version;
 
@@ -123,11 +95,14 @@
 
       deviceState->currHeat=deviceState->nextHeat;
 		  ]]></OnSend>
-		</OutputPin>
-
-
-	</DeviceType>
-
+        </OutputPin>
+        <ReadyToSend><![CDATA[
+		*readyToSend		= 0;
+		if( abs_diff(deviceState->currHeat,deviceState->nextHeat) > 3 ){
+       *readyToSend=RTS_FLAG_share_out;
+    }
+		]]></ReadyToSend>
+      </DeviceType>
     </DeviceTypes>
   </GraphType>
 </Graphs>

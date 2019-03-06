@@ -1,0 +1,654 @@
+<?xml version="1.0"?>
+<Graphs xmlns="https://poets-project.org/schemas/virtual-graph-schema-v3">
+	<GraphType id="v3_everything_test">
+		<Documentation>
+		  Created by Alex Rast.
+
+		  Edited by Jonny Beaumont (jrbeaumont).
+
+		  This is a test script to exercise every feature of the POETS XML schema. It should
+		  run on the POETS hardware but cannot be counted upon to produce rational output.
+		</Documentation>
+
+		 <MetaData>
+			"native_dimension":2
+		 </MetaData>
+
+		 <SharedCode><![CDATA[
+		        // some functions to extract x-y coordinates from a flattened index and vice versa.
+		        inline int flat_idx(int x, int y, int row_len) {return x+y*row_len;};
+		        inline int y_idx(int f_idx, int row_len) {return f_idx/row_len;};
+			inline int x_idx(int f_idx, int row_len) {return f_idx%row_len;};
+		 ]]></SharedCode>
+
+		 <Properties>
+		 	<Scalar name="max_ticks" type="uint32_t" default="100"/>
+		 </Properties>
+
+		 <Types>
+			<TypeDef id="dev2_state_t">
+	   			<Documentation>
+	   				The name of this tuple is ignored, as the only member of the TypeDef.
+	   			</Documentation>
+		   		<Tuple name="_">
+					<Scalar name="val1" type="uint32_t"/>
+					<Tuple name="field2">
+						<Scalar name="val2_high" type="uint8_t"/>
+						<Scalar name="val2_midh" type="uint8_t"/>
+						<Scalar name="val2_midl" type="uint8_t"/>
+						<Scalar name="val2_low" type="uint8_t"/>
+						<Documentation>
+							Some struct that looks like an IP address format.
+						</Documentation>
+					</Tuple>
+					<Union name="recvd_wd">
+						<Scalar name="data_long_long" type="uint32_t"/>
+						<Scalar name="data_long" type="uint32_t"/>
+						<Scalar name="data_short" type="uint16_t"/>
+						<Scalar name="data_byte" type="uint8_t"/>
+						<Documentation>
+							A union to contain different possible values of a data word.
+						</Documentation>
+					</Union>
+		     	</Tuple>
+			</TypeDef>
+
+			<TypeDef id="dev2_float_u_t">
+				<Union name="fvalue">
+					<Scalar name="data_double" type="double"/>
+					<Scalar name="data_float" type="float"/>
+					<Scalar name="data_half" type="float"/>
+					<Documentation>
+						 A union to contain a type-specific floating-point value.
+						 Again, the "fvalue" name of this union is ignored. This union is referenced
+						 using the "dev2_float_u_t" name of the TypeDef
+					</Documentation>
+				</Union>
+		   </TypeDef>
+
+			<TypeDef id="msg_update_t">
+				<Tuple name="msg_update">
+					<Scalar name="msg_long_long" type="int64_t"/>
+					<Scalar name="msg_long" type="int32_t"/>
+					<Scalar name="msg_short" type="int16_t"/>
+					<Scalar name="msg_byte" type="int8_t"/>
+					<Documentation>
+						A message containing a struct with all the int types.
+					</Documentation>
+				</Tuple>
+			</TypeDef>
+		</Types>
+
+	    <MessageTypes>
+			<MessageType id="prod">
+				<Documentation>This is an empty message: a pure event</Documentation>
+			</MessageType>
+
+			<MessageType id="tick">
+				<Message>
+					<Scalar name="type" type="uint32_t"/>
+			 	</Message>
+			 	<Documentation> 0: Tick, 1: Ack</Documentation>
+			</MessageType>
+
+			<MessageType id="update">
+				<Documentation>
+					A more complex message with an internal struct. The struct is typedef'ed so
+					(perhaps confusingly) the message itself contains a scalar of the appropriate type.
+				</Documentation>
+				<MetaData>
+					"num_fields":4, "max_len":15
+				</MetaData>
+				<Message>
+					<Scalar name="upd_payload" type="msg_update_t"/>
+				</Message>
+				<HashDigest type="structural" hash="f9480fe5fd17947a" />
+			</MessageType>
+	    </MessageTypes>
+
+	    <DeviceTypes>
+			<DeviceType id="start" >
+				<Documentation>
+					A control node to start the application and interface with the user.
+				</Documentation>
+
+				<State>
+					<Scalar name="go_stop" type="int32_t" default="1">
+						<Documentation>
+							A 'long-hand' scalar only has documentation in addition to its definition
+						</Documentation>
+					</Scalar>
+				</State>
+
+				<HashDigest type="structural" hash="f9480fe5fd17947a" />
+				<HashDigest type="functional" hash="abc80fe5fd17947a" />
+
+				<ReadyToSend><![CDATA[
+					if (deviceState->go_stop != 0)
+						//Indicates broadcast
+						*readyToSend = 1;
+					else {
+						//Indicates indexed send
+						*readyToSend = 2;
+					}
+				]]></ReadyToSend>
+
+				<InputPin name="reset" messageTypeId="prod">
+					<OnReceive><![CDATA[
+						if (deviceState->go_stop == 0)
+							deviceState->go_stop = -1;
+						else if (deviceState->go_stop < 0)
+							deviceState->go_stop = 1;
+						else
+							deviceState->go_stop = 0;
+					]]></OnReceive>
+				</InputPin>
+
+				<OutputPin name="prod_out" messageTypeId="prod">
+					<OnSend><![CDATA[
+						if (deviceState->go_stop > 0)
+							deviceState->go_stop = 0;
+					]]></OnSend>
+				</OutputPin>
+				<OutputPin name="indexed_send" messageTypeId="prod" indexed="true">
+					<OnSend><![CDATA[
+						if (deviceState->go_stop > 0) {
+							*sendEdgeIndex = 0;
+						} else {
+							*sendEdgeIndex = 1;
+						}
+					]]></OnSend>
+					<Documentation>
+						Sends a single message to only one of the two edges this pin has.
+					</Documentation>
+				</OutputPin>
+
+                <OnHardwareIdle><![CDATA[
+                    // The hardware has signalled that every device is idle, and no messages are in flight.
+                    // The code in this hander indicates what I should do in this circumstance.
+                    ]]></OnHardwareIdle>
+
+			</DeviceType>
+
+			<DeviceType id="relay">
+				<Documentation>
+					A device that fans out messages to nodes and keeps track of time
+				</Documentation>
+
+		        <SharedCode><![CDATA[
+				const uint32_t RTS_TICK = 1;
+				const uint32_t RTS_MSG = 2;
+
+				void write_upd_msg(const relay_out_t* props, msg_update_t* msg, const uint32_t field)
+				{
+					// initialise all fields to an invalid value
+					msg->msg_long_long = -1;
+					msg->msg_long = -1;
+					msg->msg_short = -1;
+					msg->msg_byte = -1;
+					// only set a valid field if the choice is sensible
+					if (field < 4)
+					{
+					   // the field to set should be converted to the appropriate int type from its uint version
+					   if (!field) msg->msg_long_long = (props->relay_out.r_long_long > INT64_MAX) ? INT64_MAX : static_cast<int64_t>(props->relay_out.r_long_long);
+					   if (field == 1) msg->msg_long = (props->relay_out.r_long > INT32_MAX) ? INT32_MAX : static_cast<int32_t>(props->relay_out.r_long);
+					   if (field == 2) msg->msg_short = (props->relay_out.r_short > INT16_MAX) ? INT16_MAX : static_cast<int16_t>(props->relay_out.r_short);
+					   if (field == 3) msg->msg_byte = (props->relay_out.r_byte > INT8_MAX) ? INT8_MAX : static_cast<int8_t>(props->relay_out.r_byte);
+					}
+				}
+				]]></SharedCode>
+
+				<Properties cTypeName="relay_out_t">
+					<Tuple name="relay_out">
+						<Scalar name="r_long_long" type="uint32_t" default="262143"/>
+						<Scalar name="r_long" type="uint32_t" default="262143"/>
+						<Scalar name="r_short" type="uint16_t" default="1023"/>
+						<Scalar name="r_byte" type = "uint8_t" default="3"/>
+					</Tuple>
+				</Properties>
+
+				<State cTypeName="relay_state_t">
+					<Scalar name="started" type="uint32_t" default="0"/>
+					<Scalar name="tick_count" type="uint32_t" default="0"/>
+				</State>
+
+				<ReadyToSend><![CDATA[
+					if (deviceState->started)
+						*readyToSend |= RTS_TICK;
+					if (deviceState->tick_count)
+						*readyToSend |= RTS_MSG;
+				]]></ReadyToSend>
+
+				<InputPin name="prod_in" messageTypeId="prod">
+					<OnReceive><![CDATA[
+					deviceState->started ^= 1;
+					if (!deviceState->started)
+						deviceState->tick_count=0;
+					]]></OnReceive>
+				</InputPin>
+
+				<InputPin name="tick_in" messageTypeId="tick">
+					<Documentation>
+						Receive the acknowledge from the worker devices. Ignore non-ack tick messages.
+					</Documentation>
+					<OnReceive><![CDATA[
+					if (message->type==1)
+					{
+						// only advance time if we are started
+						if (deviceState->started > 0)
+						{
+							// reached the end. Reset.
+							if (deviceState->tick_count > max_ticks)
+							{
+								deviceState->tick_count = 0;
+								deviceState->started = 0;
+							}
+							else deviceState->tick_count++;
+						}
+					}
+					]]></OnReceive>
+				</InputPin>
+
+				<OutputPin name="tick_out" messageTypeId="tick">
+					<OnSend><![CDATA[
+					// the relay device only send tick messages out and only if it's started.
+					if (deviceState->started)
+					{
+						if (deviceState->tick_count == max_ticks)
+							handler_log(0, "Last tick");
+
+						message->type=0;
+					}
+					]]></OnSend>
+				</OutputPin>
+
+				<OutputPin name="update_out" messageTypeId="update">
+					<Documentation>
+						Sending an update calls the auxiliary function write_upd_msg in DeviceSharedCode to write the message.
+						Only one field of the message will be non-negative, depending upon the modulo-4 tick count.
+						We convert an unsigned integral type into a signed integer, set the appropriate field, and set
+						the others to -1.
+					</Documentation>
+					<OnSend><![CDATA[
+						if (deviceState->started)
+							write_upd_msg(deviceProperties,message,deviceState->tick_count%4);
+					]]></OnSend>
+				</OutputPin>
+
+                <OnThreadIdle><![CDATA[
+                    // All devices on the thread I am on are idle. No messages to receive, no messages to send.
+                    // The code in this hander indicates what I should do in this circumstance.
+                    ]]></OnThreadIdle>
+
+			</DeviceType>
+
+			<DeviceType id="worker">
+				<Documentation>
+					The device that does most of the work, and has most of the bells and whistles.
+				</Documentation>
+				<MetaData>
+					"properties_bytes":16, "state_bytes":40
+				</MetaData>
+
+				<SharedCode><![CDATA[
+					const uint32_t RTS_ACK = 1;
+					const uint32_t RTS_CAN = 2;
+				]]></SharedCode>
+
+				<Properties>
+					<Scalar type="uint32_t" name="devID"/>
+					<Scalar type="uint32_t" name="type">
+			            <Documentation> type gives the active union member for the float array 0: data_double, 1: data_float, 2: data_half </Documentation>
+			          </Scalar>
+					<Array type="uint8_t" length="8" name="dev_type" default="Type 0"/>
+					<Scalar type="uint32_t" name="env_len" default="3"/>
+				</Properties>
+
+				<State>
+					<Scalar type="dev2_state_t" name="work_state" >
+						<Default>
+							"field2":   { "val2_high": 192, "val2_midh": 168, "val2_midl": 0, "val2_low": 1 },
+							"recvd_wd": { "data_long_long": 0 }
+						</Default>
+					</Scalar>
+
+					<Array length="3" name="work_env">
+					    <Scalar type="dev2_float_u_t" name="env_var">
+					    	<Default>
+					    		"data_double": 1.0
+					    	</Default>
+					    </Scalar>
+						<Documentation>
+							Both types of array declaration tested - and with straight scalars and typedef'd elements.
+						</Documentation>
+					</Array>
+				</State>
+
+				<ReadyToSend><![CDATA[
+					// error if one of the state variables goes out of range
+					if (deviceState->work_state.val1 > 1 || !(deviceState->work_state.field2.val2_high == 127 || deviceState->work_state.field2.val2_high == 192))
+						*readyToSend = RTS_CAN;
+					for (uint32_t i = 0; i < deviceProperties->env_len; i++)
+					{
+						if (deviceProperties->type == 0) if (deviceState->work_env[i].data_double < 1.0)
+							*readyToSend = RTS_CAN;
+						if (deviceProperties->type == 1) if (deviceState->work_env[i].data_float < 1.0)
+							*readyToSend = RTS_CAN;
+						if (deviceProperties->type == 2) if (deviceState->work_env[i].data_half < 1.0)
+							*readyToSend = RTS_CAN;
+					}
+					// otherwise acknowledge once we have received the next update.
+					if (deviceState->work_state.val1 == 1)
+						*readyToSend |= RTS_ACK;
+				]]></ReadyToSend>
+
+				<OnInit><![CDATA[
+					deviceState->dev2_state_t.recvd_wd.data_byte = 255;
+				]]></OnInit>
+
+				<OnDeviceIdle><![CDATA[
+                    // I alone am idle, I have no messages to send, I have no messages to receive.
+                    // The code in this hander indicates what I should do in this circumstance.
+					for (uint32_t i = 0; i < deviceProperties->env_len; i++)
+					{
+						if (deviceProperties->type == 0)
+							deviceState->work_env[i].data_double *= (1.0+1.0/i);
+						if (deviceProperties->type == 1)
+							deviceState->work_env[i].data_float *= (1.0+1.0/i);
+						if (deviceProperties->type == 2)
+							deviceState->work_env[i].data_half *= (1.0+1.0/i);
+					}
+				]]></OnDeviceIdle>
+
+				<HashDigest type="structural" hash="f9480fe5fd17947a" />
+
+				<InputPin name="tick_in"  messageTypeId="tick">
+					<OnReceive><![CDATA[
+						deviceState->work_state.val1 = 1;
+					]]></OnReceive>
+				</InputPin>
+
+				<InputPin name="update_in" messageTypeId="update">
+					<Documentation>
+						A complex input pin with properties and state.
+					</Documentation>
+					<MetaData>
+						"properties_bytes":4, "state_bytes":4
+					</MetaData>
+					<Properties>
+						<Scalar name="upd_pin_high" type="uint8_t" default="192"/>
+						<Scalar name="upd_pin_midh" type="uint8_t" default="168"/>
+						<Scalar name="upd_pin_midl" type="uint8_t" default="0"/>
+						<Scalar name="upd_pin_low" type="uint8_t" default="1"/>
+					</Properties>
+
+					<State cTypeName="upd_prty_t">
+						<Scalar name="parity" type="uint32_t" default="0"/>
+					</State>
+
+					<OnReceive><![CDATA[
+						if (edgeProperties->upd_pin_high == deviceState->work_state.field2.val2_high &&
+							edgeProperties->upd_pin_midh == deviceState->work_state.field2.val2_midh &&
+							edgeProperties->upd_pin_midl == deviceState->work_state.field2.val2_midl &&
+							edgeProperties->upd_pin_low == deviceState->work_state.field2.val2_low)
+						{
+							if (edgeState->parity == 0)
+							{
+								deviceState->work_state.received_wd.data_long_long = 0;
+								if (message->msg_long_long >= 0)
+									deviceState->work_state.received_wd.data_long_long = message->msg_long_long;
+								if (message->msg_long >= 0)
+									deviceState->work_state.received_wd.data_long = message->msg_long;
+								if (message->msg_short >= 0)
+									deviceState->work_state.received_wd.data_short = message->msg_short;
+								if (message->msg_byte >= 0)
+									deviceState->work_state.received_wd.data_byte = message->msg_byte;
+							}
+							edgeState->parity ^= 1;
+						}
+
+						if (deviceState->field2.val2_high == 127)
+						{
+							deviceState->field2.val2_high = 192;
+							deviceState->field2.val2_midh = 168;
+							deviceState->field2.val2_midl = 0;
+							deviceState->field2.val2_low = 1;
+						} else if (++deviceState->field2.val2_low > deviceProperties->env_len)
+						{
+							deviceState->field2.val2_high = 127;
+							deviceState->field2.val2_midh = 0;
+							deviceState->field2.val2_midl = 0;
+							deviceState->field2.val2_low = 1;
+						}
+						deviceState->work_state.val1 = 1;
+					]]></OnReceive>
+				</InputPin>
+
+				<InputPin name="cancel_in" messageTypeId="prod">
+					<Documentation>
+						An pin that amounts to a reset of the device
+					</Documentation>
+					<OnReceive><![CDATA[
+						deviceState->work_state.val1 = 0;
+						deviceState->field2.val2_high = 192;
+						deviceState->field2.val2_midh = 168;
+						deviceState->field2.val2_midl = 0;
+						deviceState->field2.val2_low = 1;
+						deviceState->work_state.received_wd.data_long_long = 0;
+						for (uint32 i = 0; i < deviceProperties->env_len; i++)
+						{
+							if (deviceProperties->type == 0)
+								deviceState->work_env[i].data_double = 1.0;
+						  	if (deviceProperties->type == 1)
+						  		deviceState->work_env[i].data_float = 1.0;
+						  	if (deviceProperties->type == 2)
+						  		deviceState->work_env[i].data_half = 1.0;
+						}
+					]]></OnReceive>
+				</InputPin>
+
+				<OutputPin name="ack_out" messageTypeId="tick" priority="1">
+					<OnSend><![CDATA[
+						deviceState->work_state.val1 = 0;
+						message->type = 1;
+						handler_log(0, "Device %d received a message and updated its received state to %d", deviceProperties->devID, deviceState->work_state.received_wd.data_long_long);
+						handler_log(0, "Meanwhile, the floating-point data value for device %d is %f", deviceProperties->devID, deviceState->work_env[deviceState.field2.val2.low-1].data_double);
+					]]></OnSend>
+				</OutputPin>
+
+				<OutputPin name="cancel_out" messageTypeId="prod" priority="0">
+					<Documentation>
+						Something went wrong, so ask for a reset from the user.
+					</Documentation>
+					<OnSend><![CDATA[
+						handler_log(0, "Error on device %d: please reset me.", deviceProperties->devID);
+					]]></OnSend>
+				</OutputPin>
+
+	       </DeviceType>
+
+			<SupervisorType id="supervisor" requiresPersistentLocalDeviceInfo="no" requiresLocalDeviceProperties="no" requiresLocalEdgeEndpoints="no">
+				<SharedCode><![CDATA[
+						// CODE WHICH CAN BE SHARED BY ALL HANDLERS IN THIS SUPERVISOR
+					]]></SharedCode>
+
+				<Properties>
+					<Tuple name="sup_tup">
+						<Scalar type="uint8_t" name="x"/>
+						<Scalar type="uint8_t" name="y"/>
+						<Array type="uint8_t" name="z" length="10">
+							<Default>[1, 2, 3, 9, 6, 2]</Default>
+						</Array>
+					</Tuple>
+				</Properties>
+
+				<State>
+					<Array name="tup_arr" length="5">
+						<Tuple name="_">
+							<Scalar type="uint8_t" name="type"/>
+							<Scalar type="float" name="distance"/>
+						</Tuple>
+						<Default>{ "0": { "type": 2, "distance": 1.2 } }</Default>
+					</Array>
+				</State>
+
+				<MetaData>something</MetaData>
+
+				<OnInit><![CDATA[
+					for (int i = 0; i < 5; i++) {
+						deviceState->tup_arr[i].type = 2;
+						deviceState->tup_arr[i].distance = deviceProperties->sup_tup.z[i] * deviceProperties->sup_tup.z[10 - i];
+					}
+				]]></OnInit>
+
+				<InputPin name="worker_cancel_in" messageTypeId="prod">
+					<Documentation>
+						Receives messages from workers asking to be reset
+					</Documentation>
+					<MetaData>something else</MetaData>
+					<Properties>
+						<Scalar name="supervisorID" type="uint32_t" default="0"/>
+					</Properties>
+					<State>
+						<Scalar name="cycles" type="uint32_t" default="0"/>
+					</State>
+					<OnReceive><![CDATA[
+						// CODE WHICH EXECUTES WHEN THIS SUPERVISOR RECEIVES A MESSAGE
+					]]></OnReceive>
+				</InputPin>
+
+				<OutputPin name="worker_cancel_out" messageTypeId="prod">
+					<OnSend><![CDATA[
+						P_Sup_Msg_t msg;
+						In->Get<P_Sup_Msg_t>(0, &msg);                                // receive a request for reset,
+						P_Msg_t output_msg;                                           // turn the packet around
+						output_msg.header.destDeviceAddr=msg.header.sourceDeviceAddr; // to the source device
+						output_msg.header.destEdgeIndex=0;
+						output_msg.header.destPin=2;                                  // on its supervisor pin
+						output_msg.messageLenBytes=12;
+						output_msg.messageTag=0;                                      // as a reset signal,
+						Out->Put<P_Msg_t>(0, output_msg);                             // and send it on its way
+					]]></OnSend>
+				</OutputPin>
+
+				<SupervisorCompute><![CDATA[
+					// CODE TO EXECUTE TO TAKE ADVANTAGE OF SUPERVISOR IDLE TIME
+				]]></SupervisorCompute>
+
+				<OnStop><![CDATA[
+					// CODE TO EXECUTE WHEN THE "/stop" COMMAND IS EXECUTED
+				]]></OnStop>
+
+				<HashDigest type="structural" hash="45680fe5fd17947a" />
+				<HashDigest type="functional" hash="89180fe5fd17947a" />
+			</SupervisorType>
+
+			<ExternalType id="user_ctl">
+				<Documentation>
+					The user interface that connects directly into the application (as opposed to through Application pins)
+				</Documentation>
+
+				<InputPin name="app_notify" messageTypeId="prod">
+					<MetaData>
+					    "NumNotifyDevices": 1
+					</MetaData>
+				</InputPin>
+
+				<OutputPin name="app_start" messageTypeId="prod">
+					<Documentation>
+					    This issues the 'go' signal to the start device
+					</Documentation>
+				</OutputPin>
+
+				<HashDigest type="structural" hash="45680fe5fd17991a" />
+			</ExternalType>
+	    </DeviceTypes>
+
+		<HashDigest type="functional" hash="45680fe5fd17991a" />
+
+	</GraphType>
+<!--    <GraphTypeReference id="ro" src="./ro-1.xml"/>
+
+   <GraphInstanceReference id="graph1" src="./ro-1.xml"/>
+   <GraphInstanceReference id="graph10" src="./ro-10.xml">
+   		<HashDigest type="functional" hash="45680fe5fd17991a" />
+   </GraphInstanceReference> -->
+
+   <GraphInstance id="XMLTest1" graphTypeId="v3_everything_test" supervisorTypeId="supervisor">
+		<Properties>
+		"max_ticks": 100
+		</Properties>
+
+		<MetaData>
+		"Num_workers": 3
+		</MetaData>
+
+		<HashDigest type="functional" hash="45680f456d17991a" />
+
+		<DeviceInstances>
+			<DevI id="start_0" type="start"/>
+			<DevI id="relay_0" type="relay"/>
+			<DevI id="relay_1" type="relay"/>
+			<DevI id="worker_0" type="worker">
+				<P>"devID": 0, "type": 0</P>
+				<M>"val2_init":"192.168.0.1"</M>
+			</DevI>
+			<DevI id="worker_1" type="worker">
+				<P>"devID": 1, "type": 1, "dev_type": "Type 1"</P>
+				<S>"work_state": {"recvd_wd": {"data_long_long": 1}}, "work_env": [{"data_float": 1.0}, {"data_float": 1.0}, {"data_float": 1.0}]</S>
+			</DevI>
+			<DevI id="worker_2" type="worker">
+				<P>"devID": 2, "type": 2, "dev_type": "Type 2", "env_len": 4</P>
+				<S>"work_state": {"val1": 0, "field2": {"val2_high": 192, "val2_midh": 168, "val2_midl": 0, "val2_low": 3}, "recvd_wd": {"data_long_long": 54}}, "work_env": [{"data_half": 2.0}, {"data_half": 3.0} , {"data_half": 4.0}]</S>
+				<M>"val2_init":"192.168.0.3"</M>
+			</DevI>
+			<DevI id="user_0" type="user_ctl"></DevI>
+			<ExtI id="ext_0" type="user_ctl"/>
+		</DeviceInstances>
+
+		<EdgeInstances>
+			<EdgeI path="relay_0:prod_in-start_0:prod_out" />
+			<EdgeI path="relay_0:tick_in-worker_0:ack_out" />
+			<EdgeI path="relay_0:tick_in-worker_1:ack_out" />
+			<EdgeI path="relay_0:tick_in-worker_2:ack_out" />
+			<EdgeI path="worker_0:tick_in-relay_0:tick_out" />
+			<EdgeI path="worker_1:tick_in-relay_0:tick_out" />
+			<EdgeI path="worker_2:tick_in-relay_0:tick_out" />
+			<EdgeI path="worker_0:update_in-relay_0:update_out"></EdgeI>
+			<EdgeI path="worker_1:update_in-relay_0:update_out">
+				<P>"upd_pin_low":2</P>
+				<M>"upd_pin_init":"192.168.0.2"</M>
+			</EdgeI>
+			<EdgeI path="worker_2:update_in-relay_0:update_out">
+				<P>"upd_pin_high":192, "upd_pin_midh":168, "upd_pin_midl":0, "upd_pin_low":3</P>
+				<S>"parity":1</S>
+			</EdgeI>
+			<EdgeI path="start_0:reset-ext_0:app_start" />
+			<EdgeI path="ext_0:app_notify-start_0:prod_out" />
+			<EdgeI path="relay_0:prod_in-start_0:indexed_send" sendIndex="0"/>
+			<EdgeI path="relay_1:prod_in-start_0:indexed_send" sendIndex="1"/>
+		</EdgeInstances>
+
+		<HashDigest type="instance" hash="45680fe5fd17991a" />
+	</GraphInstance>
+
+	<GraphInstanceMetadataPatch id="XMLTest1">
+		<HashDigest type="instance" hash="45680fe5fd17991a" />
+
+		<MetaData> "Num_internal_devices": 5 </MetaData>
+
+		<DeviceInstances>
+			<DevI id="worker_1">
+				<M>"val2_init":"192.168.0.1"</M>
+			</DevI>
+		</DeviceInstances>
+
+		<EdgeInstances>
+			<EdgeI path="worker_0:update_in-relay_0:update_out">
+				<M>"upd_pin_init":192.168.0.1"</M>
+			</EdgeI>
+		</EdgeInstances>
+
+	</GraphInstanceMetadataPatch>
+
+</Graphs>

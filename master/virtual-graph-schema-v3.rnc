@@ -1,0 +1,1818 @@
+#
+#
+# This file is a <a href="http://relaxng.org/">RELAX NG</a> schema
+# for defining POETS graph types and instances. This document
+# is both the grammar specification, and the documentation of
+# that specification.
+#
+# A RELAX NG grammar uses a BNF like description to constrain
+# an XML document to particular patterns, allowing you to specify
+# what kinds of elements and attributes can appear within each
+# other, and how many of each are allowed/needed. It is
+# essentially the same as using a YACC grammar, except
+# no code generation is needed. There are existing tools for
+# working with these grammers, which are able to take an
+# XML document and check that it matches the grammar.
+#
+# ### Changes from version 0
+#
+# There are a few changes/additions since v0:
+# - Edge properties and state are now defined on the input pin rather
+#   than the edge itself. This is based on looking at how Spinnaker
+#   does things, and some situations where some device types need
+#   different properties for input pins with the same device type.
+#
+# ### Changes from version 1
+#
+# Everything that was once a "port" is now a "pin".
+#
+# All XML files should have a Provenance element. This is still only loosely specified though,
+# and needs to be refined.
+#
+# ### Changes from 2 -> 2.1
+#
+# PIP-0007 integrated
+#
+# ### Changes from 2.1 -> 2.2
+#
+# PIP-0004 integrated
+#
+# ### Changes from 2.2 -> 3.0
+# For more information, see PIP-0017
+#
+# Optional OnInit handler added
+# <S> tag added to DevI to allow individual setting of device instance states.
+# Optional Default tag has been added to Scalar, Array, Tuple, and Union
+# Optional attribute "indexed" in OutputPin added:
+#   Boolean used to indicate whether this pin broadcasts or sends to an index.
+# Optional attribute "sendIndex" accepting an integer to identify this pin for indexed send Output pin
+# Application pins removed
+# DeviceSharedCode removed
+# Fix incorrect definition for TypeDef (typedDataSpec -> typedDataMember)
+# TypeDef can now contain documentation
+# Dense or Sparse array initialisation provided for Arrays.
+# Digest hashes for types and instances added
+# Added <SupervisorType>, renamed from <SupervisorDeviceType> in previous versions.
+# GraphInstance attribute "supervisorTypeId" changed from "supervisorDeviceTypeId"
+# Updated SupervisorType to the specification discussed with Southampton
+# <OnCompute> and <OnIdle> tags are to be entirely removed
+#   These are replaced by optional <OnHardwareIdle>, <OnDeviceIdle> and <OnThreadIdle>.
+#   This provides more detailed descriptions of when these handlers are executed
+
+
+
+# BEGIN_SCHEMA
+
+# This section establishes some ambient declarations
+# for the grammar
+#
+# This is used to bring in things like integers, as XML
+# Schema doesn't support many primitive types.
+datatypes xsd = "http://www.w3.org/2001/XMLSchema-datatypes"
+
+# This is the XML namespace within which the graphs live.
+# If a breaking change is made to the graph specification,
+# then the namespace identifier will change.
+default namespace = "https://poets-project.org/schemas/virtual-graph-schema-v3"
+
+
+# Here begins the actual grammar itself
+grammar {
+
+  ## All identifiers used in the graph types are simplified C
+  ## identifiers. This applies to type ids and instances ids.
+  identifier = xsd:string { pattern = "[a-zA-Z0-9_]+" }
+
+  ## Source code that appears within the handlers should be
+  ## non-allocating C++ with no IO. i.e. it can contain anything
+  ## that does not require dynamic memory allocation and does not
+  ## cause input-output.
+  ##
+  ## Using the C++ run-time library is allowed as long as:
+  ## - The function does not allocate memory or perform IO
+  ## - It does not rely on global state
+  ## - It does not interact with the environment/platform/OS
+  ## - It expands inline into primitive C
+  ## So things like `std::copy` will be ok, but `std::cout` or
+  ## `exit` are not.
+
+  cxxSourceCode = text
+
+  ## This is used to attach documentation strings to graph types.
+  ## We allow effectively anything to appear within Documentation elements,
+  ## and so rely on a helper rule called "anything"
+
+  documentation = anything
+
+  ## A definition of "anything" used by documentation, which can be:
+  ## - Any type of element (element *), which can contain anyhing
+  ## - Any attribute, with any content type
+  ## - Any text element
+
+  anything = element * { anything } * & attribute * { text } * & text *
+
+  ## The top-level element is a container for POETS graphs and instances
+
+  start =
+
+    ## The top-level container can contain any number of graph types,
+    ## instances, or snapshorts. These can be arbitrarily interleaved,
+    ## though typically you would expect to see either:
+    ## - A single graph type
+    ## - A graph type followed by an instance of that type
+    ##
+    ## Any graph instance must refer to a graph type that has already
+    ## been defined using a GraphType, or declared using a GraphTypeReference.
+    ##
+    ## An example of a top-level graph, including xml pre-amble, would be:
+    ##
+    ##    <?xml version="1.0"?>
+    ##    <Graphs xmlns="https://poets-project.org/schemas/virtual-graph-schema-v3">
+    ##      <GraphType id="my_graph_type">
+    ##         ... <!-- See GraphType -->
+    ##      </GraphType>
+    ##      <GraphInstances id="my_graph_instance" graphTypeId="my_graph_type">
+    ##         ... <!-- See GraphInstance -->
+    ##      </GraphInstances>
+    ##    </Graphs>
+
+    element Graphs {
+
+      ## If non-breaking changes are made to the schema, the minor
+      ## version can be increased. The major version is explicit
+      ## in the namespace for the schema.
+
+      attribute formatMinorVersion { "0" | "1" | "2" } ?
+      &
+      graphType *
+      &
+      graphTypeReference *
+      &
+      graphInstance *
+      &
+      graphInstanceReference *
+      &
+      graphInstanceMetadataPatch *
+    }
+
+  graphType =
+
+    ## A graph type encapsulates the data-structures and handlers
+    ## associated with a particular kind of graph.
+    ##
+    ## A graph type describes a space of possible graphs, and there
+    ## are a (usually) infinite set of possible graph instances
+    ## that could be created of that type.
+    ##
+    ## A minimal graph type would be:
+    ##
+    ##    <GraphType id="example">
+    ##      <Documentation>This is an example graph type </Documentation>
+    ##        <SharedCode><![CDATA[
+    ##          inline int helper(int x) { return x+1; }
+    ##        ]]></SharedCode>
+    ##        <Properties>
+    ##          <Scalar type="uint32_t" name="haloSize" />
+    ##          <Scalar type="float" name="threshold" />
+    ##        </Properties>
+    ##        <State>
+    ##          <Scalar type="uint32_t" name="counter" />
+    ##        </State>
+    ##        <MessageTypes>
+    ##          <MessageType id="update">
+    ##            <Scalar type="uint32_t" name="update" />
+    ##          </MessageType>
+    ##        </MessageTypes>
+    ##        <DevicesTypes>
+    ##          ... <!-- See DeviceType -->
+    ##        </DeviceTypes>
+    ##        <ExternalTypes>
+    ##          ... <!-- See ExternalType -->
+    ##        </ExternalTypes>
+    ##      </GraphInstance>
+
+    element GraphType {
+
+      ## Unique identifier for the graph type.
+      attribute id { identifier }
+
+      &
+
+      element Documentation {
+        documentation
+      } *
+
+      &
+
+      ## C++ code that needs to be injected into the handler source
+      ## files.
+      ##
+      ## Declarations at the graph level will be visible to
+      ## all devices in the graph, essentially by pre-pending them
+      ## before the handler code.
+      ##
+      ## Multiple declarations are allowed, in which case they will
+      ## be inserted into the output in the same order as they appear
+      ## in the graph type.
+      ##
+      ## The intent is that handlers don't need to link against
+      ## external code, so all functions should be included inline.
+      ## The base language is C++, so inline functions are legal.
+      ##
+      ## An example of a shared code section would be:
+      ##
+      ##    <GraphType id="...">
+      ##      <Properties> ... </Properties
+      ##      <SharedData><![CDATA[
+      ##        // Declare a shared helper function
+      ##        inline int cube(int x) { return x*x*x; }
+      ##
+      ##        // Declare a function which calculates a function
+      ##        // of the the graph properties
+      ##        inline int graph_area(const GRAPH_PROPERTIES_T *gp)
+      ##        { return gp->width*gp->height; }
+      ##      ]]></SharedData>
+      ##      <DeviceTypes>
+      ##        ...
+      ##      </DeviceTypes>
+      ##    </GraphType
+      ##
+      ## This example makes use of the GRAPH_PROPERTIES_T macro
+      ## in order to avoid depending on the specific C type
+      ## name of the properties structure. By default the
+      ## name will be `${graphTypeId}_properties_t`, but that
+      ## can be customised using the `cTypeName` attribute.
+      ## The code is placed in a CDATA section to avoid
+      ## escaping problems. Otherwise a `<` symbol in the
+      ## C code needs to be escaped to `&lt;`.
+
+      element SharedCode {
+        cxxSourceCode
+      } *
+
+      &
+
+      element Types {
+
+        ## Introduces a new named type which can be used in later typed data specs
+        element TypeDef {
+          ## Named that the new type has, both within type specs, and in the C code.
+          attribute id { identifier }
+
+          &
+
+          element Documentation {
+            documentation
+          } *
+
+          &
+
+          typedDataMember
+        } *
+      } ?
+
+      &
+
+      ## Global properties that are shared with all nodes at run-time.
+      ##
+      ## If there is no properties element then the struct still exists, but is empty.
+      element Properties {
+        ## Used to specify what the C type name is for the properties structure.
+        ## The default is "{graphTypeId}_properties_t".
+        ##
+        ## The explicit or implicit name will be available within the
+        ## graph handler code as ${GRAPH_PROPERTIES_T}.
+        attribute cTypeName { identifier } ? ,
+
+        typedDataSpec
+      } ?
+
+      &
+
+      ## Free-form data to attach to the graph type.
+      element MetaData {
+        metaDataValue
+      } ?
+
+      &
+
+      ## Establishes the different types of message that could exist in the graph.
+      ##
+      ## This element must exist, even if there are no message types.
+
+      element MessageTypes {
+
+        ## A message type captures a type of communication that could happen between pins
+        ##
+        ## The reason for having named types is that messages can have semantic
+        ## meaning beyond their structural type. For example, empty messages are quite
+        ## common, but can indicate quite different things within a single graph type.
+        ## For example, the `reset` message and `trigger` message are both empty structs,
+        ## but should not be connected to each eother.
+        ##
+        ## The ordering of message types has no semantic meaning, but the order should be
+        ## preserved when reading and writing graph types.
+        element MessageType {
+
+          ## Must be unique amongst all message types
+          attribute id { identifier }
+
+          &
+
+          element Documentation {
+            documentation
+          } *
+
+          &
+
+          ## Free-form data to attach to the input pin type.
+          element MetaData {
+            metaDataValue
+          } ?
+
+          &
+
+          ## The type of messages that are sent over this edge. This may be empty or not exist
+          ## (e.g. if it is only a pulse).
+          element Message {
+            ## Used to specify what the C type name is for the message structure.
+            ## The default is "{graphTypeId}_{messageTypeId}_message_t".
+            ##
+            ## The actual type name will be available within send/receive handlers as ${MESSAGE_T}.
+            attribute cTypeName { identifier } ? ,
+
+            typedDataSpec
+          } ?
+
+          &
+
+          functionLevelHash*
+
+        } *
+      }
+
+      &
+
+      ## This establishes the shapes of devices, though not the internals.
+      ##
+      ## This element must exist (a graph with no devices is not useful).
+
+      element DeviceTypes {
+
+        ## A device type captures a piece of structure and functionality that can
+        ## be instantiated within the graph. All devices of the same type are identical
+        ## except for the functionality they have.
+        ##
+        ## The number of pins must be fixed, but we allow a variable number of
+        ## edges to enter or leave a pin. Alongside the edge properties and
+        ## edge state this provides storage that scales with the number of edges.
+        ##
+        ## Messages are delivered to the device in any order, and a device has no
+        ## way of avoiding receipt of messages.
+        ##
+        ## Priorities
+        ##
+        ## Each output pin and the compute pin of the device are given a unique
+        ## non-negative `requestIndex`. The requestIndex will be contiguous and start at zero.
+        ## so they can be used as bit-field masks. The maximum number of output pins + compute
+        ## pin is fixed at 32, in order to bound memory requirements at one word per device.
+        ##
+        ## For an output pin called {name}, the requestIndex will be available within
+        ## handlers and device shared code as `RTS_INDEX_{name}`, and the
+        ## equivalent bit-mask as `RTS_FLAG_{name}`.
+        ## These values will be injected as C++ identifiers
+        ## when the handler code is compiled, so for different devices there will be
+        ## different identifiers in scope.
+        ##
+        ## Flags are also available globally through a flag of the form:
+        ## `RTS_FLAG_{device_type}_{name}` and `RTS_INDEX_{device_type}_{name}`.
+        ## This allows for the use of flags outside device scope (sometimes it
+        ## is useful to work with them in the graph shared code, but it is difficult
+        ## to work out what numbers they will have).
+        ##
+        ## The index of a pin determines its priority, with the lowest value having
+        ## the highest priority. By default the priorities will be assigned in the
+        ## order that outputs appear in the device type, with the compute handler
+        ## always receiving lowest priority (highest index). The priorities can be
+        ## modified for each output by using the `priority` attribute on OutputPin
+        ## and OnCompute. This means it is possible to specifiy that the compute pin
+        ## has a higher priority than an output pin, which might make sense if
+        ## we had a very low priority output (for example a heart-beat).
+        ##
+        ## Priorities are statically assigned, and are hints, so they do not have to be
+        ## observed at run-time. A natural example is that the compute
+        ## handler typically has the lowest priority, but it will run
+        ## ahead of the other handlers if there is no space available.
+        ## Another example is where the high priority pin sends to a
+        ## remote device, but the low priority only sends to a local device
+        ## Network congestion may block the remote send, but it may be
+        ## possible to send then immediately deliver the local message.
+        ##
+        element DeviceType {
+
+          ## Must be unique amongst all device types
+          attribute id { identifier }
+
+          &
+
+          element Documentation {
+            documentation
+          } ?
+
+          &
+
+          element SharedCode {
+            cxxSourceCode
+          } *
+
+          &
+
+          ## Read-only properties that could be specified on the device. This element
+          ## may not appear if the device has no properties. There may be default
+          ## values specified for some or all components of the properties.
+
+          element Properties {
+
+            ## Used to specify what the C type name is for the properties structure.
+            ## The default is "{graphTypeId}_{deviceTypeId}_properties_t".
+            ##
+            ## The properties type will be available within handlers as ${DEVICE_PROPERTIES_T}
+
+            attribute cTypeName { identifier } ? ,
+
+            typedDataSpec
+          } ?
+
+          &
+
+          ## Mutable properties attached to the device. In principle this element might
+          ## not appear, if the device has no state (I suppose all the mutable state could
+          ## be in the edge properties).
+          element State {
+
+            ## Used to specify what the C type name is for the state structure.
+            ## The default is "{graphTypeId}_{deviceTypeId}_state_t".
+            ##
+            ## The state type will be available within handlers as ${DEVICE_STATE_T}
+
+            attribute cTypeName { identifier } ? ,
+
+            typedDataSpec
+          } ?
+
+          &
+
+          ## Free-form data to attach to the device type.
+          element MetaData {
+            metaDataValue
+          } ?
+
+          &
+
+          ## An input pin that appears on the device type.
+          element InputPin {
+
+            ## Name of the pin, must be unique within the device type
+            attribute name { identifier }
+
+            &
+
+            ## Identifies the message type for this pin
+            ## A pin can only be connected to an output of the same type (not just structurally,
+            ## they must have the same messageTypeId)
+            attribute messageTypeId { identifier }
+
+            &
+
+            element Documentation {
+              documentation
+            } ?
+
+            &
+
+            ## Free-form data to attach to the input pin type.
+            element MetaData {
+              metaDataValue
+            } ?
+
+            &
+
+            ## Indicates read-only properties associated with each edge. This will be
+            ## delivered along-side messages which arrive along that edge
+            ## An input pin may have no properties, in which case this element will not exist.
+            element Properties {
+              ## Used to specify what the C type name is for the properties structure.
+              ## The default is "{graphTypeId}_{deviceTypeId}_{pinName}_properties_t".
+              ##
+              ## The properties type will be available within handlers as ${PORT_PROPERTIES_T}
+              attribute cTypeName { identifier } ?,
+
+              typedDataSpec
+            } ?
+
+            &
+
+            ## Indicates mutable state associated with an edge.
+            element State {
+              ## Used to specify what the global C type name is for the properties structure.
+              ## The default is "{graphTypeId}_{deviceTypeId}_{pinName}_state_t".
+              ##
+              ## The properties type will be available within handlers as ${PORT_STATE_T}
+              attribute cTypeName { identifier } ?,
+
+              typedDataSpec
+            } ?
+
+            &
+
+            ## Event handler for when a message arrives on this device. The body will
+            ## be a fragment of C. It should probably be wrapped in a CDATA section,
+            ## but that is up to you. The code should be a statement or sequence of
+            ## statements, and does not contain any function header.
+            ##
+            ## Rationale: why a fragment? It forces the implementer to not use globals etc.,
+            ## and means we have control over the type names of the various structs.
+            ##
+            ## Variables which will be in scope are:
+            ##   `const ${GRAPH_PROPERTIES_T} *_graphProperties` : Read-only pointer to the graph properties
+            ##   `const ${DEVICE_PROPERTIES_T} *deviceProperties` : Read-only pointer to the device state
+            ##   `${DEVICE_STATE_T} *deviceState : Mutable pointer to the device state
+            ##   `const ${PORT_PROPERTIES_T} *edgeProperties` : Read-only pointer to the edge state
+            ##   ${PORT_STATE_T} *edgeState : Mutable pointer to the edge state
+            ##   `const ${MESSAGE_T} message : Read-only pointer to the message payload
+            element OnReceive {
+              cxxSourceCode
+            }
+          } *
+
+          &
+
+          ## An output pin that appear on the device type.
+          element OutputPin {
+            ## Name of the pin, must be unique within the device type
+            (
+              attribute name { identifier },
+
+              ## This is an indicator of whether this output pin performs an "Indexed Sends" PIP-0002
+              ## If so, then the message produced will be able to send to a single device based on index
+              attribute indexed { xsd:boolean } ?
+            )
+
+            &
+
+            ## Optionally specify the outputPinIndex for this particular pin.
+            ##
+            ## If not specified, the index will be automatically calculated
+            ## to provide a contiguous range.
+            ##
+            ## Either way, the outputPinIndex for the pin will be available
+            ## within the device handlers as `RTS_INDEX_{name}`,
+            ## while a bit-mask version is available as `RTS_FLAG_{name}`.
+            attribute priority { xsd:integer } ?
+
+            &
+
+            ## Identifies the message type for this pin.
+            ##
+            ## A pin can only be connected to a pin of the same type (not just structurally,
+            ## they must have the same messageTypeId)
+            attribute messageTypeId { string }
+
+            &
+
+            element Documentation {
+              documentation
+            } ?
+
+            &
+
+            ## Free-form data to attach to the input pin type.
+            element MetaData {
+              metaDataValue
+            } ?
+
+            &
+
+            ## Event handler for sending a message on this device. The body will
+            ## be a fragment of C. It should probably be wrapped in a CDATA section.
+            ##
+            ## The things which will be available within scope are:
+            ##
+            ##   `const ${GRAPH_PROPERTIES_T} *graphProperties` :  Read-only pointer to the graph properties
+            ##   `const ${DEVICE_PROPERTIES_T} *deviceProperties` : Read-only pointer to the device properties
+            ##   `${DEVICE_STATE_T} *deviceState` : Mutable pointer to the device state
+            ##   `${MESSAGE_T} *message` : A mutable pointer to payload associate with the edge
+            ##   `bool *doSend` : A mutable pointer to control whether the message is sent. By default it is true.
+            element OnSend {
+              cxxSourceCode
+            }
+          } *
+
+          &
+
+          ## Used to determine which output pins are ready to send.
+          ##
+          ## This fragment returns a bit-mask indicating which pins currently
+          ## want to send,
+          ## The things which will be available within scope are:
+          ##
+          ##   `const ${GRAPH_PROPERTIES_T} *graphProperties` :  Read-only pointer to the graph properties
+          ##   `const ${DEVICE_PROPERTIES_T} *deviceProperties` : Read-only pointer to the device properties
+          ##   `const ${DEVICE_STATE_T} *deviceState` : Read-only pointer to the device state
+          ##   uint32_t *readyToSend : Used to specify the bit-mask indicating which pins want to send
+          ##   `uint32_t *requestIdle` : Indicates whether the device wishes to do OnDeviceIdle computation when there is idle compute time.
+          element ReadyToSend {
+            cxxSourceCode
+          }
+
+          &
+
+          ## Code to run on the device before any other handler runs (this replaces the
+          ## old __init__ pin).
+          ## The things which will be available within scope are:
+          ##
+          ##   `const ${GRAPH_PROPERTIES_T} *graphProperties` :  Read-only pointer to the graph properties
+          ##   `const ${DEVICE_PROPERTIES_T} *deviceProperties` : Read-only pointer to the device properties
+          ##   `${DEVICE_STATE_T} *deviceState` : Read-write pointer to the device state
+          ##
+          ## If the init handler is not presence it should implicitly have an empty body (though an
+          ## implementation can optimise that out).
+          element OnInit {
+            cxxSourceCode
+          } ?
+
+          &
+
+          ## Code which runs when the hardware detects that all devices on all threads are idle, and no
+          ## messages are in flight. The hardware provides a signal to all device to run this handler.
+          ##
+          ## If OnHardwareIdle is not present, then it is assumed to be an empty handler, and it is valid to mix
+          ## devices with an OnHardwareIdle with those with an implicit empty OnHardwareIdle.
+          ## A device with no OnHardwareIdle will not block a device which does have OnHardwareIdle.
+          ## If there are no OnHardwareIdle handlers an implementation may omit the OnHardwareIdle machinery,
+          ## but this is not detectible/visible by the application.
+          ##
+          ## The things which will be available within scope are:
+          ##
+          ##   `const ${GRAPH_PROPERTIES_T} *graphProperties` :  Read-only pointer to the graph properties
+          ##   `const ${DEVICE_PROPERTIES_T} *deviceProperties` : Read-only pointer to the device properties
+          ##   `${DEVICE_STATE_T} *deviceState` : Mutable pointer to the device state
+          element OnHardwareIdle {
+            cxxSourceCode
+          } ?
+
+          &
+
+          ## OnThreadIdle is executed when all devices on a thread have no messages to receive, and
+          ## all ReadyToSends are 0. This can be used as a computation opportunity for the thread when
+          ## idling.
+          ## WARNING: This is currently a placeholder for parsers, as it does not have well-defined semantics.
+          ## There is currently no concept of a "thread" at this level, nor is there any way of accessing
+          ## thread contexts. It is not clear how this would work in heterogeneous thread systems where there are
+          ## multiple device types in a thread.
+          element OnThreadIdle {
+            cxxSourceCode
+          } ?
+
+          &
+
+          ## This event handler will execute when is it detected that a single device has no
+          ## messages to be received, and its readyToSend value is 0, indicating nothing to be sent.
+          ##
+          ## The things which will be available within scope are:
+          ##
+          ##   `const ${GRAPH_PROPERTIES_T} *graphProperties` :  Read-only pointer to the graph properties
+          ##   `const ${DEVICE_PROPERTIES_T} *deviceProperties` : Read-only pointer to the device properties
+          ##   `${DEVICE_STATE_T} *deviceState` : Mutable pointer to the device state
+          element OnDeviceIdle {
+
+            cxxSourceCode
+          } ?
+
+          &
+
+          functionLevelHash*
+
+        } *
+
+       &
+
+       element ExternalType {
+         ## An ExternalType defines external devices which connect external I/O to regular devices.
+         ## Unlike DeviceType ExternalType devices do not have state, properties, or handlers.
+         ## They only have input and output pins with no handlers attached.
+
+         ## Must be unique amongst all device types
+         attribute id { identifier }
+
+         &
+
+         element Documentation {
+           documentation
+         } ?
+
+         &
+
+         ## Indicates read-only properties associated with an external instance.
+         ## This is useful to embed in the graph as it can be used to tell ExternalTypes
+         ## what type of thing they should be, e.g. to configure frame-rate for a video,
+         ## or describe protocol properties such as the buffer depth of a native device
+         ## they are connected to. So it's a bit more than meta-data, as it does actually
+         ## change how the application operates, just not in a way that is known to the
+         ## standard tools. It doesn't have a c type name etc. as that all happens
+         ## outside.
+         element Properties {
+           typedDataSpec
+         } ?
+
+         &
+
+         ## Free-form data to attach to the device type.
+         element MetaData {
+           metaDataValue
+         } ?
+
+         &
+
+         element InputPin {
+
+           ## Name of the pin, must be unique within the device type
+           attribute name { identifier }
+
+           &
+
+           ## Identifies the message type for this pin
+           ## A pin can only be connected to an output of the same type
+           attribute messageTypeId { identifier }
+
+           &
+
+           element Documentation {
+              documentation
+           } ?
+
+           &
+
+           ## Free-form data to attach to the input pin type
+           element MetaData {
+             metaDataValue
+           } ?
+        } ?
+
+        &
+
+        element OutputPin {
+
+           ## Name of the pin, must be unique within the device type
+           attribute name { identifier }
+
+           &
+
+           ## Identifies the message type for this pin
+           ## A pin can only be connected to an output of the same type
+           attribute messageTypeId { identifier }
+
+           &
+
+           element Documentation {
+              documentation
+           } ?
+
+           &
+
+           ## Free-form data to attach to the output pin type
+           element MetaData {
+             metaDataValue
+           } ?
+        } ?
+
+        &
+
+        ## ExternalType has unknown function
+        structureLevelHash*
+
+       } *
+
+       &
+
+       element SupervisorType {
+
+          ## Must be unique amongst all device types
+          attribute id { identifier }
+
+          &
+
+          ## TODO: This was inferred from the Soton part of examplar. What does it mean?
+          attribute requiresPersistentLocalDeviceInfo { "no" }
+
+          &
+
+          ## TODO: This was inferred from the Soton part of examplar. What does it mean?
+          attribute requiresLocalDeviceProperties { "no" }
+
+          &
+
+          ## TODO: This was inferred from the Soton part of examplar. What does it mean?
+          attribute requiresLocalEdgeEndpoints { "no" }
+
+          &
+
+          element Documentation {
+            documentation
+          } ?
+
+          &
+
+          element SharedCode {
+            cxxSourceCode
+          } *
+
+          &
+
+          element Properties {
+            ## Used to specify what the C type name is for the properties structure.
+            ## The default is "{graphTypeId}_{supervisorTypeId}_properties_t".
+            ##
+            ## The properties type will be available within handlers as DEVICE_PROPERTIES_T
+
+            attribute cTypeName { identifier } ? ,
+
+            typedDataSpec
+          } ?
+
+          &
+
+          element State {
+            ## Used to specify what the C type name is for the state structure.
+            ## The default is "{graphTypeId}_{supervisorTypeId}_state_t".
+            ##
+            ## The properties type will be available within handlers as DEVICE_STATE_T
+
+            attribute cTypeName { identifier } ? ,
+
+            typedDataSpec
+          } ?
+
+          &
+
+          ## Free-form data to attach to the supervisor device type.
+          ## TODO: This may need removing if it doesn't fit with Southampton's specification
+          element MetaData {
+            metaDataValue
+          } ?
+
+          &
+
+          ## Code to run on the device before any other handler runs (this replaces the
+          ## old __init__ pin).
+          ## The things which will be available within scope are:
+          ##
+          ##   `const ${GRAPH_PROPERTIES_T} *graphProperties` :  Read-only pointer to the graph properties
+          ##   `const ${DEVICE_PROPERTIES_T} *deviceProperties` : Read-only pointer to the device properties
+          ##   `${DEVICE_STATE_T} *deviceState` : Read-write pointer to the device state
+          ##
+          ## If the OnInit handler is not presence it should implicitly have an empty body (though an
+          ## implementation can optimise that out).
+          element OnInit {
+            cxxSourceCode
+          } ?
+
+          &
+
+          ## An input pin that appears on the device type.
+          element InputPin {
+
+            ## Name of the pin, must be unique within the device type
+            attribute name { identifier }
+
+            &
+
+            ## Identifies the message type for this pin
+            ## A pin can only be connected to an output of the same type (not just structurally,
+            ## they must have the same messageTypeId)
+            attribute messageTypeId { identifier }
+
+            &
+
+            element Documentation {
+              documentation
+            } ?
+
+            &
+
+            ## Free-form data to attach to the input pin type.
+            element MetaData {
+              metaDataValue
+            } ?
+
+            &
+
+            ## Indicates read-only properties associated with each edge. This will be
+            ## delivered along-side messages which arrive along that edge
+            ## An input pin may have no properties, in which case this element will not exist.
+            element Properties {
+              ## Used to specify what the C type name is for the properties structure.
+              ## The default is "{graphTypeId}_{deviceTypeId}_{pinName}_properties_t".
+              ##
+              ## The properties type will be available within handlers as ${PORT_PROPERTIES_T}
+              attribute cTypeName { identifier } ?,
+
+              typedDataSpec
+            } ?
+
+            &
+
+            ## Indicates mutable state associated with an edge.
+            element State {
+              ## Used to specify what the global C type name is for the properties structure.
+              ## The default is "{graphTypeId}_{deviceTypeId}_{pinName}_state_t".
+              ##
+              ## The properties type will be available within handlers as ${PORT_STATE_T}
+              attribute cTypeName { identifier } ?,
+
+              typedDataSpec
+            } ?
+
+            &
+
+            ## Event handler for when a message arrives on this device. The body will
+            ## be a fragment of C. It should probably be wrapped in a CDATA section,
+            ## but that is up to you. The code should be a statement or sequence of
+            ## statements, and does not contain any function header.
+            ##
+            ## Rationale: why a fragment? It forces the implementer to not use globals etc.,
+            ## and means we have control over the type names of the various structs.
+            ##
+            ## Variables which will be in scope are:
+            ##   `const ${GRAPH_PROPERTIES_T} *_graphProperties` : Read-only pointer to the graph properties
+            ##   `const ${DEVICE_PROPERTIES_T} *deviceProperties` : Read-only pointer to the device state
+            ##   `${DEVICE_STATE_T} *deviceState : Mutable pointer to the device state
+            ##   `const ${PORT_PROPERTIES_T} *edgeProperties` : Read-only pointer to the edge state
+            ##   ${PORT_STATE_T} *edgeState : Mutable pointer to the edge state
+            ##   `const ${MESSAGE_T} message : Read-only pointer to the message payload
+            element OnReceive {
+              cxxSourceCode
+            }
+
+          } *
+
+          &
+
+          ## An output pin that appear on the device type.
+          element OutputPin {
+            ## Name of the pin, must be unique within the device type
+            (
+              attribute name { identifier },
+
+              ## This is an indicator of whether this output pin performs an "Indexed Sends" PIP-0002
+              ## If so, then the message produced will be able to send to a single device based on index
+              attribute indexed { xsd:boolean } ?
+            )
+
+            &
+
+            ## Optionally specify the outputPinIndex for this particular pin.
+            ##
+            ## If not specified, the index will be automatically calculated
+            ## to provide a contiguous range.
+            ##
+            ## Either way, the outputPinIndex for the pin will be available
+            ## within the device handlers as `RTS_INDEX_{name}`,
+            ## while a bit-mask version is available as `RTS_FLAG_{name}`.
+            attribute priority { xsd:integer } ?
+
+            &
+
+            ## Identifies the message type for this pin.
+            ##
+            ## A pin can only be connected to a pin of the same type (not just structurally,
+            ## they must have the same messageTypeId)
+            attribute messageTypeId { string }
+
+            &
+
+            element Documentation {
+              documentation
+            } ?
+
+            &
+
+            ## Free-form data to attach to the input pin type.
+            element MetaData {
+              metaDataValue
+            } ?
+
+            &
+
+            ## Event handler for sending a message on this device. The body will
+            ## be a fragment of C. It should probably be wrapped in a CDATA section.
+            ##
+            ## The things which will be available within scope are:
+            ##
+            ##   `const ${GRAPH_PROPERTIES_T} *graphProperties` :  Read-only pointer to the graph properties
+            ##   `const ${DEVICE_PROPERTIES_T} *deviceProperties` : Read-only pointer to the device properties
+            ##   `${DEVICE_STATE_T} *deviceState` : Mutable pointer to the device state
+            ##   `${MESSAGE_T} *message` : A mutable pointer to payload associate with the edge
+            ##   `bool *doSend` : A mutable pointer to control whether the message is sent. By default it is true.
+            element OnSend {
+              cxxSourceCode
+            }
+
+          } *
+
+          &
+
+          ## Supervisor specific handler to execute when this supervisor device has no messages to receive
+          ## and nothing to send. This supervisor will be idle, and can perform other tasks.
+          ##
+          ## If the SupervisorCompute handler is empty, it should implicitly be an empty.
+          ## (An implementation could optimise this out however)
+          ##
+          ## The things which will be available within scope are:
+          ##
+          ##   `const ${GRAPH_PROPERTIES_T} *graphProperties` :  Read-only pointer to the graph properties
+          ##   `const ${DEVICE_PROPERTIES_T} *deviceProperties` : Read-only pointer to the device properties
+          ##   `${DEVICE_STATE_T} *deviceState` : Mutable pointer to the device state
+          ## TODO: This is assumed, no discussion of exactly what a supervisor would need in this handler has been mentioned
+          element SupervisorCompute {
+            cxxSourceCode
+          } ?
+
+          &
+
+          ## Supervisor specific handler to execute when the "/stop" command is called from the orchestrator.
+          ## This can be used to perform final calculations before tearing down the application currently on
+          ## the hardware.
+          ##
+          ## The things which will be available within scope are:
+          ##
+          ##   `const ${GRAPH_PROPERTIES_T} *graphProperties` :  Read-only pointer to the graph properties
+          ##   `const ${DEVICE_PROPERTIES_T} *deviceProperties` : Read-only pointer to the device properties
+          ##   `${DEVICE_STATE_T} *deviceState` : Mutable pointer to the device state
+          ## TODO: This is assumed, no discussion of exactly what a supervisor would need in this handler has been mentioned
+          element OnStop {
+            cxxSourceCode
+          } ?
+
+          &
+
+          functionLevelHash*
+
+        } *
+
+      } *
+
+      &
+
+      functionLevelHash*
+
+   }
+
+
+  graphTypeReference =
+     ## This is used when we want the graph type to live in a different file, or
+     ## to use a graph-type that is defined by a software provider
+     element GraphTypeReference {
+       attribute id { identifier },
+
+       ## This will usually be the path to a file containing the xml graph type.
+       ## It can be a path relative to the current file, an absolute file-system
+       ## path, or an absolute URL.
+       ## If this may be missing, it is assumed some other mechanism will
+       ## connect it up (for example, the id is a well-known GUID or an URN).
+       attribute src { string } ?,
+
+
+       functionLevelHash*
+     }
+
+  graphInstance =
+   ## This specifies an instance of a graph, including all the devices (nodes)
+   ## and edges between devices.
+   element GraphInstance {
+
+    attribute id { identifier },
+
+    ## The graph type must have already been declared using either a GraphType or a GraphTypeReference
+    attribute graphTypeId { identifier },
+
+    ## The supervisor device type to use with this graph.
+    ##
+    ## If this attribute is not specified, the first supervisor
+    ## device type is chosen.
+    attribute supervisorTypeId { identifier } ? ,
+
+    (
+
+      element Documentation {
+        documentation
+      } ?
+
+      &
+
+      ## Read-only data associated with the entire graph
+      element Properties {
+        typedDataValue
+      } ?
+
+      &
+
+      ## Any meta-data associated with the graph instance
+      element MetaData {
+        metaDataValue
+      } ?
+
+      &
+
+      instanceLevelHash*
+    ),
+
+    ## Zero or more DeviceInstance elements.
+    element DeviceInstances {
+
+      ## If present and true, then the edge instances are sorted lexically by instance id.
+      attribute sorted { xsd:boolean } ?
+
+      &
+
+      ## Each DevI creates a single device instance of a given device type.
+      ##
+      ## Every device instance must have a unique id within the set
+      ## of devices instances. The exact nature of this identifier
+      ## is application-specific, and there is no requirement on string
+      ## length
+      ##
+      element DevI {
+        ## A unique string
+        attribute id { identifier },
+
+        ## Links to a previously declared device type
+        attribute type { string },
+
+        ## Read-only properties associated with this device instance.
+        ## This element must not exist if the device type has no properties
+        ## This element may not exist if the property has a (complete) default value
+        element P {
+          typedDataValue
+        } ? ,
+
+        ## This element is used to set the state of a deviceInstance instead of setting
+        ## a value through Device Properties, and using the init handler to set the state
+        element S {
+          typedDataValue
+        } ? ,
+
+        ## Any meta-data associated with the instance
+        element M {
+          metaDataValue
+        } ?
+      } *
+
+      &
+
+      ## Each ExtI creates a single external device instance of a given external type.
+      ##
+      ## Every external instance must have a unique id within the set
+      ## of all devices instances. The exact nature of this identifier
+      ## is application-specific, and there is no requirement on string
+      ## length
+      ##
+      element ExtI {
+        ## A unique string
+        attribute id { identifier },
+
+        ## Links to a previously declared device type
+        attribute type { string },
+
+        ## Read-only properties associated with this device instance.
+        ## This element must not exist if the device type has no properties
+        ## This element may not exist if the property has a (complete) default value
+        element P {
+          typedDataValue
+        } ? ,
+
+        ## Any meta-data associated with the instance
+        element M {
+          metaDataValue
+        } ?
+      } *
+
+    },
+
+    ## Zero or more edge instance elements
+    element EdgeInstances {
+      ## If present and true, then the edge instances are sorted lexically by effective id.
+      attribute sorted { xsd:boolean } ? ,
+
+
+      ## Each EdgeI specifies a single connection between two device instances.
+      ##
+      ## The messageTypeId can be inferred from the types of the pins.
+      ## It is intended that the loader type-checks them against each
+      ## other, so it is not specified here.
+      element EdgeI {
+        ## A string of the form "dstDeviceId:dstPinName-srcDeviceId:srcPinName"
+        ## It is legal for the dstDeviceId to be missing, in which case it will
+        ## connect to the supervisor device. Similarly srcDeviceId can be missing,
+        ## and will connect to the supervisor. Both cannot be missing, as that
+        ## would connect from a supervisor output to a supervisor input, but
+        ## a supervisor only exists in the context of devices being managed.
+        attribute path { xsd:string { pattern="[_a-zA-Z0-9]*:[_a-zA-Z0-9]+-[_a-zA-Z0-9]*:[_a-zA-Z0-9]+" } } ?,
+
+        ## Used in conjunction with "indexed" attribute in OutputPin
+        ## This indicates the index used to identify this edge only to send a message on
+        attribute sendIndex { xsd:integer } ?,
+
+        ## Read-only properties associated with the destination (input pin) of the edge instance
+        ##
+        ## This element can only exist if the edge has properties.
+        ##
+        ## This element may not exist if all properties have a default
+        element P {
+          typedDataValue
+        } ? ,
+
+        ## Mutable properties associated with the destination (input pin)
+        ## of this edge instance.
+        ##
+        ## This element can only exist if the edge has state
+        ##
+        ## This edge may not exist if all parts of the state have a default.
+        element S {
+          typedDataValue
+        } ? ,
+
+        ## Any meta-data associated with the instance
+        element M {
+          metaDataValue
+        } ?
+      } *
+    },
+
+    ## Streaming generators may put hashes last to make generation easier
+    instanceLevelHash*
+  }
+
+  graphInstanceReference =
+   ## This is used when we want the graph instance to live in a different file,
+   ## or the graph instance is easier to represent implicitly.
+   element GraphInstanceReference {
+     attribute id { identifier },
+
+     ## This will usually be the path to a file containing the xml graph instance.
+     ## It can be a path relative to the current file, an absolute file-system
+     ## path, or an absolute URL.
+     ## If this may be missing, it is assumed some other mechanism will
+     ## connect it up (for example, the id is a well-known GUID or an URN).
+     attribute src { string } ?,
+
+    instanceLevelHash*
+   }
+
+  graphInstanceMetadataPatch =
+   ## This is a metadata patch against an existing graph (in this file or another)
+   element GraphInstanceMetadataPatch {
+
+    ## Id of the graph it is talking about
+    attribute id { identifier },
+
+    instanceLevelHash *,
+
+    ## Patch against the graph metadata
+    element MetaData {
+      metaDataValue
+    } ? ,
+
+    element DeviceInstances {
+
+      element DevI {
+        ## A unique string
+        attribute id { identifier },
+
+        ## Any meta-data associated with the instance
+        element M {
+          metaDataValue
+        } ?
+      } *
+    },
+
+    element EdgeInstances {
+
+      element EdgeI {
+        attribute path { xsd:string { pattern="[_a-zA-Z0-9]*:[_a-zA-Z0-9]+-[_a-zA-Z0-9]*:[_a-zA-Z0-9]+" } } ?,
+
+        element M {
+          metaDataValue
+        } ?
+      } *
+    }
+  }
+
+  structureLevelHash = element HashDigest {
+      attribute type { "structural" },
+      attribute hash { xsd:string { pattern = "[0-9a-zA-Z]{16,16}"  } }
+  }
+
+  functionLevelHash = element HashDigest {
+      attribute type { "functional" | "structural" },
+      attribute hash { xsd:string { pattern = "[0-9a-zA-Z]{16,16}"  } }
+  }
+
+  ## We have no easy way of saying there should be no more than hash of each
+  ## type in the grammar, so the parser needs to do something sensible to check them.
+  instanceLevelHash = element HashDigest {
+      attribute type { "instance" | "functional" | "structural" },
+      attribute hash { xsd:string { pattern = "[0-9a-zA-Z]{16,16}"  } }
+  }
+
+
+  #
+  # Typed Data Specifications
+  # =========================
+  #
+  # It represents the prototype for a typed piece of data, along with
+  # the default values. The intent is that typed data is used for
+  # everything managed by P-Cores and send over the P-Core network,
+  # so typed data is explicitly fixed-size. It also needs to be
+  # writeable and readable by high-level tools, so the structure
+  # needs to be explicitly defined - we can't just use raw bytes
+  # everywhere.
+  #
+  # Typed-data is intended to be binary compatible across all native
+  # platforms, requiring zero marshalling. But we also need simulation
+  # platforms to be able to bring that raw binary data into their world
+  # (e.g. for Python, Haskell, JavaScript). In order to ensure this, we have
+  # to think about:
+  # - Cross compiler compatibility, making sure that all the platforms
+  #   end up with exactly the same layout.
+  # - Alignment requirements on certain platforms. x86-64, ARM, and RISC-V all
+  #   support unaligned reads, but if we want to do MIPS/NIOS/MBlaze then
+  #   they are more complicated. The compiler can sort it out, but it will
+  #   be slower.
+  # - Performance versus padding. If we pad out to give performance for
+  #   the x64-64, it is likely to just be wasting space (memory and cache)
+  #   on the RISC-V.
+  # - Bit-wise packing. We are likely to really care about bit-field packing
+  #   for some messages and data structures.
+  #
+  # One possibility would be to use ASN.1 to define the structures,
+  # as this is a well-established method for describing data-structures,
+  # allowing fine-grain control over formatting. However it is mainly
+  # designed for messages on the wire, rather than data-structures
+  # that are manipulated directly (although it can be used for either).
+  # It also adds another tool-chain, and manipulating ASN.1 requires
+  # toolchains and libraries that aren't available in all platforms - there
+  # are JavaScript ASN.1 libraries around, but they didn't look that
+  # robust. Haskell and Python have good libraries though.
+  #
+  # We could also embed the C declaration directly in this file,
+  # then rely on the consumer to parse it out. The obvious down-side
+  # is that every platform/language then needs a C structure parser,
+  # and we would have to create some method of explicitly specifying
+  # packing (though `#pragma pack(1)` is pretty portable).
+  # The layout of bit-fields is also [implementation defined](http://en.cppreference.com/w/cpp/language/bit_field),
+  # so we really can't rely on the compilers for all the different
+  # CPUs and OSs doing the same thing.
+  #
+  # The approach taken here is to describe C structures directly
+  # as part of the DOM, as everyone already has an XML parser. The
+  # conversion process to a C struct or binary format is then
+  # mandated by this specification.
+  #
+  # In order to eliminate surprises, the approach taken is that
+  # the ordering given by the designer mandates the layout in
+  # memory. This means that the designer has to take complete
+  # responsibility for getting good packing, but they can also
+  # do weird pointer-tricks if they really want to.
+  #
+  # For bit-fields, we want to allow them, but don't want
+  # complicated padding/alignment. I (DBT) cannot see a portable
+  # way of defining bit-fields that will end up the same
+  # on all architectures - these things aren't even defined by the
+  # compiler, it's [down to the ABI](https://gcc.gnu.org/onlinedocs/gcc/Structures-unions-enumerations-and-bit-fields-implementation.html).
+  # The only way I could see to support this is to indicate that
+  # a scalar integer is actually split into bit-fields, but not
+  # to try to express them as C bit-fields. That way we would get complete
+  # control over the layout, and high-level tools can still
+  # extract the fields. The downside is that the bit-fields have
+  # to have associated accessor functions to get and set the values.
+  #
+  # So for now, bit-fields are not supported.
+  #
+  # We support unions, as space is important for both messages and
+  # storage, but must also have the ability to interpret a structure
+  # at run-time (e.g. for debuggers and visualisation). So unions
+  # are tagged unions, with the tag value representing which of the
+  # alternatives is active.
+  #
+  # So the rules are:
+  # - Every type has a size in bytes
+  # - The size of an integer or float is its natural size (e.g. uint32_t is 4, half is 2, uint64_t is 8)
+  # - All data-structures are laid out in the order specified in the type specification
+  # - The size of a tuple is the sum of the size of the elements, laid out end to end
+  # - The size of an array is the size of the element multiplied by the array length
+  # - The size of a union is the maximum size of any alternative plus 1 for the tag byte
+  #   - The tag byte is the last byte in the layout, appearing after the biggest alternative.
+  #     It is last because that is least likely to cause performance problems, as you can
+  #     pad up after the tag byte to get a decent alignment
+  #
+  # There is no boolean type, because it does not have a natural platform-portable
+  # size. It is suggested to use an `int8_t` for performance, or a bit-field for size.
+
+  # We now support arbitrary ids due to TypeDef
+  typeName = primitiveScalarType | identifier
+
+  primitiveScalarType = primitiveIntType | primitiveFloatType
+
+  primitiveIntType = "int64_t" | "uint64_t" | "int32_t" | "uint32_t" | "int16_t" | "uint16_t" | "uint8_t" | "int8_t" | "char"
+
+  primitiveFloatType = "half" | "float" | "double"
+
+  ## A typed data specification consists of zero or more members.
+  typedDataSpec =
+    typedDataMember *
+
+  ## This represents one entry in a properties/state tuple, a sub-tuple, or a union.
+  typedDataMember =
+    (
+      ## Long-hand definition of a scalar
+      element Scalar {
+        attribute name { identifier },
+
+        attribute type { typeName },
+
+        ## Gives the default for this thing
+        ## If this is an int/uint/float then a single value can be provided in the tag,
+        ## or provided in the "default" attribute.
+        ## However, if this is a declaration of a Typedef,
+        ## it may need more than a single value for it's default, JSON is used for this.
+        ## Attributes don't accept " on, and a large JSON strings in an attribute can be messy
+        ## therefore, a Default tag can be used instead.
+        ##
+        ## For a Typedef, the JSON is parsed based on the first non-whitespace character.
+        ## This could be in multiple forms. If 'C' is the first non-whitespace character, the
+        ## default value could be:
+        ##
+        ## Scalar: Should always produce a JSON scalar: number or bool:
+        ## Array: should always parse directly, producing an array or dict:
+        ##      if C='[' - This is a dense array of initialisers, filling the target array from the front
+        ##      if C='{' - This is a sparse array of initialisers, filling the target array based on the given index
+        ## Tuple(-like): always add curly brackets at beginning and end, then parse as JSON
+        ##        if C="": If there exists a non-whitespace char, it must start the first key
+        ##
+        ## Example:
+        ## A typedef is declared as:
+        ## <TypeDef id="tup_test">
+        ##   <Tuple name="_">
+        ##     <Scalar type="float" name="a"/>
+        ##     <Scalar type="uint8_t" name="b"/>
+        ##   </Tuple>
+        ## </TypeDef>
+        ##
+        ## An instance of this typedef is declared, with a default, as:
+        ## <Scalar type="tup_test" name="x">
+        ##   <Default>
+        ##        "a": 2.4, "b": -1
+        ##   </Default>
+        ## </Scalar>
+        ##
+        ## See TypedDataMembers for how other data types can be defaulted using the <Default> tag.
+        (
+          (
+            attribute default { text } ?
+          )
+          |
+          (
+            element Default {
+              typedDataValue
+            } ?
+          )
+        ),
+
+        element Documentation {
+          documentation
+        } ?
+      }
+      |
+      element Tuple {
+        attribute name { identifier },
+
+        typedDataMember +,
+
+        ## This is an optional default tag for providing default values to members of this Tuple.
+        ## It accepts a JSON string which can be used to identify and set the values of the individual
+        ## members of this tuple.
+        ##
+        ## When parsing a JSON string used to default a Tuple, always add curly brackets at the
+        ## beginning and end of the string, then parse as JSON.
+        ## This JSON string (after curly bracket) should expect that the first non-whitespace character
+        ## is the start of the first key.
+        ##
+        ## Example:
+        ## A tuple is declared as containing three floats and another tuple, and includes a <Default>:
+        ## <Tuple name="pos3D">
+        ##   <Scalar type="float" name="x"/>
+        ##   <Scalar type="float" name="y"/>
+        ##   <Scalar type="float" name="z"/>
+        ##   <Tuple name="type">
+        ##     <Scalar type="uint8_t" name="type_id"/>
+        ##     <Scalar type="int8_t" name="force"/>
+        ##   </Tuple>
+        ##   <Default>
+        ##     "z": 2.4, "y": 0.01, "type": { "type_id": 1, "force": -1 }
+        ##   </Default>
+        ## </Tuple>
+        ##
+        ## Any members of the tuple not defaulted in the JSON string is automatically defaulted to 0.
+        ## This example clearly shows that a tuple within a tuple (or other nested elements) can be
+        ## defaulted by nesting JSON strings within.
+        ##
+        element Default {
+          typedDataValue
+        } ?,
+
+        element Documentation {
+          documentation
+        } ?
+      }
+      |
+      element Array {
+        attribute name { identifier },
+
+        attribute length { xsd:integer },
+
+        (
+          ## Short-hand for an array of scalars
+          (
+            attribute type { typeName },
+
+            ## Must be meaningfully convertible to array type
+            ##
+            ## Special case for an array of char, where the string will be converted to chars
+            attribute default { text } ?
+          )
+          |
+          (
+            ## Allows an array of any data-type
+            ##
+            ## The name of the typedDataSpec will be ignored.
+            typedDataMember
+          )
+        ),
+
+        ## JSON strings can be used to provide default values to Arrays
+        ## This can be done in two ways:
+        ##   1. Filling the array from the front (from the 0th element) - Dense
+        ##   2. Providing elements by index - Sparse
+        ##
+        ## Dense initialisation:
+        ##
+        ## For dense initialisers, parsing JSON string expects the first non-whitespace
+        ## character is '['. This will then have any number of elements, up to n, where
+        ## n is the size of the array being initialised. This will then be used to fill
+        ## the array from the front
+        ##
+        ## Example:
+        ## We have an array of 10 integers. If we want to default fill this array
+        ## from the front, we can default this in this way:
+        ## <Array name="int_array" length="10">
+        ##   <Scalar type="int32_t" name="_"/>
+        ##   <Default>
+        ##     [ 44, -243, 1000, 99, 0, 45]
+        ##   </Default>
+        ## </Array>
+        ##
+        ## Elements 0 to 6 in this array will be filled in by default. Elements 7 to 9 will
+        ## be defaulted to 0 automatically.
+        ##
+        ## Sparse initialisation:
+        ##
+        ## Alternatively, the array may only need certain elements filled by default.
+        ## Sparse initialisation expects that the first non-whitespace character is '{'.
+        ## Following this, it must have keys which are integers only, with a value no
+        ## larger than the length of the target array. These keys then have the value
+        ## associated with that index following them.
+        ##
+        ## Example:
+        ## With the same array as before, we can default it in the following way
+        ## <Array name="int_array" length="10">
+        ##   <Scalar type="int32_t" name="_"/>
+        ##   <Default>
+        ##     "0": 964, "9": -469
+        ##   </Default>
+        ## </Array>
+        ##
+        ## Only the first and last elements of this array will have default non-zero values in this case.
+        ##
+        element Default {
+          typedDataValue
+        } ?,
+
+        element Documentation {
+          documentation
+        } ?
+      }
+      |
+      ## The first union member specified is always the default
+      element Union {
+        attribute name { identifier },
+
+        ## Explicitly set the tagName variable
+        ##
+        ## By default it is `{unionName}_tag`, where unionName is
+        ## the name of this union ("../@name"in XPath).
+        attribute tagName { identifier } ? ,
+
+        ## One or more alternatives for the union
+        ##
+        ## The tag indices will be assigned in the order that
+        ## the alternatives appear here.
+        typedDataMember +,
+
+        element Default {
+          typedDataValue
+        } ?,
+
+        element Documentation {
+          documentation
+        } ?
+      }
+    )
+
+
+  # ### Example 1
+  #
+  # A basic properties definition:
+  #
+  # ````
+  # <Properties cTypeName="my_properties">
+  #    <Scalar name="x" type="uint8_t" />
+  # </Properties>
+  # ````
+  #
+  # This type will be 1 byte in size, and the emitted struct
+  # definition would be:
+  #
+  # <![CDATA[
+  # ```
+  # #pragma push()
+  # #pragma pack(1)
+  # struct my_properties{
+  #     uint8_t x;
+  # };
+  # #pragma pop()
+  # ````
+  # ]]>
+  #
+  # ### Example 2
+  #
+  # A more complicated state definition:
+  #
+  # <![CDATA[
+  # ````
+  # <State cTypeName="my_state">
+  #    <Scalar name="x" type="uint16_t" />
+  #    <Tuple name="y">
+  #        <Scalar name="a" type="uint8_t" />
+  #        <Scalar name="b" type="uint32_t" />
+  #        <Array name="c" length=2 type="float" />
+  #    </Tuple>
+  #    <Scalar name="z" type="int8_t" />
+  #    <Scalar name="zz" type="int8_t" />
+  # </State>
+  # ````
+  # ]]>
+  #
+  # C struct definition:
+  #
+  # <![CDATA[
+  # ````
+  # #pragma pack(push)
+  # #pragma pack(1)
+  # struct my_state{
+  #   uint16_t x;
+  #   struct {
+  #     uint8_t a;
+  #     uint32_t b;
+  #     float c[2];
+  #   } y;
+  #   int8_t z;
+  #   int8_t zz;
+  # };
+  # #pragma pack(pop)
+  #
+  # Layout in memory:
+  # <![CDATA[
+  # ````
+  # 0 | x[7:0]
+  # 1 | x[15:8]
+  # 2 | y.a[7:0]
+  # 3 | y.b[7:0]
+  # 4 | y.b[15:8]
+  # 5 | y.b[23:16]
+  # 6 | y.b[31:24]
+  # 7 | z[7:0]
+  # 8 | zz[7:0]
+  # ````
+  # ]]>
+  #
+  # ### Example 3
+  #
+  # Message type with union
+  #
+  # <![CDATA[
+  # ````
+  # <Message cTypeName="my_message">
+  #   <Scalar name="x" type="int8_t" />
+  #   <Union name="y">
+  #      <Scalar name="vInt" type="uint32_t" />
+  #      <Scalar name="vFloat" type="float" />
+  #      <Array name="vBytes" length="5" type="uint8_t" />
+  #      <Tuple name="vTuple">
+  #        <Scalar name="a" type="uint8_t" />
+  #        <Scalar name="b" type="uint16_t" />
+  #      </Tuple>
+  #   </Union>
+  #   <Scalar name="z" type="uint16_t" />
+  # </Message>
+  # ````
+  # ]]>
+  #
+  # C struct definition:
+  #
+  # <![CDATA[
+  # ````
+  # #pragma pack(push)
+  # #pragma pack(1)
+  # struct my_message{
+  #   int8_t x;
+  #   union{
+  #     uint32_t vInt;
+  #     float vFloat;
+  #     uint8_t vBytes[5];
+  #     struct {
+  #       uint8_t a;
+  #       uint16_t b;
+  #     } vTuple;
+  #   } y;
+  #   uint8_t y_tag;
+  #   uint16_t z;
+  # };
+  # #pragma pack(pop)
+  # ````
+  # ]]>
+  #
+  # Memory layout:
+  #
+  # <![CDATA[
+  # ````
+  #   0 | x[7:0]
+  #   1 | y.vInt[7:0],  y.vFloat[7:0],  y.vBytes[0][7:0], y.vTuple.a[7:0]
+  #   2 | y.vInt[15:8], y.vFloat[15:8], y.vBytes[1][7:0], y.vTuple.b[7:0]
+  #   3 | y.vInt[23:16],y.vFloat[23:16] y.vBytes[2][7:0], y.vTuple.b[15:8]
+  #   4 | y.vInt[31:24],y.vFloat[31:24],y.vBytes[3][7:0]
+  #   5 |                               y.vBytes[5][7:0]
+  #   6 | y_tag
+  #   7 | z[7:0]
+  #   8 | z[15:8]
+  # ````
+  # ]]>
+
+  ## Typed data is encoded in plain text rather than XML.
+  ## - The encoding is simply "name":value, with name-value pairs seperated by commas.
+  ## - Tuples are encoded as `"name":{ "sub-name":value, ... }`
+  ## - Arrays are encoded as `"name":[value,value,...]`
+  ## - Unions are encoded as `"union.tag" : value`, where "union" is the name of the union, and
+  ##   "tag" is the name of the currently active union member.
+  ##
+  ## Any relationship to JSON is entirely intentional. I realise there is an irony
+  ## in using XML on the outside and JSON on the inside. There are a few reasons for this:
+  ## - global scale data-structures are much more difficult to debug if there are unbalanced
+  ##   closing tags, but at a local level it is not much of a problem.
+  ## - If the detailed structures are also XML, then we have to take the cost of parsing
+  ##   all the details in order to get the overall structures and ids. Embedding them as strings
+  ##   means that the XML parser can skip over them.
+  ## - Similarly, it supports more parallelism in the reading processes, as the work of
+  ##   parsing the details gets moved out of the bottleneck process of parsing the XML,
+  ##   and can be moved into the (parallel) building of the graph.
+  ##
+  ## The only difference with JSON is that there is an implicit surrounding
+  ## pair of curly brackets. So given a string `typedDataValue`, you can turn
+  ## it into parseable JSON as `"{"+typedDataValue+"}"`.
+  typedDataValue =
+    text
+
+  ## This is a bundle of arbitrary JSON encoded properties, using the same
+  ## implicit surrounding brackets as typedDataValue. This is distinct from
+  ## typedDataValue because it is free-form, so grammatically it is a different
+  ## kind of thing. The actual semantics and namespace of the values is
+  ## not determined here, except for some "well-known" values:
+  ##
+  ## - "nativeDimension":number - Attached to graphs to indicate what the diesion
+  metaDataValue =
+    text
+
+# Here endeth the grammar
+}
+
+# END_SCHEMA

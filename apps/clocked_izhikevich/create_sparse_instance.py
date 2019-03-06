@@ -37,7 +37,7 @@ clockType=graphType.device_types["clock"]
 
 instName="sparse_{}_{}_{}".format(Ne,Ni,K)
 
-properties={}
+properties=None
 res=GraphInstance(instName, graphType, properties)
 
 clock=DeviceInstance(res, "clock", clockType, {"neuronCount":N})
@@ -73,7 +73,7 @@ for dst in range(N):
     random.shuffle(free)
     for i in range(K):
         src=free[i]
-        
+
         if src<Ne:
             S=0.5*urand()
         else:
