@@ -25,6 +25,8 @@ instruments*.trace
 /external/rng-svg
 /pypy-env
 /*.log
+/.tmp
+/cmake-build-*
 
 /*.xml
 /*.gz

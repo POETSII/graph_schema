@@ -33,8 +33,11 @@ max_steps=10
 n=16
 if len(sys.argv)>1:
     n=int(sys.argv[1])
+m=n
+if len(sys.argv)>2:
+    m=int(sys.argv[2])
 
-assert n>=2
+#assert n>=2
 
 graphType=graphTypes["relaxation_heat"]
 cellType=graphType.device_types["cell"]
@@ -52,14 +55,14 @@ nodes={}
 
 for x in range(0,n):
     sys.stderr.write(" Devices : Row {} of {}\n".format(x, n))
-    for y in range(0,n):
+    for y in range(0,m):
         meta={"loc":[x,y],"hull":[ [x-0.5,y-0.5], [x+0.5,y-0.5], [x+0.5,y+0.5], [x-0.5,y+0.5] ]}
         boundary=0
         initial=0
         if x==0 or y==0:
             boundary=1
             initial=-127
-        if x==n-1 or y==n-1:
+        if x==n-1 or y==m-1:
             boundary=1
             initial=127
         colour=cell_colour(x,y)
@@ -78,14 +81,17 @@ def add_channel(dx,dy,sx,sy):
 
 for x in range(0,n):
     sys.stderr.write(" Edges : Row {} of {}\n".format( x, n))
-    for y in range(0,n):
+    for y in range(0,m):
         if x!=0:    add_channel(x-1,y,x,y)
         if y!=0:    add_channel(x,y-1,x,y)
         if x!=n-1:    add_channel(x+1,y,x,y)
-        if y!=n-1:    add_channel(x,y+1,x,y)
+        if y!=m-1:    add_channel(x,y+1,x,y)
 
 for d in nodes.values():
-    d.properties["multiplier"]=int( 2**16 / (d.properties["neighbours"]) )
+    if n==1:
+        d.properties["multiplier"]=0
+    else:
+        d.properties["multiplier"]=int( 2**16 / (d.properties["neighbours"]) )
 
 
 ############################################################
@@ -114,7 +120,7 @@ while len(to_merge)>1:
     to_merge=to_merge_next
     depth+=1
 
-root=DeviceInstance(res,"root", rootType, {"totalCells":len(nodes), "width":n, "height":n, "max_steps":max_steps})
+root=DeviceInstance(res,"root", rootType, {"totalCells":len(nodes), "width":n, "height":m, "max_steps":max_steps})
 res.add_device_instance(root)
 res.add_edge_instance(EdgeInstance(res, root,"termination_in",to_merge[0],"termination_out"))
 
@@ -156,7 +162,7 @@ else:
             recurse_fanout(left, dev, "modification_out_left",xBegin, xEnd, yBegin, split_value, idx*2)
             recurse_fanout(right, dev, "modification_out_right",xBegin, xEnd, split_value, yEnd, idx*2+1)
 
-    recurse_fanout(nodes,root,"modification_out", 0, n, 0, n, 1)
+    recurse_fanout(nodes,root,"modification_out", 0, n, 0, m, 1)
 
     
 

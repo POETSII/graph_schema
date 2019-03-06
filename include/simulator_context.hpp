@@ -442,6 +442,7 @@ public:
     virtual void executeReceive(
         edge_index_t edgeIncdex,
         const TypedDataPtr &payload,
+        uint64_t sendEventId,
         uint32_t &readyToSend,
         routing_tuple_t *route
     ) =0;
@@ -457,6 +458,7 @@ public:
         device_address_t sourceDev,
         pin_index_t sourcePortIndex,
         TypedDataPtr &payload,
+        uint64_t &sendEventId,
         bool &doSend,
         edge_index_range_t &pEdges,
         uint32_t &readyToSend
@@ -532,6 +534,7 @@ private:
 
         void application_exit(int code) override
         {
+            fprintf(stderr, "Application exit %d\n", code);
             exit(code);
         }
     };
@@ -609,6 +612,14 @@ private:
 
     std::unordered_map<MessageTypePtr,TypedDataPtr> m_messageTypeToDefaultMessage;
 
+    std::shared_ptr<LogWriter> m_logWriter;
+    uint64_t m_logIdUnq=0;
+
+    uint64_t make_log_id()
+    {
+        return m_logIdUnq++;
+    }
+
     // We want a default message to clone for output messages, but this
     // should be shared by everyone (as there could be thousands of them)
     TypedDataPtr getDefaultMessageForOutputPin(const MessageTypePtr &messageType)
@@ -623,6 +634,10 @@ private:
     }
     
 public:
+    SimulationEngineFast(std::shared_ptr<LogWriter> pLogWriter)
+        : m_logWriter(pLogWriter)
+    {}
+
 
     /////////////////////////////////////////////////////////////////////////////////////////////
     // GraphLoadEvents
@@ -686,6 +701,22 @@ public:
                     nullptr,
                     nullptr
             );
+
+            if(m_logWriter){
+                auto id=make_log_id();
+                m_logWriter->onInitEvent(
+                    std::to_string(id).c_str(),
+                    (double)id,
+                    0.0,
+                    {},
+                    dt,
+                    dev.name.c_str(),
+                    dev.RTS,
+                    id,
+                    {},
+                    dev.state
+                );
+            }
         }
 
         if(!dt->isExternal()) {
@@ -868,6 +899,7 @@ public:
     void executeReceive(
         edge_index_t edgeIndex,
         const TypedDataPtr &payload,
+        uint64_t sendEventId,
         uint32_t &readyToSend,
         routing_tuple_t *route = nullptr // optional : information about the route
     ) override
@@ -897,6 +929,24 @@ public:
         );
         device.RTS=readyToSend;
 
+        if(m_logWriter){
+            auto id=make_log_id();
+            m_logWriter->onRecvEvent(
+                std::to_string(id).c_str(),
+                (double)id,
+                0.0,
+                {},
+                device.type,
+                device.name.c_str(),
+                device.RTS,
+                id,
+                {},
+                device.state,
+                edge.inputPin,
+                std::to_string(sendEventId).c_str()
+            );
+        }
+
         if(route){
             *route=edge.route;
         }
@@ -919,6 +969,7 @@ public:
         device_address_t sourceDev,
         pin_index_t sourcePortIndex,
         TypedDataPtr &payload,
+        uint64_t &sendEventId,
         bool &doSend,
         edge_index_range_t &destinations,
         uint32_t &readyToSend
@@ -953,9 +1004,33 @@ public:
         );
         device.RTS=readyToSend;
 
+        
         destinations.begin=pin.beginEdgeIndex;
         destinations.beginExternals=pin.beginExternalIndex;
         destinations.end=pin.endEdgeIndex;
+
+        if(!m_logWriter){
+            sendEventId=-1;
+        }else{
+            auto id=make_log_id();
+            m_logWriter->onSendEvent(
+                std::to_string(id).c_str(),
+                (double)id,
+                0.0,
+                {},
+                device.type,
+                device.name.c_str(),
+                device.RTS,
+                id,
+                {},
+                device.state,
+                pin.pin,
+                !doSend,
+                destinations.end-destinations.begin,
+                payload
+            );
+            sendEventId=id;
+        }
     }  
 };
 
@@ -976,6 +1051,7 @@ protected:
     {
         edge_index_t edgeIndex;
         TypedDataPtr payload;
+        uint64_t sendEventId;
     };
 
     std::shared_ptr<SimulationEngine> m_engine;
@@ -991,7 +1067,7 @@ protected:
     virtual void keep_ready(device_address_t device)=0;
     virtual size_t count_ready() const =0;
 
-    virtual void add_messages(const edge_index_range_t &range, const TypedDataPtr &payload)=0;
+    virtual void add_messages(const edge_index_range_t &range, const TypedDataPtr &payload, uint64_t sendEventId)=0;
     virtual message_t pop_message()=0;
     virtual size_t count_messages() const=0;
 
@@ -1006,10 +1082,12 @@ protected:
         TypedDataPtr payload;
         bool doSend = true;
         edge_index_range_t range;
+        uint64_t sendEventId;
         m_engine->executeSend(
                 address,
                 outputPin,
                 payload,
+                sendEventId,
                 doSend,
                 range,
                 readyToSend
@@ -1017,7 +1095,7 @@ protected:
 
         if(doSend) {
             // TODO: Currently we just drop external destinations
-            add_messages(range, payload);
+            add_messages(range, payload, sendEventId);
         }
 
         if(readyToSend){
@@ -1033,9 +1111,11 @@ protected:
 
         uint32_t readyToSend;
         routing_tuple_t route;
+        uint64_t sendEventId;
         m_engine->executeReceive(
                 msg.edgeIndex,
                 msg.payload,
+                msg.sendEventId,
                 readyToSend,
                 &route
         );
@@ -1126,10 +1206,10 @@ protected:
     size_t count_ready() const override
     { return m_readyQueue.size(); }
 
-    void add_messages(const edge_index_range_t &range, const TypedDataPtr &payload) override
+    void add_messages(const edge_index_range_t &range, const TypedDataPtr &payload, uint64_t sendEventId) override
     {
         for(auto ei=range.begin; ei<range.beginExternals; ei++){
-            m_messageQueue.push(message_t{ei, payload});
+            m_messageQueue.push(message_t{ei, payload,sendEventId});
         }
     }
 
@@ -1174,10 +1254,10 @@ private:
     size_t count_ready() const override
     { return m_readySet.size(); }
 
-    void add_messages(const edge_index_range_t &range, const TypedDataPtr &payload) override
+    void add_messages(const edge_index_range_t &range, const TypedDataPtr &payload, uint64_t sendEventId) override
     {
         for(auto ei=range.begin; ei<range.beginExternals; ei++){
-            m_messageSet.push_back(message_t{ei, payload});
+            m_messageSet.push_back(message_t{ei, payload, sendEventId});
         }
     }
 
@@ -1225,10 +1305,10 @@ protected:
     size_t count_ready() const override
     { return m_readyQueue.size(); }
 
-    void add_messages(const edge_index_range_t &range, const TypedDataPtr &payload) override
+    void add_messages(const edge_index_range_t &range, const TypedDataPtr &payload, uint64_t sendEventId) override
     {
         for(auto ei=range.begin; ei<range.beginExternals; ei++){
-            m_messageQueue.push(message_t{ei, payload});
+            m_messageQueue.push(message_t{ei, payload, sendEventId});
         }
     }
 

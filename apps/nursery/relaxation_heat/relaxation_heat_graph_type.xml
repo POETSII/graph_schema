@@ -140,6 +140,7 @@
           <Scalar type="uint32_t" name="count" /><!-- Number of cells at this version -->
           <Scalar type="uint32_t" name="sent" /><!-- Number of sends performed at this version -->
           <Scalar type="uint32_t" name="received" /><!-- Number of receives performed at this version -->
+          <Scalar type="uint32_t" name="linkClock" /><!-- Maintain ordered history on this link only -->
           <Scalar type="uint8_t" name="index" /><!-- Index to tell parent which child this is from -->
         </Message> 
 			</MessageType>
@@ -191,6 +192,8 @@
 
           <Scalar name="currHeat" type="float" />
           <Scalar name="nextHeat" type="float" />
+
+          <Scalar name="clock" type="uint32_t" />
           
           <Array name="nhood" type="float" length="4" />
 
@@ -229,12 +232,10 @@
       if( !deviceState->boundary ){
         deviceState->nhood[message->colour] = message->temperature;
 
-        int32_t sum=0;
+        float sum=0;
         for(unsigned i=0; i<4; i++){
           sum += deviceState->nhood[i];
         }
-
-        //deviceState->nextHeat = (sum*deviceProperties->multiplier)>>16;  ;
 
         // Trying this in floating-point to avoid rounding problems
         float div=deviceProperties->neighbours;
@@ -290,14 +291,15 @@
 		  <OnSend><![CDATA[
 			assert(deviceState->dirty);
       assert(abs_diff(deviceState->currHeat,deviceState->nextHeat) <= graphProperties->threshold);
-      
-      assert(deviceState->currVersion <= deviceState->currVersion);
-      deviceState->currVersion = deviceState->nextVersion;
-      
+      assert(deviceState->currVersion == deviceState->currVersion);
+
+      deviceState->clock++;
+
       message->version=deviceState->currVersion;
       message->sent=deviceState->sent;
       message->received=deviceState->received;
       message->count=1;
+      message->linkClock=deviceState->clock;
       message->index=deviceProperties->termination_index;
 
       deviceState->dirty=false;
@@ -331,10 +333,12 @@
 
     <State>
       <Scalar name="version" type="uint32_t" />
+      <Scalar name="clock" type="uint32_t" />
       
       <Array name="count" type="uint32_t" length="4" />
       <Array name="sent" type="uint32_t" length="4" />
       <Array name="received" type="uint32_t" length="4" />
+      <Array name="linkClock" type="uint32_t" length="4" />
 
       <Scalar name="dirty" type="uint8_t" />
     </State>
@@ -354,6 +358,9 @@
 
     <InputPin name="termination_in" messageTypeId="termination">
       <OnReceive><![CDATA[
+
+      unsigned index=message->index;
+      assert(index<deviceProperties->degree);
     
     if(deviceState->version < message->version){
       deviceState->version=message->version;
@@ -364,14 +371,18 @@
       }
     }
     if(deviceState->version == message->version){
-      unsigned index=message->index;
-      assert(index<deviceProperties->degree);
-      
-      deviceState->count[index]=message->count;
-      deviceState->received[index]=message->received;
-      deviceState->sent[index]=message->sent;
+      if(deviceState->linkClock[index] < message->linkClock){
 
-      deviceState->dirty=true;
+        deviceState->count[index]=message->count;
+        deviceState->received[index]=message->received;
+        deviceState->sent[index]=message->sent;
+
+        deviceState->dirty=true;
+      }
+    }
+
+    if(deviceState->linkClock[index] < message->linkClock){
+      deviceState->linkClock[index]=message->linkClock;
     }
 
     ]]></OnReceive>
@@ -384,11 +395,14 @@
     // TODO: this could be optimised to only send down when the total count
     // matches the sum of all cells recursively above this on the tree.
 
+    deviceState->clock++;
+
     message->version=deviceState->version;
     message->count=0;
     message->sent=0;
     message->received=0;
     message->index=deviceProperties->termination_index;
+    message->linkClock=deviceState->clock;
 
     for(unsigned i=0; i<deviceProperties->degree; i++){
       message->count+=deviceState->count[i];
