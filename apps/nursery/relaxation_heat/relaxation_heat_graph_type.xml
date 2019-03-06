@@ -28,7 +28,7 @@
     - Each cell has a nextVersion and currVerson
     - When any cell receives an update, it takes self.nextVersion=max(self.nextVersion,msg.version)
     - When a cell sends a message it does:
-       - if abs_diff(self.nextHeat,self.currHeat) <= 3 : self.currVersion=self.nextVersion
+       - if abs_diff(self.nextHeat,self.currHeat) <= THRESH : self.currVersion=self.nextVersion
        - else: self.currVersion=self.nextVersion+1
     
     Eventually everyone converges on the same version, though convergence speed depends
@@ -75,11 +75,16 @@
   {
     return (a>b) ? a-b : b-a;
   }
+
+  float abs_diff(float a, float b)
+  {
+    return (a>b) ? a-b : b-a;
+  }
   ]]>
   </SharedCode>
 
 	<Properties>
-      <Scalar type="uint32_t" name="maxTime" default="65" />
+      <Scalar type="float" name="threshold" default="0.01" />
     </Properties>
 
     <MessageTypes>
@@ -94,8 +99,8 @@
         </Documentation>
         <Message>
          <Scalar type="uint32_t" name="version" />
+         <Scalar type="float" name="temperature" />
 			   <Scalar type="uint8_t" name="colour" />
-         <Scalar type="int8_t" name="temperature" />
         </Message>
 			</MessageType>
 
@@ -126,8 +131,8 @@
           <Scalar type="uint16_t" name="x" />
           <Scalar type="uint16_t" name="y" />
 
+          <Scalar type="float" name="heat" />
           <Scalar type="int8_t" name="boundary" />
-          <Scalar type="int8_t" name="heat" />
         </Message> 
 			</MessageType>
     </MessageTypes>
@@ -148,7 +153,7 @@
 
           <Scalar type="uint8_t" name="neighbours"/>
 
-          <Scalar type="int8_t" name="initial_heat" />
+          <Scalar type="float" name="initial_heat" />
           <Scalar type="int8_t" name="initial_boundary" />
         </Properties>
 
@@ -159,10 +164,10 @@
           <Scalar name="sent" type="uint32_t" />
           <Scalar name="received" type="uint32_t" />
 
-          <Scalar name="currHeat" type="int8_t" />
-          <Scalar name="nextHeat" type="int8_t" />
+          <Scalar name="currHeat" type="float" />
+          <Scalar name="nextHeat" type="float" />
           
-          <Array name="nhood" type="int8_t" length="4" />
+          <Array name="nhood" type="float" length="4" />
 
           <Scalar name="dirty" type="int8_t" /> <!-- The state has updated, but not yet send upwards for termination -->
 
@@ -171,7 +176,7 @@
 
 		<ReadyToSend><![CDATA[
 		*readyToSend		= 0;
-		if( abs_diff(deviceState->currHeat,deviceState->nextHeat) > 1  || deviceState->currVersion < deviceState->nextVersion ){
+		if( abs_diff(deviceState->currHeat,deviceState->nextHeat) > graphProperties->threshold  || deviceState->currVersion < deviceState->nextVersion ){
        *readyToSend=RTS_FLAG_share_out;
     }else if(deviceState->dirty){
       *readyToSend=RTS_FLAG_termination_out;
@@ -232,9 +237,9 @@
 
 		<OutputPin name="share_out" messageTypeId="share">
 		  <OnSend><![CDATA[
-			assert(abs_diff(deviceState->currHeat,deviceState->nextHeat) > 1 || deviceState->currVersion != deviceState->nextVersion );
+			assert(abs_diff(deviceState->currHeat,deviceState->nextHeat) > graphProperties->threshold || deviceState->currVersion != deviceState->nextVersion );
       
-      if( abs_diff(deviceState->currHeat,deviceState->nextHeat) > 1 ){
+      if( abs_diff(deviceState->currHeat,deviceState->nextHeat) > graphProperties->threshold ){
         deviceState->currHeat=deviceState->nextHeat;      
         deviceState->nextVersion+=1;
         deviceState->sent=0;
@@ -259,7 +264,7 @@
     <OutputPin name="termination_out" messageTypeId="termination">
 		  <OnSend><![CDATA[
 			assert(deviceState->dirty);
-      assert(abs_diff(deviceState->currHeat,deviceState->nextHeat) <= 1);
+      assert(abs_diff(deviceState->currHeat,deviceState->nextHeat) <= graphProperties->threshold);
       
       assert(deviceState->currVersion <= deviceState->currVersion);
       deviceState->currVersion = deviceState->nextVersion;
@@ -380,7 +385,7 @@
     <State>
       <Scalar type="uint16_t" name="x" />
       <Scalar type="uint16_t" name="y" />
-      <Scalar type="int8_t" name="heat" />
+      <Scalar type="float" name="heat" />
       <Scalar type="uint8_t" name="boundary" />
 
       <Scalar type="uint8_t" name="valid" />

@@ -56,10 +56,10 @@ for x in range(0,n):
         meta={"loc":[x,y],"hull":[ [x-0.5,y-0.5], [x+0.5,y-0.5], [x+0.5,y+0.5], [x-0.5,y+0.5] ]}
         boundary=0
         initial=0
-        if x==0 and y==0:
+        if x==0 or y==0:
             boundary=1
             initial=-127
-        if x==n-1 and y==n-1:
+        if x==n-1 or y==n-1:
             boundary=1
             initial=127
         colour=cell_colour(x,y)

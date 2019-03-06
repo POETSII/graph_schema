@@ -31,7 +31,7 @@ demos/relaxation_heat/relaxation_heat_$1.mp4 : demos/relaxation_heat/relaxation_
 		$4
 	(cd demos/relaxation_heat/relaxation_heat_$1.tmp/  &&  for i in *.dot; do echo $$$$i; neato -Gsize=5,5\! -Gdpi=100 -Tpng $$$$i > $$$$i.png; done )
 	#(cd demos/relaxation_heat/relaxation_heat_$1.tmp/  && convert -delay 20 -loop 0 *.dot.png ../relaxation_heat_$1.gif)
-	(cd demos/relaxation_heat/relaxation_heat_$1.tmp/  && $(FFMPEG) -r 10 -i out_%06d.dot.png -vf "scale=trunc(iw/2)*2:trunc(ih/2)*2" -c:v libx264 -crf 18 ../relaxation_heat_$1.mp4)
+	(cd demos/relaxation_heat/relaxation_heat_$1.tmp/  && $(FFMPEG) -y -r 10 -i out_%06d.dot.png -vf "scale=trunc(iw/2)*2:trunc(ih/2)*2" -c:v libx264 -crf 18 ../relaxation_heat_$1.mp4)
 
 else
 
@@ -54,12 +54,12 @@ relaxation_heat_FILTERS_VALUE = \
   --device-type-filter cell --bind-dev "cell" "state" "currHeat" "color" "heat(-127, +127, value)"
 
 
-$(eval $(call relaxation_heat_instance_template,9,1,100,$(relaxation_heat_FILTERS_VALUE)))
-$(eval $(call relaxation_heat_instance_template,16,1,100,$(relaxation_heat_FILTERS_TIME)))
+$(eval $(call relaxation_heat_instance_template,9,1,1000,$(relaxation_heat_FILTERS_VALUE)))
+$(eval $(call relaxation_heat_instance_template,16,1,1000,$(relaxation_heat_FILTERS_TIME)))
 
-$(eval $(call relaxation_heat_instance_template,32,10,10000,$(relaxation_heat_FILTERS_VALUE),yes))
+$(eval $(call relaxation_heat_instance_template,32,10,50000,$(relaxation_heat_FILTERS_VALUE),yes))
 
-$(eval $(call relaxation_heat_instance_template,128,200,50000,$(relaxation_heat_FILTERS_VALUE),yes))
+$(eval $(call relaxation_heat_instance_template,128,10,50000,$(relaxation_heat_FILTERS_VALUE),yes))
 
 
 
