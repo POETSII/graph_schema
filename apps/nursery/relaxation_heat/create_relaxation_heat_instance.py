@@ -28,7 +28,7 @@ def cell_colour(x,y):
 
 urand=random.random
 
-max_steps=10
+max_steps=1
 
 n=16
 if len(sys.argv)>1:
