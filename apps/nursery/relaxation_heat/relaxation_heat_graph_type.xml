@@ -146,6 +146,8 @@
             <Documentation>Used to give the muliplication weight. multiplier/(2**20) is the weight per neighbour </Documentation>
           </Scalar>
 
+          <Scalar type="float" name="initial_heat" />
+
           <Scalar type="uint16_t" name="x"/>
           <Scalar type="uint16_t" name="y"/>
 
@@ -154,7 +156,6 @@
 
           <Scalar type="uint8_t" name="neighbours"/>
 
-          <Scalar type="float" name="initial_heat" />
           <Scalar type="int8_t" name="initial_boundary" />
         </Properties>
 
@@ -397,9 +398,11 @@
     </Properties>
 
     <State>
+      <Scalar type="float" name="heat" />
+
       <Scalar type="uint16_t" name="x" />
       <Scalar type="uint16_t" name="y" />
-      <Scalar type="float" name="heat" />
+      
       <Scalar type="uint8_t" name="boundary" />
 
       <Scalar type="uint8_t" name="valid" />
