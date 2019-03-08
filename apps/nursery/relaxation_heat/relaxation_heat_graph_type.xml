@@ -116,6 +116,7 @@
           <Scalar type="uint32_t" name="sent" /><!-- Number of sends performed at this version -->
           <Scalar type="uint32_t" name="received" /><!-- Number of receives performed at this version -->
           <Scalar type="uint32_t" name="linkClock" /><!-- Maintain ordered history on this link only -->
+          <Scalar type="uint64_t" name="totalSent" /><!-- Number of share messages sent ever -->
           <Scalar type="uint8_t" name="index" /><!-- Index to tell parent which child this is from -->
         </Message> 
 			</MessageType>
@@ -172,6 +173,8 @@
           <Scalar name="clock" type="uint32_t" />
           
           <Array name="nhood" type="float" length="4" />
+
+          <Scalar name="totalSent" type="uint64_t" />
 
           <Scalar name="dirty" type="int8_t" /> <!-- The state has updated, but not yet send upwards for termination -->
 
@@ -257,7 +260,7 @@
       message->colour=deviceProperties->colour;
       message->temperature=deviceState->currHeat;
 
-
+      deviceState->totalSent += deviceProperties->neighbours;
 
       deviceState->dirty=true;
 		  ]]></OnSend>
@@ -276,6 +279,7 @@
       message->received=deviceState->received;
       message->count=1;
       message->linkClock=deviceState->clock;
+      message->totalSent=deviceState->totalSent;
       message->index=deviceProperties->termination_index;
 
       deviceState->dirty=false;
@@ -315,6 +319,7 @@
       <Array name="sent" type="uint32_t" length="4" />
       <Array name="received" type="uint32_t" length="4" />
       <Array name="linkClock" type="uint32_t" length="4" />
+      <Array name="totalSent" type="uint64_t" length="4" />
 
       <Scalar name="dirty" type="uint8_t" />
     </State>
@@ -358,6 +363,7 @@
     }
 
     if(deviceState->linkClock[index] < message->linkClock){
+      deviceState->totalSent[index]=message->totalSent;
       deviceState->linkClock[index]=message->linkClock;
     }
 
@@ -384,6 +390,7 @@
       message->count+=deviceState->count[i];
       message->sent+=deviceState->sent[i];
       message->received+=deviceState->received[i];
+      message->totalSent+=deviceState->totalSent[i];
     }
 
     deviceState->dirty=false;
@@ -507,12 +514,18 @@
       <OnReceive><![CDATA[
       assert(message->index==0); // Root doesn't do any merging
 
-      handler_log(2, "version=%u, count=%u (of %u), sent=%u, received=%u", message->version, message->count, deviceProperties->totalCells, message->sent, message->received);
+      handler_log(2, "version=%u, count=%u (of %u), sent=%u, received=%u, totalSentHi=%u, totalSentLo=%u",
+          message->version, message->count, deviceProperties->totalCells, message->sent, message->received,
+          uint32_t(message->totalSent>>32), uint32_t(message->totalSent&0xFFFFFFFFul) 
+          );
 
       if(message->count==deviceProperties->totalCells && message->sent==message->received){
         deviceState->steps++;
 
-        handler_log(1, "steps = %u, max_steps = %u", deviceState->steps, deviceProperties->max_steps);
+        handler_log(1, "steps = %u, max_steps = %u, totalSentHi=%u, totalSentLo=%u",
+            deviceState->steps, deviceProperties->max_steps,
+            uint32_t(message->totalSent>>32), uint32_t(message->totalSent&0xFFFFFFFFul)
+        );
         if(deviceState->steps >= deviceProperties->max_steps){
           handler_exit(0);
         }else{

@@ -291,12 +291,16 @@ public:
         : value(nullptr)
     {}
 
+#ifndef NDEBUG
     interned_string_t(const std::shared_ptr<StringInterner> &_owner, const std::string *_value)
         : value(_value)
-        #ifndef NDEBUG
         , owner(_owner)
-        #endif
     {}
+#else
+    interned_string_t(const std::string *_value)
+        : value(_value)
+    {}
+#endif
 
     bool operator ==(const interned_string_t &o) const
     {

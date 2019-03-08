@@ -31,7 +31,7 @@ endif
 CPPFLAGS += -std=c++11 -g
 CPPFLAGS += -O0
 
-#CPPFLAGS += -O2 -fno-omit-frame-pointer -ggdb -DNDEBUG=1
+CPPFLAGS += -O2 -fno-omit-frame-pointer -ggdb -DNDEBUG=1
 
 
 
