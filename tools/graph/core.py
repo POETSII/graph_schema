@@ -37,11 +37,14 @@ class frozendict(dict):
 
 class ScalarTypedDataSpec(TypedDataSpec):
     
-    _primitives=set(["int32_t","uint32_t","int16_t","uint16_t","int8_t","uint8_t","float","double"])
+    _primitives=set(["int64_t","uint64_t","int32_t","uint32_t","int16_t","uint16_t","int8_t","uint8_t","float","double"])
     
     def _check_value(self,value):
         assert not isinstance(self.type,Typedef)
-        if self.type=="int32_t":
+        if self.type=="int64_t":
+            res=int(value)
+            assert(-2**63 <= res < 2**63)
+        elif self.type=="int32_t":
             res=int(value)
             assert(-2**31 <= res < 2**31)
         elif self.type=="int16_t":
@@ -50,6 +53,9 @@ class ScalarTypedDataSpec(TypedDataSpec):
         elif self.type=="int8_t":
             res=int(value)
             assert(-2**7 <= res < 2**7)
+        elif self.type=="uint64_t":
+            res=int(value)
+            assert(0 <= res < 2**64)
         elif self.type=="uint32_t":
             res=int(value)
             assert(0 <= res < 2**32)
