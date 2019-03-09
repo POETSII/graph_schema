@@ -1007,13 +1007,13 @@ def render_graph_instance_as_softswitch(gi,dst,num_threads,device_to_thread):
         edgesIn[ei.dst_device][ei.dst_pin].append(ei)
         edgesOut[ei.src_device][ei.src_pin].append(ei)
 
-    thread_to_devices=[[] for i in range(num_threads)]
+    thread_to_devices=[[] for i in range(num_threads+1024)]
     devices_to_thread={}
     for d in gi.device_instances.values():
         if d.id not in device_to_thread:
             logging.error("device {}  not in mapping".format(d.id))
         t=device_to_thread[d.id]
-        assert(t>=0 and t<num_threads)
+        assert(t>=0 and t < 3071 or t >= 4096 and t<num_threads + 1024)
         thread_to_devices[t].append(d)
         devices_to_thread[d]=t
 
@@ -1041,13 +1041,13 @@ def render_graph_instance_as_softswitch(gi,dst,num_threads,device_to_thread):
 
     const unsigned DEVICE_INSTANCE_COUNT={TOTAL_INSTANCES};
     enum {{ DEVICE_INSTANCE_COUNT_V={TOTAL_INSTANCES} }};
-    """.format(GRAPH_TYPE_ID=gi.graph_type.id, NUM_THREADS=num_threads, TOTAL_INSTANCES=len(gi.device_instances)))
+    """.format(GRAPH_TYPE_ID=gi.graph_type.id, NUM_THREADS=num_threads+1024, TOTAL_INSTANCES=len(gi.device_instances)))
 
-    for ti in range(num_threads):
+    for ti in range(num_threads+1024):
         dst.write("    const unsigned DEVICE_INSTANCE_COUNT_thread{}={};\n".format(ti,len(thread_to_devices[ti])))
         dst.write("    enum{{ DEVICE_INSTANCE_COUNT_thread{}_V={} }};\n".format(ti,len(thread_to_devices[ti])))
 
-    for ti in range(num_threads):
+    for ti in range(num_threads+1024):
         render_graph_instance_as_thread_context(
             dst,
             globalProperties,globalState,globalOutputPinTargets,
@@ -1071,7 +1071,7 @@ def render_graph_instance_as_softswitch(gi,dst,num_threads,device_to_thread):
     pointersAreRelative=0
     if _use_indirect_BLOB:
         pointersAreRelative=1
-    for ti in range(num_threads):
+    for ti in range(num_threads+1024):
         dst.write("""
         {{
             {},
@@ -1097,7 +1097,7 @@ def render_graph_instance_as_softswitch(gi,dst,num_threads,device_to_thread):
             0, // hbuf_head
             0 // hbuf_tail
         }}\n""".format(ti,graphPropertiesBinding,ti,ti,pointersAreRelative))
-        if ti+1<num_threads:
+        if ti+1<num_threads+1024:
             dst.write(",\n")
 
     dst.write("};\n")
@@ -1111,7 +1111,7 @@ def render_graph_instance_as_softswitch(gi,dst,num_threads,device_to_thread):
     globalOutputPinTargets.write(dst, "softswitch_pthread_output_pin_targets")
 
     print("graphOutputInstCount, -, {}, \n".format(len(edgeCosts)), file=measure_file)
-    print_statistics(dst, "renderSoftswitchOutputInstCost", "estimatedTotalOutgoingEdgeDistance", edgeCosts)
+    # print_statistics(dst, "renderSoftswitchOutputInstCost", "estimatedTotalOutgoingEdgeDistance", edgeCosts)
 
 
 import argparse
@@ -1254,15 +1254,20 @@ if(len(instances)>0):
     destInstPath=os.path.abspath("{}/{}_{}_inst.cpp".format(destPrefix,graph.id,inst.id))
     destInst=open(destInstPath,"wt")
 
+    for v in device_to_thread:
+        if device_to_thread[v] >= 3072 and device_to_thread[v] <= 4095:
+            t = device_to_thread[v] + 3072
+            del device_to_thread[v]
+            device_to_thread[v] = t
+
     # create a mapping from threads to devices
-    thread_to_devices=[[] for i in range(hwThreads)]
+    thread_to_devices=[[] for i in range(hwThreads + 1024)]
     for d in inst.device_instances.values():
         if d.id not in device_to_thread:
             logging.error("device {}  not in mapping".format(d.id))
         t=device_to_thread[d.id]
-        assert(t>=0 and t<hwThreads)
+        assert(t>=0 and t < 3071 or t >= 4096 and t<hwThreads + 1024)
         thread_to_devices[t].append(d.id)
-
 
     # dump the device name -> address mappings into a file for sending messages from the executive
     deviceAddrMap=open(args.app_pins_addr_map,"w+")
