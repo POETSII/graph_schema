@@ -13,6 +13,24 @@
 		again, so eventually all credit must return (though who knows how long it takes...)
 	</Documentation>
 
+	<SharedCode><![CDATA[
+#ifdef POETS_LEGACY_HAS_HANDLER_EXIT
+#define _do_handler_exit(code) handler_exit(code)
+#else
+#define _do_handler_exit(code) ((void)0)
+#endif
+
+#define fake_handler_exit(code) \
+{ \
+    if((code)==0){ \
+        handler_log(0, "_HANDLER_EXIT_SUCCESS_9be65737_"); \
+    }else{ \
+        handler_log(0, "_HANDLER_EXIT_FAIL_9be65737_"); \
+    } \
+    _do_handler_exit(code); \
+}
+]]></SharedCode>
+
     <MessageTypes>
       <MessageType id="__init__">
 				<Documentation>This doesn't have any properties</Documentation>
@@ -42,18 +60,18 @@
 			*readyToSend = 0; 
 			if(deviceProperties->isRoot){
 				if(deviceState->credit==0){
-					*readyToSend = OUTPUT_FLAG_wide;
+					*readyToSend = RTS_FLAG_wide;
 				}
 			}else{
 				if(deviceState->credit >= deviceProperties->degree){
 					uint32_t b=1664525*deviceState->credit+1013904223;
 					if( (b>>30)==0 ){
-				 		*readyToSend = OUTPUT_FLAG_wide;
+				 		*readyToSend = RTS_FLAG_wide;
 					}else{
-						*readyToSend = OUTPUT_FLAG_narrow;
+						*readyToSend = RTS_FLAG_narrow;
 					}
 				}else if(deviceState->credit > 0 ){
-					*readyToSend = OUTPUT_FLAG_narrow;
+					*readyToSend = RTS_FLAG_narrow;
 				}
 			}
 		]]></ReadyToSend>
@@ -94,7 +112,7 @@
 		  <OnReceive><![CDATA[
 		  deviceState->credit += message->credit;
 			if(deviceProperties->isRoot && deviceState->credit==deviceState->totalCredit){
-				handler_exit(0);
+				fake_handler_exit(0);
 			}
 		  ]]></OnReceive>
 		</InputPin>

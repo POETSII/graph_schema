@@ -1,0 +1,60 @@
+<?xml version='1.0'?>
+<Graphs xmlns="https://poets-project.org/schemas/virtual-graph-schema-v2">
+<GraphType xmlns="https://poets-project.org/schemas/virtual-graph-schema-v2" id="hello_world">
+  <SharedCode><![CDATA[
+#ifdef POETS_LEGACY_HAS_HANDLER_EXIT
+#define _do_handler_exit(code) handler_exit(code)
+#else
+#define _do_handler_exit(code) ((void)0)
+#endif
+
+#define fake_handler_exit(code) \
+{ \
+    if((code)==0){ \
+        handler_log(0, "_HANDLER_EXIT_SUCCESS_9be65737_"); \
+    }else{ \
+        handler_log(0, "_HANDLER_EXIT_FAIL_9be65737_"); \
+    } \
+    _do_handler_exit(code); \
+}
+]]></SharedCode>
+  <MessageTypes>
+    <MessageType id="__init__"/>
+    <MessageType id="exchange">
+      <Message>
+        <Scalar name="credit" type="uint32_t"/>
+      </Message>
+    </MessageType>
+  </MessageTypes>
+  <DeviceTypes>
+    <DeviceType id="node">
+      <Properties>
+        <Scalar name="max_count" type="uint32_t"/>
+      </Properties>
+      <State>
+        <Scalar name="count" type="uint32_t"/>
+      </State>
+      <OutputPin name="fire" messageTypeId="exchange">
+        <OnSend><![CDATA[
+		handler_log(0, "node_fire");
+		deviceState->count++;
+		  ]]></OnSend>
+      </OutputPin>
+      <ReadyToSend><![CDATA[
+		handler_log(0, "node_rts");
+			*readyToSend = 0; 
+			if(deviceState->count < deviceProperties->max_count ){
+				*readyToSend = RTS_FLAG_fire;
+			}
+		]]></ReadyToSend>
+    </DeviceType>
+  </DeviceTypes>
+</GraphType>
+ <GraphInstance id="hello_world" graphTypeId="hello_world">
+  <DeviceInstances>
+   <DevI id="n59" type="node"><P>"max_count":10</P></DevI>
+  </DeviceInstances>
+  <EdgeInstances>
+  </EdgeInstances>
+ </GraphInstance>
+</Graphs>

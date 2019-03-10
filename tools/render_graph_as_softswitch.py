@@ -246,6 +246,7 @@ class BLOBHolder:
         self.bytes=bytearray([])
         self.offsets={} # Map of name : (offset,size)
         self.segments=[] # List of (offset,size,name)
+        self.all_zeros = True  # True iff all content bytes are zero
     
     def pad(self,granularity):
         over = len(self.bytes) % granularity
@@ -265,6 +266,7 @@ class BLOBHolder:
         self.bytes.extend(payload)
         self.offsets[name]=(offset,length)
         self.segments.append( (offset,length,name) )
+        self.all_zeros = self.all_zeros and not any(payload)
         return offset
             
     # Returns an (offset,length) pair
@@ -275,9 +277,14 @@ class BLOBHolder:
             sys.stderr.write("Looking for {}\n".format(name))
         assert name in self.offsets
         return self.offsets[name]
-        
+
+    def write(self, dst, name):
+      """Write blob to `dst` as an array with `name`."""
+      writer = self._write_all_zeros if self.all_zeros else self._write_with_values
+      writer(dst, name)
+
     # Write the array out as an array of uint8_t called name
-    def write(self,dst,name):
+    def _write_with_values(self, dst, name):
         dst.write("uint8_t {}[]  __attribute__((aligned({}))) ={{\n".format(name, _cache_line_size));
         for (offset,length,name) in self.segments:
             dst.write("  // {} +{}, {}\n".format(offset, length, name))
@@ -287,6 +294,12 @@ class BLOBHolder:
         dst.write("  // trailing byte\n")
         dst.write("  0\n")
         dst.write("};\n\n")
+
+    def _write_all_zeros(self, dst, name):
+        """Declare array with given name and initialize elements to zero."""
+        last_offset, last_length, _ = self.segments[-1]
+        blob_nbytes = last_offset + last_length + 1
+        dst.write("uint8_t %s[%d]  __attribute__((aligned(%d))) = { 0 };\n" % (name, blob_nbytes, _cache_line_size));
 
 #enumerate all message types in the graph and assign a unique numerical ID to the message type
 def assign_unique_ident_for_each_message_type(gt):

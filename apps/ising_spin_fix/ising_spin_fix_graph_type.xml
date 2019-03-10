@@ -41,6 +41,24 @@
       <Array name="probabilities" length="10" type="uint32_t" />
     </Properties>
 
+	<SharedCode><![CDATA[
+#ifdef POETS_LEGACY_HAS_HANDLER_EXIT
+#define _do_handler_exit(code) handler_exit(code)
+#else
+#define _do_handler_exit(code) ((void)0)
+#endif
+
+#define fake_handler_exit(code) \
+{ \
+    if((code)==0){ \
+        handler_log(0, "_HANDLER_EXIT_SUCCESS_9be65737_"); \
+    }else{ \
+        handler_log(0, "_HANDLER_EXIT_FAIL_9be65737_"); \
+    } \
+    _do_handler_exit(code); \
+}
+]]></SharedCode>
+
     <SharedCode><![CDATA[
 
     uint32_t mod(uint32_t x, uint32_t y)
@@ -309,9 +327,9 @@
 	if(deviceState->times[0] == 0xFFFFFFFFul){
 		*readyToSend = 0;
 	}else if(deviceState->times[0] >= graphProperties->endTime){
-		*readyToSend = RTS_FLAG_cell_finished;
+		*readyToSend = RTS_FLAG_finished;
 	}else if(deviceState->isEarliest){
-		*readyToSend = RTS_FLAG_cell_out;
+		*readyToSend = RTS_FLAG_out;
 	}else{
 		*readyToSend = 0;
 	}
@@ -331,7 +349,7 @@
 				deviceState->seen++;
 				handler_log(2, "seenFinished = %u, wantFinished = %u", deviceState->seen, deviceProperties->fanin);
 				if(deviceState->seen == deviceProperties->fanin){
-					handler_exit(0);
+					fake_handler_exit(0);
 				}
 				]]></OnReceive>
 			</InputPin>

@@ -1,5 +1,5 @@
 import sys
-
+import collections
 class GraphDescriptionError(Exception):
     def __init__(self,msg):
         Exception.__init__(self,msg)
@@ -425,10 +425,10 @@ class GraphType(object):
         self.properties=properties
         self.metadata=metadata
         self.shared_code=shared_code
-        self.device_types={}
+        self.device_types=collections.OrderedDict()
         self.typedefs_by_index=[]
         self.typedefs={}
-        self.message_types={}
+        self.message_types=collections.OrderedDict()
         
     def _validate_type(self,type):
         """Walk through the types and check that any typedefs have already been added to the graphtype."""

@@ -49,7 +49,7 @@ private:
   std::string stateName(State s)
   {
     switch(s){
-    case State_Graph: return "Graph";
+    case State_Graph: return "Graphs";
     case State_GraphInstance: return "GraphInstance";
     case State_DeviceInstances: return "DeviceInstances";
     case State_PostDeviceInstances: return "PostDeviceInstances";
@@ -92,7 +92,7 @@ private:
     xmlTextWriterWriteAttribute(m_dst, (const xmlChar *)"name", (const xmlChar *)ip->getName().c_str() );
     xmlTextWriterWriteAttribute(m_dst, (const xmlChar *)"messageTypeId", (const xmlChar *)ip->getMessageType()->getId().c_str() );
     if(ip->isApplication()){
-      xmlTextWriterWriteAttribute(m_dst, (const xmlChar *)"application", "true" );
+      xmlTextWriterWriteAttribute(m_dst, (const xmlChar *)"application", (const xmlChar *)"true" );
     }
 
     writeMetaData(ip->getMetadata(), "MetaData");
@@ -115,7 +115,7 @@ private:
     xmlTextWriterWriteAttribute(m_dst, (const xmlChar *)"messageTypeId", (const xmlChar *)op->getMessageType()->getId().c_str() );
     
     if(op->isApplication()){
-      xmlTextWriterWriteAttribute(m_dst, (const xmlChar *)"application", "true" );
+      xmlTextWriterWriteAttribute(m_dst, (const xmlChar *)"application", (const xmlChar*)"true" );
     }
 
     writeMetaData(op->getMetadata(), "MetaData");
@@ -287,7 +287,7 @@ public:
   {
       xmlTextWriterSetIndent(m_dst, 1);
       xmlTextWriterStartDocument(m_dst, NULL, NULL, NULL);
-      xmlTextWriterStartElementNS(m_dst, NULL, (const xmlChar*)"Graph", m_ns);
+      xmlTextWriterStartElementNS(m_dst, NULL, (const xmlChar*)"Graphs", m_ns);
   }
 
 

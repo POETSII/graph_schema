@@ -29,7 +29,7 @@ endif
 endif
 
 CPPFLAGS += -std=c++11 -g
-CPPFLAGS += -O0
+#CPPFLAGS += -O0
 
 CPPFLAGS += -O2 -fno-omit-frame-pointer -ggdb -DNDEBUG=1
 
@@ -198,6 +198,7 @@ ALL_SOFTSWITCH := $(ALL_SOFTSWITCH) $(SOFTSWITCH_DIR)/generated/apps/$1_threads$
 
 endef
 
+include apps/hello_world/makefile.inc
 include apps/clock_tree/makefile.inc
 include apps/ising_spin/makefile.inc
 include apps/ising_spin_fix/makefile.inc
@@ -206,7 +207,7 @@ include apps/clocked_izhikevich_fix/makefile.inc
 include apps/gals_izhikevich/makefile.inc
 include apps/gals_heat/makefile.inc
 include apps/gals_heat_fix/makefile.inc
-#include apps/gals_heat_fix_noedge/makefile.inc
+include apps/gals_heat_fix_noedge/makefile.inc
 include apps/storm/makefile.inc
 
 include apps/amg/makefile.inc

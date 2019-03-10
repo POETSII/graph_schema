@@ -24,6 +24,22 @@
 
 	<SharedCode><![CDATA[
 	  #include <algorithm>
+
+#ifdef POETS_LEGACY_HAS_HANDLER_EXIT
+#define _do_handler_exit(code) handler_exit(code)
+#else
+#define _do_handler_exit(code) ((void)0)
+#endif
+
+#define fake_handler_exit(code) \
+{ \
+    if((code)==0){ \
+        handler_log(0, "_HANDLER_EXIT_SUCCESS_9be65737_"); \
+    }else{ \
+        handler_log(0, "_HANDLER_EXIT_FAIL_9be65737_"); \
+    } \
+    _do_handler_exit(code); \
+}
 	]]></SharedCode>
 
     <MessageTypes>
@@ -162,9 +178,9 @@
 		
 		<ReadyToSend><![CDATA[
             if(deviceState->distDirty){
-                *readyToSend = OUTPUT_FLAG_dout;
+                *readyToSend = RTS_FLAG_dout;
             }else if(deviceState->controlPending){
-                *readyToSend = OUTPUT_FLAG_response_out;
+                *readyToSend = RTS_FLAG_response_out;
             }else{
                 *readyToSend = 0;
             }
@@ -265,7 +281,7 @@
 	  
 	  <ReadyToSend><![CDATA[
       if(deviceState->controlPending){
-            *readyToSend = OUTPUT_FLAG_request_out;
+            *readyToSend = RTS_FLAG_request_out;
       }else{
             *readyToSend = 0;
       }
@@ -318,7 +334,7 @@
                     auto ok=deviceState->sumSumDist==deviceProperties->refSumSumDist || deviceProperties->refSumSumDist==0;
                     ok = ok && (deviceState->sumMaxDist==deviceProperties->refSumMaxDist || deviceProperties->refSumMaxDist==0);
 		    
-                    handler_exit(ok?0:1);
+                    fake_handler_exit(ok?0:1);
                 }
             }
         }

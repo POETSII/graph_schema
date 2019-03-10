@@ -12,6 +12,24 @@
 		"native_dimension":2
 	 </MetaData>
 
+<SharedCode><![CDATA[
+#ifdef POETS_LEGACY_HAS_HANDLER_EXIT
+#define _do_handler_exit(code) handler_exit(code)
+#else
+#define _do_handler_exit(code) ((void)0)
+#endif
+
+#define fake_handler_exit(code) \
+{ \
+    if((code)==0){ \
+        handler_log(0, "_HANDLER_EXIT_SUCCESS_9be65737_"); \
+    }else{ \
+        handler_log(0, "_HANDLER_EXIT_FAIL_9be65737_"); \
+    } \
+    _do_handler_exit(code); \
+}
+]]></SharedCode>
+
 	 <Properties>
 	 	<Scalar name="max_ticks" type="uint32_t" default="100"/>
 	 </Properties>
@@ -53,9 +71,9 @@
 		<ReadyToSend><![CDATA[
 			*readyToSend = 0; 
 			if(deviceState->doExport){
-				*readyToSend = OUTPUT_FLAG_root_output;
-			}else if(deviceState->pending==0){
-			 	*readyToSend = OUTPUT_FLAG_root_tick_out;
+				*readyToSend = RTS_FLAG_output;
+			}else if((deviceState->pending==0) && (deviceState->cycle < graphProperties->max_ticks)){
+			 	*readyToSend = RTS_FLAG_tick_out;
 			}
 		]]></ReadyToSend>
 		
@@ -66,7 +84,7 @@
 			assert(deviceState->doExport==0);
 			deviceState->cycle++;
 			if(deviceState->cycle >= graphProperties->max_ticks){
-				handler_exit(0);
+				fake_handler_exit(0);
 				*doSend=false;
 			}else{
 				deviceState->pending=deviceProperties->fanout;
@@ -75,10 +93,10 @@
 		  ]]></OnSend>
 		</OutputPin>
 
-		<OutputPin name="output" messageTypeId="output" >
+		<OutputPin name="output" messageTypeId="output">
 		<OnSend><![CDATA[
 		handler_log(1, "export = %u", deviceState->cycle);
-		handler_export_key_value(0, deviceState->cycle);
+		//handler_export_key_value(0, deviceState->cycle);
 		deviceState->doExport=0;
 		message->ticks=deviceState->cycle;
 		]]></OnSend>
@@ -115,9 +133,9 @@
 			if(deviceState->status==0){
 				*readyToSend=0;
 			}else if(deviceState->status==1){
-				*readyToSend = OUTPUT_FLAG_branch_tick_out;
+				*readyToSend = RTS_FLAG_tick_out;
 			}else if(deviceState->status==2){
-				*readyToSend = OUTPUT_FLAG_branch_ack_out;
+				*readyToSend = RTS_FLAG_ack_out;
 			}else{
 				*readyToSend=0;
 			}
@@ -156,7 +174,7 @@
 		</State>
 		
 		<ReadyToSend><![CDATA[
-		*readyToSend = deviceState->ready ? OUTPUT_FLAG_leaf_ack_out : 0;
+		*readyToSend = deviceState->ready ? RTS_FLAG_ack_out : 0;
 		]]></ReadyToSend>
 	
 		  <InputPin name="tick_in" messageTypeId="tick">
