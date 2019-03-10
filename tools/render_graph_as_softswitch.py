@@ -1254,11 +1254,14 @@ if(len(instances)>0):
     destInstPath=os.path.abspath("{}/{}_{}_inst.cpp".format(destPrefix,graph.id,inst.id))
     destInst=open(destInstPath,"wt")
 
+    new_device_to_thread = {}
     for v in device_to_thread:
-        if device_to_thread[v] >= 3072 and device_to_thread[v] <= 4095:
-            t = device_to_thread[v] + 3072
-            del device_to_thread[v]
-            device_to_thread[v] = t
+        t = device_to_thread[v]
+        if t >= 3072 and t <= 4095:
+            t = t + 3072
+        new_device_to_thread[v] = t
+
+    device_to_thread = new_device_to_thread
 
     # create a mapping from threads to devices
     thread_to_devices=[[] for i in range(hwThreads + 1024)]
