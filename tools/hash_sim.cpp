@@ -12,6 +12,8 @@
 #include <cstring>
 #include <cstdlib>
 
+#include "typed_data_interner.hpp"
+
 static unsigned  logLevel=2;
 
 struct HashSim
@@ -19,13 +21,15 @@ struct HashSim
 {
   std::unordered_set<std::string> m_internedStrings;
   TypedDataInterner m_internedData;
+
+  typedef TypedDataPtr interned_typed_data_t;
   
 
-  // Return a stable C pointer to the name. Avoids us to store
+  // Return a stable C pointer to the name. Allows us to store
   // pointers in the data structures, and avoid calling .c_str() everywhere
   const char *intern(const std::string &name)
   {
-    auto it=m_interned.insert(name);
+    auto it=m_internedStrings.insert(name);
     return it.first->c_str();
   }
   
@@ -50,9 +54,10 @@ struct HashSim
     message_state(uint32_t _edge, interned_typed_data_t _message)
       : edge(_edge)
       , message(_message)
+    {}
     
     message_state(uint32_t targetDevice, uint32_t targetPin, uint32_t sourceDevice, uint32_t sourcePin, interned_typed_data_t _message)
-      : targetEndpoint( (targetDevice<<(5+11+5)) | (targetPin<<(11+5) | (sourceDevice<<(11) | sourcePin )
+      : edge( (targetDevice<<(5+11+5)) | (targetPin<<(11+5) | (sourceDevice<<(11) | sourcePin )
       , message(_message)
     {
       assert(targetDevice<2048);
