@@ -1013,7 +1013,7 @@ def render_graph_instance_as_softswitch(gi,dst,num_threads,device_to_thread):
         if d.id not in device_to_thread:
             logging.error("device {}  not in mapping".format(d.id))
         t=device_to_thread[d.id]
-        assert(t>=0 and t < 3071 or t >= 4096 and t<num_threads + 1024)
+        assert(t>=0 and t <= 3071 or t >= 4096 and t<num_threads + 1024)
         thread_to_devices[t].append(d)
         devices_to_thread[d]=t
 
@@ -1269,7 +1269,7 @@ if(len(instances)>0):
         if d.id not in device_to_thread:
             logging.error("device {}  not in mapping".format(d.id))
         t=device_to_thread[d.id]
-        assert(t>=0 and t < 3071 or t >= 4096 and t<hwThreads + 1024)
+        assert(t>=0 and t <= 3071 or t >= 4096 and t<hwThreads + 1024)
         thread_to_devices[t].append(d.id)
 
     # dump the device name -> address mappings into a file for sending messages from the executive
