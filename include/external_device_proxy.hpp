@@ -166,6 +166,15 @@ public:
 
   virtual const std::vector<OutputPinPtr> &getOutputs() const override
   { return m_outputsByIndex; }
+
+  virtual void init(
+           OrchestratorServices *orchestrator,
+           const typed_data_t *graphProperties,
+           const typed_data_t *deviceProperties,
+           typed_data_t *deviceState
+  ) const {
+    return; // Externals have no meaningful init
+  }
 };
 
 #endif

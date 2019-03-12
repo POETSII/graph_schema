@@ -10,6 +10,7 @@ define relaxation_heat_instance_template
 # $3 = maxsteps
 # $4 = filters
 # $5 = use_field (should be "" or "yes")
+# $6 = demo_only (should be "" or "no")
 
 demos/relaxation_heat/relaxation_heat_$1.xml : apps/nursery/relaxation_heat/create_relaxation_heat_instance.py apps/nursery/relaxation_heat/relaxation_heat_graph_type.xml
 	mkdir -p $$(dir $$@)
@@ -18,7 +19,9 @@ demos/relaxation_heat/relaxation_heat_$1.xml : apps/nursery/relaxation_heat/crea
 demos/relaxation_heat/relaxation_heat_$1.snap : demos/relaxation_heat/relaxation_heat_$1.xml bin/epoch_sim providers/relaxation_heat.graph.so demos/relaxation_heat/relaxation_heat_$1.checked
 	bin/epoch_sim  --log-level 0 --max-steps $3 --snapshots $2 $$@  demos/relaxation_heat/relaxation_heat_$1.xml
 
+ifeq (,$6)
 ALL_relaxation_heat_TESTS += demos/relaxation_heat/relaxation_heat_$1.snap
+endif
 
 ifeq (,$5)
 
@@ -57,9 +60,9 @@ relaxation_heat_FILTERS_VALUE = \
 $(eval $(call relaxation_heat_instance_template,9,1,1000,$(relaxation_heat_FILTERS_VALUE)))
 $(eval $(call relaxation_heat_instance_template,16,1,1000,$(relaxation_heat_FILTERS_TIME)))
 
-$(eval $(call relaxation_heat_instance_template,32,10,50000,$(relaxation_heat_FILTERS_VALUE),yes))
+$(eval $(call relaxation_heat_instance_template,32,10,50000,$(relaxation_heat_FILTERS_VALUE),yes,no))
 
-$(eval $(call relaxation_heat_instance_template,128,10,50000,$(relaxation_heat_FILTERS_VALUE),yes))
+$(eval $(call relaxation_heat_instance_template,128,10,50000,$(relaxation_heat_FILTERS_VALUE),yes,no))
 
 
 

@@ -13,14 +13,14 @@ except:
     import json
     is_ujson=False
 
-ns={"p":"https://poets-project.org/schemas/virtual-graph-schema-v2"}
+ns={"p":"https://poets-project.org/schemas/virtual-graph-schema-v3"}
 
 
 
 def write_edge_instance(dst,ei):
     properties=ei.properties
     metadata=ei.metadata
-    if properties or metadata:    
+    if properties or metadata:
         dst.write('   <EdgeI path="{}">'.format(ei.id))
         if properties:
             properties=json.dumps(properties)[1:-1]
@@ -36,12 +36,9 @@ def write_edge_instance(dst,ei):
 def write_device_instance(dst,di):
     properties=di.properties
     metadata=di.metadata
-    
+
     if properties or metadata:
-        if di.device_type.isExternal:
-            dst.write('   <ExtI id="{}" type="{}">'.format(di.id,di.device_type.id))
-        else:
-            dst.write('   <DevI id="{}" type="{}">'.format(di.id,di.device_type.id))
+        dst.write('   <DevI id="{}" type="{}">'.format(di.id,di.device_type.id))
         if properties:
             try:
                 properties=json.dumps(properties)
@@ -55,11 +52,8 @@ def write_device_instance(dst,di):
             dst.write('<M>{}</M>'.format(metadata))
         dst.write("</DevI>\n")
     else:
-        if di.device_type.isExternal:
-            dst.write('   <ExtI id="{}" type="{}" />\n'.format(di.id,di.device_type.id))
-        else:
-            dst.write('   <DevI id="{}" type="{}" />\n'.format(di.id,di.device_type.id))
-        
+        dst.write('   <DevI id="{}" type="{}" />\n'.format(di.id,di.device_type.id))
+
 
 
 def save_graph(graph,dst):
@@ -76,8 +70,7 @@ def save_graph(graph,dst):
                 save_graph(graph,dstFile)
     else:
         assert not isinstance(dst,str)
-        
-        ns="https://poets-project.org/schemas/virtual-graph-schema-v2"
+        ns="https://poets-project.org/schemas/virtual-graph-schema-v3"
         nsmap = { None : ns }
         root=etree.Element(toNS("p:Graphs"), nsmap=nsmap)
 

@@ -1,5 +1,5 @@
 <?xml version="1.0"?>
-<Graphs xmlns="https://poets-project.org/schemas/virtual-graph-schema-v2" formatMinorVersion="1">
+<Graphs xmlns="https://poets-project.org/schemas/virtual-graph-schema-v3" formatMinorVersion="1">
   <GraphType id="relaxation_heat" >
 	<Documentation><![CDATA[
 		Supposed to broadly match spinnaker experiments.
@@ -88,9 +88,6 @@
     </Properties>
 
     <MessageTypes>
-      <MessageType id="__init__">
-				<!-- This doesn't have any properties -->
-      </MessageType>
 
 			<MessageType id="share">
         <Documentation>
@@ -190,8 +187,7 @@
     }
 		]]></ReadyToSend>
 
-		<InputPin name="__init__" messageTypeId="__init__">
-		  <OnReceive><![CDATA[
+		<OnInit><![CDATA[
       deviceState->boundary=deviceProperties->initial_boundary;
 
       deviceState->nextHeat=deviceProperties->initial_heat;
@@ -203,8 +199,7 @@
       deviceState->received=0;
 
       deviceState->dirty=true;
-		  ]]></OnReceive>
-		</InputPin>
+		  ]]></OnInit>
 
 		<InputPin name="share_in" messageTypeId="share">
 		  <OnReceive><![CDATA[
@@ -328,14 +323,14 @@
       *readyToSend = deviceState->dirty ? RTS_FLAG_termination_out : 0;
     ]]></ReadyToSend>
 
-    <InputPin name="__init__" messageTypeId="__init__">
-    <OnReceive><![CDATA[
+    <OnInit>
+    <![CDATA[
       // Accept all defaults
 
       // Check the degree property doesn't exceed the array size
       assert( deviceProperties->degree <= sizeof(deviceState->count)/sizeof(deviceState->count[0]) );
-    ]]></OnReceive>
-    </InputPin>
+    ]]>
+    </OnInit>
 
     <InputPin name="termination_in" messageTypeId="termination">
       <OnReceive><![CDATA[

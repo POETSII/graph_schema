@@ -1,5 +1,5 @@
-graph_schema
-============
+graph_schema - Version 3
+========================
 
 This repository is intended to describe the format for graphs via:
 
@@ -22,6 +22,42 @@ other graphs could also be added here, but that is up for discussion.
 
 The policy is that things should not be merged to master
 unless `make test` works.
+
+Version 3 features
+------------------
+
+* Optional OnInit handler added - Standardizes how individual device
+initialisation is done.
+* `<S>` tag added to DevI to allow individual setting of device instance states.
+* Optional Default tag has been added to Scalar, Array, Tuple, and Union -
+Takes JSON strings which are parsed to provide default values to instances
+of these data types.
+* Optional attribute "indexed" in OutputPin added:
+    * Boolean used to indicate whether this pin broadcasts or sends to an
+    index - default is broadcast.
+* Optional attribute "sendIndex" for Edge instances added, accepting an
+integer to identify this pin for indexed send Output pin.
+* Application pins removed - They have been deprecated by Externals.
+* DeviceSharedCode removed - SharedCode in DeviceType performs this task.
+* Fix incorrect definition for TypeDef (typedDataSpec -> typedDataMember).
+* TypeDef can now contain documentation.
+* Dense or Sparse array initialisation provided for Arrays.
+* Digest hashes for types and instances added.
+* Added <SupervisorType>, renamed from <SupervisorDeviceType> in previous
+versions.
+* GraphInstance attribute "supervisorTypeId" changed from
+"supervisorDeviceTypeId" to match name of SupervisorType.
+* Updated SupervisorType to the specification discussed with Southampton.
+* <OnCompute> and <OnIdle> tags are to be entirely removed.
+    * These are replaced by optional <OnHardwareIdle>, <OnDeviceIdle> and <OnThreadIdle>.
+    * This provides more detailed descriptions of when these handlers are executed.
+
+An exemplar XML for version 3, featuring *one of everything* can be found in
+`master/virtual-graph-schema-v3-exemplar-xml.xml`
+
+**A conversion script from version 2 to version 3 is included in with this
+new version of the schema. Information on it's usage is included
+[here](#Tools)**
 
 Requirements
 ============
@@ -58,7 +94,7 @@ A non-complete list of packages needed is:
 - `curl`
 - `mpich`
 - `rapidjson-dev`
-- `libboost-filesystem-dev` 
+- `libboost-filesystem-dev`
 - `metis`
 - `graphviz`
 - `imagemagick`
@@ -72,16 +108,15 @@ A non-complete list of packages needed is:
 Not officially tested on non Ubuntu 16 platforms, but it has worked
 in the past in both Cygwin and Linux.
 
-
 Schema
 ======
 
 The structure of the application format is captured in a relax ng xml schema, which
 checks a fair amount of the structure of the file, such as allowed/missing elements
-and attributes. The schema is available at [master/virtual-graph-schema.rnc](master/virtual-graph-schema.rnc).
+and attributes. The schema is available at [master/virtual-graph-schema.rnc](master/virtual-graph-schema-v3.rnc).
 
 For checking purposes, the schema can be validated directly using `tring`, or
-is also available as an [xml schema (.xsd)](derived/virtual-graph-schema.xsd)
+is also available as an [xml schema (.xsd)](derived/virtual-graph-schema-v3.xsd)
 which many XML parsers can handle.
 
 To validate a file `X.xml` you can ask for the file `X.checked`. This
@@ -101,6 +136,9 @@ A slightly deeper check on graph instances is also available:
 
 This checks some context-free aspects, such as id matching. Beyond this level
 you need to try running the graph.
+
+For reference, an example XML, which features one of everything in the schema,
+has been included in `virtual-graph-schema-v3-exemplar-xml.xml`.
 
 Usage
 =====
@@ -156,7 +194,7 @@ the orchestrator.
   root, branch, and leaf. The root node is a central clock which generates ticks.
   The ticks are fanned out by the branches to the leaves, which reflect them back
   as tocks. Once the clock has received all the tocks, it ticks again.
-  
+
 - [apps/amg](apps/amg) : *Deterministic* : A complete algebraic multi-grid solver,
   with many types of nodes and quite complex interactions. It should be self-checking.
 
@@ -168,6 +206,21 @@ is lost or any device fails.
 
 Tools
 =====
+
+### tools/convert_v2_graph_to_v3.py
+
+Takes an XML graph type or graph instance which is written using version 2.*
+of the schema, and converts this to version 3 of the schema. This converts
+any `__init__` input pins to `<OnInit>` handlers, and removes any application
+pin attributes.
+
+Usage:
+```
+python tools/convert_v2_graph_to_v3.py <path-to-v2-XML> >> <path-to-new-XML-file>
+```
+
+If no path to a new XML file is provided, the XML will be printed to the
+screen.
 
 ### bin/epoch_sim
 
@@ -192,13 +245,13 @@ Parameters:
 
 - `--max-steps n` : Stop the simulation after this many epochs. It will also stop
   if all devices are quiescent.
-  
+
 - `--snapshots interval destFile` : Store state snapshots every `interval` epochs to
   the given file.
-  
+
 - `--prob-send probability` : Control the probability that a device ready to send
   gets to send within each epoch. Default is 0.75.
-  
+
 - `--log-events destFile` : Log all events that happen into a complete history. This
   can be processed by other tools, such as `tools/render_event_log_as_dot.py'.
 
@@ -233,7 +286,7 @@ Parameters:
 
 - `--output OUTPUT` : Choose the output name, or if snapshots are specified the output prefix.
 
-### `tools/render_event_log_as_dot.py`
+### tools/render_event_log_as_dot.py
 
 Takes an event log (e.g. generated by `bin/epoch_sim`) and renders it as a graph.
 _Beware_: don't try to render lots of events (e.g. 1000+) or large numbers of devices (30+),
@@ -246,4 +299,3 @@ tools/render_event_log_as_dot.py events.xml
 dot graph.dot -Tsvg -O
 ````
 Should produce an svg called `graph.svg`.
-

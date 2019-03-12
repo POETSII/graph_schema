@@ -192,9 +192,9 @@ struct EpochSim
     return 0;
   }
 
-  virtual uint64_t onDeviceInstance(uint64_t gId, const DeviceTypePtr &dt, const std::string &id, const TypedDataPtr &deviceProperties, rapidjson::Document &&) override
+  virtual uint64_t onDeviceInstance(uint64_t gId, const DeviceTypePtr &dt, const std::string &id, const TypedDataPtr &deviceProperties, const TypedDataPtr &deviceState, rapidjson::Document &&) override
   {
-    TypedDataPtr state=dt->getStateSpec()->create();
+    // TypedDataPtr state=dt->getStateSpec()->create();
     device d;
     d.index=m_devices.size();
     d.id=id;
@@ -206,7 +206,7 @@ struct EpochSim
     }
 
     d.properties=deviceProperties;
-    d.state=state;
+    d.state=deviceState;
     d.keyValueSeq=0;
     d.readyToSend=0;
     d.outputCount=dt->getOutputCount();
@@ -333,15 +333,17 @@ struct EpochSim
     }
 
     for(auto &dev : m_devices){
-      ReceiveOrchestratorServicesImpl receiveServices{logLevel, stderr, dev.name, "__init__", m_onExportKeyValue, m_onDeviceExit, m_onCheckpoint  };
-      auto init=dev.type->getInput("__init__");
-      if(init){
-        if(logLevel>2){
-          fprintf(stderr, "  init device %d = %s\n", dev.index, dev.id.c_str());
-        }
+      ReceiveOrchestratorServicesImpl receiveServices{logLevel, stderr, dev.name, "Init handler", m_onExportKeyValue, m_onDeviceExit, m_onCheckpoint  };
+      dev.type->init(&receiveServices, m_graphProperties.get(), dev.properties.get(), dev.state.get());
+      // TODO: Allow for "__init__" backwards compatability
+      // auto init=dev.type->getInput("__init__");
+      // if(init){
+      //   if(logLevel>2){
+      //     fprintf(stderr, "  init device %d = %s\n", dev.index, dev.id.c_str());
+      //   }
 
-        init->onReceive(&receiveServices, m_graphProperties.get(), dev.properties.get(), dev.state.get(), 0, 0, 0);
-      }
+      //   init->onReceive(&receiveServices, m_graphProperties.get(), dev.properties.get(), dev.state.get(), 0, 0, 0);
+      // }
       dev.readyToSend = dev.type->calcReadyToSend(&receiveServices, m_graphProperties.get(), dev.properties.get(), dev.state.get());
 
       if(m_log){

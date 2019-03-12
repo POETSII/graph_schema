@@ -79,7 +79,7 @@ graph_library : $(wildcard tools/graph/*.py)
 derived/%.rng derived/%.xsd : master/%.rnc $(TRANG) $(JING) $(wildcard master/%-example*.xml)
 	# Check the claimed examples in order to make sure that
 	# they validate
-	for i in master/$*-example*.xml; do \
+	for i in master/$*-example*.xml master/$*-exemplar*.xml ; do \
 		echo "Checking file $$i"; \
 		java -jar $(JING) -c master/$*.rnc $$i; \
 	done
@@ -96,6 +96,8 @@ build-virtual-schema-v2 : derived/virtual-graph-schema-v2.rng derived/virtual-gr
 
 build-virtual-schema-v2.1 : derived/virtual-graph-schema-v2.1.rng derived/virtual-graph-schema-v2.1.xsd
 
+build-virtual-schema-v3 : derived/virtual-graph-schema-v3.rng derived/virtual-graph-schema-v3.xsd
+
 regenerate-random :
 	python3.4 tools/create_random_graph.py 1 > test/virtual/random1.xml
 	python3.4 tools/create_random_graph.py 2 > test/virtual/random2.xml
@@ -103,9 +105,9 @@ regenerate-random :
 	python3.4 tools/create_random_graph.py 8 > test/virtual/random4.xml
 
 
-%.checked : %.xml $(JING) master/virtual-graph-schema-v2.2.rnc derived/virtual-graph-schema-v2.2.xsd
-	java -jar $(JING) -c master/virtual-graph-schema-v2.2.rnc $*.xml
-	java -jar $(JING) derived/virtual-graph-schema-v2.2.xsd $*.xml
+%.checked : %.xml $(JING) master/virtual-graph-schema-v3.rnc derived/virtual-graph-schema-v3.xsd
+	java -jar $(JING) -c master/virtual-graph-schema-v3.rnc $*.xml
+	java -jar $(JING) derived/virtual-graph-schema-v3.xsd $*.xml
 	touch $@
 
 validate-virtual/% : output/%.checked
@@ -165,7 +167,7 @@ endif
 
 providers/$1.graph.cpp providers/$1.graph.hpp : $$($1_src_xml) $(JING)
 	mkdir -p providers
-	java -jar $(JING) -c master/virtual-graph-schema-v2.2.rnc $$($1_src_xml)
+	java -jar $(JING) -c master/virtual-graph-schema-v3.rnc $$($1_src_xml)
 	$$(PYTHON) tools/render_graph_as_cpp.py $$($1_src_xml) providers/$1.graph.cpp
 	$$(PYTHON) tools/render_graph_as_cpp.py --header < $$($1_src_xml) > providers/$1.graph.hpp
 
@@ -198,7 +200,6 @@ ALL_SOFTSWITCH := $(ALL_SOFTSWITCH) $(SOFTSWITCH_DIR)/generated/apps/$1_threads$
 
 endef
 
-include apps/hello_world/makefile.inc
 include apps/clock_tree/makefile.inc
 include apps/ising_spin/makefile.inc
 include apps/ising_spin_fix/makefile.inc
@@ -221,8 +222,6 @@ include apps/gals_heat_float/makefile.inc
 # Non-default
 include apps/nursery/airfoil/airfoil.inc
 include apps/nursery/relaxation_heat/makefile.inc
-
-include test/io/makefile.inc
 
 #TODO : Defunct?
 include tools/partitioner.inc

@@ -17,15 +17,15 @@ struct filepath
   filepath(const std::string &p)
     : path(p)
   {}
-  
+
   std::string path;
-  
+
   const char *c_str() const
   { return path.c_str(); }
-  
+
   const std::string &native() const
   { return path; }
-  
+
   filepath parent_path() const
   {
     auto pos=path.find_last_of('/');
@@ -117,6 +117,7 @@ public:
    const DeviceTypePtr &dt,
    const std::string &id,
    const TypedDataPtr &properties,
+   const TypedDataPtr &state,
    rapidjson::Document &&metadata=rapidjson::Document()
   ) =0;
 

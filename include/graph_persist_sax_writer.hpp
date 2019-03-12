@@ -91,9 +91,6 @@ private:
     xmlTextWriterStartElement(m_dst, (const xmlChar *)"InputPin");
     xmlTextWriterWriteAttribute(m_dst, (const xmlChar *)"name", (const xmlChar *)ip->getName().c_str() );
     xmlTextWriterWriteAttribute(m_dst, (const xmlChar *)"messageTypeId", (const xmlChar *)ip->getMessageType()->getId().c_str() );
-    if(ip->isApplication()){
-      xmlTextWriterWriteAttribute(m_dst, (const xmlChar *)"application", (const xmlChar *)"true" );
-    }
 
     writeMetaData(ip->getMetadata(), "MetaData");
 
@@ -114,10 +111,6 @@ private:
     xmlTextWriterWriteAttribute(m_dst, (const xmlChar *)"name", (const xmlChar *)op->getName().c_str() );
     xmlTextWriterWriteAttribute(m_dst, (const xmlChar *)"messageTypeId", (const xmlChar *)op->getMessageType()->getId().c_str() );
     
-    if(op->isApplication()){
-      xmlTextWriterWriteAttribute(m_dst, (const xmlChar *)"application", (const xmlChar*)"true" );
-    }
-
     writeMetaData(op->getMetadata(), "MetaData");
 
     xmlTextWriterStartElement(m_dst, (const xmlChar *)"OnSend");

@@ -13,7 +13,7 @@ demos/storm/storm_$1.xml : apps/storm/create_storm_instance.py
 	$$(PYTHON) apps/storm/create_storm_instance.py  $$(subst _, ,$1) > $$@
 
 demos/storm/storm_$1.snap : demos/storm/storm_$1.xml bin/epoch_sim providers/storm.graph.so demos/storm/storm_$1.checked
-	bin/epoch_sim  --log-level 0 --snapshots 10 $$@  demos/storm/storm_$1.xml
+	bin/epoch_sim  --log-level 0 --snapshots 100 $$@  demos/storm/storm_$1.xml
 
 ALL_storm_TESTS += demos/storm/storm_$1.snap
 
