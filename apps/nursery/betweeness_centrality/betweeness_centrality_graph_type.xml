@@ -1,0 +1,357 @@
+<?xml version='1.0' encoding='ASCII'?>
+<Graphs xmlns="https://poets-project.org/schemas/virtual-graph-schema-v3">
+  <GraphType id="betweeness_centrality">
+    <Documentation>
+		This estimates betweenness centrality using parallel random walks.
+        It is guaranteed terminating, but is not deterministic as the order
+        of the walks depends on ordering of messages.
+
+        Each device is a node in a graph (could be directed or not, doesn't matter),
+        and has a set of outgoing edges, represented as indexed edges. In the first
+        timestep each node originates a random walk, which it sends to one node
+        chosen uniformly randomly amongst the targets. Within each timestep each
+        node collects any arriving random walks by incrementing a counter. At the
+        end of the timestep each node will have zero or more walks currently at that
+        node. We then move to the next timestep, and each node fires out one walk
+        for each walk terminating in the current timestep.
+
+        The timesteps could be implemented using:
+        1 - Standard GALS
+        2 - Hardware step handler
+        3 - An array of counters tracking how many walks are present at each timestep.
+            Without some kind of global-virtual-time this will require a static maximum
+            time step count.
+
+        GALS would not make use of indexed sets, as it would require a send to every neighbour.
+
+        Step handler would work well with indexed sends, though at the time of writing this
+        isn't supported in graph_schema (adding indexed sends before step handler).
+
+        So for now we take 3, as it is the most interesting, and might actually be fast.
+
+        Because we expect some nodes to be more loaded, we allow for one message to represent
+        more than one walk. Whether we exploit this or not I'm not sure yet, it would make
+        sense with nodes that are extremely central, though such nodes might present
+        a sequential bottleneck too.
+
+        To handle termination we will use a collection node, which receives walks after
+        they have reached the final time-step. It knows we have finished when as many
+        walks have reached the end as there are nodes in the graph.
+
+        In future this collection node should be an external, so as well as termination
+        information we actually send up the node id and number of walks visited
+        so far. That means that at the moment termination is detected the collection
+        node also knows the number of walks passing through all nodes. Messages out
+        to the collector could be re-ordered, but at the point of termination there
+        will exist no messages still in flight.
+
+        A tricky area is in how fast we let empty nodes run ahead. Once a node
+        contains no walk it is able to race ahead through the array, and then notify
+        the collector that it is idel. So in the worst case the nodes might
+        spend a lot of time receiving a message, passing the walk on, and then immediately
+        notifying the collector. If we're unlucky we could get an almost one-to-one
+        correspondence between walk messages and notification message, or O(n*t). We solve this
+        by only notifying the collector for completed nodes, which guarantees
+        that the number of collection messages is O(n). That solves the message flood
+        problem, but there is then a danger of the nodes running up and down the
+        time-steps. A possible pattern is:
+        - Node sends walk for time 1
+        - Node is empty, so walks through array in O(t) time
+        - Node receives walk for time 2
+        - Node sends walk for time 2
+        - Node is empty, so walks through array in O(t) time
+        - ...
+        If we're unlucky then we could incur O(t^2 n) compute cost,
+        even though the number of messages sent is only O(t n).
+
+        The correct solution to this is to do global virtual time management, which
+        would require:
+        - a node to count walks received in each time step
+        - fan-in nodes to combine walks received in time steps, to avoid overload on master node
+        - fan-out nodes to take GVT updates back out to the nodes
+        It's not very complicated, but requires a lot of writing and testing, so
+        for now I'm avoiding it.
+
+        Another solution is to only allow the nodes to move through the timesteps once
+        per send handler, and cancel if it is empty. Unfortunately, for the current
+        softswitch designs the penalty in instructions would probably be worse the
+        O(t) search through the array.
+
+        So to "fix" this we'll just maintain hierarchical bit-masks, which indicate
+        presence/absence. So the nodes will detect they are empty in O(log t) time,
+        and also don't need to trash the cache when working out they are idle. We
+        don't expect t to be very large, so if we pick a max of t=1023, then in
+        we can cover all the bits using two levels of 32-bit masks
+
+	</Documentation>
+
+	<SharedCode><![CDATA[
+    /*
+        Should assume that the bits are equally spread, rather than concentrated at low indices
+        NOTE: further evidence suggesting an lmo instruction would be really useful
+    */
+    unsigned pick_bit(uint32_t x)
+    {
+        assert(x);
+        unsigned res=0
+        if(!(x&0xFFFF)){ res+=16; x>>=16; }
+        if(!(x&0xFF)){   res+=8;  x>>=8; }
+        if(!(x&0xF)){    res+=4;  x>>=4; }
+        if(!(x&0x3)){    res+=2;  x>>=2; }
+        if(!(x&0x1)){    res+=1;  x>>=1; }
+        return res;
+    }
+
+    int find_ready_1k(
+        uint32_t l0,    // 32 bits
+        const uint32_t l1[32],    // 1024 bits
+    ){
+        if(l0==0){
+            return -1;
+        }
+        unsigned s0=pick_bit(l0);
+        uint32_t m1=l1[s0];
+        assert(m1);
+        return pick_bit(m1);
+    }
+
+    void remove_ready_1k(
+        uint32_t &l0, // Single 32-bit mask
+        uint32_t l1[32], // Array of 32 bit-masks
+        uint32_t c2[1024], // Array of 1024 counters
+        unsigned sel
+    ){
+        assert(c2[sel]>0);
+        assert(l1[sel/32] & (1u<<(sel%32)));
+        assert(l0 & (1u<<(sel/32)));
+
+        uint32_t nc= --c2[sel];
+        if(nc){
+            return;
+        }
+        uint32_t m1= (l1[sel/32] &= ~(1u<<(sel%32)));
+        if(m1){
+            return;
+        }
+        l0 &= ~(1u<<(sel/32));
+    }
+
+    unsigned remove_all_ready_1k(
+        uint32_t &l0, // Single 32-bit mask
+        uint32_t l1[32], // Array of 32 bit-masks
+        uint32_t c2[1024], // Array of 1024 counters
+        unsigned sel
+    ){
+        assert(c2[sel]>0);
+        assert(l1[sel/32] & (1u<<(sel%32)));
+        assert(l0 & (1u<<(sel/32)));
+
+        unsigned pc=c2[sel];
+        c2[sel]=0;
+        
+        uint32_t m1= (l1[sel/32] &= ~(1u<<(sel%32)));
+        if(!m1){
+            l0 &= ~(1u<<(sel/32));
+        }
+
+        return pc;
+    }
+
+    unsigned find_and_remove_ready_1k(
+        uint32_t &l0,
+        uint32_t l1[32],
+        uint32_t c2[1024]
+    ){
+        assert(l0);
+        unsigned s0=pick_bit(l0);
+        uint32_t m1=l1[s0];
+        assert(m1);
+        unsigned sel=pick_bit(m1);
+        
+        auto nc = --c2[sel];
+        if(!nc){
+            m1 &= ~(1u<<(sel%32));
+            l1[sel/32]=m1;
+            if(!m1){
+                l0 &= ~(1u<<(sel/32));
+            }
+        }
+
+        return sel;
+    }
+
+    void add_ready_1k(
+        uint32_t &l0,
+        uint32_t l1[32],
+        uint32_t c2[1024],
+        unsigned sel,
+        unsigned count=1
+    ){
+        assert(sel<1024);
+        assert(count>0);
+
+        uint32_t pc=c2[sel];
+        c2[sel]+=count;
+        if(pc){
+            return;
+        }
+        uint32_t m1 = (l1[sel/32] |= (1u<<(sel%32)));
+        // Might as well do it unconditionally, probably saves both time and instruction space
+        l0 |= (1u<<(sel/32));
+    }
+
+
+    ]]></SharedCode>
+
+	<SharedCode><![CDATA[
+        #ifdef POETS_LEGACY_HAS_HANDLER_EXIT
+        #define _do_handler_exit(code) handler_exit(code)
+        #else
+        #define _do_handler_exit(code) ((void)0)
+        #endif
+
+        #define fake_handler_exit(code) \
+        { \
+            if((code)==0){ \
+                handler_log(0, "_HANDLER_EXIT_SUCCESS_9be65737_"); \
+            }else{ \
+                handler_log(0, "_HANDLER_EXIT_FAIL_9be65737_"); \
+            } \
+            _do_handler_exit(code); \
+        }
+]]></SharedCode>
+
+    <Properties>
+        <Scalar name="max_steps" type="uint32_t" />
+        <Scalar name="initial_walks" type="uint32_t" />
+    </Properties>
+
+    <MessageTypes>
+      <MessageType id="walk">
+        <Message>
+          <Scalar name="timestep" type="uint32_t"/><!-- Which timestep is this walk currently at? -->
+          <Scalar name="count" type="uint32_t"/><!-- How many walks represented by this message? -->
+        </Message>
+      </MessageType>
+      <MessageType id="terminate">
+        <Message>
+          <Scalar name="count" type="uint32_t"/><!-- How many walks represented by this message? -->
+          <Scalar name="node_id" type="uint32_t"/><!-- Node id this came from. -->
+          <Scalar name="total_visits" type="uint32_t"/><!-- How many walks have pass through the node so far. -->
+        </Message>
+      </MessageType>
+    </MessageTypes>
+
+
+    <DeviceTypes>
+      <DeviceType id="node">
+        <Properties>
+          <Scalar name="degree" type="uint32_t"/>
+        </Properties>
+        <State>
+          <Scalar name="total_walks" type="uint32_t" />
+          <Scalar name="degree_shift" type="uint32_t" /><!--How much to shift random numbers by before looping -->
+          <Scalar name="non_final_count" type="uint32_t" /><!-- We cache the non-final to optimise ready-to-send -->
+
+          <!-- These are ordered from hottest to coldest for caching purposes -->
+          <Array name="walks_mask_l0" type="uint32_t"/>
+          <Array name="walks_mask_l1" type="uint32_t" length="32" />
+          <Array name="walks_by_timestep" type="uint32_t" length="1024" />
+          
+        </State>
+        <OnInit><![CDATA[
+        assert(graph_properties->max_steps < 1024);
+
+        uint32_t bits=1;
+        uint32_t mask=1;
+        while(deviceProperties->degree >= mask){
+            bits++;
+            mask=(mask<<1)|1;
+        }
+        deviceState->degree_shift=32-bits;
+
+        add_ready_1k(
+            deviceState->walks_mask_l0, deviceState->walks_mask_l1, deviceState->walks_by_timestep,
+            0, deviceProperties->initial_walks
+        );
+        deviceState->nonFinalCount+=deviceProperties->initial_walks;
+        ]]></OnInit>
+        <InputPin name="walk_arrive" messageTypeId="walk">
+          <OnReceive><![CDATA[
+		  assert(message->timestep <= graphProperties->max_steps);
+          
+          assert(message->count > 0);
+          deviceState->total_visits += message->count;
+          
+          add_ready_1k(
+            deviceState->walks_mask_l0, deviceState->walks_mask_l1, deviceState->walks_by_timestep,
+            message->timestep, message->count
+          );
+          if(message->timestep < graphProperties->max_steps){
+            deviceState->non_final_count += message->count;
+          }
+		  ]]></OnReceive>
+        </InputPin>
+        <OutputPin name="walk_continue" messageTypeId="walk">
+          <OnSend><![CDATA[
+            // Always succeeds (unless program is corrupt)
+            unsigned sel=find_and_remove_ready(
+                deviceState->walks_mask_l0, deviceState->walks_mask_l1, deviceState->walks_by_timestep,
+            );
+            // If we had sel == graphProperties->max_steps we shouldn't be in this handler
+            assert(sel < graphProperties->max_steps);
+
+            message->count=1;
+            message->timestep=deviceState->youngest_walk+1;
+            do{
+                sendIndex = next_random(deviceState->seed) >> deviceState->degree_shift;
+            }while(sendIndex >= deviceProperties->degree);
+
+            --deviceState->non_final_count;
+
+		]]></OnSend>
+        </OutputPin>
+        <OutputPin name="walk_finish" messageTypeId="terminate">
+          <OnSend><![CDATA[
+            unsigned count=remove_all_ready_1k(
+                deviceState->walks_mask_l0, deviceState->walks_mask_l1, deviceState->walks_by_timestep,
+                graphProperties->max_steps
+            );
+            assert(count>0); // If there was nothing at max_steps then shouldn't be in this handler
+
+            message->count=count;
+            message->node_id=deviceProperties->node_id;
+            message->total_visits=deviceState->total_visits;
+		]]></OnSend>
+        </OutputPin>
+        <ReadyToSend><![CDATA[
+			*readyToSend = 0;
+            if(deviceState->walks_mask_l1){
+                if(deviceState->non_final_count){
+                    *readyToSend=RTS_FLAG_walk_continue;
+                }else{
+                    *readyToSend=RTS_FLAG_walk_finish;
+                }
+            }
+		]]></ReadyToSend>
+      </DeviceType>
+      <DeviceType id="collector">
+        <DeviceState>
+            <Scalar type="uint32_t" name="collected" />
+            <Scalar type="uint32_t" name="max_visited" />
+        </DeviceState>
+        <InputPort name="finished_walk">
+            <OnRecv><![CDATA[
+            deviceState->collected+=message->count;
+            deviceState->max_visited=std::max(deviceState->max_visited, message->total_visits);
+
+            if(deviceState->collected==graphProperties->graph_size){
+                handler_log(1, "max_visited=%u", deviceState->max_visited);
+                fake_handler_exit(0);
+            }
+            ]]></OnRecv>
+        </InputPort>
+      </DeviceType>
+    </DeviceTypes>
+  </GraphType>
+</Graphs>
