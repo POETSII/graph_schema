@@ -385,18 +385,23 @@
             <Scalar type="uint32_t" name="graph_size" />
         </Properties>
         <State>
+            <Scalar type="uint32_t" name="expected" />
             <Scalar type="uint32_t" name="collected" />
             <Scalar type="uint32_t" name="max_visited" />
         </State>
         <ReadyToSend><![CDATA[
             *readyToSend=0;
         ]]></ReadyToSend>
+        <OnInit><![CDATA[
+            deviceState->expected=graphProperties->initial_walks * deviceProperties->graph_size;
+        ]]></OnInit>
         <InputPin name="finished_walk" messageTypeId="terminate">
             <OnReceive><![CDATA[
             deviceState->collected+=message->count;
             deviceState->max_visited=std::max(deviceState->max_visited, message->total_visits);
+            handler_log(2, "collected=%u, exepect4d=%u", deviceState->collected, deviceState->expected);
 
-            if(deviceState->collected==deviceProperties->graph_size){
+            if(deviceState->collected==deviceState->expected){
                 handler_log(1, "max_visited=%u", deviceState->max_visited);
                 fake_handler_exit(0);
             }

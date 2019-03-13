@@ -411,6 +411,7 @@ private:
   TypedDataSpecPtr m_state;
 
   std::string m_readyToSendCode;
+  std::string m_onInitCode;
   std::string m_sharedCode;
 
   bool m_isExternal;
@@ -424,10 +425,20 @@ private:
   rapidjson::Document m_metadata;
 
 protected:
-  DeviceTypeImpl(const std::string &id, TypedDataSpecPtr properties, TypedDataSpecPtr state, const std::vector<InputPinPtr> &inputs, const std::vector<OutputPinPtr> &outputs, bool isExternal)
+  DeviceTypeImpl(const std::string &id,
+      TypedDataSpecPtr properties, TypedDataSpecPtr state,
+      const std::vector<InputPinPtr> &inputs, const std::vector<OutputPinPtr> &outputs,
+      bool isExternal,
+      std::string readyToSendCode=std::string(),
+      std::string onInitCode=std::string(),
+      std::string sharedCode=std::string()
+  )
     : m_id(id)
     , m_properties(properties)
     , m_state(state)
+    , m_readyToSendCode(readyToSendCode)
+    , m_onInitCode(onInitCode)
+    , m_sharedCode(sharedCode)
     , m_isExternal(isExternal)
     , m_inputsByIndex(inputs)
     , m_outputsByIndex(outputs)
@@ -456,6 +467,9 @@ public:
 
   virtual const std::string &getReadyToSendCode() const override
   { return m_readyToSendCode; }
+
+  virtual const std::string &getOnInitCode() const override
+  { return m_onInitCode; }
 
   virtual const std::string &getSharedCode() const override
   { return m_sharedCode; }
@@ -526,6 +540,9 @@ public:
 
   virtual const std::string &getReadyToSendCode() const override
   { return m_base->getReadyToSendCode(); }
+
+  virtual const std::string &getOnInitCode() const override
+  { return m_base->getOnInitCode(); }
 
   virtual const std::string &getSharedCode() const override
   { return m_base->getSharedCode(); }

@@ -167,8 +167,12 @@ class DeviceTypeDynamic
   : public DeviceTypeImpl
 {
 public:
-  DeviceTypeDynamic(const std::string &id, TypedDataSpecPtr properties, TypedDataSpecPtr state, const std::vector<InputPinPtr> &inputs, const std::vector<OutputPinPtr> &outputs, bool isExternal)
-    : DeviceTypeImpl(id, properties, state, inputs, outputs, isExternal)
+  DeviceTypeDynamic(const std::string &id,
+    TypedDataSpecPtr properties, TypedDataSpecPtr state,
+    const std::vector<InputPinPtr> &inputs, const std::vector<OutputPinPtr> &outputs, bool isExternal,
+    std::string readyToSendCode, std::string onInitCode, std::string sharedCode
+  )
+    : DeviceTypeImpl(id, properties, state, inputs, outputs, isExternal, readyToSendCode, onInitCode, sharedCode)
   {
     for(auto i : inputs){
       std::cerr<<"  input : "<<i->getName()<<"\n";
@@ -229,9 +233,26 @@ DeviceTypePtr loadDeviceTypeElement(
 
   std::cerr<<"Loading "<<id<<"\n";
 
-  std::vector<std::string> sharedCode;
+  
+  std::string readyToSendCode, onInitCode;
+  auto *eReadyToSendCode=find_single(eDeviceType, "./g:ReadyToSend", ns);
+  if(eReadyToSendCode){
+    auto ch=xmlNodeGetContent(eReadyToSendCode->cobj());
+    readyToSendCode=(char*)ch;
+    xmlFree(ch);
+  }
+  auto *eOnInitCode=find_single(eDeviceType, "./g:OnInit", ns);
+  if(eOnInitCode){
+    auto ch=xmlNodeGetContent(eOnInitCode->cobj());
+    onInitCode=(char*)ch;
+    xmlFree(ch);
+  }
+
+  std::string sharedCode;
   for(auto *n : eDeviceType->find("./g:SharedCode", ns)){
-    sharedCode.push_back(((xmlpp::Element*)n)->get_child_text()->get_content());
+    auto ch=xmlNodeGetContent(n->cobj());
+    sharedCode += *ch + "\n";
+    xmlFree(ch);
   }
 
   TypedDataSpecPtr properties;
@@ -334,7 +355,7 @@ DeviceTypePtr loadDeviceTypeElement(
   }
 
   auto res=std::make_shared<DeviceTypeDynamic>(
-    id, properties, state, inputs, outputs, isExternal
+    id, properties, state, inputs, outputs, isExternal, readyToSendCode, onInitCode, sharedCode
   );
 
   // Lazily fill in the thing that delayedSrc points to

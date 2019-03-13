@@ -523,6 +523,8 @@ public:
   virtual const TypedDataSpecPtr &getPropertiesSpec() const=0;
   virtual const TypedDataSpecPtr &getStateSpec() const=0;
 
+  virtual const std::string &getOnInitCode() const=0;
+
   virtual const std::string &getReadyToSendCode() const=0;
 
   virtual const std::string &getSharedCode() const=0;

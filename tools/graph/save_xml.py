@@ -206,6 +206,8 @@ def save_device_type(parent,dt):
         pn=etree.SubElement(n,toNS("OutputPin"))
         pn.attrib["name"]=p.name
         pn.attrib["messageTypeId"]=p.message_type.id
+        if p.is_indexed is not None:
+            pn.attrib["indexed"]="true"
         if p.is_application: # TODO: Remove applications pins in all forms
             pn.attrib["application"]="true"
         if p.documentation is not None:

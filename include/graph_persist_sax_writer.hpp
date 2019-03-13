@@ -26,7 +26,7 @@ private:
     State_PostEdgeInstances
   };
   
-  const xmlChar *m_ns=(const xmlChar *)"https://poets-project.org/schemas/virtual-graph-schema-v2";
+  const xmlChar *m_ns=(const xmlChar *)"https://poets-project.org/schemas/virtual-graph-schema-v3";
 
 
   
@@ -127,6 +127,10 @@ private:
     xmlTextWriterWriteAttribute(m_dst, (const xmlChar *)"id", (const xmlChar *)deviceType->getId().c_str() );
 
     writeTypedDataSpec(deviceType->getPropertiesSpec(), "Properties");
+
+    xmlTextWriterStartElement(m_dst, (const xmlChar *)"OnInit");
+    xmlTextWriterWriteCDATA(m_dst, (const xmlChar *)deviceType->getOnInitCode().c_str());
+    xmlTextWriterEndElement(m_dst);
 
     xmlTextWriterStartElement(m_dst, (const xmlChar *)"ReadyToSend");
     xmlTextWriterWriteCDATA(m_dst, (const xmlChar *)deviceType->getReadyToSendCode().c_str());
