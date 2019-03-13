@@ -151,12 +151,13 @@ public:
     const std::string &name,
     unsigned index,
     MessageTypePtr messageType,
-    const std::string &code
+    const std::string &code,
+    bool isIndexedSend
   )
-  : OutputPinImpl(deviceTypeSrc, name, index, messageType, code)
+  : OutputPinImpl(deviceTypeSrc, name, index, messageType, code, isIndexedSend)
   {}
 
-  virtual void onSend(OrchestratorServices*, const typed_data_t*, const typed_data_t*, typed_data_t*, typed_data_t*, bool*) const
+  virtual void onSend(OrchestratorServices*, const typed_data_t*, const typed_data_t*, typed_data_t*, typed_data_t*, bool*, unsigned *) const override
   {
     throw std::runtime_error("onSend - output pin not loaded from provider, so functionality not available.");
   }
@@ -306,6 +307,7 @@ DeviceTypePtr loadDeviceTypeElement(
 
     std::string name=get_attribute_required(e, "name");
     std::string messageTypeId=get_attribute_required(e, "messageTypeId");
+    bool isIndexedSend=get_attribute_optional_bool(e, "indexed");
 
     if(messageTypes.find(messageTypeId)==messageTypes.end()){
       throw std::runtime_error("Unknown messageTypeId '"+messageTypeId+"'");
@@ -326,7 +328,8 @@ DeviceTypePtr loadDeviceTypeElement(
       name,
       outputs.size(),
       messageType,
-      onSend
+      onSend,
+      isIndexedSend
     ));
   }
 
@@ -617,6 +620,16 @@ void loadGraph(Registry *registry, const filepath &srcPath, xmlpp::Element *pare
       dstPinName=get_attribute_required(eEdge, "dstPinName");
     }
 
+    int sendIndex=-1;
+    std::string sendIndexStr=get_attribute_optional(eEdge, "sendIndex");
+    if(!sendIndexStr.empty()){
+      sendIndex=atoi(sendIndexStr.c_str());
+      if(sendIndex<0){
+        throw std::runtime_error("Invalid sendIndex.");
+      }
+    }
+
+
     auto &srcDevice=devices.at(srcDeviceId);
     auto &dstDevice=devices.at(dstDeviceId);
 
@@ -632,6 +645,10 @@ void loadGraph(Registry *registry, const filepath &srcPath, xmlpp::Element *pare
 
     if(srcPin->getMessageType()!=dstPin->getMessageType())
       throw std::runtime_error("Edge type mismatch on pins.");
+
+    if(sendIndex!=-1 && !srcPin->isIndexedSend()){
+      throw std::runtime_error("Attempt to set send index on non indexed output pin.");
+    }
 
     auto et=dstPin->getPropertiesSpec();
 
@@ -666,6 +683,7 @@ void loadGraph(Registry *registry, const filepath &srcPath, xmlpp::Element *pare
     events->onEdgeInstance(gId,
                 dstDevice.first, dstDevice.second, dstPin,
                 srcDevice.first, srcDevice.second, srcPin,
+                sendIndex,
                 edgeProperties,
                 std::move(metadata)
     );

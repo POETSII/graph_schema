@@ -126,11 +126,17 @@ struct EpochSim
 
   DeviceTypePtr createExternalInterceptor(DeviceTypePtr dt, unsigned index)
   {
+    for(auto op : dt->getOutputs()){
+      if(op->isIndexedSend()){
+        throw std::runtime_error("Currently external devices with indexed send outputs are not supported.");
+      }
+    }
+
     // Create an interceptor device which will send to the external connection
     auto onSend=[this](OrchestratorServices *orchestrator, const typed_data_t *graphProperties,
       const typed_data_t *deviceProperties, unsigned deviceAddress,
       unsigned sendPortIndex,
-      typed_data_t *message, bool *doSend
+      typed_data_t *message, bool *doSend, unsigned *sendIndex
     ){
       auto &dev=this->m_devices.at(deviceAddress);
       assert(dev.type->isExternal());
@@ -143,6 +149,9 @@ struct EpochSim
       assert(msg.isMulticast); // We can only take multi-cast from this route, as it is treated like any other send
       msg.data.copy_to(message);
       *doSend=true;
+
+      // Currently indexed sends involving externals are not supported
+      assert(sendIndex==0);
     };
 
     auto onRTS=[this](OrchestratorServices *orchestrator, const typed_data_t *graphProperties,
@@ -221,8 +230,12 @@ struct EpochSim
     return d.index;
   }
 
-  void onEdgeInstance(uint64_t gId, uint64_t dstDevIndex, const DeviceTypePtr &dstDevType, const InputPinPtr &dstInput, uint64_t srcDevIndex, const DeviceTypePtr &srcDevType, const OutputPinPtr &srcOutput, const TypedDataPtr &properties, rapidjson::Document &&) override
+  void onEdgeInstance(uint64_t gId, uint64_t dstDevIndex, const DeviceTypePtr &dstDevType, const InputPinPtr &dstInput, uint64_t srcDevIndex, const DeviceTypePtr &srcDevType, const OutputPinPtr &srcOutput, int sendIndex, const TypedDataPtr &properties, rapidjson::Document &&) override
   {
+    if(sendIndex!=-1){
+      throw std::runtime_error("Explicit send indexes are not yet supported in epoch_sim.");
+    }
+
     // In principle we support external->external connections!
     // They just get routed through. Why would this happen though?
 
@@ -507,6 +520,8 @@ struct EpochSim
       std::string idSend;
 
       bool doSend=true;
+      unsigned sendIndexStg=-1;
+      unsigned *sendIndex=0;
       {
         #ifndef NDEBUG
         uint32_t check=src.type->calcReadyToSend(&sendServices, m_graphProperties.get(), src.properties.get(), src.state.get());
@@ -514,13 +529,17 @@ struct EpochSim
         assert( (check>>sel) & 1);
         #endif
 
+        if(output->isIndexedSend()){
+          sendIndex=&sendIndexStg;
+        }
+
         if(capturePreEventState){
           prevState=src.state.clone();
         }
         sendServices.setDevice(src.name, src.outputNames[sel]);
         try{
           // Do the actual send handler
-          output->onSend(&sendServices, m_graphProperties.get(), src.properties.get(), src.state.get(), message.get(), &doSend);
+          output->onSend(&sendServices, m_graphProperties.get(), src.properties.get(), src.state.get(), message.get(), &doSend, sendIndex);
         }catch(provider_assertion_error &e){
           fprintf(stderr, "Caught handler exception during send. devId=%s, devType=%s, outPin=%s.", src.name, src.type->getId().c_str(), output->getName().c_str());
           fprintf(stderr, "  %s\n", e.what());
@@ -530,6 +549,10 @@ struct EpochSim
           }
           fprintf(stderr, "     currState = %s\n", src.type->getStateSpec()->toJSON(src.state).c_str());
           throw;
+        }
+
+        if(sendIndex && sendIndexStg >= src.outputs.size()){
+          fprintf(stderr, "Application tried to specify sendIndex of %u, but out degree is %u\n", sendIndexStg, (unsigned)src.outputs.size());
         }
 
         src.readyToSend = src.type->calcReadyToSend(&sendServices, m_graphProperties.get(), src.properties.get(), src.state.get());
@@ -572,8 +595,17 @@ struct EpochSim
       }
 
       sent=true;
+
+      // Try to support both indexed sends and broadcast, though indexed are less efficient
+      auto *pOutputVec=&src.outputs[sel];
+      std::vector<EpochSim::output> indexedOutputBuffer;
+      if(sendIndex){
+        // This is quite inefficient
+        indexedOutputBuffer.push_back( pOutputVec->at(*sendIndex) );
+        pOutputVec = &indexedOutputBuffer;
+      }
       
-      for(auto &out : src.outputs[sel]){
+      for(auto &out : *pOutputVec){
         
         auto &dst=m_devices[out.dstDevice];
         auto &in=dst.inputs[out.dstPinIndex];

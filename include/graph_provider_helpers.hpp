@@ -296,15 +296,18 @@ private:
   unsigned m_index;
   MessageTypePtr m_messageType;
   std::string m_code;
+  bool m_isIndexedSend;
+  
 
   rapidjson::Document m_metadata;
 protected:
-  OutputPinImpl(std::function<DeviceTypePtr ()> deviceTypeSrc, const std::string &name, unsigned index, MessageTypePtr messageType, const std::string &code)
+  OutputPinImpl(std::function<DeviceTypePtr ()> deviceTypeSrc, const std::string &name, unsigned index, MessageTypePtr messageType, const std::string &code, bool isIndexedSend)
     : m_deviceTypeSrc(deviceTypeSrc)
     , m_name(name)
     , m_index(index)
     , m_messageType(messageType)
     , m_code(code)
+    , m_isIndexedSend(isIndexedSend)
   {
     m_metadata.SetObject();
   }
@@ -330,6 +333,9 @@ public:
 
   virtual rapidjson::Document &getMetadata() override
   { return m_metadata; }
+
+  virtual bool isIndexedSend() const override
+  { return m_isIndexedSend; }
 };
 
 class OutputPinDelegate
@@ -362,6 +368,9 @@ public:
 
   virtual rapidjson::Document &getMetadata() override
   { return m_base->getMetadata(); }
+
+  virtual bool isIndexedSend() const override
+  { return m_base->isIndexedSend(); }
 };
 
 class MessageTypeImpl

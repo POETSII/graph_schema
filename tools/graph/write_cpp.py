@@ -763,16 +763,24 @@ def render_output_pin_as_cpp(op,dst):
     dst.write('static const char *{}_{}_handler_code=R"CDATA({})CDATA";\n'.format(dt.id, op.name, op.send_handler))
 
     dst.write("class {}_{}_Spec : public OutputPinImpl {{\n".format(dt.id,op.name))
-    dst.write('  public: {}_{}_Spec() : OutputPinImpl({}_Spec_get, "{}", {}, {}_Spec_get(), {}_{}_handler_code) {{}} \n'.format(dt.id,op.name, dt.id, op.name, index, op.message_type.id,  dt.id, op.name))
+    dst.write('  public: {}_{}_Spec() : OutputPinImpl({}_Spec_get, "{}", {}, {}_Spec_get(), {}_{}_handler_code, {}) {{}} \n'.format(
+            dt.id,op.name, dt.id, op.name, index, op.message_type.id,  dt.id, op.name, 1 if op.is_indexed else 0
+    ))
     dst.write("""    virtual void onSend(
                       OrchestratorServices *orchestrator,
                       const typed_data_t *gGraphProperties,
 		      const typed_data_t *gDeviceProperties,
 		      typed_data_t *gDeviceState,
 		      typed_data_t *gMessage,
-		      bool *doSend
+		      bool *doSend,
+              unsigned *sendIndex
 		      ) const override {""")
     dst.write('    {pinLocalConstants}\n'.format(**subs));
+
+    if op.is_indexed:
+        dst.write("    assert(sendIndex!=0); // This is an indexed output pin\n");
+    else:
+        dst.write("    assert(sendIndex==0); // This is not an indexed output pin\n");
 
     dst.write('    auto graphProperties=cast_typed_properties<{}_properties_t>(gGraphProperties);\n'.format( graph.id ))
     dst.write('    auto deviceProperties=cast_typed_properties<{}_properties_t>(gDeviceProperties);\n'.format( dt.id ))

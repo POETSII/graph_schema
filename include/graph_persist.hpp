@@ -138,6 +138,7 @@ public:
    uint64_t graphInst,
    uint64_t dstDevInst, const DeviceTypePtr &dstDevType, const InputPinPtr &dstPin,
    uint64_t srcDevInst,  const DeviceTypePtr &srcDevType, const OutputPinPtr &srcPin,
+   int sendIndex, // -1 if it is not indexed pin, or if index is not explicitly specified
    const TypedDataPtr &properties,
    rapidjson::Document &&metadata=rapidjson::Document()
   ) =0;

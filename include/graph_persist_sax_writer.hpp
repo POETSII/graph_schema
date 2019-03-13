@@ -365,6 +365,7 @@ public:
    const DeviceTypePtr &dt,
    const std::string &id,
    const TypedDataPtr &properties,
+   const TypedDataPtr &state,
    rapidjson::Document &&metadata
    ) override
   {
@@ -387,6 +388,7 @@ public:
     xmlTextWriterWriteAttribute(m_dst, (const xmlChar *)"type", (const xmlChar *)dt->getId().c_str());
     
     writeTypedData(dt->getPropertiesSpec(), properties, "P");
+    writeTypedData(dt->getStateSpec(), state, "S");
     
     writeMetaData(metadata, "M");
 
@@ -421,6 +423,7 @@ public:
    uint64_t gId,
    uint64_t dstDevInst, const DeviceTypePtr &dstDevType, const InputPinPtr &dstPin,
    uint64_t srcDevInst,  const DeviceTypePtr &srcDevType, const OutputPinPtr &srcPin,
+   int sendIndex,
    const TypedDataPtr &properties,
    rapidjson::Document &&metadata
   ) override
@@ -442,6 +445,10 @@ public:
     if(dstPin->getMessageType()->getId() != srcPin->getMessageType()->getId())
       throw std::runtime_error("The pin edge types do not match.");
 
+    if(sendIndex!=-1 && srcPin->isIndexedSend()){
+      throw std::runtime_error("Attempt to specify sendIndex on non-indexed output pin.");
+    }
+
     auto it_inserted=m_seenIds.insert(id);
     if(!it_inserted.second)
       throw std::runtime_error("An edge called "+id+" has already been added.");
@@ -450,6 +457,11 @@ public:
     
     xmlTextWriterStartElement(m_dst, (const xmlChar *)"EdgeI");
     xmlTextWriterWriteAttribute(m_dst, (const xmlChar *)"path", (const xmlChar *)id.c_str());
+
+    if(sendIndex!=-1){
+      std::string tmp=std::to_string(sendIndex);
+      xmlTextWriterWriteAttribute(m_dst, (const xmlChar *)"sendIndex", (const xmlChar *)tmp.c_str());
+    }
 
     writeTypedData(dstPin->getPropertiesSpec(), properties, "P");
     

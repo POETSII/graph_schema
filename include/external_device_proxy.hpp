@@ -31,7 +31,8 @@ public:
         unsigned sendDeviceAddress, 
         unsigned sendPortIndex, // This is needed to intelligently dispatch
         typed_data_t *message,
-        bool *doSend
+        bool *doSend,
+        unsigned *sendIndex
     )> on_send_t;
     
     typedef std::function<uint32_t (
@@ -93,13 +94,14 @@ private:
           const typed_data_t *deviceProperties,
           typed_data_t *deviceState,
           typed_data_t *message,
-          bool *doSend
+          bool *doSend,
+          unsigned *sendIndex
     ) const override
     {
       m_device->m_onSend(orchestrator, graphProperties, deviceProperties,
         m_device->m_deviceAddress,
         getBase()->getIndex(),
-        message, doSend
+        message, doSend, sendIndex
      );
     }
 

@@ -606,6 +606,8 @@ def load_edge_instance(graph,eiNode):
     path=eiNode.attrib["path"]
     (dst_device_id,dst_pin_name,src_device_id,src_pin_name)=_split_path_re.match(path).groups()
 
+    send_index=eiNode.attrib.get("send_index")
+
     dst_device=graph.device_instances[dst_device_id]
     src_device=graph.device_instances[src_device_id]
 
@@ -630,7 +632,7 @@ def load_edge_instance(graph,eiNode):
         else:
             assert "Unknown tag type in EdgeI"
 
-    return EdgeInstance(graph,dst_device,dst_pin_name,src_device,src_pin_name,properties,metadata)
+    return EdgeInstance(graph,dst_device,dst_pin_name,src_device,src_pin_name,properties,metadata, send_index)
 
 def load_graph_instance(graphTypes, graphNode, namespace=None, loadDocumentation=False):
     if namespace==None:

@@ -502,8 +502,11 @@ public:
 		      const typed_data_t *deviceProperties,
 		      typed_data_t *deviceState,
 		      typed_data_t *message,
-		      bool *doSend
+		      bool *doSend,
+          unsigned *sendIndex=0
 		      ) const=0;
+
+  virtual bool isIndexedSend() const=0;
 
   virtual const std::string &getHandlerCode() const=0;
 };

@@ -462,9 +462,10 @@ class InputPin(Pin):
         self.receive_handler=receive_handler
 
 class OutputPin(Pin):
-    def __init__(self,parent,name,message_type,is_application,metadata,send_handler,source_file,source_line,documentation=None):
+    def __init__(self,parent,name,message_type,is_application,metadata,send_handler,source_file,source_line,documentation=None,is_indexed=False):
         Pin.__init__(self,parent,name,message_type,is_application,metadata,source_file,source_line,documentation)
         self.send_handler=send_handler
+        self.is_indexed=is_indexed
 
 
 class DeviceType(object):
@@ -492,6 +493,11 @@ class DeviceType(object):
         self.init_source_line=None
         self.isExternal=isExternal
         self.documentation=documentation
+    
+    def get_indexed_outputs(self):
+        "Returns a list of any output ports that are indexed"
+        return [op for op in self.outputs_by_index if op.is_indexed]
+
 
     def add_input(self,name,message_type,is_application,properties,state,metadata,receive_handler,source_file=None,source_line={},documentation=None):
         assert (state is None) or isinstance(state,TypedDataSpec)
@@ -612,7 +618,7 @@ class DeviceInstance(object):
 
 class EdgeInstance(object):
 
-    def __init__(self,parent,dst_device,dst_pin,src_device,src_pin,properties=None,metadata=None):
+    def __init__(self,parent,dst_device,dst_pin,src_device,src_pin,properties=None,metadata=None,send_index=None):
         # type : (GraphInstance, DeviceInstance, Union[str,InputPin], DeviceInstance, Union[str,OutputPin], Optional[Dict], Optional[Dict] ) -> None
         self.parent=parent
 
@@ -630,11 +636,16 @@ class EdgeInstance(object):
         else:
             assert src_device.device_type.outputs[src_pin.name]==src_pin
 
-        if __debug__ and (dst_pin.message_type != src_pin.message_type):
-            raise GraphDescriptionError("Dest pin has type {}, source pin type {}".format(dst_pin.message_type.id,src_pin.message_type.id))
+        if __debug__:
+            if(dst_pin.message_type != src_pin.message_type):
+                raise GraphDescriptionError("Dest pin has type {}, source pin type {}".format(dst_pin.message_type.id,src_pin.message_type.id))
 
-        if __debug__ and (not is_refinement_compatible(dst_pin.properties,properties)):
-            raise GraphDescriptionError("Properties are not compatible: proto={}, value={}.".format(dst_pin.properties, properties))
+            if (not is_refinement_compatible(dst_pin.properties,properties)):
+                raise GraphDescriptionError("Properties are not compatible: proto={}, value={}.".format(dst_pin.properties, properties))
+
+            if (send_index is not None) and not dst_pin.is_indexed:
+                raise GraphDescriptionError("Attempt to set sendIndex on non-indexed output pin {}.".format(dst_pin.name))
+
 
         self.id = "{}:{}-{}:{}".format(dst_device.id,dst_pin.name,src_device.id,src_pin.name)
 
@@ -645,6 +656,7 @@ class EdgeInstance(object):
         self.src_pin=src_pin
         self.properties=properties
         self.metadata=metadata
+        self.send_index=send_index;
 
 
 class GraphInstance:
@@ -683,6 +695,40 @@ class GraphInstance:
 
         if not is_refinement_compatible(di.device_type.properties,di.properties):
             raise GraphDescriptionError("DeviceInstance properties don't match device type.")
+    
+    def _validate_indexed_edges(self,di):
+        indexed={} # Map of { (di.id,port.name) : [ ei ] }
+
+        # Map of { dt.id : [port.name] }, only containing indexed ports
+        indexed_port_types={ dt.id : [p.name for p in dt.get_indexed_outputs()] for dt in self.device_types.values() }
+        indexed_port_types={ (id,ports) for (id,ports) in indexed_port_types if len(ports)>0 }
+
+        # Set of { (di.id, port.name) } pairs
+        indexed_port_instances=set()
+        for di in self.device_instances.values():
+            ports=indexed_port_types.get(di.device_type.id)
+            if ports:
+                for p in ports:
+                    indexed_port_instances[(di.id,p)]=[]
+        
+        # Find the relevent edge indices
+        for ei in self.edge_instances.values():
+            src=(ei.src_device.id,ei.src_pin.name)
+            ports=indexed_port_instances.get(src)
+            if ports:
+                ports.append(ei.send_index)
+        
+        # Now actually check that each indexed port list is either all None, or is contiguous
+        for ((di_id,port_name),indices) in indexed_port_instances.items():
+            if indices.count(None) == len(indices):
+                continue
+            
+            indices.sort()
+            for i in range(len(indices)):
+                if i==indices[i]:
+                    continue
+                raise GraphDescriptionError("""Device instance '{}', output port '{}' is indexed and has at least one explicit index, but the {}'th index is {}.""".format(di_id, port_name, i, indices[i]))
+
 
     def _validate_edge_instance(self,ei):
         pass
@@ -769,6 +815,7 @@ class GraphInstance:
             self._validate_device_instance(di)
         for ei in self.edge_instances:
             self._validate_edge_instances(ei)
+        self._validate_indexed_edges()
 
         self._validated=True
 
