@@ -404,6 +404,7 @@ def load_device_type(graph,dtNode,sourceFile,namespace=None,loadDocumentation=Fa
         if message_type_id not in graph.message_types:
             raise XMLSyntaxError("Unknown messageTypeId {}".format(message_type_id),p)
         is_application=get_attrib_optional_bool(p,"application")
+        is_indexed=get_attrib_optional_bool(p,"indexed")
         message_type=graph.message_types[message_type_id]
         pinMetadata=load_metadata(p,"p:MetaData")
         (handler,sourceLine)=get_child_text(p,"p:OnSend",namespace)
@@ -412,7 +413,7 @@ def load_device_type(graph,dtNode,sourceFile,namespace=None,loadDocumentation=Fa
             docNode = p.find("p:Documentation", namespace)
             if docNode is not None:
                 documentation = docNode.text
-        dt.add_output(name,message_type,is_application,pinMetadata,handler,sourceFile,sourceLine,documentation)
+        dt.add_output(name,message_type,is_application,pinMetadata,handler,sourceFile,sourceLine,documentation,is_indexed)
 
     (handler,sourceLine)=get_child_text(dtNode,"p:ReadyToSend",namespace)
     dt.ready_to_send_handler=handler
@@ -606,7 +607,7 @@ def load_edge_instance(graph,eiNode):
     path=eiNode.attrib["path"]
     (dst_device_id,dst_pin_name,src_device_id,src_pin_name)=_split_path_re.match(path).groups()
 
-    send_index=eiNode.attrib.get("send_index")
+    send_index=eiNode.attrib.get("sendIndex")
 
     dst_device=graph.device_instances[dst_device_id]
     src_device=graph.device_instances[src_device_id]

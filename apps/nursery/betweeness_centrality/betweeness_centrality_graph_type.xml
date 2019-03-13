@@ -92,19 +92,40 @@
     */
     unsigned pick_bit(uint32_t x)
     {
+        uint32_t ox=x;
         assert(x);
-        unsigned res=0
+        unsigned res=0;
         if(!(x&0xFFFF)){ res+=16; x>>=16; }
         if(!(x&0xFF)){   res+=8;  x>>=8; }
         if(!(x&0xF)){    res+=4;  x>>=4; }
         if(!(x&0x3)){    res+=2;  x>>=2; }
         if(!(x&0x1)){    res+=1;  x>>=1; }
+        assert( ox&(1u<<res));
         return res;
+    }
+
+    void assert_ready_1k_invariants(
+        uint32_t l0, // Single 32-bit mask
+        const uint32_t l1[32], // Array of 32 bit-masks
+        const uint32_t c2[1024], // Array of 1024 counters
+        unsigned max // Max exclusive
+    ){
+#ifndef NDEBUG
+        for(unsigned i=0; i<max; i++){
+            assert( !(c2[i]) == !((l1[i/32]>>(i%32))&1) );
+        }
+        for(unsigned i=max; i<1024; i++){
+            assert(c2[i]==0);
+        }
+        for(unsigned i=0; i<32; i++){
+            assert( !(l0&(1u<<i)) ==  !l1[i] );
+        }
+#endif
     }
 
     int find_ready_1k(
         uint32_t l0,    // 32 bits
-        const uint32_t l1[32],    // 1024 bits
+        const uint32_t l1[32]    // 1024 bits
     ){
         if(l0==0){
             return -1;
@@ -112,7 +133,7 @@
         unsigned s0=pick_bit(l0);
         uint32_t m1=l1[s0];
         assert(m1);
-        return pick_bit(m1);
+        return (s0<<5) | pick_bit(m1);
     }
 
     void remove_ready_1k(
@@ -166,7 +187,8 @@
         unsigned s0=pick_bit(l0);
         uint32_t m1=l1[s0];
         assert(m1);
-        unsigned sel=pick_bit(m1);
+        unsigned sel=(s0<<5)|pick_bit(m1);
+        assert(c2[sel]>0);
         
         auto nc = --c2[sel];
         if(!nc){
@@ -247,20 +269,23 @@
       <DeviceType id="node">
         <Properties>
           <Scalar name="degree" type="uint32_t"/>
+          <Scalar name="node_id" type="uint32_t"/>
+          <Scalar name="seed" type="uint32_t"/>
         </Properties>
         <State>
-          <Scalar name="total_walks" type="uint32_t" />
+          <Scalar name="seed" type="uint32_t" />
+          <Scalar name="total_visits" type="uint32_t" />
           <Scalar name="degree_shift" type="uint32_t" /><!--How much to shift random numbers by before looping -->
           <Scalar name="non_final_count" type="uint32_t" /><!-- We cache the non-final to optimise ready-to-send -->
 
           <!-- These are ordered from hottest to coldest for caching purposes -->
-          <Array name="walks_mask_l0" type="uint32_t"/>
+          <Scalar name="walks_mask_l0" type="uint32_t"/>
           <Array name="walks_mask_l1" type="uint32_t" length="32" />
           <Array name="walks_by_timestep" type="uint32_t" length="1024" />
           
         </State>
         <OnInit><![CDATA[
-        assert(graph_properties->max_steps < 1024);
+        assert(graphProperties->max_steps < 1024);
 
         uint32_t bits=1;
         uint32_t mask=1;
@@ -270,15 +295,21 @@
         }
         deviceState->degree_shift=32-bits;
 
+        deviceState->seed=deviceProperties->seed;
+
         add_ready_1k(
             deviceState->walks_mask_l0, deviceState->walks_mask_l1, deviceState->walks_by_timestep,
-            0, deviceProperties->initial_walks
+            0, graphProperties->initial_walks
         );
-        deviceState->nonFinalCount+=deviceProperties->initial_walks;
+        deviceState->non_final_count+=graphProperties->initial_walks;
+
+        assert_ready_1k_invariants(deviceState->walks_mask_l0, deviceState->walks_mask_l1, deviceState->walks_by_timestep, graphProperties->max_steps+1);
+        
         ]]></OnInit>
         <InputPin name="walk_arrive" messageTypeId="walk">
           <OnReceive><![CDATA[
 		  assert(message->timestep <= graphProperties->max_steps);
+          assert_ready_1k_invariants(deviceState->walks_mask_l0, deviceState->walks_mask_l1, deviceState->walks_by_timestep, graphProperties->max_steps+1);
           
           assert(message->count > 0);
           deviceState->total_visits += message->count;
@@ -290,29 +321,39 @@
           if(message->timestep < graphProperties->max_steps){
             deviceState->non_final_count += message->count;
           }
+
+          handler_log(3, "Received %u at time %u, nonFinalCount=%u", message->count, message->timestep, deviceState->non_final_count);
+
+          assert_ready_1k_invariants(deviceState->walks_mask_l0, deviceState->walks_mask_l1, deviceState->walks_by_timestep, graphProperties->max_steps+1);
 		  ]]></OnReceive>
         </InputPin>
-        <OutputPin name="walk_continue" messageTypeId="walk">
+        <OutputPin name="walk_continue" messageTypeId="walk" indexed="true">
           <OnSend><![CDATA[
+            assert_ready_1k_invariants(deviceState->walks_mask_l0, deviceState->walks_mask_l1, deviceState->walks_by_timestep, graphProperties->max_steps+1);
+
             // Always succeeds (unless program is corrupt)
-            unsigned sel=find_and_remove_ready(
-                deviceState->walks_mask_l0, deviceState->walks_mask_l1, deviceState->walks_by_timestep,
+            unsigned sel=find_and_remove_ready_1k(
+                deviceState->walks_mask_l0, deviceState->walks_mask_l1, deviceState->walks_by_timestep
             );
             // If we had sel == graphProperties->max_steps we shouldn't be in this handler
             assert(sel < graphProperties->max_steps);
 
             message->count=1;
-            message->timestep=deviceState->youngest_walk+1;
+            message->timestep=sel+1;
             do{
-                sendIndex = next_random(deviceState->seed) >> deviceState->degree_shift;
-            }while(sendIndex >= deviceProperties->degree);
+                deviceState->seed=deviceState->seed*1664525+1013904223ul;
+                *sendIndex = (deviceState->seed) >> (deviceState->degree_shift);
+            }while(*sendIndex >= deviceProperties->degree);
 
             --deviceState->non_final_count;
 
+            assert_ready_1k_invariants(deviceState->walks_mask_l0, deviceState->walks_mask_l1, deviceState->walks_by_timestep, graphProperties->max_steps+1);
 		]]></OnSend>
         </OutputPin>
         <OutputPin name="walk_finish" messageTypeId="terminate">
           <OnSend><![CDATA[
+            assert_ready_1k_invariants(deviceState->walks_mask_l0, deviceState->walks_mask_l1, deviceState->walks_by_timestep, graphProperties->max_steps+1);
+
             unsigned count=remove_all_ready_1k(
                 deviceState->walks_mask_l0, deviceState->walks_mask_l1, deviceState->walks_by_timestep,
                 graphProperties->max_steps
@@ -322,11 +363,15 @@
             message->count=count;
             message->node_id=deviceProperties->node_id;
             message->total_visits=deviceState->total_visits;
+
+            assert_ready_1k_invariants(deviceState->walks_mask_l0, deviceState->walks_mask_l1, deviceState->walks_by_timestep, graphProperties->max_steps+1);
 		]]></OnSend>
         </OutputPin>
         <ReadyToSend><![CDATA[
+            assert_ready_1k_invariants(deviceState->walks_mask_l0, deviceState->walks_mask_l1, deviceState->walks_by_timestep, graphProperties->max_steps+1);
+
 			*readyToSend = 0;
-            if(deviceState->walks_mask_l1){
+            if(deviceState->walks_mask_l0){
                 if(deviceState->non_final_count){
                     *readyToSend=RTS_FLAG_walk_continue;
                 }else{
@@ -336,21 +381,27 @@
 		]]></ReadyToSend>
       </DeviceType>
       <DeviceType id="collector">
-        <DeviceState>
+        <Properties>
+            <Scalar type="uint32_t" name="graph_size" />
+        </Properties>
+        <State>
             <Scalar type="uint32_t" name="collected" />
             <Scalar type="uint32_t" name="max_visited" />
-        </DeviceState>
-        <InputPort name="finished_walk">
-            <OnRecv><![CDATA[
+        </State>
+        <ReadyToSend><![CDATA[
+            *readyToSend=0;
+        ]]></ReadyToSend>
+        <InputPin name="finished_walk" messageTypeId="terminate">
+            <OnReceive><![CDATA[
             deviceState->collected+=message->count;
             deviceState->max_visited=std::max(deviceState->max_visited, message->total_visits);
 
-            if(deviceState->collected==graphProperties->graph_size){
+            if(deviceState->collected==deviceProperties->graph_size){
                 handler_log(1, "max_visited=%u", deviceState->max_visited);
                 fake_handler_exit(0);
             }
-            ]]></OnRecv>
-        </InputPort>
+            ]]></OnReceive>
+        </InputPin>
       </DeviceType>
     </DeviceTypes>
   </GraphType>

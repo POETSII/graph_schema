@@ -513,14 +513,14 @@ class DeviceType(object):
         self.inputs_by_index.append(p)
         self.pins[name]=p
 
-    def add_output(self,name,message_type,is_application, metadata,send_handler,source_file=None,source_line=None,documentation=None):
+    def add_output(self,name,message_type,is_application, metadata,send_handler,source_file=None,source_line=None,documentation=None, is_indexed=False):
         if name in self.pins:
             raise GraphDescriptionError("Duplicate pin {} on device type {}".format(name,self.id))
         if message_type.id not in self.parent.message_types:
             raise GraphDescriptionError("Unregistered message type {} on pin {} of device type {}".format(message_type.id,name,self.id))
         if message_type != self.parent.message_types[message_type.id]:
             raise GraphDescriptionError("Incorrect message type object {} on pin {} of device type {}".format(message_type.id,name,self.id))
-        p=OutputPin(self, name, self.parent.message_types[message_type.id], is_application, metadata, send_handler, source_file, source_line, documentation)
+        p=OutputPin(self, name, self.parent.message_types[message_type.id], is_application, metadata, send_handler, source_file, source_line, documentation, is_indexed)
         self.outputs[name]=p
         self.outputs_by_index.append(p)
         self.pins[name]=p
@@ -643,8 +643,8 @@ class EdgeInstance(object):
             if (not is_refinement_compatible(dst_pin.properties,properties)):
                 raise GraphDescriptionError("Properties are not compatible: proto={}, value={}.".format(dst_pin.properties, properties))
 
-            if (send_index is not None) and not dst_pin.is_indexed:
-                raise GraphDescriptionError("Attempt to set sendIndex on non-indexed output pin {}.".format(dst_pin.name))
+            if (send_index is not None) and not src_pin.is_indexed:
+                raise GraphDescriptionError("Attempt to set sendIndex on non-indexed output pin {}.".format(src_pin.name))
 
 
         self.id = "{}:{}-{}:{}".format(dst_device.id,dst_pin.name,src_device.id,src_pin.name)

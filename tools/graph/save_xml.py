@@ -322,7 +322,7 @@ def save_edge_instance(parent, ei):
     n=etree.SubElement(parent, _edge_instance_tag_type, {"path":ei.id } )
 
     if ei.send_index is not None:
-        n.attrib["send_index"]=ei.send_index
+        n.attrib["sendIndex"]=ei.send_index
 
     save_typed_struct_instance(n, _edge_instance_properties_type, ei.dst_pin.properties, ei.properties)
     save_metadata(n, _edge_instance_metadata_type, ei.metadata)

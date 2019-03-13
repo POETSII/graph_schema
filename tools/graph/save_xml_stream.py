@@ -20,8 +20,12 @@ ns={"p":"https://poets-project.org/schemas/virtual-graph-schema-v3"}
 def write_edge_instance(dst,ei):
     properties=ei.properties
     metadata=ei.metadata
-    if properties or metadata:
-        dst.write('   <EdgeI path="{}">'.format(ei.id))
+    send_index=ei.send_index
+    if properties or metadata or (send_index is not None):
+        if send_index is not None:
+            dst.write('   <EdgeI path="{}" sendIndex="{}">'.format(ei.id, send_index))
+        else:
+            dst.write('   <EdgeI path="{}">'.format(ei.id))
         if properties:
             properties=json.dumps(properties)[1:-1]
             dst.write('<P>{}</P>'.format(properties))
@@ -36,8 +40,9 @@ def write_edge_instance(dst,ei):
 def write_device_instance(dst,di):
     properties=di.properties
     metadata=di.metadata
+    state=di.state
 
-    if properties or metadata:
+    if properties or metadata or state:
         dst.write('   <DevI id="{}" type="{}">'.format(di.id,di.device_type.id))
         if properties:
             try:
@@ -47,6 +52,14 @@ def write_device_instance(dst,di):
                 raise
             properties=properties[1:-1]
             dst.write('<P>{}</P>'.format(properties))
+        if state:
+            try:
+                state=json.dumps(state)
+            except:
+                sys.stderr.write("state for device '{}' = {}\n".format(di.id, state))
+                raise
+            state=state[1:-1]
+            dst.write('<S>{}</S>'.format(state))
         if metadata:
             metadata=json.dumps(metadata)[1:-1]
             dst.write('<M>{}</M>'.format(metadata))

@@ -61,6 +61,7 @@ struct EpochSim
     unsigned dstPinSlot; // This is the actual landing zone within the destination, i.e. where the state is
     const char *dstDeviceId;
     const char *dstInputName;
+    int sendIndex;
   };
 
   struct input
@@ -232,9 +233,6 @@ struct EpochSim
 
   void onEdgeInstance(uint64_t gId, uint64_t dstDevIndex, const DeviceTypePtr &dstDevType, const InputPinPtr &dstInput, uint64_t srcDevIndex, const DeviceTypePtr &srcDevType, const OutputPinPtr &srcOutput, int sendIndex, const TypedDataPtr &properties, rapidjson::Document &&) override
   {
-    if(sendIndex!=-1){
-      throw std::runtime_error("Explicit send indexes are not yet supported in epoch_sim.");
-    }
 
     // In principle we support external->external connections!
     // They just get routed through. Why would this happen though?
@@ -265,6 +263,7 @@ struct EpochSim
     o.dstPinSlot=dstPinSlot;
     o.dstDeviceId=m_devices.at(dstDevIndex).name;
     o.dstInputName=intern(dstInput->getName());
+    o.sendIndex=sendIndex;
     m_devices.at(srcDevIndex).outputs.at(srcOutput->getIndex()).push_back(o);
 
     if(dstDevType->isExternal() || srcDevType->isExternal())
@@ -273,6 +272,40 @@ struct EpochSim
         m_devices[dstDevIndex].name, dstDevIndex, dstDevType, dstInput,
         m_devices[srcDevIndex].name, srcDevIndex, srcDevType, srcOutput
       );
+    }
+  }
+
+  void onEndEdgeInstances(uint64_t ) override
+  {
+    for(auto &d : m_devices){
+      for(auto &op : d.type->getOutputs()){
+        if(op->isIndexedSend()){
+          auto &ov = d.outputs.at(op->getIndex());
+          bool anyIndexed=false;
+          bool anyNonIndexed=false;
+          for(auto x : ov){
+            if(x.sendIndex!=-1){
+              anyIndexed=true;
+            }else{
+              anyNonIndexed=true;
+            }
+          }
+          if(anyIndexed && anyNonIndexed){
+            std::stringstream tmp;
+            tmp<<"Output "<<d.name<<":"<<op->getName()<<" has both explict and non explicit send indices.";
+            throw std::runtime_error(tmp.str());
+          }
+
+          if(anyIndexed){
+            std::sort(ov.begin(), ov.end(), [](const output &a, const output &b){ return a.sendIndex < b.sendIndex; });
+            for(unsigned i=0; i<ov.size(); i++){
+              if(i!=ov[i].sendIndex){
+                throw std::runtime_error("Explicit send indices are not contiguous and/or don't start at zero.");
+              }
+            }            
+          }
+        }
+      }
     }
   }
 
@@ -551,8 +584,9 @@ struct EpochSim
           throw;
         }
 
-        if(sendIndex && sendIndexStg >= src.outputs.size()){
+        if(sendIndex && sendIndexStg >= src.outputs[sel].size()){
           fprintf(stderr, "Application tried to specify sendIndex of %u, but out degree is %u\n", sendIndexStg, (unsigned)src.outputs.size());
+          exit(1);
         }
 
         src.readyToSend = src.type->calcReadyToSend(&sendServices, m_graphProperties.get(), src.properties.get(), src.state.get());

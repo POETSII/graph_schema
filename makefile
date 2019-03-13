@@ -31,7 +31,7 @@ endif
 CPPFLAGS += -std=c++11 -g
 #CPPFLAGS += -O0
 
-CPPFLAGS += -O2 -fno-omit-frame-pointer -ggdb -DNDEBUG=1
+#CPPFLAGS += -O2 -fno-omit-frame-pointer -ggdb -DNDEBUG=1
 
 
 
@@ -222,6 +222,7 @@ include apps/gals_heat_float/makefile.inc
 # Non-default
 include apps/nursery/airfoil/airfoil.inc
 include apps/nursery/relaxation_heat/makefile.inc
+include apps/nursery/betweeness_centrality/makefile.inc
 
 #TODO : Defunct?
 include tools/partitioner.inc
