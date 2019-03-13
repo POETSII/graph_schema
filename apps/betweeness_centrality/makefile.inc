@@ -1,6 +1,6 @@
 
 
-$(eval $(call provider_rules_template,betweeness_centrality,apps/nursery/betweeness_centrality/betweeness_centrality_graph_type.xml))
+$(eval $(call provider_rules_template,betweeness_centrality))
 
 
 define betweeness_centrality_instance_template
@@ -8,9 +8,9 @@ define betweeness_centrality_instance_template
 # $2 = delta
 # $3 = maxsteps
 
-demos/betweeness_centrality/betweeness_centrality_$1.xml : apps/nursery/betweeness_centrality/create_betweeness_centrality_instance.py apps/nursery/betweeness_centrality/betweeness_centrality_graph_type.xml
+demos/betweeness_centrality/betweeness_centrality_$1.xml : apps/betweeness_centrality/create_betweeness_centrality_instance.py apps/betweeness_centrality/betweeness_centrality_graph_type.xml
 	mkdir -p $$(dir $$@)
-	$$(PYTHON) apps/nursery/betweeness_centrality/create_betweeness_centrality_instance.py  $$(subst _, ,$1) > $$@
+	$$(PYTHON) apps/betweeness_centrality/create_betweeness_centrality_instance.py  $$(subst _, ,$1) > $$@
 
 demos/betweeness_centrality/betweeness_centrality_$1.snap : demos/betweeness_centrality/betweeness_centrality_$1.xml bin/epoch_sim providers/betweeness_centrality.graph.so demos/betweeness_centrality/betweeness_centrality_$1.checked
 	bin/epoch_sim  --log-level 0 --max-steps $3 --snapshots $2 $$@  demos/betweeness_centrality/betweeness_centrality_$1.xml
