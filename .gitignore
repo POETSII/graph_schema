@@ -22,6 +22,7 @@ instruments*.trace
 /*.snap
 /*.gz
 /CMakeFiles
+/cmake-build-*
 /external/rng-svg
 /pypy-env
 
@@ -31,3 +32,5 @@ instruments*.trace
 /*.svg
 /*.dot
 .mypy_cache
+/.tmp*
+/.idea
