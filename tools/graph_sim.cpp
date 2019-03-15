@@ -164,6 +164,7 @@ int main(int argc, char *argv[])
 
 
     engine = std::make_shared<SimulationEngineFast>(g_pLog);
+    engine->setLogLevel(logLevel);
 
     loadGraph(&registry, srcPath, parser.get_document()->get_root_node(), engine.get());
     if(logLevel>1){

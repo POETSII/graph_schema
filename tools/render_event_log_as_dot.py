@@ -53,6 +53,12 @@ def write_graph(dst, src):
         for k in order:
             cv=curr[k]
             pv=prev.get(k,None)
+            if isinstance(cv,list):
+                if len(cv)>64:
+                    cv="["+",".join([str(x) for x in cv[:32]])+",...]"
+            if isinstance(pv,list):
+                if len(pv)>64:
+                    pv="["+",".join([str(x) for x in pv[:32]])+",...]"
             if cv==pv:
                 res+="<TR><TD>{}</TD><TD>{}</TD></TR>".format(k,  cv)
             else:

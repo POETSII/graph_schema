@@ -31,7 +31,7 @@ endif
 CPPFLAGS += -std=c++11 -g
 #CPPFLAGS += -O0
 
-#CPPFLAGS += -O2 -fno-omit-frame-pointer -ggdb -DNDEBUG=1
+CPPFLAGS += -O2 -fno-omit-frame-pointer -ggdb -DNDEBUG=1
 
 
 
@@ -214,6 +214,7 @@ include apps/storm/makefile.inc
 include apps/amg/makefile.inc
 include apps/apsp/makefile.inc
 include apps/betweeness_centrality/makefile.inc
+include apps/relaxation_heat/makefile.inc
 
 include apps/firefly_sync/makefile.inc
 #include apps/firefly_nosync/makefile.inc
@@ -222,7 +223,7 @@ include apps/gals_heat_float/makefile.inc
 
 # Non-default
 include apps/nursery/airfoil/airfoil.inc
-include apps/nursery/relaxation_heat/makefile.inc
+
 
 #TODO : Defunct?
 include tools/partitioner.inc
@@ -230,8 +231,9 @@ include tools/partitioner.inc
 demos : $(ALL_DEMOS)
 
 
-all_tools : bin/print_graph_properties bin/epoch_sim
-#bin/queue_sim
+all_tools : bin/print_graph_properties bin/epoch_sim bin/graph_sim
+
+
 
 
 VIRTUAL_ALL_TESTS := $(patsubst test/virtual/%.xml,%,$(wildcard test/virtual/*.xml))

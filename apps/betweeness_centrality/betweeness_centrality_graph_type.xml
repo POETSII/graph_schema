@@ -347,6 +347,8 @@
 
             --deviceState->non_final_count;
 
+            handler_log(3, "Sending %u to time %u, nonFinalCount=%u", message->count, message->timestep, deviceState->non_final_count);
+
             assert_ready_1k_invariants(deviceState->walks_mask_l0, deviceState->walks_mask_l1, deviceState->walks_by_timestep, graphProperties->max_steps+1);
 		]]></OnSend>
         </OutputPin>

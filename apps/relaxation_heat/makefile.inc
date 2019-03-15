@@ -1,7 +1,7 @@
 
 
-$(eval $(call provider_rules_template,relaxation_heat,apps/nursery/relaxation_heat/relaxation_heat_graph_type.xml))
-$(eval $(call provider_rules_template,relaxation_heat_noterm,apps/nursery/relaxation_heat/relaxation_heat_noterm_graph_type.xml))
+$(eval $(call provider_rules_template,relaxation_heat,apps/relaxation_heat/relaxation_heat_graph_type.xml))
+$(eval $(call provider_rules_template,relaxation_heat_noterm,apps/relaxation_heat/relaxation_heat_noterm_graph_type.xml))
 
 
 define relaxation_heat_instance_template
@@ -12,9 +12,9 @@ define relaxation_heat_instance_template
 # $5 = use_field (should be "" or "yes")
 # $6 = demo_only (should be "" or "no")
 
-demos/relaxation_heat/relaxation_heat_$1.xml : apps/nursery/relaxation_heat/create_relaxation_heat_instance.py apps/nursery/relaxation_heat/relaxation_heat_graph_type.xml
+demos/relaxation_heat/relaxation_heat_$1.xml : apps/relaxation_heat/create_relaxation_heat_instance.py apps/relaxation_heat/relaxation_heat_graph_type.xml
 	mkdir -p $$(dir $$@)
-	$$(PYTHON) apps/nursery/relaxation_heat/create_relaxation_heat_instance.py  $$(subst _, ,$1) > $$@
+	$$(PYTHON) apps/relaxation_heat/create_relaxation_heat_instance.py  $$(subst _, ,$1) > $$@
 
 demos/relaxation_heat/relaxation_heat_$1.snap : demos/relaxation_heat/relaxation_heat_$1.xml bin/epoch_sim providers/relaxation_heat.graph.so demos/relaxation_heat/relaxation_heat_$1.checked
 	bin/epoch_sim  --log-level 0 --max-steps $3 --snapshots $2 $$@  demos/relaxation_heat/relaxation_heat_$1.xml
@@ -39,7 +39,7 @@ demos/relaxation_heat/relaxation_heat_$1.mp4 : demos/relaxation_heat/relaxation_
 else
 
 demos/relaxation_heat/relaxation_heat_$1.mp4 : demos/relaxation_heat/relaxation_heat_$1.xml demos/relaxation_heat/relaxation_heat_$1.snap
-	apps/nursery/relaxation_heat/render_heat_as_video_field.sh demos/relaxation_heat/relaxation_heat_$1.xml demos/relaxation_heat/relaxation_heat_$1.snap
+	apps/relaxation_heat/render_heat_as_video_field.sh demos/relaxation_heat/relaxation_heat_$1.xml demos/relaxation_heat/relaxation_heat_$1.snap
 	mv  demos/relaxation_heat/relaxation_heat_$1.xml.field.mp4 demos/relaxation_heat/relaxation_heat_$1.mp4
 
 endif

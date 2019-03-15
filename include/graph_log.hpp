@@ -545,7 +545,7 @@ class LogWriterToFile
   : public LogWriter
 {
 private:
-  const char *m_ns="https://poets-project.org/schemas/virtual-graph-schema-v2";
+  const char *m_ns="https://poets-project.org/schemas/virtual-graph-schema-v3";
 
   std::shared_ptr<xmlChar> toXmlStr(const char *v)
   { return std::shared_ptr<xmlChar>(xmlCharStrdup(v), free); }

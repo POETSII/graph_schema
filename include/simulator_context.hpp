@@ -399,8 +399,8 @@ public:
 
         uint32_t destDeviceAddress;
         uint32_t sourceDeviceAddress;
-        uint8_t destDevicePin;
-        uint8_t sourceDevicePin;
+        uint16_t destDevicePin;
+        uint16_t sourceDevicePin;
 
         bool operator==(const routing_tuple_t &o) const
         {
@@ -433,6 +433,8 @@ public:
     interned_string_t intern(const std::string &v)
     { return m_interner->intern(v); }
 
+    virtual void setLogLevel(unsigned level) =0;
+
     virtual size_t getDeviceCount() const =0;
 
     virtual uint32_t getDeviceRTS(device_address_t address) const =0;
@@ -455,6 +457,7 @@ public:
         device_address_t sourceDev,
         pin_index_t sourcePinIndex,
         const TypedDataPtr &payload,
+        int sendIndex,
         edge_index_range_t &destinations
     ) =0;
 
@@ -481,6 +484,7 @@ private:
         InputPinPtr inputPin;
         TypedDataPtr properties;
         TypedDataPtr state;
+        int sendIndex;
     };
 
     struct output_pin_t
@@ -488,8 +492,10 @@ private:
         OutputPinPtr pin;
         TypedDataPtr defaultMsg;
         edge_index_t beginEdgeIndex;
-        edge_index_t beginExternalIndex;
+        edge_index_t beginExternalIndex; // May be invalid for interleaved indexed sends
         edge_index_t endEdgeIndex;
+        // Indexed sends are special, as we may have interleaved externals and internals.
+        bool isIndexedSend;
     };
 
     struct device_t
@@ -502,6 +508,7 @@ private:
         DeviceTypePtr type;
         TypedDataPtr properties;
         TypedDataPtr state;
+        bool isExternal; // == type->isExternal(); Cache here for performance
 
         uint32_t RTS;
     };
@@ -606,7 +613,7 @@ private:
         }
     };
 
-    int m_logLevel=6;
+    unsigned m_logLevel=6;
 
     TypedDataPtr m_graphProperties;
     std::vector<device_t> m_devices;
@@ -642,6 +649,11 @@ public:
         : m_logWriter(pLogWriter)
     {}
 
+    void setLogLevel(unsigned level) override
+    {
+        m_logLevel=level;
+    }
+
 
     /////////////////////////////////////////////////////////////////////////////////////////////
     // GraphLoadEvents
@@ -663,6 +675,7 @@ public:
         const DeviceTypePtr &dt,
         const std::string &id,
         const TypedDataPtr &properties,
+        const TypedDataPtr &state,
         rapidjson::Document &&metadata
     ) override
     {
@@ -679,7 +692,8 @@ public:
         dev.address=address;
         dev.type=dt;
         dev.properties=properties;
-        dev.state=dt->getStateSpec()->create();
+        dev.state=state.clone(); // Bit of a waste of time, but loading only
+        dev.isExternal=dt->isExternal();
         
         for(auto & pin : dt->getOutputs()){
             dev.outputPins.emplace_back(output_pin_t{
@@ -687,23 +701,19 @@ public:
                     getDefaultMessageForOutputPin(pin->getMessageType()),
                     invalid_edge_index,
                     invalid_edge_index,
-                    invalid_edge_index
+                    invalid_edge_index,
+                    pin->isIndexedSend()
             });
         }
 
-        InitServicesHandler services(this, &dev);
+        if(!dt->isExternal()) {
+            InitServicesHandler services(this, &dev);
 
-        InputPinPtr init=dt->getInput("__init__");
-        if(init) {
-
-            init->onReceive(
-                    &services,
-                    m_graphProperties.get(),
-                    dev.properties.get(),
-                    dev.state.get(),
-                    nullptr,
-                    nullptr,
-                    nullptr
+            dt->init(
+                &services,
+                m_graphProperties.get(),
+                dev.properties.get(),
+                dev.state.get()
             );
 
             if(m_logWriter){
@@ -721,9 +731,7 @@ public:
                     dev.state
                 );
             }
-        }
-
-        if(!dt->isExternal()) {
+            
             dev.RTS = dt->calcReadyToSend(
                     &services,
                     m_graphProperties.get(),
@@ -737,7 +745,7 @@ public:
 
         m_devices.push_back(std::move(dev));
 
-        fprintf(stderr, "Loaded device : %s=%u, numOutputs=%lu, type=%s\n", id.c_str(), address, m_devices.back().outputPins.size(), dt->getId().c_str());
+        //fprintf(stderr, "Loaded device : %s=%u, numOutputs=%lu, type=%s\n", id.c_str(), address, m_devices.back().outputPins.size(), dt->getId().c_str());
 
         return address;
     }
@@ -747,6 +755,7 @@ public:
         uint64_t graphInst,
         uint64_t dstDevInst, const DeviceTypePtr &dstDevType, const InputPinPtr &dstPin,
         uint64_t srcDevInst,  const DeviceTypePtr &srcDevType, const OutputPinPtr &srcPin,
+        int sendIndex,
         const TypedDataPtr &properties,
         rapidjson::Document &&metadata
     ) override
@@ -756,6 +765,9 @@ public:
         // - Sorting all edges by (srcDevInst,srcPortIndex), and internals before externals
         // - Capturing the output list for a pin as [beginOutputIndex,endOutputIndex)
         // - The point beginExternalIndex marks the break where externals start
+        //
+        // In the special case of indexed sends the internals and externals may be
+        // interleaved, and beginExternalIndex will be invalid.
 
 
         edge_index_t index=m_edges.size();
@@ -768,15 +780,16 @@ public:
         edge.inputPin=dstPin;
         edge.properties=properties;
         edge.state=dstPin->getStateSpec()->create();
+        edge.sendIndex=sendIndex;
 
         auto &srcDev = m_devices.at(edge.route.sourceDeviceAddress);
         auto &dstDev = m_devices.at(edge.route.destDeviceAddress);
         auto dstPinType=dstDev.type->getInput(edge.route.destDevicePin);
         auto srcPinType=srcDev.type->getOutput(edge.route.sourceDevicePin);
-        fprintf(stderr, "  Route: %s:%s-%s:%s\n",
+        /*fprintf(stderr, "  Route: %s:%s-%s:%s\n",
                 dstDev.name.c_str(), dstPinType->getName().c_str(),
                 srcDev.name.c_str(), srcPinType->getName().c_str()
-        );
+        );*/
 
         // We do not hook up edges at this point, as we'll want to sort
         // them first to make sure (srcDevInst,srcPortIndex) runs are contiguous
@@ -800,9 +813,10 @@ public:
          */
 
         // We also sort internals before externals, so make a temporary bit-mask
+        // as we could hit it quite a bit during sorting
         std::vector<char> isExternal(m_devices.size());
         for(unsigned i=0; i<m_devices.size(); i++){
-            isExternal[i]=m_devices[i].type->isExternal();
+            isExternal[i]=m_devices[i].isExternal;
         }
 
         auto cmp=[&](const edge_t &a, const edge_t &b){
@@ -811,21 +825,21 @@ public:
             if(a.route.sourceDevicePin<b.route.sourceDevicePin) return true;
             if(a.route.sourceDevicePin>b.route.sourceDevicePin) return false;
 
+            // Explicit send indices have priority over external/internal ordering
+            if( (a.sendIndex!=-1) != (b.sendIndex!=-1) ){
+                throw std::runtime_error("Graph contains mix of implicit and explicit send indexes for an output.");
+            }
+            if(a.sendIndex<b.sendIndex) return true;
+            if(a.sendIndex>b.sendIndex) return false;
+
             // Internals destinations come before externals
             if(!isExternal[a.route.destDeviceAddress] && isExternal[b.route.destDeviceAddress]) return true;
+            if(isExternal[a.route.destDeviceAddress] && !isExternal[b.route.destDeviceAddress]) return false;
 
             // We don't care about the rest, because we only need to sort into
             // equivalence classes
             return false;
         };
-
-        for(auto &a : m_edges){
-            for(auto &b : m_edges) {
-                bool a_lt_b=cmp(a,b);
-                bool b_lt_a=cmp(b,a);
-                assert(!(a_lt_b && b_lt_a));
-            }
-        }
 
         std::stable_sort(m_edges.begin(), m_edges.end(), cmp);
 
@@ -843,25 +857,30 @@ public:
             output_pin_t &srcPin=srcDev.outputPins.at(edge.route.sourceDevicePin);
             if(srcPin.beginEdgeIndex==invalid_edge_index){
                 srcPin.beginEdgeIndex=index;
-                srcPin.beginExternalIndex=index;
                 srcPin.endEdgeIndex=index;
+                if(!srcPin.isIndexedSend){
+                    srcPin.beginExternalIndex=index+1;
+                }
+            }
+            
+            if(!srcPin.isIndexedSend){
+                if(srcPin.beginExternalIndex==srcPin.endEdgeIndex && isExternal[edge.route.destDeviceAddress]){
+                    srcPin.beginExternalIndex=index;
+                }
+            }else{
+                if(edge.sendIndex!=-1 && edge.sendIndex!=(int)(index-srcPin.beginEdgeIndex)){
+                    throw std::runtime_error("Graph contains non-contiguous or non-zero-base explicit send indices.");
+                }
             }
 
-            if(!isExternal[edge.route.destDeviceAddress]){
-                assert(srcPin.beginExternalIndex==index);
-                assert(srcPin.endEdgeIndex==index);
-                srcPin.beginExternalIndex++;
-                srcPin.endEdgeIndex++;
-            }else {
-                assert(srcPin.beginExternalIndex<=index);
-                assert(srcPin.endEdgeIndex==index);
-                srcPin.endEdgeIndex++;
-            }
+            srcPin.endEdgeIndex=index+1;
         }
+
 
         for(const auto & dev : m_devices) {
             for (const auto &pin : dev.outputPins) {
                 fprintf(stderr, "%s/%s : [%u,%u)\n", dev.name.c_str(), pin.pin->getName().c_str(), pin.beginEdgeIndex, pin.endEdgeIndex);
+
             }
         }
     }
@@ -956,17 +975,49 @@ public:
         }
     }
 
+private:
+    void extractDestinations(
+        const output_pin_t &pin,
+        int sendIndex,
+        edge_index_range_t &destinations
+    ){
+        if(!pin.isIndexedSend){
+            assert(sendIndex==-1); // Simulator should enforce this, not application
+            destinations.begin=pin.beginEdgeIndex;
+            destinations.beginExternals=pin.beginExternalIndex;
+            destinations.end=pin.endEdgeIndex;
+        }else{
+            if( (sendIndex<0) || (int(pin.endEdgeIndex-pin.beginEdgeIndex)<sendIndex) ){
+                throw std::runtime_error("Attempt to send on out of range sendIndex.");
+            }
+            destinations.begin=pin.beginEdgeIndex+sendIndex;
+            destinations.end=pin.beginEdgeIndex+sendIndex+1;
+            
+            const auto &edge=m_edges[pin.beginEdgeIndex+sendIndex];
+            const auto &dstDev=m_devices[edge.route.destDeviceAddress];
+            if(dstDev.isExternal){
+                assert(0);
+                destinations.beginExternals=destinations.begin;
+            }else{
+                destinations.beginExternals=destinations.end;
+            }
+        }
+        assert(destinations.begin <= destinations.beginExternals);
+        assert(destinations.beginExternals <= destinations.end);
+    }
+public:
+
     virtual void onExternalSend(
         device_address_t sourceDev,
         pin_index_t sourcePinIndex,
         const TypedDataPtr &payload,
+        int sendIndex, // -1 for non indexed
         edge_index_range_t &destinations
     )
     {
-        auto &device=m_devices.at(sourceDev);
-        auto &pin=device.outputPins.at(sourcePinIndex);
-        destinations.begin=pin.beginEdgeIndex;
-        destinations.end=pin.endEdgeIndex;
+        const auto &device=m_devices.at(sourceDev);
+        const auto &pin=device.outputPins.at(sourcePinIndex);
+        extractDestinations(pin, sendIndex, destinations);
     }
 
     virtual void executeSend(
@@ -991,13 +1042,17 @@ public:
 
         payload=pin.defaultMsg.clone();
 
+        unsigned sendIndex=-1;
+        unsigned *sendIndexPtr=pin.isIndexedSend ? &sendIndex : nullptr;
+
         pin.pin->onSend(
             &services,
 			m_graphProperties.get(),
 			device.properties.get(),
 			device.state.get(),
             payload.get(),
-            &doSend
+            &doSend,
+            sendIndexPtr
         );
 
         readyToSend=device.type->calcReadyToSend(
@@ -1008,10 +1063,8 @@ public:
         );
         device.RTS=readyToSend;
 
+        extractDestinations(pin, sendIndex, destinations);
         
-        destinations.begin=pin.beginEdgeIndex;
-        destinations.beginExternals=pin.beginExternalIndex;
-        destinations.end=pin.endEdgeIndex;
 
         if(!m_logWriter){
             sendEventId=-1;
@@ -1081,6 +1134,7 @@ protected:
         device_address_t address=pick_ready();
 
         uint32_t readyToSend = m_engine->getDeviceRTS(address);
+        assert(readyToSend);
         unsigned outputPin = __builtin_ctz(readyToSend);
 
         TypedDataPtr payload;
@@ -1212,6 +1266,7 @@ protected:
 
     void add_messages(const edge_index_range_t &range, const TypedDataPtr &payload, uint64_t sendEventId) override
     {
+        assert(range.begin<range.beginExternals);
         for(auto ei=range.begin; ei<range.beginExternals; ei++){
             m_messageQueue.push(message_t{ei, payload,sendEventId});
         }
