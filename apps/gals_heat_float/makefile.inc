@@ -12,6 +12,8 @@ demos/gals_heat_float/gals_heat_float_$1.xml : apps/gals_heat_float/create_gals_
 	mkdir -p $$(dir $$@)
 	$$(PYTHON) apps/gals_heat_float/create_gals_heat_float_instance.py  $$(subst _, ,$1) > $$@
 
+ALL_TEST_XML += demos/gals_heat_float/gals_heat_float_$1.xml
+
 demos/gals_heat_float/gals_heat_float_$1.snap demos/gals_heat_float/gals_heat_float_$1.kv : demos/gals_heat_float/gals_heat_float_$1.xml bin/epoch_sim providers/gals_heat_float.graph.so demos/gals_heat_float/gals_heat_float_$1.checked
 	bin/epoch_sim  --log-level 0 --max-steps $3 --snapshots $2 demos/gals_heat_float/gals_heat_float_$1.snap --key-value demos/gals_heat_float/gals_heat_float_$1.kv  demos/gals_heat_float/gals_heat_float_$1.xml
 

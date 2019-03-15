@@ -11,6 +11,8 @@ demos/apsp/apsp_$1.xml : apps/apsp/create_apsp_instance.py apps/apsp/apsp_graph_
 	mkdir -p $$(dir $$@)
 	$$(PYTHON) apps/apsp/create_apsp_instance.py  $$(subst _, ,$1) > $$@
 
+ALL_TEST_XML += demos/apsp/apsp_$1.xml
+
 demos/apsp/apsp_$1.snap : demos/apsp/apsp_$1.xml bin/epoch_sim providers/apsp.graph.so demos/apsp/apsp_$1.checked
 	bin/epoch_sim --stats-delta 1000 --log-level 0 --max-steps $3 --snapshots $2 $$@  demos/apsp/apsp_$1.xml
 

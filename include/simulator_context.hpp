@@ -639,8 +639,12 @@ private:
         if(it!=m_messageTypeToDefaultMessage.end()){
             return it->second;
         }
+
+        TypedDataPtr d;
+        if(messageType && messageType->getMessageSpec()){
+            d=messageType->getMessageSpec()->create();
+        }
         
-        auto d=messageType->getMessageSpec()->create();
         return m_messageTypeToDefaultMessage.emplace_hint(it, messageType, d)->second;
     }
     

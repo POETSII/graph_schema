@@ -1,5 +1,5 @@
 <?xml version="1.0"?>
-<Graphs xmlns="https://poets-project.org/schemas/virtual-graph-schema-v2" formatMinorVersion="1">
+<Graphs xmlns="https://poets-project.org/schemas/virtual-graph-schema-v3">
   <GraphType id="relaxation_heat_noterm" >
 	<Documentation><![CDATA[
 		Supposed to broadly match spinnaker experiments.
@@ -84,9 +84,6 @@
     </Properties>
 
     <MessageTypes>
-      <MessageType id="__init__">
-				<!-- This doesn't have any properties -->
-      </MessageType>
 
       <MessageType id="ticker">
         <!-- This doesn't have any properties -->
@@ -179,15 +176,14 @@
         }
 		]]></ReadyToSend>
 
-		<InputPin name="__init__" messageTypeId="__init__">
-		  <OnReceive><![CDATA[
+		<OnInit><![CDATA[
       deviceState->boundary=deviceProperties->initial_boundary;
 
       deviceState->nextHeat=deviceProperties->initial_heat;
 
       deviceState->dirty=true;
-		  ]]></OnReceive>
-		</InputPin>
+		  ]]>
+		</OnInit>
 
 		<InputPin name="share_in" messageTypeId="share">
 		  <OnReceive><![CDATA[
@@ -413,11 +409,9 @@
       *readyToSend = deviceState->rts;
     ]]></ReadyToSend>
 
-    <InputPin name="__init__" messageTypeId="__init__">
-      <OnReceive><![CDATA[
+    <OnInit><![CDATA[
        deviceState->rts=RTS_FLAG_modification_out;
-      ]]></OnReceive>
-    </InputPin>
+      ]]></OnInit>
 
     <InputPin name="termination_in" messageTypeId="termination">
       <OnReceive><![CDATA[

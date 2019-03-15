@@ -233,8 +233,17 @@ demos : $(ALL_DEMOS)
 
 all_tools : bin/print_graph_properties bin/epoch_sim bin/graph_sim
 
+#############################
+# Most testing of graphs is done with epoch_sim. Give graph_sim some exercise here
 
+%.xml.graph_sim : %.xml
+	bin/graph_sim $< && touch $@
 
+test_graph_sim : $(foreach p,$(ALL_TEST_XML), $(p).graph_sim )
+
+ALL_TESTS += test_graph_sim
+
+##
 
 VIRTUAL_ALL_TESTS := $(patsubst test/virtual/%.xml,%,$(wildcard test/virtual/*.xml))
 

@@ -12,6 +12,8 @@ demos/betweeness_centrality/betweeness_centrality_$1.xml : apps/betweeness_centr
 	mkdir -p $$(dir $$@)
 	$$(PYTHON) apps/betweeness_centrality/create_betweeness_centrality_instance.py  $$(subst _, ,$1) > $$@
 
+ALL_TEST_XML += demos/betweeness_centrality/betweeness_centrality_$1.xml
+
 demos/betweeness_centrality/betweeness_centrality_$1.snap : demos/betweeness_centrality/betweeness_centrality_$1.xml bin/epoch_sim providers/betweeness_centrality.graph.so demos/betweeness_centrality/betweeness_centrality_$1.checked
 	bin/epoch_sim  --log-level 0 --max-steps $3 --snapshots $2 $$@  demos/betweeness_centrality/betweeness_centrality_$1.xml
 

@@ -16,6 +16,8 @@ demos/relaxation_heat/relaxation_heat_$1.xml : apps/relaxation_heat/create_relax
 	mkdir -p $$(dir $$@)
 	$$(PYTHON) apps/relaxation_heat/create_relaxation_heat_instance.py  $$(subst _, ,$1) > $$@
 
+ALL_TEST_XML += demos/relaxation_heat/relaxation_heat_$1.xml
+
 demos/relaxation_heat/relaxation_heat_$1.snap : demos/relaxation_heat/relaxation_heat_$1.xml bin/epoch_sim providers/relaxation_heat.graph.so demos/relaxation_heat/relaxation_heat_$1.checked
 	bin/epoch_sim  --log-level 0 --max-steps $3 --snapshots $2 $$@  demos/relaxation_heat/relaxation_heat_$1.xml
 

@@ -1,5 +1,5 @@
 <?xml version="1.0"?>
-<Graphs xmlns="https://poets-project.org/schemas/virtual-graph-schema-v2">
+<Graphs xmlns="https://poets-project.org/schemas/virtual-graph-schema-v3">
 	<GraphType id="firefly_sync">
 		
 		<SharedCode><![CDATA[
@@ -11,8 +11,6 @@
 	</Properties>
 
 	<MessageTypes>
-		<MessageType id="__init__">
-		</MessageType>
 
 		<MessageType id="tick">
 		</MessageType>
@@ -56,15 +54,13 @@
 
 		]]></ReadyToSend>
 
-		<InputPin name="__init__" messageTypeId="__init__">
-			<OnReceive><![CDATA[
+		<OnInit><![CDATA[
 				deviceState->t = deviceProperties->start_phase;
 				deviceState->rdy_to_flash = 0;
 				deviceState->rdy_to_slowflash = 0;
 				deviceState->rdy_to_log = 0;
 				deviceState->rdy_to_tick = 1;
-			]]></OnReceive>
-		</InputPin>
+			]]></OnInit>
 
 
 		<InputPin name="tick_in" messageTypeId="tick">
@@ -93,14 +89,16 @@
 				]]></OnSend>
 		</OutputPin>
 
-                <InputPin name="force_flash" messageTypeId="flash" application="true">
+                <InputPin name="force_flash" messageTypeId="flash">
                      <OnReceive><![CDATA[
+					 			// TODO: This needs to be updated to connect to an external
                                 deviceState->t = deviceProperties->period - 2; // move it close to flashing
                      ]]></OnReceive>
                 </InputPin>
 
-		<OutputPin name="flash_log" messageTypeId="flash" application="true">
+		<OutputPin name="flash_log" messageTypeId="flash">
 			<OnSend><![CDATA[
+				// TODO: This needs to be updated to connect to an external
 				deviceState->rdy_to_log=0;	
 			]]></OnSend>
 		</OutputPin>
