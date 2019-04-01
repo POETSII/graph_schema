@@ -1007,13 +1007,13 @@ def render_graph_instance_as_softswitch(gi,dst,num_threads,device_to_thread):
         edgesIn[ei.dst_device][ei.dst_pin].append(ei)
         edgesOut[ei.src_device][ei.src_pin].append(ei)
 
-    thread_to_devices=[[] for i in range(num_threads)]
+    thread_to_devices=[[] for i in range(num_threads+1024)]
     devices_to_thread={}
     for d in gi.device_instances.values():
         if d.id not in device_to_thread:
             logging.error("device {}  not in mapping".format(d.id))
         t=device_to_thread[d.id]
-        assert(t>=0 and t<num_threads)
+        assert(t>=0 and t <= 3071 or t >= 4096 and t<num_threads + 1024)
         thread_to_devices[t].append(d)
         devices_to_thread[d]=t
 
@@ -1041,13 +1041,13 @@ def render_graph_instance_as_softswitch(gi,dst,num_threads,device_to_thread):
 
     const unsigned DEVICE_INSTANCE_COUNT={TOTAL_INSTANCES};
     enum {{ DEVICE_INSTANCE_COUNT_V={TOTAL_INSTANCES} }};
-    """.format(GRAPH_TYPE_ID=gi.graph_type.id, NUM_THREADS=num_threads, TOTAL_INSTANCES=len(gi.device_instances)))
+    """.format(GRAPH_TYPE_ID=gi.graph_type.id, NUM_THREADS=num_threads+1024, TOTAL_INSTANCES=len(gi.device_instances)))
 
-    for ti in range(num_threads):
+    for ti in range(num_threads+1024):
         dst.write("    const unsigned DEVICE_INSTANCE_COUNT_thread{}={};\n".format(ti,len(thread_to_devices[ti])))
         dst.write("    enum{{ DEVICE_INSTANCE_COUNT_thread{}_V={} }};\n".format(ti,len(thread_to_devices[ti])))
 
-    for ti in range(num_threads):
+    for ti in range(num_threads+1024):
         render_graph_instance_as_thread_context(
             dst,
             globalProperties,globalState,globalOutputPinTargets,
@@ -1071,7 +1071,7 @@ def render_graph_instance_as_softswitch(gi,dst,num_threads,device_to_thread):
     pointersAreRelative=0
     if _use_indirect_BLOB:
         pointersAreRelative=1
-    for ti in range(num_threads):
+    for ti in range(num_threads+1024):
         dst.write("""
         {{
             {},
@@ -1097,7 +1097,7 @@ def render_graph_instance_as_softswitch(gi,dst,num_threads,device_to_thread):
             0, // hbuf_head
             0 // hbuf_tail
         }}\n""".format(ti,graphPropertiesBinding,ti,ti,pointersAreRelative))
-        if ti+1<num_threads:
+        if ti+1<num_threads+1024:
             dst.write(",\n")
 
     dst.write("};\n")
@@ -1111,7 +1111,7 @@ def render_graph_instance_as_softswitch(gi,dst,num_threads,device_to_thread):
     globalOutputPinTargets.write(dst, "softswitch_pthread_output_pin_targets")
 
     print("graphOutputInstCount, -, {}, \n".format(len(edgeCosts)), file=measure_file)
-    print_statistics(dst, "renderSoftswitchOutputInstCost", "estimatedTotalOutgoingEdgeDistance", edgeCosts)
+    # print_statistics(dst, "renderSoftswitchOutputInstCost", "estimatedTotalOutgoingEdgeDistance", edgeCosts)
 
 
 import argparse
@@ -1224,21 +1224,41 @@ if(len(instances)>0):
     partitionInfoKey="dt10.partitions.{}".format(nThreads)
     partitionInfo=(inst.metadata or {}).get(partitionInfoKey,None)
 
-    if partitionInfo:
-        key=partitionInfo["key"]
-        logging.info("Reading partition info from metadata.")
-        device_to_thread = { di.id:int(di.metadata[key]) for di in inst.device_instances.values() }
-    else:
-        seed=args.placementSeed or 1
-        logging.info("Generating random partition from seed {}.".format(seed))
-        random.seed(seed)
-        device_to_thread = { id:random.randint(0,nThreads-1) for id in inst.device_instances.keys() }
+    # if partitionInfo:
+    #     key=partitionInfo["key"]
+    #     logging.info("Reading partition info from metadata.")
+    #     device_to_thread = { di.id:int(di.metadata[key]) for di in inst.device_instances.values() }
+    # else:
+    #     seed=args.placementSeed or 1
+    #     logging.info("Generating random partition from seed {}.".format(seed))
+    #     random.seed(seed)
+    #     device_to_thread = { id:random.randint(0,nThreads-1) for id in inst.device_instances.keys() }
+    logging.info("Generating one to one placement. Putting one helper on each FPGA")
+    ths = [i for i in range(nThreads)]
+    device_to_thread = {}
+
+    device_to_thread["head_helper"] = 0
+    device_to_thread["helper0"] = 1024
+    device_to_thread["helper1"] = 2048
+    device_to_thread["helper2"] = 3072
+    device_to_thread["helper3"] = 4096
+    device_to_thread["helper4"] = 5120
+
+    i = 1
+    for k in inst.device_instances.keys():
+        if k != "head_helper" and k != "helper0" and k != "helper1" and k != "helper2" and k != "helper3" and k != "helper4":
+            device_to_thread[k] = ths[i]
+            i = i + 1
+            if i == 1024 or i == 2048 or i == 3072 or i == 4096 or i == 5120:
+                i = i + 1
+            elif i == 6144:
+                i = 0
 
     if nThreads!=hwThreads:
         logging.info("Contracting from {} logical to {} physical using {}".format(nThreads,hwThreads,args.contraction))
         assert nThreads<hwThreads
         if args.contraction=="dense":
-            logicalToPhysica=[i for i in range(nThreads)]
+            logicalToPhysical=[i for i in range(nThreads)]
         elif args.contraction=="sparse":
             scale=hwThreads/nThreads
             logicalToPhysical=[ math.floor(i*scale) for i in range(nThreads)]
@@ -1254,15 +1274,59 @@ if(len(instances)>0):
     destInstPath=os.path.abspath("{}/{}_{}_inst.cpp".format(destPrefix,graph.id,inst.id))
     destInst=open(destInstPath,"wt")
 
+    new_device_to_thread = {}
+    for v in device_to_thread:
+        t = device_to_thread[v]
+        if t >= 3072:
+            t = t + 1024
+        new_device_to_thread[v] = t
+
+    device_to_thread = new_device_to_thread
+
     # create a mapping from threads to devices
-    thread_to_devices=[[] for i in range(hwThreads)]
+    thread_to_devices=[[] for i in range(hwThreads + 1024)]
     for d in inst.device_instances.values():
         if d.id not in device_to_thread:
             logging.error("device {}  not in mapping".format(d.id))
         t=device_to_thread[d.id]
-        assert(t>=0 and t<hwThreads)
+        assert(t>=0 and t <= 3071 or t >= 4096 and t<hwThreads + 1024)
         thread_to_devices[t].append(d.id)
 
+
+    for i in range(1, 1024):
+        if (thread_to_devices[i] is not None):
+            devices_on_thread = thread_to_devices[i]
+            for d in devices_on_thread:
+                inst.create_edge_instance(inst.device_instances[d],inst.device_instances[d].device_type.inputs["removeBlock"],inst.device_instances["head_helper"],inst.device_instances["head_helper"].device_type.outputs["start_units"])
+
+    for i in range(1025, 2048):
+        if (thread_to_devices[i] is not None):
+            devices_on_thread = thread_to_devices[i]
+            for d in devices_on_thread:
+                inst.create_edge_instance(inst.device_instances[d],inst.device_instances[d].device_type.inputs["removeBlock"],inst.device_instances["helper0"],inst.device_instances["helper0"].device_type.outputs["start_units"])
+
+    for i in range(2049, 3072):
+        if (thread_to_devices[i] is not None):
+            devices_on_thread = thread_to_devices[i]
+            for d in devices_on_thread:
+                inst.create_edge_instance(inst.device_instances[d],inst.device_instances[d].device_type.inputs["removeBlock"],inst.device_instances["helper1"],inst.device_instances["helper1"].device_type.outputs["start_units"])
+
+    for i in range(4097, 5120):
+        if (thread_to_devices[i] is not None):
+            devices_on_thread = thread_to_devices[i]
+            for d in devices_on_thread:
+                inst.create_edge_instance(inst.device_instances[d],inst.device_instances[d].device_type.inputs["removeBlock"],inst.device_instances["helper2"],inst.device_instances["helper2"].device_type.outputs["start_units"])
+
+    for i in range(5121, 6144):
+        if (thread_to_devices[i] is not None):
+            devices_on_thread = thread_to_devices[i]
+            for d in devices_on_thread:
+                inst.create_edge_instance(inst.device_instances[d],inst.device_instances[d].device_type.inputs["removeBlock"],inst.device_instances["helper3"],inst.device_instances["helper3"].device_type.outputs["start_units"])
+
+    for i in range(6145, 7168):
+            devices_on_thread = thread_to_devices[i]
+            for d in devices_on_thread:
+                inst.create_edge_instance(inst.device_instances[d],inst.device_instances[d].device_type.inputs["removeBlock"],inst.device_instances["helper4"],inst.device_instances["helper4"].device_type.outputs["start_units"])
 
     # dump the device name -> address mappings into a file for sending messages from the executive
     deviceAddrMap=open(args.app_pins_addr_map,"w+")
