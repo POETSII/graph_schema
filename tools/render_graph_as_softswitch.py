@@ -1113,6 +1113,16 @@ def render_graph_instance_as_softswitch(gi,dst,num_threads,device_to_thread):
     print("graphOutputInstCount, -, {}, \n".format(len(edgeCosts)), file=measure_file)
     # print_statistics(dst, "renderSoftswitchOutputInstCost", "estimatedTotalOutgoingEdgeDistance", edgeCosts)
 
+def removeHelper(name, inst):
+    del inst.device_instances[name]
+    toRemove = []
+    for ei in inst.edge_instances:
+        if inst.edge_instances[ei].dst_device.id == name:
+            toRemove.append(ei)
+        elif inst.edge_instances[ei].src_device.id == name:
+            toRemove.append(ei)
+    for e in toRemove:
+        del inst.edge_instances[e]
 
 import argparse
 
@@ -1238,20 +1248,33 @@ if(len(instances)>0):
     device_to_thread = {}
 
     device_to_thread["head_helper"] = 0
-    device_to_thread["helper0"] = 1024
-    device_to_thread["helper1"] = 2048
-    device_to_thread["helper2"] = 3072
-    device_to_thread["helper3"] = 4096
-    device_to_thread["helper4"] = 5120
+    if nThreads > 1024:
+        device_to_thread["helper0"] = 1024
+    else:
+        removeHelper("helper0", inst)
+    if nThreads > 2048:
+        device_to_thread["helper1"] = 2048
+    else:
+        removeHelper("helper1", inst)
+    if nThreads > 3072:
+        device_to_thread["helper2"] = 3072
+    else:
+        removeHelper("helper2", inst)
+    if nThreads > 4096:
+        device_to_thread["helper3"] = 4096
+    else:
+        removeHelper("helper3", inst)
+    if nThreads > 5120:
+        device_to_thread["helper4"] = 5120
+    else:
+        removeHelper("helper4", inst)
 
-    i = 1
+    i = 0
     for k in inst.device_instances.keys():
         if k != "head_helper" and k != "helper0" and k != "helper1" and k != "helper2" and k != "helper3" and k != "helper4":
             device_to_thread[k] = ths[i]
             i = i + 1
-            if i == 1024 or i == 2048 or i == 3072 or i == 4096 or i == 5120:
-                i = i + 1
-            elif i == 6144:
+            if i == nThreads:
                 i = 0
 
     if nThreads!=hwThreads:
@@ -1293,40 +1316,51 @@ if(len(instances)>0):
         thread_to_devices[t].append(d.id)
 
 
-    for i in range(1, 1024):
+    for i in range(0, 1024):
         if (thread_to_devices[i] is not None):
             devices_on_thread = thread_to_devices[i]
             for d in devices_on_thread:
-                inst.create_edge_instance(inst.device_instances[d],inst.device_instances[d].device_type.inputs["removeBlock"],inst.device_instances["head_helper"],inst.device_instances["head_helper"].device_type.outputs["start_units"])
+                if not inst.device_instances[d].id == "head_helper":
+                    inst.create_edge_instance(inst.device_instances[d],inst.device_instances[d].device_type.inputs["removeBlock"],inst.device_instances["head_helper"],inst.device_instances["head_helper"].device_type.outputs["start_units"])
 
-    for i in range(1025, 2048):
-        if (thread_to_devices[i] is not None):
-            devices_on_thread = thread_to_devices[i]
-            for d in devices_on_thread:
-                inst.create_edge_instance(inst.device_instances[d],inst.device_instances[d].device_type.inputs["removeBlock"],inst.device_instances["helper0"],inst.device_instances["helper0"].device_type.outputs["start_units"])
+    if nThreads > 1024:
+        for i in range(1024, 2048):
+            if (thread_to_devices[i] is not None):
+                devices_on_thread = thread_to_devices[i]
+                for d in devices_on_thread:
+                    if not inst.device_instances[d].id == "helper0":
+                        inst.create_edge_instance(inst.device_instances[d],inst.device_instances[d].device_type.inputs["removeBlock"],inst.device_instances["helper0"],inst.device_instances["helper0"].device_type.outputs["start_units"])
 
-    for i in range(2049, 3072):
-        if (thread_to_devices[i] is not None):
-            devices_on_thread = thread_to_devices[i]
-            for d in devices_on_thread:
-                inst.create_edge_instance(inst.device_instances[d],inst.device_instances[d].device_type.inputs["removeBlock"],inst.device_instances["helper1"],inst.device_instances["helper1"].device_type.outputs["start_units"])
+    if nThreads > 2048:
+        for i in range(2048, 3072):
+            if (thread_to_devices[i] is not None):
+                devices_on_thread = thread_to_devices[i]
+                for d in devices_on_thread:
+                    if not inst.device_instances[d].id == "helper1":
+                        inst.create_edge_instance(inst.device_instances[d],inst.device_instances[d].device_type.inputs["removeBlock"],inst.device_instances["helper1"],inst.device_instances["helper1"].device_type.outputs["start_units"])
 
-    for i in range(4097, 5120):
-        if (thread_to_devices[i] is not None):
-            devices_on_thread = thread_to_devices[i]
-            for d in devices_on_thread:
-                inst.create_edge_instance(inst.device_instances[d],inst.device_instances[d].device_type.inputs["removeBlock"],inst.device_instances["helper2"],inst.device_instances["helper2"].device_type.outputs["start_units"])
+    if nThreads > 3072:
+        for i in range(4096, 5120):
+            if (thread_to_devices[i] is not None):
+                devices_on_thread = thread_to_devices[i]
+                for d in devices_on_thread:
+                    if not inst.device_instances[d].id == "helper2":
+                        inst.create_edge_instance(inst.device_instances[d],inst.device_instances[d].device_type.inputs["removeBlock"],inst.device_instances["helper2"],inst.device_instances["helper2"].device_type.outputs["start_units"])
 
-    for i in range(5121, 6144):
-        if (thread_to_devices[i] is not None):
-            devices_on_thread = thread_to_devices[i]
-            for d in devices_on_thread:
-                inst.create_edge_instance(inst.device_instances[d],inst.device_instances[d].device_type.inputs["removeBlock"],inst.device_instances["helper3"],inst.device_instances["helper3"].device_type.outputs["start_units"])
+    if nThreads > 4096:
+        for i in range(5120, 6144):
+            if (thread_to_devices[i] is not None):
+                devices_on_thread = thread_to_devices[i]
+                for d in devices_on_thread:
+                    if not inst.device_instances[d].id == "helper3":
+                        inst.create_edge_instance(inst.device_instances[d],inst.device_instances[d].device_type.inputs["removeBlock"],inst.device_instances["helper3"],inst.device_instances["helper3"].device_type.outputs["start_units"])
 
-    for i in range(6145, 7168):
-            devices_on_thread = thread_to_devices[i]
-            for d in devices_on_thread:
-                inst.create_edge_instance(inst.device_instances[d],inst.device_instances[d].device_type.inputs["removeBlock"],inst.device_instances["helper4"],inst.device_instances["helper4"].device_type.outputs["start_units"])
+    if nThreads > 5120:
+        for i in range(6144, 7168):
+                devices_on_thread = thread_to_devices[i]
+                for d in devices_on_thread:
+                    if not inst.device_instances[d].id == "helper4":
+                        inst.create_edge_instance(inst.device_instances[d],inst.device_instances[d].device_type.inputs["removeBlock"],inst.device_instances["helper4"],inst.device_instances["helper4"].device_type.outputs["start_units"])
 
     # dump the device name -> address mappings into a file for sending messages from the executive
     deviceAddrMap=open(args.app_pins_addr_map,"w+")
