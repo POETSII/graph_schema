@@ -418,11 +418,13 @@ def load_device_type(graph,dtNode,sourceFile,namespace=None,loadDocumentation=Fa
     dt.ready_to_send_source_line=sourceLine
     dt.ready_to_send_source_file=sourceFile
 
-    # Tags with no implementation
+    if dtNode.find("p:OnHardwareIdle",namespace) is not None:
+        (idle_handler,idle_sourceLine)=get_child_text(dtNode,"p:OnHardwareIdle")
+        dt.on_idle_handler=idle_handler
+        dt.on_idle_source_line=idle_sourceLine
+        dt.on_idle_source_file=sourceFile
 
-    i = dtNode.find("p:OnHardwareIdle", namespace)
-    if i is not None:
-        raise RuntimeError("OnHardwareIdle has not been implemented")
+    # Tags with no implementation
 
     i = dtNode.find("p:OnThreadIdle", namespace)
     if i is not None:

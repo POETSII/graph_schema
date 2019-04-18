@@ -480,6 +480,9 @@ class DeviceType(object):
         self.init_source_line=None
         self.isExternal=isExternal
         self.documentation=documentation
+        self.on_hardware_idle_handler = ""
+        self.on_hardware_idle_source_file = None
+        self.on_hardware_idle_source_line = None
 
     def add_input(self,name,message_type,is_application,properties,state,metadata,receive_handler,source_file=None,source_line={},documentation=None):
         assert (state is None) or isinstance(state,TypedDataSpec)
