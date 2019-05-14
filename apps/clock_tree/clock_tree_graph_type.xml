@@ -69,7 +69,7 @@
 			assert(deviceState->pending==0);
 			assert(deviceState->doExport==0);
 			deviceState->cycle++;
-			if(deviceState->cycle >= graphProperties->max_ticks){
+			if(deviceState->cycle == graphProperties->max_ticks){
 				fake_handler_exit(0);
 				*doSend=false;
 			}else{
@@ -88,7 +88,9 @@
         </OutputPin>
         <ReadyToSend><![CDATA[
 			*readyToSend = 0;
-			if(deviceState->doExport){
+      if(deviceState->cycle > graphProperties->max_ticks){
+        // Do nothing
+      }else if(deviceState->doExport){
 				*readyToSend = OUTPUT_FLAG_root_output;
 			}else if(deviceState->pending==0){
 			 	*readyToSend = OUTPUT_FLAG_root_tick_out;
