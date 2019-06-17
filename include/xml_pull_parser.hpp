@@ -146,9 +146,13 @@ class ElementBindingsText
 
 public:
     std::string text;
+    bool seen;
   
     void onBegin(const Glib::ustring &) override
-    { text.clear(); }
+    {
+        text.clear();
+        seen=false;
+    }
 
     void onAttribute(const Glib::ustring &name, const Glib::ustring &value)
     {
@@ -161,7 +165,13 @@ public:
     }
 
     void onText(const Glib::ustring &dst) override
-    { text=dst; }
+    {
+        if(seen){
+            throw std::runtime_error("Received two text elements (TODO: should they be joined?)");
+        }
+        text=dst;
+        seen=true;
+    }
 
     void onEnd() override
     {}
@@ -181,7 +191,7 @@ public:
 class ElementBindingsDeviceInstance
     : public ElementBindingsComposite
 {
-    typedef std::function<void (std::string &&id, std::string &&deviceType, std::string &&properties, std::string &&metadata )> sink_t;
+    typedef std::function<void (std::string &&id, std::string &&deviceType, std::string &&properties, std::string &&state, std::string &&metadata )> sink_t;
 
 private:
     sink_t m_sink;
@@ -191,6 +201,7 @@ private:
 
     ElementBindingsText m_properties;
     ElementBindingsText m_metadata;
+    ElementBindingsText m_state;
 public:
     ElementBindingsDeviceInstance(sink_t sink)
         : m_sink(sink)
@@ -204,6 +215,7 @@ public:
         m_deviceType.clear();
         m_properties.text.clear();
         m_metadata.text.clear();
+        m_state.text.clear();
     }
 
   void onAttribute(const Glib::ustring &name, const Glib::ustring &value) override
@@ -221,7 +233,7 @@ public:
     {
         if(name=="P") return &m_properties;
         if(name=="M") return &m_metadata;
-        if(name=="S") throw std::runtime_error("State elements on device (v3) not supported by this parser yet.");
+        if(name=="S") return &m_state;
         throw std::runtime_error("Unexpected element");
     }
 
@@ -233,7 +245,7 @@ public:
 
     virtual void onEnd() override
     {
-        m_sink( std::move(m_id), std::move(m_deviceType), std::move(m_properties.text), std::move(m_metadata.text) );
+        m_sink( std::move(m_id), std::move(m_deviceType), std::move(m_properties.text), std::move(m_properties.text), std::move(m_metadata.text) );
     }
 };
 
@@ -336,7 +348,7 @@ class ElementBindingsGraphInstance
 {
 private:
     ElementBindingsText m_ebGraphProperties;
-      ElementBindingsText m_ebGraphMetadata;
+    ElementBindingsText m_ebGraphMetadata;
 
     ElementBindingsDeviceInstance m_ebDeviceInstance;
     ElementBindingsEdgeInstance m_ebEdgeInstance;
@@ -360,7 +372,7 @@ private:
     std::unordered_map<std::string,DeviceTypePtr> m_deviceTypes;
     std::unordered_map<std::string, std::pair<uint64_t,DeviceTypePtr> > m_deviceInstances;
 
-    void onDeviceInstance(std::string &&id, std::string &&deviceType, std::string &&properties, std::string &&metadata)
+    void onDeviceInstance(std::string &&id, std::string &&deviceType, std::string &&properties, std::string &&state, std::string &&metadata)
     {
         auto dt=m_deviceTypes.at(deviceType);
         TypedDataPtr deviceProperties;
@@ -370,12 +382,18 @@ private:
             deviceProperties=parseTypedDataFromText(dt->getPropertiesSpec(), properties);
         }
 
+        TypedDataPtr deviceState;
+        if(state.empty()){
+            deviceState=dt->getStateSpec()->create();
+        }else{
+            deviceState=parseTypedDataFromText(dt->getStateSpec(), state);
+        }
+
         uint64_t dId;
         rapidjson::Document deviceMetadata;
         if(m_parseMetaData && !metadata.empty()){
             deviceMetadata=parseMetadataFromText(metadata);
         }
-        TypedDataPtr deviceState; // TODO : Not supported yet.
         dId=m_events->onDeviceInstance(m_gId, dt, id, deviceProperties, deviceState, std::move(deviceMetadata));
 
         m_deviceInstances.insert(std::make_pair( id, std::make_pair(dId, dt)));
@@ -433,7 +451,7 @@ public:
 				 GraphLoadEvents *events,
 				 Registry *registry
     )
-        : m_ebDeviceInstance( std::bind(&ElementBindingsGraphInstance::onDeviceInstance, this, _1, _2, _3, _4) )
+        : m_ebDeviceInstance( std::bind(&ElementBindingsGraphInstance::onDeviceInstance, this, _1, _2, _3, _4, _5) )
         , m_ebEdgeInstance( std::bind(&ElementBindingsGraphInstance::onEdgeInstance, this, _1, _2, _3, _4) )
         , m_ebDeviceInstances{ "DeviceInstances", {{"DevI", &m_ebDeviceInstance}, {"ExtI", &m_ebDeviceInstance}}  }
         , m_ebEdgeInstances{ "EdgeInstances", {{"EdgeI", &m_ebEdgeInstance}} }
