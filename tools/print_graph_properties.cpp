@@ -1,4 +1,5 @@
 #include "graph.hpp"
+#include "xml_pull_parser.hpp"
 
 #include <libxml++/parsers/domparser.h>
 
@@ -143,9 +144,11 @@ int main(int argc, char *argv[])
   try{
     fprintf(stderr, "Initialising registry.\n");
     RegistryImpl registry;
+    GraphInfo graph;
+
     fprintf(stderr, "Parsing.\n");
 
-    xmlpp::DomParser parser;
+    bool useStreamingParser=false;
 
     filepath srcPath(current_path());
     filepath srcFileName("-");
@@ -159,20 +162,31 @@ int main(int argc, char *argv[])
       }
     }
 
-    fprintf(stderr, "Parsing XML\n");
-    if(srcFileName.native()=="-"){
-      parser.parse_stream(std::cin);
-    }else{
-      parser.parse_file(srcFileName.native());
-    }
-    fprintf(stderr, "Parsed XML\n");
-
-    GraphInfo graph;
+    
     if(argc>2){
       graph.quiet=atoi(argv[2]);
     }
 
-    loadGraph(&registry, srcPath, parser.get_document()->get_root_node(), &graph);
+    if(argc>3){
+      useStreamingParser=atoi(argv[3])!=0;
+    }
+
+    if(!useStreamingParser){
+      fprintf(stderr, "Parsing XML using DOM\n");
+      xmlpp::DomParser parser;
+      if(srcFileName.native()=="-"){
+        parser.parse_stream(std::cin);
+      }else{
+        parser.parse_file(srcFileName.native());
+      }
+      fprintf(stderr, "Parsed XML\n");
+
+      loadGraph(&registry, srcPath, parser.get_document()->get_root_node(), &graph);
+    }else{
+      fprintf(stderr, "Parsing using streaming parser.\n");
+
+      loadGraphPull(&registry, srcFileName, &graph);
+    }
 
     fprintf(stderr, "Done\n");
 
