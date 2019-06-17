@@ -3,11 +3,15 @@
 //#include "external_connection.hpp"
 //#include "external_device_proxy.hpp"
 
+#if POETS_EXTERNAL_INTERFACE_SPEC_ENABLE
+
 #include "poets_protocol/messages/factory.hpp"
 #include "poets_protocol/channels.hpp"
 
 #include "poets_protocol/DownstreamConnection.hpp"
 #include "poets_protocol/DownstreamConnectionEventsBase.hpp"
+
+#endif
 
 #include <libxml++/parsers/domparser.h>
 #include <libxml++/document.h>
@@ -17,6 +21,7 @@
 #include <fstream>
 #include <memory>
 #include <random>
+#include <queue>
 #include <unordered_set>
 #include <algorithm>
 #include <signal.h>
@@ -98,8 +103,12 @@ struct EpochSim
 
     std::pair<MessageTypePtr, TypedDataPtr> prev_message;
 
+#if POETS_EXTERNAL_INTERFACE_SPEC_ENABLE
+
     // Only used for externals
     std::queue<external_message_t> externalSendQueue;
+
+#endif
 
     bool anyReady() const
     {
@@ -129,6 +138,7 @@ struct EpochSim
 
   uint64_t m_unq;
 
+#if POETS_EXTERNAL_INTERFACE_SPEC_ENABLE
   std::shared_ptr<DownstreamConnectionEnvironmentBase> m_connectionEnv;
   std::set<std::string> m_devicesAddedToExternalConnectionEnv;
 
@@ -195,6 +205,13 @@ struct EpochSim
 
     return std::make_shared<ExternalDeviceImpl>(dt,index, onSend,onRecv,onRTS);
   }
+#else
+  DeviceTypePtr createExternalInterceptor(DeviceTypePtr dt, unsigned index)
+  {
+    throw std::runtime_error("Externals not supported in this build.");
+  }
+
+#endif
 
   uint64_t nextSeqUnq()
   {
@@ -275,6 +292,8 @@ struct EpochSim
 
     if(dstDevType->isExternal() || srcDevType->isExternal())
     {
+#if POETS_EXTERNAL_INTERFACE_SPEC_ENABLE
+      
       const auto &dstDev=m_devices[dstDevIndex];
       if(m_devicesAddedToExternalConnectionEnv.find(dstDev.name)==m_devicesAddedToExternalConnectionEnv.end()){
         m_connectionEnv->add_device(dstDev.name, dstDev.type);
@@ -285,6 +304,9 @@ struct EpochSim
       }
 
       m_connectionEnv->add_edge(srcDev.name, srcOutput->getName(), dstDev.name, dstInput->getName());
+    #else
+      throw std::runtime_error("Externals are not supported in this build.");
+    #endif
     }
   }
 
@@ -465,6 +487,8 @@ struct EpochSim
   template<class TRng>
   bool step(TRng &rng, double probSend,bool capturePreEventState)
   {
+  #if POETS_EXTERNAL_INTERFACE_SPEC_ENABLE
+
     // Drain the external connection
     // TODO: Is this too eager?
     while(m_pExternalConnection->canRead()){
@@ -485,6 +509,7 @@ struct EpochSim
       dev.externalSendQueue.push(msg);
       dev.readyToSend=1ul<<msg.srcPort;
     }
+  #endif
 
     // Within each step every object gets the chance to send a message with probability probSend
     std::uniform_real_distribution<> udist;
@@ -890,7 +915,9 @@ int main(int argc, char *argv[])
 
     EpochSim graph;
 
+#if POETS_EXTERNAL_INTERFACE_SPEC_ENABLE
     graph.m_connectionEnv=std::make_shared<DownstreamConnectionEnvironmentBase>();
+#endif
 
     if(!logSinkName.empty()){
       graph.m_log.reset(new LogWriterToFile(logSinkName.c_str()));
@@ -912,7 +939,9 @@ int main(int argc, char *argv[])
 
     graph.init();
 
+#if POETS_EXTERNAL_INTERFACE_SPEC_ENABLE
     graph.m_pExternalConnection->startPump();
+#endif
 
     if(snapshotWriter){
       graph.writeSnapshot(snapshotWriter.get(), 0.0, 0);
@@ -941,6 +970,7 @@ int main(int argc, char *argv[])
       }
 
       if(!running){
+#if POETS_EXTERNAL_INTERFACE_SPEC_ENABLE
         if(graph.m_pExternalConnection->isReadOpen() ){
           if(logLevel>1){
             fprintf(stderr, "  Internal events have finished, but external read connection is open.\n");
@@ -962,6 +992,7 @@ int main(int argc, char *argv[])
         }else{
           break; // finished
         }
+    #endif
       }
     }
 
@@ -969,17 +1000,7 @@ int main(int argc, char *argv[])
       fprintf(stderr, "Done\n");
     }
 
-    if(keyValueDst){
-        if(logLevel>2){
-            fprintf(stderr, "Writing key value file\n");
-        }
-        std::sort(graph.m_keyValueEvents.begin(), graph.m_keyValueEvents.end());
-        for(auto t : graph.m_keyValueEvents){
-            fprintf(keyValueDst, "%s, %u, %u, %u\n", std::get<0>(t), std::get<1>(t), std::get<2>(t), std::get<3>(t));
-        }
-        fflush(keyValueDst);
-    }
-
+    
     close_resources();
   }catch(std::exception &e){
     close_resources();
