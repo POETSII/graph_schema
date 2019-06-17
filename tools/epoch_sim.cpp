@@ -1,7 +1,13 @@
 #include "graph.hpp"
 
-#include "external_connection.hpp"
-#include "external_device_proxy.hpp"
+//#include "external_connection.hpp"
+//#include "external_device_proxy.hpp"
+
+#include "poets_protocol/messages/factory.hpp"
+#include "poets_protocol/channels.hpp"
+
+#include "poets_protocol/DownstreamConnection.hpp"
+#include "poets_protocol/DownstreamConnectionEventsBase.hpp"
 
 #include <libxml++/parsers/domparser.h>
 #include <libxml++/document.h>
@@ -123,7 +129,8 @@ struct EpochSim
 
   uint64_t m_unq;
 
-  std::shared_ptr<ExternalConnection> m_pExternalConnection;
+  std::shared_ptr<DownstreamConnectionEnvironmentBase> m_connectionEnv;
+  std::set<std::string> m_devicesAddedToExternalConnectionEnv;
 
   DeviceTypePtr createExternalInterceptor(DeviceTypePtr dt, unsigned index)
   {
@@ -268,6 +275,9 @@ struct EpochSim
 
     if(dstDevType->isExternal() || srcDevType->isExternal())
     {
+      m_connectionEnv->add_device(m_devices[dstDevIndex].name, m_devices[dstDevIndex].type);
+      m_connectionEnv->add_device(m_devices[dstDevIndex].name, m_devices[dstDevIndex].type);
+
       m_pExternalConnection->onExternalEdgeInstance(
         m_devices[dstDevIndex].name, dstDevIndex, dstDevType, dstInput,
         m_devices[srcDevIndex].name, srcDevIndex, srcDevType, srcOutput
@@ -755,8 +765,7 @@ int main(int argc, char *argv[])
     std::string snapshotSinkName;
     unsigned snapshotDelta=0;
 
-    std::string externalInSpec="";
-    std::string externalOutSpec="-";
+    std::string externalConnSpec="";
 
     std::string logSinkName;
 
@@ -820,26 +829,13 @@ int main(int argc, char *argv[])
         }
         logSinkName=argv[ia+1];
         ia+=2;
-      }else if(!strcmp("--key-value",argv[ia])){
+      
+      }else if(!strcmp("--external-connection-spec",argv[ia])){
         if(ia+1 >= argc){
-          fprintf(stderr, "Missing argument to --key-value\n");
+          fprintf(stderr, "Missing argument to --external-connection-spec\n");
           usage();
         }
-        keyValueName=argv[ia+1];
-        ia+=2;
-      }else if(!strcmp("--external-in",argv[ia])){
-        if(ia+1 >= argc){
-          fprintf(stderr, "Missing argument to --external_in\n");
-          usage();
-        }
-        externalInSpec=argv[ia+1];
-        ia+=2;
-      }else if(!strcmp("--external-out",argv[ia])){
-        if(ia+1 >= argc){
-          fprintf(stderr, "Missing argument to --external-out\n");
-          usage();
-        }
-        externalOutSpec=argv[ia+1];
+        externalConnSpec=argv[ia+1];
         ia+=2;
       }else if(!strcmp("--accurate-assertions",argv[ia])){
         enableAccurateAssertions=true;
@@ -860,31 +856,6 @@ int main(int argc, char *argv[])
       }
     }
 
-    FILE *externalInFile=0;
-    if(externalInSpec!=""){
-      if(externalInSpec=="-"){
-        externalInFile=stdin;
-      }else{
-        externalInFile=fopen(externalInSpec.c_str(),"rb");
-        if(externalInFile==0){
-          fprintf(stderr, "COuldn't open file '%s' for reading as external in.\n", externalInSpec.c_str());
-          exit(1);
-        }
-      }
-    }
-
-    FILE *externalOutFile=stdout;
-    if(externalOutSpec!="-"){
-      if(externalOutSpec==""){
-        externalOutFile=0;
-      }else{
-        externalOutFile=fopen(externalInSpec.c_str(),"wb");
-        if(externalOutFile==0){
-          fprintf(stderr, "COuldn't open file '%s' for writing as external out.\n", externalOutSpec.c_str());
-          exit(1);
-        }
-      }
-    }
 
     RegistryImpl registry;
 
@@ -916,21 +887,13 @@ int main(int argc, char *argv[])
 
     EpochSim graph;
 
-    graph.m_pExternalConnection=std::make_shared<JSONExternalConnection>(externalInFile, externalOutFile);
+    graph.m_connectionEnv=std::make_shared<DownstreamConnectionEnvironmentBase>();
 
     if(!logSinkName.empty()){
       graph.m_log.reset(new LogWriterToFile(logSinkName.c_str()));
       g_pLog=graph.m_log;
     }
 
-    FILE *keyValueDst=0;
-    if(!keyValueName.empty()){
-        keyValueDst=fopen(keyValueName.c_str(), "wt");
-        if(keyValueDst==0){
-            fprintf(stderr, "Couldn't open key value dest '%s'\n", keyValueName.c_str());
-            exit(1);
-        }
-    }
 
     loadGraph(&registry, srcPath, parser.get_document()->get_root_node(), &graph);
     if(logLevel>1){
