@@ -241,8 +241,8 @@ struct EpochSim
   void onEdgeInstance(uint64_t gId, uint64_t dstDevIndex, const DeviceTypePtr &dstDevType, const InputPinPtr &dstInput, uint64_t srcDevIndex, const DeviceTypePtr &srcDevType, const OutputPinPtr &srcOutput, int sendIndex, const TypedDataPtr &properties, rapidjson::Document &&) override
   {
 
-    // In principle we support external->external connections!
-    // They just get routed through. Why would this happen though?
+    // We need to allow for external -> external connections, which should
+    // get routed through the sim.
 
     // For an external's input we need to create fake properties
     TypedDataPtr props(properties);
@@ -275,13 +275,16 @@ struct EpochSim
 
     if(dstDevType->isExternal() || srcDevType->isExternal())
     {
-      m_connectionEnv->add_device(m_devices[dstDevIndex].name, m_devices[dstDevIndex].type);
-      m_connectionEnv->add_device(m_devices[dstDevIndex].name, m_devices[dstDevIndex].type);
+      const auto &dstDev=m_devices[dstDevIndex];
+      if(m_devicesAddedToExternalConnectionEnv.find(dstDev.name)==m_devicesAddedToExternalConnectionEnv.end()){
+        m_connectionEnv->add_device(dstDev.name, dstDev.type);
+      }
+      const auto &srcDev=m_devices[srcDevIndex];
+      if(m_devicesAddedToExternalConnectionEnv.find(srcDev.name)==m_devicesAddedToExternalConnectionEnv.end()){
+        m_connectionEnv->add_device(srcDev.name, srcDev.type);
+      }
 
-      m_pExternalConnection->onExternalEdgeInstance(
-        m_devices[dstDevIndex].name, dstDevIndex, dstDevType, dstInput,
-        m_devices[srcDevIndex].name, srcDevIndex, srcDevType, srcOutput
-      );
+      m_connectionEnv->add_edge(srcDev.name, srcOutput->getName(), dstDev.name, dstInput->getName());
     }
   }
 
