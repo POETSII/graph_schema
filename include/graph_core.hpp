@@ -510,6 +510,13 @@ public:
   virtual OutputPinPtr getOutput(const std::string &name) const=0;
   virtual const std::vector<OutputPinPtr> &getOutputs() const=0;
 
+  virtual void init(
+           OrchestratorServices *orchestrator,
+           const typed_data_t *graphProperties,
+           const typed_data_t *deviceProperties,
+           typed_data_t *deviceState
+           ) const=0;
+
   virtual uint32_t calcReadyToSend(
 				   OrchestratorServices *orchestrator,
 				   const typed_data_t *graphProperties,

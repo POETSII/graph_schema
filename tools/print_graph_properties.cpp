@@ -83,6 +83,7 @@ public:
    const DeviceTypePtr &dt,
    const std::string &id,
    const TypedDataPtr &properties,
+   const TypedDataPtr &state,
    rapidjson::Document &&metadata
    ) override {
      if(!quiet){
@@ -150,7 +151,7 @@ int main(int argc, char *argv[])
 
     if(argc>1){
       srcFileName=std::string(argv[1]);
-      if(srcFileName.native()!="-"){      
+      if(srcFileName.native()!="-"){
         srcFileName=absolute(srcFileName);
         fprintf(stderr,"Reading from '%s' ( = '%s' absolute)\n", argv[1], srcFileName.c_str());
         srcPath=srcFileName.parent_path();
