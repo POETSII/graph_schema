@@ -13,6 +13,7 @@
 #include <algorithm>
 #include <queue>
 #include <stack>
+#include <random>
 
 template<class T>
 class FIFOSet

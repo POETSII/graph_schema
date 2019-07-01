@@ -9,6 +9,7 @@
 #include <iostream>
 #include <string>
 #include <ctype.h>
+#include <functional>
 
 #include <dlfcn.h>
 
@@ -87,7 +88,9 @@ std::string float_to_string(float x)
 {
   // https://randomascii.wordpress.com/2012/03/08/float-precisionfrom-zero-to-100-digits-2/
   char buffer[16]={0};
-  snprintf(buffer, 15, "%.9g", x);
+  if(snprintf(buffer, 15, "%.9g", x) < 0){
+    throw std::runtime_error("snprintf failed"); // get rid of g++ 8 warning
+  }
   return buffer;
 }
 
@@ -95,7 +98,9 @@ std::string float_to_string(double x)
 {
   // https://randomascii.wordpress.com/2012/03/08/float-precisionfrom-zero-to-100-digits-2/
   char buffer[32]={0};
-  snprintf(buffer, 31, "%.17g", x);
+  if(snprintf(buffer, 31, "%.17g", x) < 0){
+    throw std::runtime_error("snprintf failed"); // get rid of g++ 8 warning
+  }
   return buffer;
 }
 
