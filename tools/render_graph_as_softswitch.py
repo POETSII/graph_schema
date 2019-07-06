@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 
-
 from graph.load_xml import load_graph_types_and_instances
 from graph.write_cpp import render_graph_as_cpp
 
@@ -15,6 +14,30 @@ import random
 import math
 import statistics
 
+import argparse
+
+#logging.getLogger(__name__)
+
+parser = argparse.ArgumentParser(description='Render graph instance as softswitch.')
+parser.add_argument('source', type=str, help='source file (xml graph instance)')
+parser.add_argument('--dest', help="Directory to write the output to", default=".")
+parser.add_argument('--graph_schema_dir', type=str, help="Root of graph_schema directory")
+parser.add_argument('--threads', help='number of logical threads to use (active threads)', type=int, default=2)
+parser.add_argument('--hardware-threads', help='number of threads used in hardware (default=threads)', type=int, default=0)
+parser.add_argument('--contraction', help='if threads < hardware-threads, how to do mapping. "dense", "sparse", or "random"', type=str, default="dense")
+parser.add_argument('--log-level', dest="logLevel", help='logging level (INFO,ERROR,...)', default='WARNING')
+parser.add_argument('--placement-seed', dest="placementSeed", help="Choose a specific random placement", default=None)
+parser.add_argument('--destination-ordering', dest="destinationOrdering", help="Should messages be send 'furthest-first', 'random', 'nearest-first'", default="random")
+parser.add_argument('--measure', help="Destination for measured properties", default="tinsel.render_softswitch.csv")
+parser.add_argument('--message-types', help="a file that prints the message types and their enumerated values. This is used to decode messages at the executive", default="messages.csv")
+parser.add_argument('--app-pins-addr-map', help="a file that gives the address map of the input pins, used by the executive to send messages to devices", default="appPinInMap.csv")
+parser.add_argument('--externals', help="if set true we are using the externals UserI/O other wise we are using application pins for I/O", type=bool, default=False)
+
+args = parser.parse_args()
+
+sys.path.append(args.graph_schema_dir + "/tools/")
+# Import config.py from tinsel (this has had to be automtically converted to python3)
+from config import p
 
 def print_statistics(dst, baseName, unit, data):
     print("{}Count, -, {}, {}\n".format(baseName, len(data), unit), file=measure_file)
@@ -47,11 +70,13 @@ _use_indirect_BLOB=False and _use_BLOB
 # If 0, then don't sort edges. If 1, then sort by furthest first. If -1, then sort by closest first
 sort_edges_by_distance=0
 
-threads_per_core=16
-cores_per_mailbox=4
-mailboxes_per_board=16
+# Force these to 1 for now. Testing more than one box at the minute could be a massive headache
+p["BoxMeshXLen"] = 1
+p["BoxMeshYLen"] = 1
+BoardMeshX = 3*p["BoxMeshXLen"]
+BoardMeshY = 2*p["BoxMeshYLen"]
 
-threads_per_mailbox=threads_per_core*cores_per_mailbox
+ThreadsPerMailbox=p["ThreadsPerCore"]*p["CoresPerMailbox"]
 
 inter_mbox_cost=5
 intra_mbox_cost=1
@@ -59,7 +84,7 @@ intra_mbox_cost=1
 measure_file=None
 
 def decompose_thread(id):
-    return (id//threads_per_mailbox, (id%threads_per_mailbox)//threads_per_core, id%threads_per_core)
+    return (id//ThreadsPerMailbox, (id%ThreadsPerMailbox)//p["ThreadsPerCore"], id%p["ThreadsPerCore"])
 
 def thread_distance(dst,src):
     (srcMbox,srcCore,srcThread)=decompose_thread(src)
@@ -392,7 +417,8 @@ def output_device_instance_addresses(gi,device_to_thread, thread_to_devices, dst
     # format deviceName_inAppPinName, thread addr, dev addr, pinIndex
     for d in gi.device_instances.values(): # iterate through all devices
         deviceName = d.id
-        threadId = device_to_thread[d.id]
+        threadNum = device_to_thread[d.id]
+        threadId = list(thread_to_devices.keys())[threadNum]
         for ip in d.device_type.inputs.values():
             if ip.is_application == True: #application input pin, so we print the addr
                 deviceOffset = thread_to_devices[threadId].index(d.id)
@@ -978,6 +1004,40 @@ def render_device_instance_outputs(devices_to_thread, di, dst, edges_out, global
     if not _use_BLOB:
         dst.write("};\n")  # End of output pin targets
 
+# create a mapping from threads to devices
+# @jrbeaumont: Complicated procedure ripped right out of POLite's PGraph.cpp
+# Generates threadIds from location on boards
+# These are used to map onto tinsel-0.6 which can connect more than one POETS box
+def generate_empty_thread_to_device():
+    threads_generated = 0
+    max_thread = 0
+    log_threads_per_core = 4
+    thread_to_devices = {}
+
+    for boardY in range(0, BoardMeshY):
+        for boardX in range(0, BoardMeshX):
+            for mBoxX in range(0, p["MailboxMeshXLen"]):
+                for mBoxY in range(0, p["MailboxMeshYLen"]):
+                    for threadNum in range(0, ThreadsPerMailbox):
+                        threadId = boardY
+                        threadId = (threadId << p["MeshXBits"]) | boardX
+                        threadId = (threadId << p["MailboxMeshYBits"]) | mBoxY
+                        threadId = (threadId << p["MailboxMeshXBits"]) | mBoxX
+                        threadId = (threadId << (p["LogCoresPerMailbox"] + p["LogThreadsPerCore"])) | threadNum
+                        if threads_generated >= nThreads:
+                            print("DONE")
+                            break
+                        threads_generated += 1
+                        thread_to_devices[threadId] = []
+                        if threadId > max_thread:
+                            max_thread = threadId
+
+    # Have to fill in the blanks or it won't run
+    for i in range(0, max_thread):
+        if i not in thread_to_devices:
+            thread_to_devices[i] = []
+
+    return thread_to_devices
 
 def render_graph_instance_as_softswitch(gi,dst,num_threads,device_to_thread):
 
@@ -1007,28 +1067,29 @@ def render_graph_instance_as_softswitch(gi,dst,num_threads,device_to_thread):
         edgesIn[ei.dst_device][ei.dst_pin].append(ei)
         edgesOut[ei.src_device][ei.src_pin].append(ei)
 
-    thread_to_devices=[[] for i in range(num_threads)]
+    # thread_to_devices=[[] for i in range(num_threads)]
+    thread_to_devices = generate_empty_thread_to_device()
     devices_to_thread={}
     for d in gi.device_instances.values():
         if d.id not in device_to_thread:
             logging.error("device {}  not in mapping".format(d.id))
         t=device_to_thread[d.id]
-        assert(t>=0 and t<num_threads)
+        # assert(t>=0 and t<num_threads)
         thread_to_devices[t].append(d)
         devices_to_thread[d]=t
 
     # calculate statistics of distribution
     device_per_thread_hist=[]
     device_per_thread_median=0
-    for d in thread_to_devices:
-        c=len(d)
+    for d in sorted(thread_to_devices):
+        c=len(thread_to_devices[d])
         while c >= len(device_per_thread_hist):
             device_per_thread_hist.append(0)
         device_per_thread_hist[c] += 1
     for i in range(len(device_per_thread_hist)):
         if device_per_thread_hist[i]!=0:
             print("renderSoftswitchDevicesPerThreadHist, {}, {}, threads\n".format(i, device_per_thread_hist[i]), file=measure_file)
-    device_per_thread_counts=[len(x) for x in thread_to_devices]
+    device_per_thread_counts=[len(thread_to_devices[x]) for x in sorted(thread_to_devices)]
     print_statistics(dst, "renderSoftswitchDevicesPerThread", "devices/thread", device_per_thread_counts)
 
 
@@ -1036,18 +1097,20 @@ def render_graph_instance_as_softswitch(gi,dst,num_threads,device_to_thread):
     dst.write("""
     #include "{GRAPH_TYPE_ID}.hpp"
 
-    const unsigned THREAD_COUNT={NUM_THREADS};
-    enum{{ THREAD_COUNT_V={NUM_THREADS} }};
+    const unsigned THREAD_COUNT=11264;
+    enum{{ THREAD_COUNT_V=11264 }};
 
     const unsigned DEVICE_INSTANCE_COUNT={TOTAL_INSTANCES};
     enum {{ DEVICE_INSTANCE_COUNT_V={TOTAL_INSTANCES} }};
     """.format(GRAPH_TYPE_ID=gi.graph_type.id, NUM_THREADS=num_threads, TOTAL_INSTANCES=len(gi.device_instances)))
 
-    for ti in range(num_threads):
+    # for ti in range(num_threads):
+    for ti in sorted(thread_to_devices):
         dst.write("    const unsigned DEVICE_INSTANCE_COUNT_thread{}={};\n".format(ti,len(thread_to_devices[ti])))
         dst.write("    enum{{ DEVICE_INSTANCE_COUNT_thread{}_V={} }};\n".format(ti,len(thread_to_devices[ti])))
 
-    for ti in range(num_threads):
+    # for ti in range(num_threads):
+    for ti in sorted(thread_to_devices):
         render_graph_instance_as_thread_context(
             dst,
             globalProperties,globalState,globalOutputPinTargets,
@@ -1071,7 +1134,8 @@ def render_graph_instance_as_softswitch(gi,dst,num_threads,device_to_thread):
     pointersAreRelative=0
     if _use_indirect_BLOB:
         pointersAreRelative=1
-    for ti in range(num_threads):
+    # for ti in range(num_threads):
+    for ti in sorted(thread_to_devices):
         dst.write("""
         {{
             {},
@@ -1097,7 +1161,7 @@ def render_graph_instance_as_softswitch(gi,dst,num_threads,device_to_thread):
             0, // hbuf_head
             0 // hbuf_tail
         }}\n""".format(ti,graphPropertiesBinding,ti,ti,pointersAreRelative))
-        if ti+1<num_threads:
+        if ti<11263: # Hardcoded until a better solution can be thought of
             dst.write(",\n")
 
     dst.write("};\n")
@@ -1114,25 +1178,30 @@ def render_graph_instance_as_softswitch(gi,dst,num_threads,device_to_thread):
     print_statistics(dst, "renderSoftswitchOutputInstCost", "estimatedTotalOutgoingEdgeDistance", edgeCosts)
 
 
-import argparse
+# import argparse
 
-#logging.getLogger(__name__)
+# #logging.getLogger(__name__)
 
-parser = argparse.ArgumentParser(description='Render graph instance as softswitch.')
-parser.add_argument('source', type=str, help='source file (xml graph instance)')
-parser.add_argument('--dest', help="Directory to write the output to", default=".")
-parser.add_argument('--threads', help='number of logical threads to use (active threads)', type=int, default=2)
-parser.add_argument('--hardware-threads', help='number of threads used in hardware (default=threads)', type=int, default=0)
-parser.add_argument('--contraction', help='if threads < hardware-threads, how to do mapping. "dense", "sparse", or "random"', type=str, default="dense")
-parser.add_argument('--log-level', dest="logLevel", help='logging level (INFO,ERROR,...)', default='WARNING')
-parser.add_argument('--placement-seed', dest="placementSeed", help="Choose a specific random placement", default=None)
-parser.add_argument('--destination-ordering', dest="destinationOrdering", help="Should messages be send 'furthest-first', 'random', 'nearest-first'", default="random")
-parser.add_argument('--measure', help="Destination for measured properties", default="tinsel.render_softswitch.csv")
-parser.add_argument('--message-types', help="a file that prints the message types and their enumerated values. This is used to decode messages at the executive", default="messages.csv")
-parser.add_argument('--app-pins-addr-map', help="a file that gives the address map of the input pins, used by the executive to send messages to devices", default="appPinInMap.csv")
-parser.add_argument('--externals', help="if set true we are using the externals UserI/O other wise we are using application pins for I/O", type=bool, default=False)
+# parser = argparse.ArgumentParser(description='Render graph instance as softswitch.')
+# parser.add_argument('source', type=str, help='source file (xml graph instance)')
+# parser.add_argument('--dest', help="Directory to write the output to", default=".")
+# parser.add_argument('--graph_schema_dir', type=str, help="Root of graph_schema directory")
+# parser.add_argument('--threads', help='number of logical threads to use (active threads)', type=int, default=2)
+# parser.add_argument('--hardware-threads', help='number of threads used in hardware (default=threads)', type=int, default=0)
+# parser.add_argument('--contraction', help='if threads < hardware-threads, how to do mapping. "dense", "sparse", or "random"', type=str, default="dense")
+# parser.add_argument('--log-level', dest="logLevel", help='logging level (INFO,ERROR,...)', default='WARNING')
+# parser.add_argument('--placement-seed', dest="placementSeed", help="Choose a specific random placement", default=None)
+# parser.add_argument('--destination-ordering', dest="destinationOrdering", help="Should messages be send 'furthest-first', 'random', 'nearest-first'", default="random")
+# parser.add_argument('--measure', help="Destination for measured properties", default="tinsel.render_softswitch.csv")
+# parser.add_argument('--message-types', help="a file that prints the message types and their enumerated values. This is used to decode messages at the executive", default="messages.csv")
+# parser.add_argument('--app-pins-addr-map', help="a file that gives the address map of the input pins, used by the executive to send messages to devices", default="appPinInMap.csv")
+# parser.add_argument('--externals', help="if set true we are using the externals UserI/O other wise we are using application pins for I/O", type=bool, default=False)
 
-args = parser.parse_args()
+# args = parser.parse_args()
+
+# sys.path.append(args.graph_schema_dir + "/tools/")
+
+# from config import p
 
 logLevel = getattr(logging, args.logLevel.upper(), None)
 logging.basicConfig(level=logLevel)
@@ -1223,7 +1292,7 @@ if(len(instances)>0):
 
     partitionInfoKey="dt10.partitions.{}".format(nThreads)
     partitionInfo=(inst.metadata or {}).get(partitionInfoKey,None)
-
+    # @jrbeaumont TODO: Find a nicer way of dealing with placement for numbers of threads
     if partitionInfo:
         key=partitionInfo["key"]
         logging.info("Reading partition info from metadata.")
@@ -1254,15 +1323,21 @@ if(len(instances)>0):
     destInstPath=os.path.abspath("{}/{}_{}_inst.cpp".format(destPrefix,graph.id,inst.id))
     destInst=open(destInstPath,"wt")
 
-    # create a mapping from threads to devices
-    thread_to_devices=[[] for i in range(hwThreads)]
+    thread_to_devices = generate_empty_thread_to_device()
+
+    new_device_to_thread = {}
     for d in inst.device_instances.values():
         if d.id not in device_to_thread:
             logging.error("device {}  not in mapping".format(d.id))
         t=device_to_thread[d.id]
         assert(t>=0 and t<hwThreads)
-        thread_to_devices[t].append(d.id)
+        # @jrbeaumont: TODO: This is a hacky way to do it, but it works. Find a nicer way dealing with dictionaries from the start
+        thread_to_devices[list(thread_to_devices.keys())[t]].append(d.id)
+        new_device_to_thread[d.id] = list(thread_to_devices.keys())[t]
 
+    # for t in thread_to_devices:
+    #     if len(thread_to_devices[t]) > 0:
+    #         print(str(t) + " " + str(thread_to_devices[t]))
 
     # dump the device name -> address mappings into a file for sending messages from the executive
     deviceAddrMap=open(args.app_pins_addr_map,"w+")
@@ -1271,4 +1346,4 @@ if(len(instances)>0):
     else:
         output_device_instance_addresses(inst, device_to_thread, thread_to_devices, deviceAddrMap)
 
-    render_graph_instance_as_softswitch(inst,destInst,hwThreads,device_to_thread)
+    render_graph_instance_as_softswitch(inst,destInst,hwThreads,new_device_to_thread)
