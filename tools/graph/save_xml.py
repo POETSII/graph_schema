@@ -300,8 +300,9 @@ def save_device_instance(parent, di):
     else:
         n = etree.SubElement(parent, _device_instance_tag_type, {"id":di.id,"type":di.device_type.id} )
 
-        defaultProperties = di.device_type.properties.create_default()
+
         if di.properties is not None:
+            defaultProperties = di.device_type.properties.create_default()
             differingProperties = reduce_typed_data(defaultProperties, di.properties)
             save_typed_struct_instance(n, _device_instance_properties_type, di.device_type.properties, differingProperties)
 
