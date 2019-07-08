@@ -55,7 +55,6 @@ def print_statistics(dst, baseName, unit, data):
             print("{}StdDev, -, {}, {}\n".format(baseName, stddev, unit), file=measure_file)
             print("{}Skewness, -, {}, {}\n".format(baseName, skewness, unit), file=measure_file)
 
-
 # The alignment to pad to for the next cache line
 _cache_line_size=32
 
@@ -1008,11 +1007,9 @@ def render_device_instance_outputs(devices_to_thread, di, dst, edges_out, global
 # @jrbeaumont: Complicated procedure ripped right out of POLite's PGraph.cpp
 # Generates threadIds from location on boards
 # These are used to map onto tinsel-0.6 which can connect more than one POETS box
-def generate_empty_thread_to_device():
+def generate_empty_thread_to_device(num_threads, fill_in_blanks):
     threads_generated = 0
-    max_thread = 0
-    log_threads_per_core = 4
-    thread_to_devices = {}
+    thread_to_devices = collections.OrderedDict()
 
     for boardY in range(0, BoardMeshY):
         for boardX in range(0, BoardMeshX):
@@ -1024,20 +1021,26 @@ def generate_empty_thread_to_device():
                         threadId = (threadId << p["MailboxMeshYBits"]) | mBoxY
                         threadId = (threadId << p["MailboxMeshXBits"]) | mBoxX
                         threadId = (threadId << (p["LogCoresPerMailbox"] + p["LogThreadsPerCore"])) | threadNum
-                        if threads_generated >= nThreads:
-                            print("DONE")
+                        if threads_generated >= num_threads:
                             break
                         threads_generated += 1
                         thread_to_devices[threadId] = []
-                        if threadId > max_thread:
-                            max_thread = threadId
-
-    # Have to fill in the blanks or it won't run
-    for i in range(0, max_thread):
-        if i not in thread_to_devices:
-            thread_to_devices[i] = []
+    if fill_in_blanks:
+        # Option to fill in the blanks or it won't run
+        for i in range(0, max_thread_id()):
+            if i not in thread_to_devices:
+                thread_to_devices[i] = []
 
     return thread_to_devices
+
+def max_thread_id():
+    maxThread = BoardMeshY - 1
+    maxThread = (maxThread << p["MeshXBits"]) | BoardMeshX - 1
+    maxThread = (maxThread << p["MailboxMeshYBits"]) | p["MailboxMeshYLen"] - 1
+    maxThread = (maxThread << p["MailboxMeshXBits"]) | p["MailboxMeshXLen"] - 1
+    maxThread = (maxThread << (p["LogCoresPerMailbox"] + p["LogThreadsPerCore"])) | ThreadsPerMailbox - 1
+    # print(maxThread)
+    return maxThread
 
 def render_graph_instance_as_softswitch(gi,dst,num_threads,device_to_thread):
 
@@ -1068,7 +1071,7 @@ def render_graph_instance_as_softswitch(gi,dst,num_threads,device_to_thread):
         edgesOut[ei.src_device][ei.src_pin].append(ei)
 
     # thread_to_devices=[[] for i in range(num_threads)]
-    thread_to_devices = generate_empty_thread_to_device()
+    thread_to_devices = generate_empty_thread_to_device(num_threads,True)
     devices_to_thread={}
     for d in gi.device_instances.values():
         if d.id not in device_to_thread:
@@ -1097,12 +1100,12 @@ def render_graph_instance_as_softswitch(gi,dst,num_threads,device_to_thread):
     dst.write("""
     #include "{GRAPH_TYPE_ID}.hpp"
 
-    const unsigned THREAD_COUNT=11264;
-    enum{{ THREAD_COUNT_V=11264 }};
+    const unsigned THREAD_COUNT={NUM_THREADS};
+    enum{{ THREAD_COUNT_V={NUM_THREADS} }};
 
     const unsigned DEVICE_INSTANCE_COUNT={TOTAL_INSTANCES};
     enum {{ DEVICE_INSTANCE_COUNT_V={TOTAL_INSTANCES} }};
-    """.format(GRAPH_TYPE_ID=gi.graph_type.id, NUM_THREADS=num_threads, TOTAL_INSTANCES=len(gi.device_instances)))
+    """.format(GRAPH_TYPE_ID=gi.graph_type.id, NUM_THREADS=max_thread_id() + 1, TOTAL_INSTANCES=len(gi.device_instances)))
 
     # for ti in range(num_threads):
     for ti in sorted(thread_to_devices):
@@ -1161,7 +1164,7 @@ def render_graph_instance_as_softswitch(gi,dst,num_threads,device_to_thread):
             0, // hbuf_head
             0 // hbuf_tail
         }}\n""".format(ti,graphPropertiesBinding,ti,ti,pointersAreRelative))
-        if ti<11263: # Hardcoded until a better solution can be thought of
+        if ti<max_thread_id(): # Hardcoded until a better solution can be thought of
             dst.write(",\n")
 
     dst.write("};\n")
@@ -1178,31 +1181,6 @@ def render_graph_instance_as_softswitch(gi,dst,num_threads,device_to_thread):
     print_statistics(dst, "renderSoftswitchOutputInstCost", "estimatedTotalOutgoingEdgeDistance", edgeCosts)
 
 
-# import argparse
-
-# #logging.getLogger(__name__)
-
-# parser = argparse.ArgumentParser(description='Render graph instance as softswitch.')
-# parser.add_argument('source', type=str, help='source file (xml graph instance)')
-# parser.add_argument('--dest', help="Directory to write the output to", default=".")
-# parser.add_argument('--graph_schema_dir', type=str, help="Root of graph_schema directory")
-# parser.add_argument('--threads', help='number of logical threads to use (active threads)', type=int, default=2)
-# parser.add_argument('--hardware-threads', help='number of threads used in hardware (default=threads)', type=int, default=0)
-# parser.add_argument('--contraction', help='if threads < hardware-threads, how to do mapping. "dense", "sparse", or "random"', type=str, default="dense")
-# parser.add_argument('--log-level', dest="logLevel", help='logging level (INFO,ERROR,...)', default='WARNING')
-# parser.add_argument('--placement-seed', dest="placementSeed", help="Choose a specific random placement", default=None)
-# parser.add_argument('--destination-ordering', dest="destinationOrdering", help="Should messages be send 'furthest-first', 'random', 'nearest-first'", default="random")
-# parser.add_argument('--measure', help="Destination for measured properties", default="tinsel.render_softswitch.csv")
-# parser.add_argument('--message-types', help="a file that prints the message types and their enumerated values. This is used to decode messages at the executive", default="messages.csv")
-# parser.add_argument('--app-pins-addr-map', help="a file that gives the address map of the input pins, used by the executive to send messages to devices", default="appPinInMap.csv")
-# parser.add_argument('--externals', help="if set true we are using the externals UserI/O other wise we are using application pins for I/O", type=bool, default=False)
-
-# args = parser.parse_args()
-
-# sys.path.append(args.graph_schema_dir + "/tools/")
-
-# from config import p
-
 logLevel = getattr(logging, args.logLevel.upper(), None)
 logging.basicConfig(level=logLevel)
 
@@ -1211,7 +1189,6 @@ if args.hardware_threads==0:
     hwThreads=nThreads
 else:
     hwThreads=args.hardware_threads
-
 if args.destinationOrdering=="furthest-first":
     sort_edges_by_distance=+1
 elif args.destinationOrdering=="nearest-first":
@@ -1303,11 +1280,12 @@ if(len(instances)>0):
         random.seed(seed)
         device_to_thread = { id:random.randint(0,nThreads-1) for id in inst.device_instances.keys() }
 
+
     if nThreads!=hwThreads:
         logging.info("Contracting from {} logical to {} physical using {}".format(nThreads,hwThreads,args.contraction))
         assert nThreads<hwThreads
         if args.contraction=="dense":
-            logicalToPhysica=[i for i in range(nThreads)]
+            logicalToPhysical=[i for i in range(nThreads)]
         elif args.contraction=="sparse":
             scale=hwThreads/nThreads
             logicalToPhysical=[ math.floor(i*scale) for i in range(nThreads)]
@@ -1323,7 +1301,7 @@ if(len(instances)>0):
     destInstPath=os.path.abspath("{}/{}_{}_inst.cpp".format(destPrefix,graph.id,inst.id))
     destInst=open(destInstPath,"wt")
 
-    thread_to_devices = generate_empty_thread_to_device()
+    thread_to_devices = generate_empty_thread_to_device(hwThreads, False)
 
     new_device_to_thread = {}
     for d in inst.device_instances.values():
@@ -1334,10 +1312,6 @@ if(len(instances)>0):
         # @jrbeaumont: TODO: This is a hacky way to do it, but it works. Find a nicer way dealing with dictionaries from the start
         thread_to_devices[list(thread_to_devices.keys())[t]].append(d.id)
         new_device_to_thread[d.id] = list(thread_to_devices.keys())[t]
-
-    # for t in thread_to_devices:
-    #     if len(thread_to_devices[t]) > 0:
-    #         print(str(t) + " " + str(thread_to_devices[t]))
 
     # dump the device name -> address mappings into a file for sending messages from the executive
     deviceAddrMap=open(args.app_pins_addr_map,"w+")
