@@ -51,6 +51,7 @@ def render_model(m):
     nodes=[
         graph.create_device_instance("n{}".format(n.id),nodeType,
             {"x":n.x,"fanout":0},
+            None,
             {"loc":[n.x[0],n.x[1]]}
         )
         for n in m["nodes"]
@@ -64,7 +65,7 @@ def render_model(m):
         (xx,yy)=zip(*hull) # Convert from list of pairs to pair of lists
         return [ sum(xx)/len(xx) , sum(yy)/len(yy) ]
     
-    def calc_spatial_props(id,map):
+    def calc_spatial_meta(id,map):
         hull=calc_hull(id,map)
         loc=calc_loc(hull)
         return {"hull":hull,"loc":loc}
@@ -72,7 +73,8 @@ def render_model(m):
     cells=[
         graph.create_device_instance("c{}".format(c.id),cellType,
             {"id":c.id,"qinit":c.q},
-            calc_spatial_props(c.id,o_pcell)
+            None,
+            calc_spatial_meta(c.id,o_pcell)
         )
         for c in m["cells"]
     ]
@@ -80,7 +82,8 @@ def render_model(m):
     edges=[
         graph.create_device_instance("e{}".format(e.id),edgeType,
             {"id":e.id},
-            calc_spatial_props(e.id,o_pedge)
+            None,
+            calc_spatial_meta(e.id,o_pedge)
         )
         for e in m["edges"]
     ]
@@ -88,7 +91,8 @@ def render_model(m):
     bedges=[
         graph.create_device_instance("be{}".format(be.id),bedgeType,
             {"bound":int(be.bound),"id":be.id},
-            calc_spatial_props(be.id,o_pbedge)
+            None,
+            calc_spatial_meta(be.id,o_pbedge)
         )
         for be in m["bedges"]
     ] 

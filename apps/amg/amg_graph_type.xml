@@ -9,6 +9,7 @@
     </Properties>
     <SharedCode><![CDATA[
         #include <cmath>
+        #include <cfloat>
 
         #ifdef POETS_LEGACY_HAS_HANDLER_EXIT
         #define _do_handler_exit(code) handler_exit(code)

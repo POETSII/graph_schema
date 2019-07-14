@@ -133,6 +133,16 @@ class ScalarTypedDataSpec(TypedDataSpec):
             return self.create_default()
         return self._check_value(inst)
 
+    def patch(self,orig,update):
+        if isinstance(self.type,Typedef):
+            return self.type.patch(orig,update)
+        elif update is not None:
+            return update
+        elif orig is not None:
+            return orig
+        else:
+            return self.create_default()
+
     def contract(self,inst):
         if inst is not None:
             default=self.default or 0
@@ -205,6 +215,14 @@ class TupleTypedDataSpec(TypedDataSpec):
         for e in self._elts_by_index:
             inst[e.name]=e.expand(inst.get(e.name,None))
         return inst
+
+    def patch(self,orig,update):
+        res=self.expand(orig)
+        update=self.expand(update)
+        for e in self._elts_by_index:
+            res[e.name]=e.patch(res[e.name], update[e.name] )
+        return res
+
 
     def contract(self,inst):
         if inst is None:
@@ -300,6 +318,13 @@ class ArrayTypedDataSpec(TypedDataSpec):
             # TODO: Throw an error message here
             return self.create_default()
 
+    def patch(self,orig,update):
+        res=self.expand(orig)
+        update=self.expand(update)
+        for i in range(self.length):
+            res[i]=self.type.patch(res[i], update[i])
+
+
     def contract(self,inst):
         if inst is None:
             return inst
@@ -376,6 +401,9 @@ class Typedef(TypedDataSpec):
 
     def expand(self,inst):
         return self.type.expand(inst)
+
+    def patch(self,orig,update):
+        return self.type.expand(orig,update)
 
     def contract(self,inst):
         return self.contract(inst)
@@ -754,14 +782,14 @@ class GraphInstance:
 
         return di
 
-    def create_device_instance(self, id,device_type,properties=None,metadata=None):
+    def create_device_instance(self, id,device_type,properties=None,state=None,metadata=None):
         if isinstance(device_type,str):
             assert isinstance(self.graph_type,GraphType)
             if device_type not in self.graph_type.device_types:
                 raise RuntimeError("No such device type called '{}'".format(device_type))
             device_type=self.graph_type.device_types[device_type]
         assert isinstance(device_type,DeviceType)
-        di=DeviceInstance(self,id,device_type,properties,metadata)
+        di=DeviceInstance(self,id,device_type,properties,state,metadata)
         return self.add_device_instance(di)
 
 

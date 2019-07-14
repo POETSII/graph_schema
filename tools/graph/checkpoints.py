@@ -168,7 +168,7 @@ def apply_checkpoints(graphInstPath:str,checkpointPath:str,eventLogPath:str,maxE
                     key=key[len("global:"):]
                     
                     if acausal_count > 0:
-                        raise RuntimeError("Attempt to do global checkpoint when event log is acausal (receive before send)."
+                        raise RuntimeError("Attempt to do global checkpoint when event log is acausal (receive before send).")
                 
                 #Always need to check this device
                 got=preState if pre else postState
