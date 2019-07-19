@@ -555,6 +555,13 @@ public:
 				   const typed_data_t *deviceState
 				   ) const=0;
 
+    virtual void onHardwareIdle(
+           OrchestratorServices *orchestrator,
+           const typed_data_t *graphProperties,
+           const typed_data_t *deviceProperties,
+           typed_data_t *deviceState
+           ) const=0;
+
   virtual rapidjson::Document &getMetadata() =0;
 };
 

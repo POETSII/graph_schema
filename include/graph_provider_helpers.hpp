@@ -513,6 +513,16 @@ public:
   virtual const std::vector<OutputPinPtr> &getOutputs() const override
   { return m_outputsByIndex; }
 
+  virtual void init(
+           OrchestratorServices *orchestrator,
+           const typed_data_t *graphProperties,
+           const typed_data_t *deviceProperties,
+           typed_data_t *deviceState
+           ) const
+  {
+    // No implementation
+  }
+
   virtual rapidjson::Document &getMetadata() override
   { return m_metadata; }
 };
@@ -729,6 +739,12 @@ public:
       fprintf(m_dst, "%s%s:%s : ", m_prefix.c_str(), m_device, m_input);
       vfprintf(m_dst, msg, args);
       fprintf(m_dst, "\n");
+      if(!strcmp("_HANDLER_EXIT_FAIL_9be65737_", msg)){
+        application_exit(1);
+      }
+      if(!strcmp("_HANDLER_EXIT_SUCCESS_9be65737_", msg)){
+        application_exit(0);
+      }
     }
   }
 

@@ -815,6 +815,7 @@ def render_output_pin_as_cpp(op,dst):
 
 def render_message_type_as_cpp_fwd(et,dst,asHeader):
     render_typed_data_as_spec(et.message, "{}_message_t".format(et.id), "pp:Message", dst, asHeader)
+    dst.write(f"using {et.parent.id}_{et.id}_message_t = {et.id}_message_t;\n")
 
 def render_message_type_as_cpp(et,dst):
     dst.write("class {}_Spec : public MessageTypeImpl {{\n".format(et.id))
@@ -829,7 +830,9 @@ def render_message_type_as_cpp(et,dst):
 
 def render_device_type_as_cpp_fwd(dt,dst, asHeader):
     render_typed_data_as_spec(dt.properties, "{}_properties_t".format(dt.id), "pp:Properties", dst, asHeader)
+    dst.write(f"using {dt.parent.id}_{dt.id}_properties_t = {dt.id}_properties_t;")
     render_typed_data_as_spec(dt.state, "{}_state_t".format(dt.id), "pp:State", dst, asHeader)
+    dst.write(f"using {dt.parent.id}_{dt.id}_state_t = {dt.id}_state_t;")
     for ip in dt.inputs.values():
         render_typed_data_as_spec(ip.properties, "{}_{}_properties_t".format(dt.id,ip.name), "pp:Properties", dst)
         render_typed_data_as_spec(ip.state, "{}_{}_state_t".format(dt.id,ip.name), "pp:State", dst)
@@ -844,7 +847,8 @@ def render_device_type_as_cpp(dt,dst):
         "handlerCode"                   : dt.ready_to_send_handler,
         "initCode"                      : dt.init_handler,
         "inputCount"                    : len(dt.inputs),
-        "outputCount"                   : len(dt.outputs)
+        "outputCount"                   : len(dt.outputs),
+        "onHardwareIdleCode"            : dt.on_hardware_idle_handler,
     }
     if dt.init_source_line and dt.init_source_file:
         subs["preInitProcLinePragma"]= '#line {} "{}"\n'.format(dt.init_source_line-1,dt.init_source_file)
@@ -981,6 +985,47 @@ def render_device_type_as_cpp(dt,dst):
         return;
     }}
     """.format(**subs))
+
+    if (dt.on_hardware_idle_handler):
+        dst.write(
+    """
+      virtual void onHardwareIdle(
+        OrchestratorServices *orchestrator,
+        const typed_data_t *gGraphProperties,
+        const typed_data_t *gDeviceProperties,
+        typed_data_t *gDeviceState
+      ) const override {{
+        auto graphProperties=cast_typed_properties<{graphPropertiesStructName}>(gGraphProperties);
+        auto deviceProperties=cast_typed_properties<{devicePropertiesStructName}>(gDeviceProperties);
+        auto deviceState=cast_typed_data<{deviceStateStructName}>(gDeviceState);
+        HandlerLogImpl handler_log(orchestrator);
+        auto handler_exit=[&](int code) -> void {{ orchestrator->application_exit(code); }};
+        auto handler_export_key_value=[&](uint32_t key, uint32_t value) -> void {{ orchestrator->export_key_value(key, value); }};
+        auto handler_checkpoint=[&](bool preEvent, int level, const char *fmt, ...) -> void {{
+            va_list a;
+            va_start(a,fmt);
+            orchestrator->vcheckpoint(preEvent,level,fmt,a);
+            va_end(a);
+        }};
+
+        // Begin custom handler
+        {preInitProcLinePragma}
+        {onHardwareIdleCode}
+        __POETS_REVERT_PREPROC_DETOUR__
+        // End custom handler
+      }}
+    """.format(**subs))
+    else:
+        dst.write(f"""
+      virtual void onHardwareIdle(
+        OrchestratorServices *orchestrator,
+        const typed_data_t *gGraphProperties,
+        const typed_data_t *gDeviceProperties,
+        typed_data_t *gDeviceState
+      ) const override {{
+          // No hardware idle handler
+      }}
+    """)
 
     dst.write("};\n")
     dst.write("DeviceTypePtr {}_Spec_get(){{\n".format(dt.id))

@@ -449,6 +449,20 @@ struct EpochSim
 
   }
 
+  void do_hardware_idle()
+  {
+    fprintf(stderr, "onHardwareIdle\n");
+    for(auto &d : m_devices){
+
+      if(!d.type->isExternal()){
+        assert(!m_log); //Need to add logging for hardware idle
+        ReceiveOrchestratorServicesImpl services{logLevel, stderr, d.name, "Idle handler", m_onExportKeyValue, m_onDeviceExit, m_onCheckpoint  };
+        d.type->onHardwareIdle(&services, m_graphProperties.get(), d.properties.get(), d.state.get()  );
+        d.readyToSend = d.type->calcReadyToSend(&services, m_graphProperties.get(), d.properties.get(), d.state.get());
+      }
+    }
+  }
+
   template<class TRng>
   bool step(TRng &rng, double probSend,bool capturePreEventState)
   {
@@ -954,6 +968,7 @@ int main(int argc, char *argv[])
     int nextStats=0;
     int nextSnapshot=snapshotDelta ? snapshotDelta-1 : -1;
     int snapshotSequenceNum=1;
+    unsigned contiguous_hardware_idle_steps=0;
 
     bool capturePreEventState=enableAccurateAssertions || !checkpointName.empty();
 
@@ -974,8 +989,13 @@ int main(int argc, char *argv[])
         snapshotSequenceNum++;
       }
 
-      if(!running){
-        if(graph.m_pExternalConnection->isReadOpen() ){
+      if(running){
+        contiguous_hardware_idle_steps=0;
+      }else{
+        if(contiguous_hardware_idle_steps<10){
+          graph.do_hardware_idle(); 
+          contiguous_hardware_idle_steps++;
+        }else if(graph.m_pExternalConnection->isReadOpen() ){
           if(logLevel>1){
             fprintf(stderr, "  Internal events have finished, but external read connection is open.\n");
           }

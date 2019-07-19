@@ -220,9 +220,14 @@ def save_device_type(parent,dt):
         #h.text = p.send_handler
         pn.append(h)
 
-    pn=etree.Element(toNS("ReadyToSend"))
+    pn=etree.Element(toNS("p:ReadyToSend"))
     pn.text=etree.CDATA(dt.ready_to_send_handler)
     n.append(pn)
+
+    if dt.on_hardware_idle_handler:
+        pn=etree.Element(toNS("p:OnHardwareIdle"))
+        pn.text=etree.CDATA(dt.on_hardware_idle_handler)
+        n.append(pn)
 
     return n
 

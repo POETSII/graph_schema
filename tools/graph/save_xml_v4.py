@@ -145,7 +145,7 @@ def save_device_type(parent:etree.Element, dt):
 
     add_code_element(n, "ReadyToSend", dt.ready_to_send_handler)
     add_code_element(n, "OnInit", dt.init_handler)
-    add_code_element(n, "OnHardwareIdle", None)
+    add_code_element(n, "OnHardwareIdle", dt.on_hardware_idle_handler)
     add_code_element(n, "OnDeviceIdle", None)   
 
     return n

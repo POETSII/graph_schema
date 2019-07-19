@@ -1,5 +1,5 @@
 <?xml version="1.0"?>
-<Graph xmlns="https://poets-project.org/schemas/virtual-graph-schema-v3">
+<Graphs xmlns="https://poets-project.org/schemas/virtual-graph-schema-v3">
 	<GraphType id="apsp_vec_barrier">
 
 		<Properties>
@@ -178,8 +178,9 @@
 				memcpy(deviceState->stats_distances, deviceState->distances, sizeof(deviceState->distances));
 				deviceState->stats_dirty=1;
 				
-				// This is safe to call after the last round. No-one will initiate any sharing.
-				begin_round(graphProperties, deviceProperties, deviceState);
+				if(deviceState->round_base < graphProperties->total_vertices){
+					begin_round(graphProperties, deviceProperties, deviceState);
+				}
 				]]></OnHardwareIdle>
 			</DeviceType>
 
@@ -305,4 +306,4 @@
 			</DeviceType>
 		</DeviceTypes>
 	</GraphType>
-</Graph>
+</Graphs>

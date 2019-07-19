@@ -150,6 +150,9 @@ class ScalarTypedDataSpec(TypedDataSpec):
                 return inst
         return None
 
+    def convert_v4_init(self, v):
+        return self._check_value(v)
+
     def __eq__(self, o):
         return isinstance(o, ScalarTypedDataSpec) and self.name==o.name and self.type==o.type and self.default==o.default
 
@@ -255,6 +258,9 @@ class TupleTypedDataSpec(TypedDataSpec):
 
         return True
 
+    def convert_v4_init(self, v):
+        assert isinstance(v,list) and len(v)==len(self._elts_by_index)
+        return { te.name:te.convert_v4_init(ve) for (te,ve) in zip(self._elts_by_index, v) }
 
 class ArrayTypedDataSpec(TypedDataSpec):
     def __init__(self,name,length,type,default=None,documentation=None):
@@ -354,10 +360,11 @@ class ArrayTypedDataSpec(TypedDataSpec):
                 if not self.type.is_refinement_compatible(inst[v]):
                     return False
 
-
-
         return True
 
+    def convert_v4_init(self, v):
+        assert isinstance(v,list) and len(v)==self.length
+        return [ self.type.convert_v4_init(ve) for ve in v ]
 
 def create_default_typed_data(proto):
     if proto is None:
@@ -479,6 +486,7 @@ class Pin(object):
         self.documentation=documentation
         ## NOTE: application pins are supported _only_ for the pursposes of the 2to3 converter, and
         ## should be considered deprecated
+        assert not is_application
         self.is_application=False
 
 
@@ -519,6 +527,9 @@ class DeviceType(object):
         self.init_handler=""
         self.init_source_file=None
         self.init_source_line=None
+        self.on_hardware_idle_handler=""
+        self.on_hardware_idle_source_file=None
+        self.on_hardware_idle_source_line=None
         self.isExternal=isExternal
         self.documentation=documentation
     

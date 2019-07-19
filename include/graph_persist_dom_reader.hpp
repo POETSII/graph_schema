@@ -191,6 +191,11 @@ public:
   {
     throw std::runtime_error("calcReadyToSend - input pin not loaded from provider, so functionality not available.");
   }
+
+  virtual void onHardwareIdle(OrchestratorServices*, const typed_data_t*, const typed_data_t*, typed_data_t*) const override
+  {
+    throw std::runtime_error("onHardwareIdle - input pin not loaded from provider, so functionality not available.");
+  }
 };
 
 std::string readTextContent(xmlpp::Element *p)

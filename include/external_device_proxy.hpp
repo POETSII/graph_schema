@@ -177,6 +177,15 @@ public:
   ) const {
     return; // Externals have no meaningful init
   }
+
+  virtual void onHardwareIdle(
+           OrchestratorServices *orchestrator,
+           const typed_data_t *graphProperties,
+           const typed_data_t *deviceProperties,
+           typed_data_t *deviceState
+  ) const {
+    return; // Externals have no meaningful idle
+  }
 };
 
 #endif
