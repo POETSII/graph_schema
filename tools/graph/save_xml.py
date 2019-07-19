@@ -378,9 +378,6 @@ def save_graph_type(parent, graph):
     return gn
 
 def save_graph_instance(parent, graph):
-    if __debug__:
-        self._validate()
-
     gn = etree.SubElement(parent, toNS("p:GraphInstance"));
     gn.attrib["id"]=graph.id
     gn.attrib["graphTypeId"]=graph.graph_type.id

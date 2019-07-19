@@ -37,8 +37,6 @@ re_KEYWORDS=re.compile("|".join([escape_re(k) for k in literal_tokens.keys()]))
 re_ID=re.compile("[_a-zA-Z][_a-zA-Z0-9]*")
 re_INT=re.compile("0x[0-9a-fA-F]+|[1-9][0-9]*")
 
-print(re_KEYWORDS)
-
 class Token(NamedTuple):
     type : str
     value : any
@@ -291,7 +289,7 @@ def parse_struct_init_string(input:str) -> List[any]:
     except:
         sys.stderr.write(f"Input struct = '{input}'")
         raise
-    assert input[pos:]=="", f"string remaining = '{input[pos:]}'"
+    assert input[pos:].strip()=="", f"string remaining = '{input[pos:]}'"
     return res
 
 def convert_def_to_typed_data_spec(d:Def) -> TypedDataSpec:

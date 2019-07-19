@@ -79,9 +79,11 @@ def save_typed_struct_instance_attrib(node,attrName,type,inst):
     if type is not None:
         assert type.is_refinement_compatible(inst)
         inst=type.expand(inst)
-        text=convert_json_init_to_c_init(type, inst)
-        node.attrib[attrName]=text
-    
+        if inst != {}:
+            text=convert_json_init_to_c_init(type, inst)
+            node.attrib[attrName]=text
+    else:
+        assert inst is None
 
 def save_metadata(node,childTagNameWithNS,value):
     pass # TODO: we don't do anything with metadata yet
@@ -228,8 +230,9 @@ def save_graph_type(parent, graph):
     save_typed_struct_spec(gn, toNS("p:Properties"), graph.properties)
 
     shared_code=""
-    if graph.shared_code:
+    if graph.shared_code is not None:
         for code in graph.shared_code:
+            sys.stderr.write(f"SC = '{code}'")
             shared_code += code+"\n";
     add_code_element(gn, "p:SharedCode", shared_code)
 

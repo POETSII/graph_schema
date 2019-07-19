@@ -111,7 +111,10 @@ def load_device_type(graph,dtNode,sourceFile):
     properties=load_struct_spec(dtNode, "p:Properties")
     state=load_struct_spec(dtNode, "p:State")
 
-    shared_code=[get_child_text(dtNode, "p:SharedCode", ns)[0]]
+    shared_code=[]
+    tt=get_child_text(dtNode, "p:SharedCode", ns)[0]
+    if tt is not None:
+        shared_code.append(tt)
     metadata=None
     documentation=None
     dt=DeviceType(graph,id,properties,state,metadata,shared_code,isExternal=False,documentation=documentation)
@@ -180,8 +183,10 @@ def load_graph_type(graphNode, sourcePath):
     metadata=None
     documentation=None
 
-    shared_code=[ get_child_text(graphNode,"p:SharedCode", ns)[0] ]
-
+    shared_code=[]
+    tt=get_child_text(graphNode, "p:SharedCode", ns)[0]
+    if tt is not None:
+        shared_code.append(tt)
     graphType=GraphType(id,properties,metadata,shared_code,documentation)
 
     for etNode in graphNode.findall("p:MessageTypes/p:*",ns):

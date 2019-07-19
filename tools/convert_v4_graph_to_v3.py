@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 from graph.load_xml import load_graph
-from graph.save_xml_v4 import save_graph
+from graph.save_xml import save_graph
 from lxml import etree
 
 import sys
@@ -21,6 +21,7 @@ dest=sys.stdout
 destPath="[XML-file]"
 
 # LOAD XML
-(type,instance)=load_graph(source, sourcePath)
+(gt,gi)=load_graph(source, sourcePath)
+assert gi, "Need a graph instance"
 
-save_graph(instance, dest)
+save_graph(gi, dest)
