@@ -336,9 +336,10 @@ to work. epoch_sim is good for initial debugging and dev, but does not  guarante
 it will work in hardware.
 
 Example usage:
-
-    make ising_spin_provider
-    bin/epoch_sim apps/ising_spin/ising_spin_16x16.xml
+```
+make demos/ising_spin_fix/ising_spin_fix_16_2.xml
+bin/epoch_sim apps/ising_spin/ising_spin_16x16.xml
+```
 
 Environment variables:
 
@@ -360,6 +361,78 @@ Parameters:
 
 - `--log-events destFile` : Log all events that happen into a complete history. This
   can be processed by other tools, such as `tools/render_event_log_as_dot.py'.
+
+### bin/graph_sim
+
+This is a much more general simulator than epoch_sim, and is useful
+for finding more complicated protocol errors in applications. The
+usage is mostly the same as epoch_sim, though it has a slighly different
+usage. The biggest change is that it supports the idea of messages
+being in flight, so a message which is sent can spend some arbitrary
+amount of time in the network before it is delivered. This also
+applies to individual destinations of a source message, so the
+messages in-flight are actually (dst,msg) pairs which are delivered
+seperately.
+
+Usage:
+```
+make demos/ising_spin_fix/ising_spin_fix_16_2.xml
+bin/graph_sim apps/ising_spin/ising_spin_16x16.xml
+```
+
+The value of graph_sim is that it allows you to simulate more hostile
+environments, particularly with respect to out of order delivery of
+messages. To support this there are two main features:
+
+- *prob-send* : this is a number between 0.0 and 1.0 that affects whether
+  the simulator prefers to send versus receive. It is somewhat similar to
+  the send-vs-receive flag in POETS ecosystem, but happens at a global 
+  rather than local level. It is often a useful way of detecting applications
+  that have infinite send failure modes (by setting *prob-send* to 1.0), or
+  those which have starvation modes (set *prob-send* to 0.0, or very low).
+
+- *strategies*: these influence the order in which messages are delivered,
+  with the following approaches currently supported:
+
+  - `FIFO` : This is similar to epoch_sim, in that it delivers messages in
+    the order in which they were sent. However, unlike epoch sim the different
+    message parts are delivered seperately, so while parts of one message
+    remain undelivered a new message might enter the system. This slight difference
+    can uncovered interesting failure modes and infinite loops.
+
+  - `LIFO` : This is the exact opposite, and whenever there are multiple
+    messages in flight the oldest one will be delivered. This often uncovers
+    assumptions about ordering in applications, where the writer imposes
+    some assumed ordering that isn't there in practise.
+
+  - `Random` : As it sounds, this picks a random message in flight. This is
+    not especially effective at finding bugs in one run, but is useful for
+    soak tests where you run huge numbers of times with the same seed. It
+    can also uncovered non-determinism when you expected it to be deterministic.
+
+Environment variables:
+
+- `POETS_PROVIDER_PATH` : Root directory in which to search for providers matching `*.graph.so`. Default
+  is the current working directory.
+
+Parameters:
+
+- `--log-level n` : Controls output from the orchestrator and the device handlers.
+
+- `--max-events n` : Stop the simulation after this many events. It will also stop
+  if all devices are quiescent.
+
+- `--prob-send probability` : The closer to 1.0, the more likely to send. Closer to 0.0 will prefer receive.
+
+- `--log-events destFile` : Log all events that happen into a complete history. This
+  can be processed by other tools, such as `tools/render_event_log_as_dot.py'.
+
+Limitations:
+
+- Currently graph_sim does not support OnHardwareIdle or OnDeviceIdle.
+
+- Currently graph_sim does not support externals of any type.
+
 
 ### tools/render_graph_as_dot.py
 
