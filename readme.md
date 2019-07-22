@@ -23,6 +23,13 @@ other graphs could also be added here, but that is up for discussion.
 The policy is that things should not be merged to master
 unless `make test` works.
 
+Version 4 features
+------------------
+
+* The XML v4 format is supported, which has been simplified to make parsing easier. See PIP0020.
+* Python tools can ingest v3 or v4, and auto-magically switch between them.
+* Graphs can be saved in v3 (default) or v4 format.
+
 Version 3 features
 ------------------
 
@@ -590,3 +597,129 @@ The pragma is allowed in an place where source code appears in the graph type.
 Note that this feature is not currently recursive, so if there is a `#include`
 in the file being embedded it won't get expanded.
 
+
+## Suggestions on how to write and debug an application/graph
+
+Many of the tools and features in graph_schema are intended to
+make the development and debugging of graphs easier, as getting
+functional correctness is often so difficult. The general idea
+here is to try to get a particular graph working on all possible
+platforms, rather than on one particular piece of hardware or one
+particular simulator. Proving that a graph is correct under
+all possible platforms is the same as proving that the graph
+is correct under all possible execution paths, which is often
+impossible due to the combinatorial explosion of possible
+execution states. However, we can get some confidence that
+a graph is correct by running it under many different execution
+patterns to look for failures. If we can the replay those
+failures it is possible to understand and debug them.
+
+### General approach for writing a graph
+
+While each application is different, a general flow for getting
+an application functionally correct is:
+
+1 - Write a reference software model in a sequential language. Trying
+    to write a concurrent graph for something you don't understand
+    sequentially is usually a waste of time.
+
+2 - Design the set of state machines on paper. Typically you want
+    two or three sets of sketches:
+
+    a - A set of state-machine diagrams, capturing the individual
+        device types in the diagram. Each state is a bubble, and
+        the edges between states represents messages arriving or
+        leaving the device. You probably need to annotate the edges
+        with:
+
+        - Whether it is a send or receive (often using a different style for
+          each is a good idea).
+
+        - Which pin it is sending/receiving on.
+
+        - Any guards which control whether an arc is taken or not.
+    
+    b - An example topology diagram, showing how a simple graph instance
+        would be constructed from those devices. You usually don't want
+        more than 20 or so nodes, but you do want something big enough
+        that it isn't trivial.
+    
+    c - (Optional) A state sequence diagram showing one possible evolution
+        of your graph instance over time. These are quite time consuming,
+        but a partial state sequence diagram can really help with complex
+        graphs.
+
+    It is tempting to skip these sketches, but for any reasonably complex
+    application you are just wasting time as you'll need to draw them
+    later when debugging.
+
+3 - Convert your state machine diagrams into a graph-type. You should be
+    extremely liberal with the use of `assert` when doing this, and
+    ideally assert device state invariants at the top of every handler.
+    If you don't know of any device state invariants, that suggests
+    you haven't fully thought through the state machine diagram.
+
+4 - Manually construct a device instance that exactly matches your example
+    topology diagram. If you have up to 20 devices it doesn't take that
+    long, and even the act of constructing it sometimes shows up problems.
+    It may be tempting to construct a generator program at this point,
+    but that may be premature - when manually constructing the instance
+    you might find problems that invalidate your original design.
+
+5 - Simulate your manual instance using `epoch_sim`. This is the friendliest
+    simulator, which tends to expose the simplest bugs. If you get errors
+    here then debug them (see later).
+
+6 - Simulate your manual instance using `graph_sim` using a number of
+    strategies. It is a good idea to run it for an hour or so with
+    the random execution strategy and event logging turned on. If you get
+    any errors, then debug the event log (see later). You really want
+    to do this with simple graphs if you want a hope of debugging it, so
+    the earlier you find problems the better.
+
+7 - (Optional) Run it in hardware. There is little point to going
+    to hardware at this point apart from warm fuzzies, but it is nice to do.
+
+8 - Create an instance generator. This should almost always be configurable
+    in size/scale, and in most cases the preference should be for a random
+    generator rather than ingesting real problems (you can always come back
+    to that). If at all possible, you should also design the instance generator
+    to embed self-check information in the generator graph. For example, if
+    there is a defined "end" for device instances, you can embed the final
+    value expected as a property. At run-time each device can assert it is
+    correct at the end state, so you find out where the application has failed.
+
+9 - Check that the application works at a bunch of scales. Think 2^n+-1, primes,
+    and so on.
+
+10 - Move to hardware! There is still a good chance it won't work it
+     hardware, but at least any errors will be obscure and hard to find.
+
+### Debugging applications
+
+You have three main tools in your debugging tool-box:
+
+1 - Assertion failures: Try to make the application assert as soon as possible.
+  As noted above, you want to assert any possible program variants you can
+  at the start of each handler. If necessary/possible, augment your device states and/or
+  messages to carry extra debug information that allows you to assert stronger
+  invariants. The fewer send and receive steps that happen before an assertion,
+  the easier it is to work out why it is happening.
+
+2 - Event logs: Some of the graph_scema tools allow you to capture the set of events
+  within a failing program. You can then use them to try to find out what went wrong
+  by looking at the messages sent and the state changes. As with assertions, you 
+  want to try to find the shortest event log that will find an error - more than
+  about 100 events becomes very difficult to follow.
+
+3 - Handler logs: print out information about the internal state of devices
+  to try to recover what went wrong. This is a powerful technique for simple
+  bugs, but a weak technique for complex bugs.
+
+If you're more dedicated/desperate you can also bring to bear some more advanced methods:
+
+4 - Checkpointing against predicted device state at key points.
+
+5 - Model checking. Not discussed here.
+
+5 - Formal methods. Not discussed here.
