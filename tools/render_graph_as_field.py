@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-from graph.load_xml import load_graph
+from graph.load_xml import load_graph_instance
 from graph.snapshots import extractSnapshotInstances
 import sys
 import os
@@ -21,7 +21,7 @@ if args.graph!="-":
 else:
     basePath=os.getcwd()
 
-graph=load_graph(args.graph,basePath)
+graph=load_graph_instance(args.graph,basePath)
 
 if "location.dimension" not in graph.graph_type.metadata:
     raise RuntimeError("This graph doesn't seem to be a 2d field.")
