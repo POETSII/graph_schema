@@ -165,44 +165,124 @@ Applications
 There is a small set of basic applications included. These are not
 amazingly complicated, but provide a way of testing orchestrators and
 inter-operability. Models that are *Deterministic* should provide
-the same application-level results independently of the orchestrator. Models that are
-*Asynchronous* do not rely on any kind of global clock - note that
-global clock refers to something created by the application, not
-the orchestrator.
+the same application-level results independently of the orchestrator.
+Models that are *Deterministic(FP)* should provide the same application-level
+results on any implementation, except for errors introduced in floating-point
+(see the later notes on fixed-point implementations). Models that are
+*Chaotic* have a dependency on the exact execution order and/or message
+order - they should always provide some kind of "correct" answer, but the answer
+you get may vary wildly.
 
-- [apps/ising_spin](apps/ising_spin) : *Deterministic*, *Asynchronous* : This is an asynchronous ising spin model,
+Models that are *Asynchronous* do not rely on any kind of internal clock,
+so there is no central synchronisation point being built. These may be
+sub-classed into *Async-GALS* which use the time-stepping approach,
+and *Async-Event* which use the local next-event approach. Models that are 
+*Synchronous* internally build some kind of central clock (hopefully
+using logarithmic time methods), so there is an application barrier.
+Models that are *Barrier* use the internal hardware idle detection
+feature through `OnHardwareIdle`.
+
+- [apps/ising_spin](apps/ising_spin) : *Deterministic(FP)*, *Async-Event* : This is an asynchronous ising spin model,
   which models magnetic dipole flipping. Each cell moves forwards using random
   increments in time, with the earliest cell in the neighbourhood advancing.
+  Regardless of execution or message ordering, this should always give exactly
+  the same answer (even though it uses floating-point, I _think_ it is
+  deterministic as long as no denormals occur).
 
-- [apps/gals_heat](apps/gals_heat) : *Deterministic*, *Asynchronous* : This models a
+- [apps/ising_spin](apps/ising_spin_fix) : *Deterministic*, *Async-Event* : A
+  fixed-point version of ising_spin which is fully deterministic. It has a self-checker
+  to verify determinism versus reference software.
+
+- [apps/gals_heat](apps/gals_heat) : *Deterministic(FP)*, *Async-GALS* : This models a
   2D DTFD heat equation, with time-varying dirichlet boundaries. All cells within
   a neighbourhood are at time t or t+1 - once the value of all neighbours at time t is
   known, the current cell will move forwards.
 
-- [apps/gals_izhikevich](apps/gals_izhikevich) : *Asynchronous* : This is
+- [apps/gals_izhikevich](apps/gals_izhikevich) : *Deterministic(FP)*, *Async-GALS* : This is
   an Izhikevich spikiung neural network, using a loose form of local synchronisation
   to manage the rate at which time proceeds. However, it is not very good - it
   does lots of local broadcasting (whether neurons fire or not), and it doesn't
   work correctly with an unfair orchestrator.
 
-- [apps/clocked_izhikevich](apps/clock_ishikevich) : *Deterministic* : Also
+- [apps/clocked_izhikevich](apps/clock_ishikevich) : *Deterministic(FP)*, *Synchronous* : Also
   an izhikevich neural network, but this time with a global clock device.
   The whole thing moves forward in lock-step, but needs 1:n and n:1 communiciation
   to the clock.
 
-- [apps/clock_tree](apps/clock_tree) : *Deterministic* : A simple benchmark, with three devices:
+- [apps/clock_tree](apps/clock_tree) : *Deterministic*, *Synchronous* : A simple benchmark, with three devices:
   root, branch, and leaf. The root node is a central clock which generates ticks.
   The ticks are fanned out by the branches to the leaves, which reflect them back
   as tocks. Once the clock has received all the tocks, it ticks again.
 
-- [apps/amg](apps/amg) : *Deterministic* : A complete algebraic multi-grid solver,
+- [apps/amg](apps/amg) : *Deterministic(FP)*, *Async-GALS* : A complete algebraic multi-grid solver,
   with many types of nodes and quite complex interactions. It should be self-checking.
+
+- [apps/relaxation_heat](apps/relaxation_heat) : *Chaotic*, *Asynchronous* : This
+  implements the chaotic relaxation method for heat, whereby each point in the
+  simulation tries to broad-cast it's heat whenever it changes. This particular
+  method uses two "interesting" features:
+
+  - Network clocks: each message is time-stamped with a version, so old messages
+    that are delayed are ignored. This ensures that time can't go backwards, and
+    makes convergence much faster for out-of-order simulators.
+
+  - Distributed termination detection: in parallel with the relaxation there is
+    a termination system going on, which uses a logarithmic tree to sum up the
+    total number of sent and received messages. Once the relaxation has stopped,
+    it will detect this within two sweeps, so for a system of size n it detects
+    termination in O(log n) time.
+
+- [apps/betweeness_centrality](apps/betweeness_centrality) : *Chaotic*, *Asynchronous* :
+  This calculates a measure of betweeness centrality using random walks over graphs.
+  Each vertex (device) is seeded with a certain number of walks, and then each device
+  sends walks randomly to a neighbouring vertex. Once a walk has stepped through a
+  fixed number of verticies it expires. The number of walks passing through each
+  node is then an estimate of centrality. This application is a show-case/test-case
+  for indexed sends, as it only sends along one outgoing edge. There are some
+  degenerate cases that can occur, so the devices use a data-structure to detect
+  idleness in logarithmic time.
+
+- [apps/storm](apps/storm): *Chaotic*, *Asynchronous* : This is not really
+  a test-case, it is more to check implementations and explore behaviour - e.g. it
+  was used for Tinsel 0.3 to look for messaging bottlenecks. The graph is
+  randomly connected, with all nodes reachable. One node is the root, which is
+  initially given all credit. Any node with credit splits and shares it randomly
+  with it's neighbours in a way that is dependendent on scheduling. When credit
+  comes back to the root it is consumed, and once all credit is back at the
+  root it terminates. The run-time of this graph can be highly variable, particularly
+  when high-credit messages get "stuck" behind low-credit ones, but (barring implementation
+  errors) it is guaranteed to terminate in finite time on all implementations.
 
 Currently all applications are designed to meet the abstract model, which means
 that messages can be arbitrarily delayed or re-ordered, and sending may be
 arbitrarily delayed. However, they are currently all interolerant to any
 kind of loss or error - AFAIK they will all eventually lock-up if any message
 is lost or any device fails.
+
+### Fixed-point implementations
+
+For some applications there will be a `*_fix` version, which is usually
+just a fixed-point version of the application. This was originally
+useful back when there was no floating-point support in the Tinsel
+CPU. They are still sometimes useful now for testing purposes, as
+it is generally much easier to make fixed-point versions bit-exact
+deterministic under all possible executions. Some common problems that
+can occur with repeatability and floating-point are:
+
+- Adding together floating-point values that arrive in messages. Because
+ the messages can arrive in different orders, the sum of the values
+ may change slightly due to the non-associativity of floating-point addition.
+
+- FPGA and CPU floating-point often behaves differently in the space just
+  above zero, with FPGAs often flushing to zero, while CPUs support full
+  denormals. While this is an obscure case, in a very long-running application
+  it can occur, and even the slightest deviation destroys bit-wise equivalence.
+
+- Special functions such as sqrt, exp, log need to be implemented from scratch
+  for Tinsel, and should use algorithms optimised for it - for example, it is
+  currently advantageous to use division-heavy algorithms. Even if these functions
+  are faithfully rounded (i.e. correct to 1-ulp) they are very likely to provide
+  different roundings to software libraries.
 
 Tools
 =====
@@ -222,12 +302,38 @@ python tools/convert_v2_graph_to_v3.py <path-to-v2-XML> >> <path-to-new-XML-file
 If no path to a new XML file is provided, the XML will be printed to the
 screen.
 
+### tools/convert_v3_graph_to_v4.py
+
+Takes an XML graph type or graph instance which is written using version 3
+of the schema, and converts this to version 4 of the schema. It attempts to
+preserve semantics, but currently documentation and meta-data are lost.
+
+Usage:
+```
+python tools/convert_v3_graph_to_v4.py <path-to-v3-XML> > <path-to-new-XML-file>
+```
+
+### tools/convert_v3_graph_to_v4.py
+
+Takes an XML graph type or graph instance which is written using version 4
+of the schema, and converts this to version 3 of the schema. It should
+convert all features of v4 correctly (correct as of the very first v4 spec).
+
+Usage:
+```
+python tools/convert_43_graph_to_v3.py <path-to-v4-XML> > <path-to-new-XML-file>
+```
+
+
 ### bin/epoch_sim
 
 This is an epoch based orchestrator. In each epoch, each device gets a chance to
 send from one port, with probability `probSend`. The order in which devices send
 in each round is somewhat randomised. All devices are always ready to recieve, so
-there is no blocking or transmission delay.
+there is no blocking or transmission delay. Note that this simulator tends to
+be very "nice", and makes applications that are sensitive to ordering appear
+to work. epoch_sim is good for initial debugging and dev, but does not  guarantee
+it will work in hardware.
 
 Example usage:
 
