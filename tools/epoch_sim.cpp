@@ -523,7 +523,7 @@ struct EpochSim
     unsigned rot=rng();
 
     double threshSendDbl=ldexp(probSend, 32);
-    uint32_t threshSend=(uint32_t)std::max((double)0xFFFFFFFFul,std::min(0.0,threshSendDbl));
+    uint32_t threshSend=(uint32_t)std::min((double)0xFFFFFFFFul,std::max(0.0,threshSendDbl));
     uint32_t threshRng=rng();
 
     for(unsigned i=0;i<m_devices.size();i++){
