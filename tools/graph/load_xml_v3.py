@@ -41,7 +41,6 @@ class XMLSyntaxError(Exception):
         self.node=node
         self.outer=outer
 
-
 def get_attrib(node,name):
     if name not in node.attrib:
         raise XMLSyntaxError("No attribute called {}".format(name), node)
@@ -437,7 +436,10 @@ def load_device_type(graph,dtNode,sourceFile,namespace=None,loadDocumentation=Fa
 
     i = dtNode.find("p:OnDeviceIdle", namespace)
     if i is not None:
-        raise RuntimeError("OnDeviceIdle has not been implemented")
+        (handler,sourceLine)=get_child_text(dtNode,"p:OnDeviceIdle",namespace)
+        dt.on_device_idle_handler=handler
+        dt.on_device_idle_source_line=sourceLine
+        dt.on_device_idle_source_file=sourceFile
 
     return dt
 
@@ -729,7 +731,7 @@ def v3_load_graph_types_and_instances(src,basePath):
     (graphTypes,graphInstances)=load_graph_types_and_instances(src,basePath)
     if len(graphInstances)==0:
         if len(graphTypes)==1:
-            for x in graphTypes:
+            for x in graphTypes.values():
                 return (x,None)
         else:
             raise RuntimeError("File contained no graph instances.")

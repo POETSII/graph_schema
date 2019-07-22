@@ -527,6 +527,9 @@ class DeviceType(object):
         self.init_handler=""
         self.init_source_file=None
         self.init_source_line=None
+        self.on_device_idle_handler=""
+        self.on_device_idle_source_file=None
+        self.on_device_idle_source_line=None
         self.on_hardware_idle_handler=""
         self.on_hardware_idle_source_file=None
         self.on_hardware_idle_source_line=None

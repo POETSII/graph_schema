@@ -868,7 +868,7 @@ def render_device_type_as_cpp(dt,dst):
     dst.write(subs["deviceGlobalConstants"])
     dst.write(subs["deviceLocalConstants"])
 
-    if dt.shared_code:
+    if dt.shared_code is not None:
         for i in dt.shared_code:
             dst.write(i)
 

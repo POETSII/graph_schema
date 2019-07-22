@@ -3,6 +3,7 @@ from typing import *
 import io
 import lxml.etree
 import xml.etree
+import warnings
 
 from graph.load_xml_v4 import v4_namespace_uri, v4_load_graph_types_and_instances
 from graph.load_xml_v3 import v3_namespace_uri, v3_load_graph_types_and_instances
@@ -43,3 +44,11 @@ def load_graph_instance(src : Union[str, io.TextIOBase, lxml.etree.Element], src
     if gi==None:
         raise RuntimeError("No GraphInstance in the given source")
     return gi
+
+def load_graph_types_and_instances(src, src_path ):
+    warnings.warn("Users should switch to load_graph", category=DeprecationWarning)
+    (gt,gi) = load_graph(src, src_path)
+    if gi is None:
+        return ({gt.id:gt},{})
+    else:
+        return ({gt.id:gt},{gi.id:gi})

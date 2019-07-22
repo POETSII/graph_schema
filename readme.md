@@ -299,3 +299,63 @@ tools/render_event_log_as_dot.py events.xml
 dot graph.dot -Tsvg -O
 ````
 Should produce an svg called `graph.svg`.
+
+### tools/preprocess_graph_type.py
+
+Some apps and graphs within graph_schema use pre-processing to embed
+or genericise the contents of graph types. Any expansions needed to create
+a standard graph type are done by this tool, which takes a graph type
+and produces an expanded/pre-processed graph type. Note that the pre-processing
+done here is in addition to (actually before) any standard C pre-processing.
+
+This tool can be run on any graph type, and will pass through graph
+types that don't have any graph_schema pre-processing features.
+
+Example usage:
+```
+tools/preprocess_graph_type.py apps/ising_spin_fix/ising_spin_fix_graph_type.xml > tmp.xml
+```
+If you run the above you'll find that the local header file referenced from the
+graph type has been embedded into the output xml.
+
+#### Direct embedding of include files
+
+It is often useful to seperate functionality out into an external header,
+particularly when you want shared functionality or logic between a
+graph type and a sequential software implementation. However, it is
+desireable to create self-contained graph types which don't rely on
+any non-standard system header files, so that the graph files can be
+removed to remote machines and run there. The direct embedding pragma
+allows certain `#include` statements to be expanded in place when
+pre-processing the graph type, making the source code self-contained.
+
+Given an include statement:
+```
+#include "some_local_header.hpp"
+```
+we can prefix it with a graph_schema-specific pragma:
+```
+#pragma POETS EMBED_HEADER
+#include "some_local_header.hpp"
+```
+When the graph is pre-processed the code will be re-written into:
+```
+/////////////////////////////////////
+//
+#pragma POETS BEGIN_EMBEDDED_HEADER "some_local_header.hpp" "/the/actual/absolute_path/to/some_local_header.hpp"
+
+void actual_contents_of_some_local_header()
+{
+}
+
+#pragma POETS END_EMBEDDED_HEADER "some_local_header.hpp" "/the/actual/absolute_path/to/some_local_header.hpp"
+//
+////////////////////////////////////
+```
+The pre-processed code will then turn up in the headers.
+
+The pragma is allowed in an place where source code appears in the graph type.
+
+Note that this feature is not currently recursive, so if there is a `#include`
+in the file being embedded it won't get expanded.
+

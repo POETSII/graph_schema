@@ -169,7 +169,7 @@ providers/$1.graph.cpp providers/$1.graph.hpp : $$($1_src_xml) $(JING)
 	mkdir -p providers
 	java -jar $(JING) -c master/virtual-graph-schema-v3.rnc $$($1_src_xml)
 	$$(PYTHON) tools/render_graph_as_cpp.py $$($1_src_xml) providers/$1.graph.cpp
-	$$(PYTHON) tools/render_graph_as_cpp.py --header < $$($1_src_xml) > providers/$1.graph.hpp
+	$$(PYTHON) tools/render_graph_as_cpp.py --header $$($1_src_xml) providers/$1.graph.hpp
 
 providers/$1.graph.so : providers/$1.graph.cpp
 	g++ $$(CPPFLAGS) -Wno-unused-but-set-variable $$(SO_CPPFLAGS) $$< -o $$@ $$(LDFLAGS) $(LDLIBS)

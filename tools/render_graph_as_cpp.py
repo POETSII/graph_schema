@@ -3,6 +3,8 @@
 from graph.load_xml import load_graph_types_and_instances
 from graph.write_cpp import render_graph_as_cpp
 
+from graph.expand_code import expand_graph_type_source
+
 import sys
 import os
 
@@ -47,6 +49,8 @@ graph=None
 for g in types.values():
     graph=g
     break
+
+expand_graph_type_source(graph,sourcePath)
 
 class OutputWithPreProcLineNum:
     def __init__(self,dest,destName):
