@@ -51,8 +51,9 @@
         <InputPin name="credit" messageTypeId="exchange">
           <OnReceive><![CDATA[
 		  deviceState->credit += message->credit;
+			handler_log(4, "Received %u credit, local credit is %u", message->credit, deviceState->credit);
 			if(deviceProperties->isRoot && deviceState->credit==deviceState->totalCredit){
-				handler_exit(0);
+				fake_handler_exit(0);
 			}
 		  ]]></OnReceive>
         </InputPin>
@@ -76,6 +77,7 @@
 			message->credit=perDevice;
 			deviceState->credit -= perDevice*deviceProperties->degree;
 		}
+		handler_log(4, "Sending %u credit wide, local credit is %u", message->credit, deviceState->credit);
 		]]></OnSend>
         </OutputPin>
         <OutputPin name="narrow" messageTypeId="exchange">
@@ -84,24 +86,26 @@
 		assert(deviceState->credit > 0);
 		message->credit=(deviceState->credit+1)/2;
 		deviceState->credit -= message->credit;
+		handler_log(4, "Sending %u credit narrow, local credit is %u", message->credit, deviceState->credit);
+
 		]]></OnSend>
         </OutputPin>
         <ReadyToSend><![CDATA[
 			*readyToSend = 0;
 			if(deviceProperties->isRoot){
 				if(deviceState->credit==0){
-					*readyToSend = OUTPUT_FLAG_wide;
+					*readyToSend = RTS_FLAG_wide;
 				}
 			}else{
 				if(deviceState->credit >= deviceProperties->degree){
 					uint32_t b=1664525*deviceState->credit+1013904223;
 					if( (b>>30)==0 ){
-				 		*readyToSend = OUTPUT_FLAG_wide;
+				 		*readyToSend = RTS_FLAG_wide;
 					}else{
-						*readyToSend = OUTPUT_FLAG_narrow;
+						*readyToSend = RTS_FLAG_narrow;
 					}
 				}else if(deviceState->credit > 0 ){
-					*readyToSend = OUTPUT_FLAG_narrow;
+					*readyToSend = RTS_FLAG_narrow;
 				}
 			}
 		]]></ReadyToSend>

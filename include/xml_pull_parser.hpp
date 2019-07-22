@@ -221,6 +221,7 @@ public:
     {
         if(name=="P") return &m_properties;
         if(name=="M") return &m_metadata;
+        if(name=="S") throw std::runtime_error("State elements on device (v3) not supported by this parser yet.");
         throw std::runtime_error("Unexpected element");
     }
 
@@ -239,12 +240,13 @@ public:
 class ElementBindingsEdgeInstance
     : public ElementBindingsComposite
 {
-typedef std::function<void (std::string &&path, std::string &&properties, std::string &&metadata) > sink_t;
+typedef std::function<void (std::string &&path, int sendIndex, std::string &&properties, std::string &&metadata) > sink_t;
 
 private:
     sink_t m_sink;
 
     std::string m_path;
+    int m_sendIndex;
 
     ElementBindingsText m_properties;
     ElementBindingsText m_metadata;
@@ -258,6 +260,7 @@ public:
         assert( name=="EdgeI" );
 
         m_path.clear();
+        m_sendIndex=-1;
         m_properties.text.clear();
         m_metadata.text.clear();
     }
@@ -266,6 +269,8 @@ public:
   {
     if(name=="path"){
       m_path=value;
+    }else if(name=="sendIndex"){
+        m_sendIndex=atoi(value.c_str());
     }else{
       throw std::runtime_error("Unexpected attribute on EdgeI");
     }
@@ -286,7 +291,7 @@ public:
 
     virtual void onEnd() override
     {
-        m_sink( std::move(m_path), std::move(m_properties.text), std::move(m_metadata.text) );
+        m_sink( std::move(m_path), m_sendIndex, std::move(m_properties.text), std::move(m_metadata.text) );
     }
 };
 
@@ -370,12 +375,13 @@ private:
         if(m_parseMetaData && !metadata.empty()){
             deviceMetadata=parseMetadataFromText(metadata);
         }
-        dId=m_events->onDeviceInstance(m_gId, dt, id, deviceProperties, std::move(deviceMetadata));
+        TypedDataPtr deviceState; // TODO : Not supported yet.
+        dId=m_events->onDeviceInstance(m_gId, dt, id, deviceProperties, deviceState, std::move(deviceMetadata));
 
         m_deviceInstances.insert(std::make_pair( id, std::make_pair(dId, dt)));
     }
 
-    void onEdgeInstance(std::string &&path, std::string &&properties, std::string &&metadata)
+    void onEdgeInstance(std::string &&path, int sendIndex, std::string &&properties, std::string &&metadata)
     {
         std::string srcDeviceId, srcPinName, dstDeviceId, dstPinName;
         split_path(path, dstDeviceId, dstPinName, srcDeviceId, srcPinName);
@@ -409,9 +415,13 @@ private:
         if(m_parseMetaData && !metadata.empty()){
             edgeMetadata=parseMetadataFromText(metadata);
         }
+        TypedDataPtr edgeState; // Not supported yet.
+        uint64_t dstDeviceUnq=dstDevice.first;
+        uint64_t srcDeviceUnq=srcDevice.first;
         m_events->onEdgeInstance(m_gId,
-                    dstDevice.first, dstDevice.second, dstPin,
-                    srcDevice.first, srcDevice.second, srcPin,
+                    dstDeviceUnq, dstDevice.second, dstPin,
+                    srcDeviceUnq, srcDevice.second, srcPin,
+                    sendIndex,
                     edgeProperties,
                     std::move(edgeMetadata)
         );
@@ -424,7 +434,7 @@ public:
 				 Registry *registry
     )
         : m_ebDeviceInstance( std::bind(&ElementBindingsGraphInstance::onDeviceInstance, this, _1, _2, _3, _4) )
-        , m_ebEdgeInstance( std::bind(&ElementBindingsGraphInstance::onEdgeInstance, this, _1, _2, _3) )
+        , m_ebEdgeInstance( std::bind(&ElementBindingsGraphInstance::onEdgeInstance, this, _1, _2, _3, _4) )
         , m_ebDeviceInstances{ "DeviceInstances", {{"DevI", &m_ebDeviceInstance}, {"ExtI", &m_ebDeviceInstance}}  }
         , m_ebEdgeInstances{ "EdgeInstances", {{"EdgeI", &m_ebEdgeInstance}} }
       , m_events(events)

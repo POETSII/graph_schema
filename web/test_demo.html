@@ -449,7 +449,7 @@ function resetGraph()
 
     svg.viewbox({ x: minX, y: minY, width: maxX-minX, height: maxY-minY })
 
-    panZoom = svgPanZoom(svg.node, {zoomScaleSensitivity: 0.3});
+    panZoom = svgPanZoom(svg.node, {zoomScaleSensitivity: 0.04});
     
     chooseStepper(true);
 

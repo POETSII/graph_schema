@@ -3,6 +3,7 @@ from graph.core import *
 #from xml.etree import ElementTree as etree
 from lxml import etree
 
+from typing import *
 import os
 import sys
 import json
@@ -206,6 +207,8 @@ def save_device_type(parent,dt):
         pn=etree.SubElement(n,toNS("OutputPin"))
         pn.attrib["name"]=p.name
         pn.attrib["messageTypeId"]=p.message_type.id
+        if p.is_indexed is not None:
+            pn.attrib["indexed"]="false"
         if p.is_application: # TODO: Remove applications pins in all forms
             pn.attrib["application"]="true"
         if p.documentation is not None:
@@ -218,9 +221,19 @@ def save_device_type(parent,dt):
         #h.text = p.send_handler
         pn.append(h)
 
-    pn=etree.Element(toNS("ReadyToSend"))
+    pn=etree.Element(toNS("p:ReadyToSend"))
     pn.text=etree.CDATA(dt.ready_to_send_handler)
     n.append(pn)
+
+    if dt.on_hardware_idle_handler:
+        pn=etree.Element(toNS("p:OnHardwareIdle"))
+        pn.text=etree.CDATA(dt.on_hardware_idle_handler)
+        n.append(pn)
+
+    if dt.on_device_idle_handler:
+        pn=etree.Element(toNS("p:OnDeviceIdle"))
+        pn.text=etree.CDATA(dt.on_device_idle_handler)
+        n.append(pn)
 
     return n
 
@@ -321,6 +334,9 @@ _edge_instance_metadata_type=toNS("p:M")
 
 def save_edge_instance(parent, ei):
     n=etree.SubElement(parent, _edge_instance_tag_type, {"path":ei.id } )
+
+    if ei.send_index is not None:
+        n.attrib["sendIndex"]=ei.send_index
 
     save_typed_struct_instance(n, _edge_instance_properties_type, ei.dst_pin.properties, ei.properties)
     save_metadata(n, _edge_instance_metadata_type, ei.metadata)
@@ -425,7 +441,7 @@ def save_graph_instance_metadata_patch(parent, id,graphMeta,deviceMeta,edgeMeta)
     return gn
 
 
-def save_graph(graph,dst):
+def save_graph(graph:Union[GraphType,GraphInstance],dst):
     nsmap = { None : "https://poets-project.org/schemas/virtual-graph-schema-v3" }
     root=etree.Element(toNS("p:Graphs"), nsmap=nsmap)
 
@@ -439,10 +455,18 @@ def save_graph(graph,dst):
                 assert not isinstance(dstFile,str)
                 save_graph(graph,dstFile)
     else:
+        if isinstance(graph, GraphInstance):
+            graph_type=graph.graph_type
+            graph_instance=graph
+        else:
+            graph_type=graph
+            graph_instance=None
+
         sys.stderr.write("save_graph: Constructing graph type tree\n")
-        save_graph_type(root,graph.graph_type)
-        sys.stderr.write("save_graph: Constructing graph inst tree\n")
-        save_graph_instance(root,graph)
+        save_graph_type(root,graph_type)
+        if graph_instance is not None:
+            sys.stderr.write("save_graph: Constructing graph inst tree\n")
+            save_graph_instance(root,graph_instance)
 
         sys.stderr.write("save_graph: writing\n")
         # The wierdness is because stdout is in text mode, so we send

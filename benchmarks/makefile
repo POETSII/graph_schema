@@ -133,7 +133,7 @@ gals_heat_fix_irregular_12k.xml.gz :
 	$(GS_ROOT)/apps/gals_heat/create_mesh/csv_mesh_to_graph_fix.py poets.8.csv 6000 | gzip > $@
 	rm poets.8.csv
 
-FILES += gals_heat_fix_irregular_12k.xml.gz
+#FILES += gals_heat_fix_irregular_12k.xml.gz
 
 gals_heat_fix_irregular_32k.xml.gz : 
 	(cd $(GS_ROOT)/apps/gals_heat/create_mesh/ && octave octave_svg_to_geo.m)
@@ -141,7 +141,7 @@ gals_heat_fix_irregular_32k.xml.gz :
 	$(GS_ROOT)/apps/gals_heat/create_mesh/csv_mesh_to_graph_fix.py  poets.16.csv 3000 | gzip > $@
 	rm poets.16.csv
 
-FILES += gals_heat_fix_irregular_32k.xml.gz
+#FILES += gals_heat_fix_irregular_32k.xml.gz
 
 
 ############################

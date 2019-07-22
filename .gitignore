@@ -22,8 +22,12 @@ instruments*.trace
 /*.snap
 /*.gz
 /CMakeFiles
+/cmake-build-*
 /external/rng-svg
 /pypy-env
+/*.log
+/.tmp
+/cmake-build-*
 
 /*.xml
 /*.gz
@@ -31,3 +35,11 @@ instruments*.trace
 /*.svg
 /*.dot
 .mypy_cache
+/.tmp*
+/.idea
+
+a.out
+perf.data
+perf.data.old
+/apps/ising_spin_fix/ising_spin_fix_ref
+/my-pypy3-env

@@ -11,6 +11,8 @@ demos/clocked_izhikevich/clocked_izhikevich_$1.xml : apps/clocked_izhikevich/cre
 	mkdir -p $$(dir $$@)
 	$$(PYTHON) apps/clocked_izhikevich/create_sparse_instance.py  $$(subst _, ,$1) > $$@
 
+ALL_TEST_XML += demos/clocked_izhikevich/clocked_izhikevich_$1.xml
+
 demos/clocked_izhikevich/clocked_izhikevich_$1.snap : demos/clocked_izhikevich/clocked_izhikevich_$1.xml bin/epoch_sim providers/clocked_izhikevich.graph.so demos/clocked_izhikevich/clocked_izhikevich_$1.checked
 	bin/epoch_sim --stats-delta 1000 --max-steps $2 --log-level 0 --snapshots 1000 $$@  demos/clocked_izhikevich/clocked_izhikevich_$1.xml
 

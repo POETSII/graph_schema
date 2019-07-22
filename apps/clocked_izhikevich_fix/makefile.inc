@@ -11,6 +11,8 @@ demos/clocked_izhikevich_fix/clocked_izhikevich_fix_$1.xml : apps/clocked_izhike
 	mkdir -p $$(dir $$@)
 	$$(PYTHON) apps/clocked_izhikevich_fix/create_clocked_izhikevich_fix_instance.py  $$(subst _, ,$1) > $$@
 
+ALL_TEST_XML += demos/clocked_izhikevich_fix/clocked_izhikevich_fix_$1.xml
+
 demos/clocked_izhikevich_fix/clocked_izhikevich_fix_$1.snap : demos/clocked_izhikevich_fix/clocked_izhikevich_fix_$1.xml bin/epoch_sim providers/clocked_izhikevich_fix.graph.so demos/clocked_izhikevich_fix/clocked_izhikevich_fix_$1.checked
 	bin/epoch_sim --stats-delta 1000 --max-steps $2 --log-level 0 --snapshots 1000 $$@ --key-value  demos/clocked_izhikevich_fix/clocked_izhikevich_fix_$1.kv  demos/clocked_izhikevich_fix/clocked_izhikevich_fix_$1.xml
 

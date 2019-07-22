@@ -51,7 +51,7 @@ protected:
         m_binaryDefault=binaryDefault;
 
         auto def=binaryToJSON(&m_binaryDefault[0], m_binaryDefault.size(), m_jsonDefault.GetAllocator());
-        m_jsonDefault.Swap(def);
+        def.Swap(m_jsonDefault);
 
     }
 public:

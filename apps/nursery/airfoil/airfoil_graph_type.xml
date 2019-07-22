@@ -1,5 +1,5 @@
 <?xml version="1.0"?>
-<Graphs xmlns="https://poets-project.org/schemas/virtual-graph-schema-v2">
+<Graphs xmlns="https://poets-project.org/schemas/virtual-graph-schema-v3">
   <GraphType id="airfoil">
 
     <MetaData>
@@ -19,6 +19,24 @@
     <SharedCode><![CDATA[
 		#include <cmath>
 		#include <cfloat>
+
+		#define handler_checkpoint(...) ((void)0)
+
+		#ifdef POETS_LEGACY_HAS_HANDLER_EXIT
+        #define _do_handler_exit(code) handler_exit(code)
+        #else
+        #define _do_handler_exit(code) ((void)0)
+        #endif
+
+        #define fake_handler_exit(code) \
+        { \
+            if((code)==0){ \
+                handler_log(0, "_HANDLER_EXIT_SUCCESS_9be65737_"); \
+            }else{ \
+                handler_log(0, "_HANDLER_EXIT_FAIL_9be65737_"); \
+            } \
+            _do_handler_exit(code); \
+        }
 
 		FILE *dump=0;
 
@@ -831,7 +849,7 @@
 							}
 
 							if(deviceState->iter==deviceProperties->delta_exit){
-								handler_exit(0);
+								fake_handler_exit(0);
 								*doSend=0;
 							}else{
 								deviceState->rms_sum=0;

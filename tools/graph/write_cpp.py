@@ -637,7 +637,6 @@ def render_input_pin_as_cpp(ip,dst):
         "devicePropertiesStructName"    : "{}_properties_t".format(dt.id),
         "deviceStateStructName"         : "{}_state_t".format(dt.id),
         "messageTypeId"                 : mt.id,
-        "isApplication"                 : "true" if ip.is_application else "false",
         "messageStructName"             : "{}_message_t".format(mt.id),
         "pinName"                      : ip.name,
         "pinIndex"                     : index,
@@ -672,7 +671,6 @@ public:
         "{pinName}",
         {pinIndex},
         {messageTypeId}_Spec_get(),
-        {isApplication},
         {pinPropertiesStructName}_Spec_get(),
         {pinStateStructName}_Spec_get(),
         {deviceTypeId}_{pinName}_handler_code
@@ -741,7 +739,6 @@ def render_output_pin_as_cpp(op,dst):
         "deviceStateStructName"         : "{}_state_t".format(dt.id),
         "messageTypeId"                 : mt.id,
         "messageStructName"             : "{}_message_t".format(mt.id),
-        "isApplication"                 : "true" if op.is_application else "false",
         "pinName"                      : op.name,
         "pinIndex"                     : index,
         "pinPropertiesStructName"       : "{}_{}_properties_t".format(dt.id,op.name),
@@ -766,16 +763,24 @@ def render_output_pin_as_cpp(op,dst):
     dst.write('static const char *{}_{}_handler_code=R"CDATA({})CDATA";\n'.format(dt.id, op.name, op.send_handler))
 
     dst.write("class {}_{}_Spec : public OutputPinImpl {{\n".format(dt.id,op.name))
-    dst.write('  public: {}_{}_Spec() : OutputPinImpl({}_Spec_get, "{}", {}, {}_Spec_get(), {}, {}_{}_handler_code) {{}} \n'.format(dt.id,op.name, dt.id, op.name, index, op.message_type.id, "true" if op.is_application else "false", dt.id, op.name))
+    dst.write('  public: {}_{}_Spec() : OutputPinImpl({}_Spec_get, "{}", {}, {}_Spec_get(), {}_{}_handler_code, {}) {{}} \n'.format(
+            dt.id,op.name, dt.id, op.name, index, op.message_type.id,  dt.id, op.name, 1 if op.is_indexed else 0
+    ))
     dst.write("""    virtual void onSend(
                       OrchestratorServices *orchestrator,
                       const typed_data_t *gGraphProperties,
 		      const typed_data_t *gDeviceProperties,
 		      typed_data_t *gDeviceState,
 		      typed_data_t *gMessage,
-		      bool *doSend
+		      bool *doSend,
+              unsigned *sendIndex
 		      ) const override {""")
     dst.write('    {pinLocalConstants}\n'.format(**subs));
+
+    if op.is_indexed:
+        dst.write("    assert(sendIndex!=0); // This is an indexed output pin\n");
+    else:
+        dst.write("    assert(sendIndex==0); // This is not an indexed output pin\n");
 
     dst.write('    auto graphProperties=cast_typed_properties<{}_properties_t>(gGraphProperties);\n'.format( graph.id ))
     dst.write('    auto deviceProperties=cast_typed_properties<{}_properties_t>(gDeviceProperties);\n'.format( dt.id ))
@@ -810,6 +815,7 @@ def render_output_pin_as_cpp(op,dst):
 
 def render_message_type_as_cpp_fwd(et,dst,asHeader):
     render_typed_data_as_spec(et.message, "{}_message_t".format(et.id), "pp:Message", dst, asHeader)
+    dst.write(f"using {et.parent.id}_{et.id}_message_t = {et.id}_message_t;\n")
 
 def render_message_type_as_cpp(et,dst):
     dst.write("class {}_Spec : public MessageTypeImpl {{\n".format(et.id))
@@ -824,7 +830,9 @@ def render_message_type_as_cpp(et,dst):
 
 def render_device_type_as_cpp_fwd(dt,dst, asHeader):
     render_typed_data_as_spec(dt.properties, "{}_properties_t".format(dt.id), "pp:Properties", dst, asHeader)
+    dst.write(f"using {dt.parent.id}_{dt.id}_properties_t = {dt.id}_properties_t;")
     render_typed_data_as_spec(dt.state, "{}_state_t".format(dt.id), "pp:State", dst, asHeader)
+    dst.write(f"using {dt.parent.id}_{dt.id}_state_t = {dt.id}_state_t;")
     for ip in dt.inputs.values():
         render_typed_data_as_spec(ip.properties, "{}_{}_properties_t".format(dt.id,ip.name), "pp:Properties", dst)
         render_typed_data_as_spec(ip.state, "{}_{}_state_t".format(dt.id,ip.name), "pp:State", dst)
@@ -839,7 +847,8 @@ def render_device_type_as_cpp(dt,dst):
         "handlerCode"                   : dt.ready_to_send_handler,
         "initCode"                      : dt.init_handler,
         "inputCount"                    : len(dt.inputs),
-        "outputCount"                   : len(dt.outputs)
+        "outputCount"                   : len(dt.outputs),
+        "onHardwareIdleCode"            : dt.on_hardware_idle_handler,
     }
     if dt.init_source_line and dt.init_source_file:
         subs["preInitProcLinePragma"]= '#line {} "{}"\n'.format(dt.init_source_line-1,dt.init_source_file)
@@ -859,7 +868,7 @@ def render_device_type_as_cpp(dt,dst):
     dst.write(subs["deviceGlobalConstants"])
     dst.write(subs["deviceLocalConstants"])
 
-    if dt.shared_code:
+    if dt.shared_code is not None:
         for i in dt.shared_code:
             dst.write(i)
 
@@ -892,7 +901,7 @@ def render_device_type_as_cpp(dt,dst):
         else:
             dst.write(',')
         dst.write('{}_{}_Spec_get()'.format(dt.id,o.name))
-    dst.write('}))\n')
+    dst.write('}), false)\n') # This is not an external
     dst.write("  {}\n")
 
     dst.write(
@@ -976,6 +985,47 @@ def render_device_type_as_cpp(dt,dst):
         return;
     }}
     """.format(**subs))
+
+    if (dt.on_hardware_idle_handler):
+        dst.write(
+    """
+      virtual void onHardwareIdle(
+        OrchestratorServices *orchestrator,
+        const typed_data_t *gGraphProperties,
+        const typed_data_t *gDeviceProperties,
+        typed_data_t *gDeviceState
+      ) const override {{
+        auto graphProperties=cast_typed_properties<{graphPropertiesStructName}>(gGraphProperties);
+        auto deviceProperties=cast_typed_properties<{devicePropertiesStructName}>(gDeviceProperties);
+        auto deviceState=cast_typed_data<{deviceStateStructName}>(gDeviceState);
+        HandlerLogImpl handler_log(orchestrator);
+        auto handler_exit=[&](int code) -> void {{ orchestrator->application_exit(code); }};
+        auto handler_export_key_value=[&](uint32_t key, uint32_t value) -> void {{ orchestrator->export_key_value(key, value); }};
+        auto handler_checkpoint=[&](bool preEvent, int level, const char *fmt, ...) -> void {{
+            va_list a;
+            va_start(a,fmt);
+            orchestrator->vcheckpoint(preEvent,level,fmt,a);
+            va_end(a);
+        }};
+
+        // Begin custom handler
+        {preInitProcLinePragma}
+        {onHardwareIdleCode}
+        __POETS_REVERT_PREPROC_DETOUR__
+        // End custom handler
+      }}
+    """.format(**subs))
+    else:
+        dst.write(f"""
+      virtual void onHardwareIdle(
+        OrchestratorServices *orchestrator,
+        const typed_data_t *gGraphProperties,
+        const typed_data_t *gDeviceProperties,
+        typed_data_t *gDeviceState
+      ) const override {{
+          // No hardware idle handler
+      }}
+    """)
 
     dst.write("};\n")
     dst.write("DeviceTypePtr {}_Spec_get(){{\n".format(dt.id))

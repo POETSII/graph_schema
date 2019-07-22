@@ -129,12 +129,11 @@ public:
     const std::string &name,
     unsigned index,
     MessageTypePtr messageType,
-    bool isApplication,
     TypedDataSpecPtr propertiesType,
     TypedDataSpecPtr stateType,
     const std::string &code
   )
-  : InputPinImpl(deviceTypeSrc, name, index, messageType, isApplication, propertiesType, stateType, code)
+  : InputPinImpl(deviceTypeSrc, name, index, messageType, propertiesType, stateType, code)
   {}
 
   virtual void onReceive(OrchestratorServices*, const typed_data_t*, const typed_data_t*, typed_data_t*, const typed_data_t*, typed_data_t*, const typed_data_t*) const override
@@ -152,13 +151,13 @@ public:
     const std::string &name,
     unsigned index,
     MessageTypePtr messageType,
-    bool isApplication,
-    const std::string &code
+    const std::string &code,
+    bool isIndexedSend
   )
-  : OutputPinImpl(deviceTypeSrc, name, index, messageType, isApplication, code)
+  : OutputPinImpl(deviceTypeSrc, name, index, messageType, code, isIndexedSend)
   {}
 
-  virtual void onSend(OrchestratorServices*, const typed_data_t*, const typed_data_t*, typed_data_t*, typed_data_t*, bool*) const
+  virtual void onSend(OrchestratorServices*, const typed_data_t*, const typed_data_t*, typed_data_t*, typed_data_t*, bool*, unsigned *) const override
   {
     throw std::runtime_error("onSend - output pin not loaded from provider, so functionality not available.");
   }
@@ -168,8 +167,12 @@ class DeviceTypeDynamic
   : public DeviceTypeImpl
 {
 public:
-  DeviceTypeDynamic(const std::string &id, TypedDataSpecPtr properties, TypedDataSpecPtr state, const std::vector<InputPinPtr> &inputs, const std::vector<OutputPinPtr> &outputs)
-    : DeviceTypeImpl(id, properties, state, inputs, outputs)
+  DeviceTypeDynamic(const std::string &id,
+    TypedDataSpecPtr properties, TypedDataSpecPtr state,
+    const std::vector<InputPinPtr> &inputs, const std::vector<OutputPinPtr> &outputs, bool isExternal,
+    std::string readyToSendCode, std::string onInitCode, std::string sharedCode
+  )
+    : DeviceTypeImpl(id, properties, state, inputs, outputs, isExternal, readyToSendCode, onInitCode, sharedCode)
   {
     for(auto i : inputs){
       std::cerr<<"  input : "<<i->getName()<<"\n";
@@ -187,6 +190,11 @@ public:
   virtual uint32_t calcReadyToSend(OrchestratorServices*, const typed_data_t*, const typed_data_t*, const typed_data_t*) const override
   {
     throw std::runtime_error("calcReadyToSend - input pin not loaded from provider, so functionality not available.");
+  }
+
+  virtual void onHardwareIdle(OrchestratorServices*, const typed_data_t*, const typed_data_t*, typed_data_t*) const override
+  {
+    throw std::runtime_error("onHardwareIdle - input pin not loaded from provider, so functionality not available.");
   }
 };
 
@@ -210,6 +218,12 @@ DeviceTypePtr loadDeviceTypeElement(
   xmlpp::Element *eDeviceType
 )
 {
+  bool isExternal=false;
+
+  if(eDeviceType->get_name()!="DeviceType"){
+    throw std::runtime_error("Not supported: dynamic device type needs to be upgraded for externals.");
+  }
+
   // TODO : This is stupid. Circular initialisation stuff, but we end up with cycle of references.
   auto futureSrc=std::make_shared<DeviceTypePtr>();
 
@@ -224,9 +238,26 @@ DeviceTypePtr loadDeviceTypeElement(
 
   std::cerr<<"Loading "<<id<<"\n";
 
-  std::vector<std::string> sharedCode;
+  
+  std::string readyToSendCode, onInitCode;
+  auto *eReadyToSendCode=find_single(eDeviceType, "./g:ReadyToSend", ns);
+  if(eReadyToSendCode){
+    auto ch=xmlNodeGetContent(eReadyToSendCode->cobj());
+    readyToSendCode=(char*)ch;
+    xmlFree(ch);
+  }
+  auto *eOnInitCode=find_single(eDeviceType, "./g:OnInit", ns);
+  if(eOnInitCode){
+    auto ch=xmlNodeGetContent(eOnInitCode->cobj());
+    onInitCode=(char*)ch;
+    xmlFree(ch);
+  }
+
+  std::string sharedCode;
   for(auto *n : eDeviceType->find("./g:SharedCode", ns)){
-    sharedCode.push_back(((xmlpp::Element*)n)->get_child_text()->get_content());
+    auto ch=xmlNodeGetContent(n->cobj());
+    sharedCode += *ch + "\n";
+    xmlFree(ch);
   }
 
   TypedDataSpecPtr properties;
@@ -252,7 +283,6 @@ DeviceTypePtr loadDeviceTypeElement(
 
     std::string name=get_attribute_required(e, "name");
     std::string messageTypeId=get_attribute_required(e, "messageTypeId");
-    bool isApplication=get_attribute_optional_bool(e, "application");
 
     if(messageTypes.find(messageTypeId)==messageTypes.end()){
       throw std::runtime_error("Unknown messageTypeId '"+messageTypeId+"'");
@@ -289,7 +319,6 @@ DeviceTypePtr loadDeviceTypeElement(
       name,
       inputs.size(),
       messageType,
-      isApplication,
       inputProperties,
       inputState,
       onReceive
@@ -304,12 +333,12 @@ DeviceTypePtr loadDeviceTypeElement(
 
     std::string name=get_attribute_required(e, "name");
     std::string messageTypeId=get_attribute_required(e, "messageTypeId");
+    bool isIndexedSend=get_attribute_optional_bool(e, "indexed");
 
     if(messageTypes.find(messageTypeId)==messageTypes.end()){
       throw std::runtime_error("Unknown messageTypeId '"+messageTypeId+"'");
     }
     auto messageType=messageTypes.at(messageTypeId);
-    bool isApplication=get_attribute_optional_bool(e, "application");
 
     rapidjson::Document outputMetadata=parse_meta_data(e, "./g:MetaData", ns);
 
@@ -325,13 +354,13 @@ DeviceTypePtr loadDeviceTypeElement(
       name,
       outputs.size(),
       messageType,
-      isApplication,
-      onSend
+      onSend,
+      isIndexedSend
     ));
   }
 
   auto res=std::make_shared<DeviceTypeDynamic>(
-    id, properties, state, inputs, outputs
+    id, properties, state, inputs, outputs, isExternal, readyToSendCode, onInitCode, sharedCode
   );
 
   // Lazily fill in the thing that delayedSrc points to
@@ -617,6 +646,16 @@ void loadGraph(Registry *registry, const filepath &srcPath, xmlpp::Element *pare
       dstPinName=get_attribute_required(eEdge, "dstPinName");
     }
 
+    int sendIndex=-1;
+    std::string sendIndexStr=get_attribute_optional(eEdge, "sendIndex");
+    if(!sendIndexStr.empty()){
+      sendIndex=atoi(sendIndexStr.c_str());
+      if(sendIndex<0){
+        throw std::runtime_error("Invalid sendIndex.");
+      }
+    }
+
+
     auto &srcDevice=devices.at(srcDeviceId);
     auto &dstDevice=devices.at(dstDeviceId);
 
@@ -629,15 +668,13 @@ void loadGraph(Registry *registry, const filepath &srcPath, xmlpp::Element *pare
     if(!dstPin){
       throw std::runtime_error("No sink pin called '"+dstPinName+"' on device '"+dstDeviceId);
     }
-    if(srcPin->isApplication()){
-      throw std::runtime_error("Attempt to connect to application output pin '"+srcPinName+"' on device '"+srcDeviceId);
-    }
-    if(dstPin->isApplication()){
-      throw std::runtime_error("Attempt to connect to application input pin '"+dstPinName+"' on device '"+dstDeviceId);
-    }
 
     if(srcPin->getMessageType()!=dstPin->getMessageType())
       throw std::runtime_error("Edge type mismatch on pins.");
+
+    if(sendIndex!=-1 && !srcPin->isIndexedSend()){
+      throw std::runtime_error("Attempt to set send index on non indexed output pin.");
+    }
 
     auto et=dstPin->getPropertiesSpec();
 
@@ -672,6 +709,7 @@ void loadGraph(Registry *registry, const filepath &srcPath, xmlpp::Element *pare
     events->onEdgeInstance(gId,
                 dstDevice.first, dstDevice.second, dstPin,
                 srcDevice.first, srcDevice.second, srcPin,
+                sendIndex,
                 edgeProperties,
                 std::move(metadata)
     );

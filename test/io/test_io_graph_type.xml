@@ -1,0 +1,79 @@
+<?xml version="1.0"?>
+<Graphs xmlns="https://poets-project.org/schemas/virtual-graph-schema-v2">
+	<GraphType id="test_io">
+		<Documentation>
+		Provides various nodes used for testing IO.
+		</Documentation>
+
+		<MessageTypes>
+
+			<MessageType id="string">
+				<Message>
+					<Scalar name="offset" type="int32_t"/>
+					<Scalar name="c" type="int8_t"/>
+				</Message>
+			</MessageType>
+
+		</MessageTypes>
+
+
+		<DeviceTypes>
+			<ExternalType id="string_sink">
+				<InputPin name="in" messageTypeId="string" />
+			</ExternalType>
+
+			<ExternalType id="string_source">
+				<OutputPin name="out" messageTypeId="string" />
+			</ExternalType>
+
+			<DeviceType id="send_hello_world">
+				<State>
+					<Scalar type="uint32_t" name="index" />
+				</State>
+
+				<ReadyToSend><![CDATA[
+					*readyToSend = deviceState->index < 12 ? RTS_FLAG_out : 0;
+				]]></ReadyToSend>
+
+				<OutputPin name="out" messageTypeId="string">
+					<OnSend><![CDATA[
+						const char *msg="Hello world";
+						message->offset=deviceState->index;
+						message->c=msg[deviceState->index];
+						++deviceState->index;
+					]]></OnSend>
+				</OutputPin>
+			</DeviceType>
+
+			<DeviceType id="recv_hello_world">
+				<State>
+					<Scalar type="uint32_t" name="index" />
+				</State>
+
+				<ReadyToSend><![CDATA[
+					*readyToSend = 0;
+				]]></ReadyToSend>
+
+				<InputPin name="in" messageTypeId="string">
+					<OnReceive><![CDATA[
+						const char *msg="Hello world";
+						if(message->offset >= 12){
+							handler_log(0, "Error - Offset beyond end of string.");
+							handler_exit(1);
+						}
+						if( msg[message->offset] != message->c){
+							handler_log(0, "Error - character didn't match.");
+							handler_exit(1);
+						}
+						++deviceState->index;
+						if(deviceState->index==12){
+							handler_exit(0);
+						}
+					]]></OnReceive>
+				</InputPin>
+			</DeviceType>
+
+		</DeviceTypes>
+	</GraphType>
+</Graphs>
+

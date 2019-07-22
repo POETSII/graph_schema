@@ -1,0 +1,553 @@
+<?xml version="1.0"?>
+<Graphs xmlns="https://poets-project.org/schemas/virtual-graph-schema-v3" formatMinorVersion="1">
+  <GraphType id="relaxation_heat" >
+	<Documentation><![CDATA[
+		Supposed to broadly match spinnaker experiments.
+
+		Each cell has a current heat h, and four neighbours n[0..3]. When an update
+		arrives the cell will store it in n[x], the calculate h'=sum(n)/4. If
+		|h' - h| > 3 then it will update its neighbours.
+
+		This is designed not to use edge properties, so it uses a strictly cartesian
+		grid and colours the devices:
+
+       0  1  2  3  4  5  6
+     +--------------------
+   0 | 0  1  3  2  0  1  3
+   1 | 0  2  3  1  0  2  3
+   2 | 3  2  0  1  3  2  0
+   3 | 3  1  0  2  3  1  0
+   4 | 0  1  3  2  0  1  3
+   5 | 0  2  3  1  0  2  3
+   6 | 3  2  0  1  3  2  0
+
+		Each device broadcasts their colour with their heat, so the heat will always
+		get routed to a unique position in the array.
+
+    Termination:
+    - Each cell has a nextVersion and currVerson
+    - When any cell receives an update, it takes self.nextVersion=max(self.nextVersion,msg.version)
+    - When a cell sends a message it does:
+       - if abs_diff(self.nextHeat,self.currHeat) <= THRESH : self.currVersion=self.nextVersion
+       - else: self.currVersion=self.nextVersion+1
+    
+    Eventually everyone converges on the same version, though convergence speed depends
+    on the diameter of the graph.
+
+    Each cell also sends updates upwards through a network which tracks:
+    - The largest known version
+    - How many cells are at the largest known version
+
+    The pair is then reduced upwards using the function:
+      (largest,count) = (max(largestA,largestB), largestA==largestB ? countA+countB : max(countA,countB)
+
+    At the top-level you can guess that termination has happened when count==len(cells). It isn't
+    certain though, because n-1 cells could be at version v, with one cell at version v-1... but
+    then not, it has to go to version v+1...
+
+    Is it possible for all cells to be at version v, but for there to be messages in flight that
+    would cause one cell to update to version v+1?... Yes.
+
+    Ok, so we broadcast up to the root:
+    - version, count=1, sent, received
+    and the collectors reduce to:
+    if( versionA < versionB ) {
+       (versionB, countB, sentB, receivedB)
+    else if( versionA > versionB ){
+       (versionA, countA, sentA, receivedA)
+    else
+       (versionA, countA+countB, sendA+sentB, receivedA+receivedB)
+
+    termination is detected at the root when:
+       count==len(cells) && sent==received
+
+
+
+    ]]></Documentation>
+	
+		<MetaData>
+			"location.dimension" : 2
+		</MetaData>
+
+  <SharedCode>
+  <![CDATA[
+  int32_t abs_diff(int32_t a, int32_t b)
+  {
+    return (a>b) ? a-b : b-a;
+  }
+
+  float abs_diff(float a, float b)
+  {
+    return (a>b) ? a-b : b-a;
+  }
+  ]]>
+  </SharedCode>
+
+	<Properties>
+      <Scalar type="float" name="threshold" default="0.01" />
+    </Properties>
+
+    <MessageTypes>
+
+			<MessageType id="share">
+        <Documentation>
+        These messages are only shared between cells, and are used to carry updates of
+        version and sometimes hit across the grid.
+        </Documentation>
+        <Message>
+         <Scalar type="uint32_t" name="version" />
+         <Scalar type="float" name="temperature" />
+			   <Scalar type="uint8_t" name="colour" />
+        </Message>
+			</MessageType>
+
+      <MessageType id="termination">
+        <Documentation>
+        These do down from the cells towards the root, through a sequence of merge nodes. At each
+        merge the information is aggregated, then at the root node it is possible to tell if termination
+        is achieved.
+        </Documentation>
+        <Message>
+          <Scalar type="uint32_t" name="version" /><!-- Which version this is talking about -->
+          <Scalar type="uint32_t" name="count" /><!-- Number of cells at this version -->
+          <Scalar type="uint32_t" name="sent" /><!-- Number of sends performed at this version -->
+          <Scalar type="uint32_t" name="received" /><!-- Number of receives performed at this version -->
+          <Scalar type="uint32_t" name="linkClock" /><!-- Maintain ordered history on this link only -->
+          <Scalar type="uint64_t" name="totalSent" /><!-- Number of share messages sent ever -->
+          <Scalar type="uint8_t" name="index" /><!-- Index to tell parent which child this is from -->
+        </Message> 
+			</MessageType>
+
+      <MessageType id="modification">
+        <Documentation>
+        These go up from the root to the cells, and are used to modify a single cell. It is up to
+        the root to make sure that it doesn't have more than one modification in the system at any
+        time.
+        
+        The updates don't use the termination tree, as we want to selectively filter upwards.
+        </Documentation>
+        <Message>
+          <Scalar type="uint16_t" name="x" />
+          <Scalar type="uint16_t" name="y" />
+
+          <Scalar type="float" name="heat" />
+          <Scalar type="int8_t" name="boundary" />
+        </Message> 
+			</MessageType>
+    </MessageTypes>
+
+    <DeviceTypes>
+
+      <DeviceType id="cell">
+        <Properties>
+          <Scalar type="uint32_t" name="multiplier">
+            <Documentation>Used to give the muliplication weight. multiplier/(2**20) is the weight per neighbour </Documentation>
+          </Scalar>
+
+          <Scalar type="float" name="initial_heat" />
+
+          <Scalar type="uint16_t" name="x"/>
+          <Scalar type="uint16_t" name="y"/>
+
+          <Scalar type="uint8_t" name="colour"/>
+          <Scalar type="uint8_t" name="termination_index"/> <!-- index to give to termination parent -->
+
+          <Scalar type="uint8_t" name="neighbours"/>
+
+          <Scalar type="int8_t" name="initial_boundary" />
+        </Properties>
+
+        <State>
+          <Scalar name="currVersion" type="uint32_t" />
+
+          <Scalar name="nextVersion" type="uint32_t" />
+          <Scalar name="sent" type="uint32_t" />
+          <Scalar name="received" type="uint32_t" />
+
+          <Scalar name="currHeat" type="float" />
+          <Scalar name="nextHeat" type="float" />
+
+          <Scalar name="clock" type="uint32_t" />
+          
+          <Array name="nhood" type="float" length="4" />
+
+          <Scalar name="totalSent" type="uint64_t" />
+
+          <Scalar name="dirty" type="int8_t" /> <!-- The state has updated, but not yet send upwards for termination -->
+
+          <Scalar type="int8_t" name="boundary" /> <!-- This is mutable at run-time -->
+        </State>
+
+		<ReadyToSend><![CDATA[
+		*readyToSend		= 0;
+		if( abs_diff(deviceState->currHeat,deviceState->nextHeat) > graphProperties->threshold  || deviceState->currVersion < deviceState->nextVersion ){
+       *readyToSend=RTS_FLAG_share_out;
+    }else if(deviceState->dirty){
+      *readyToSend=RTS_FLAG_termination_out;
+    }
+		]]></ReadyToSend>
+
+		<OnInit><![CDATA[
+      deviceState->boundary=deviceProperties->initial_boundary;
+
+      deviceState->nextHeat=deviceProperties->initial_heat;
+
+      deviceState->currVersion=0;
+
+      deviceState->nextVersion=1;
+      deviceState->sent=0;
+      deviceState->received=0;
+
+      deviceState->dirty=true;
+		  ]]></OnInit>
+
+		<InputPin name="share_in" messageTypeId="share">
+		  <OnReceive><![CDATA[
+      if( !deviceState->boundary ){
+        deviceState->nhood[message->colour] = message->temperature;
+
+        float sum=0;
+        for(unsigned i=0; i<4; i++){
+          sum += deviceState->nhood[i];
+        }
+
+        // Trying this in floating-point to avoid rounding problems
+        float div=deviceProperties->neighbours;
+        float relaxed=sum/div;
+        if(relaxed<-127){
+          relaxed=-127;
+        }else if(relaxed>127){
+          relaxed=127;
+        }
+        deviceState->nextHeat = relaxed;
+
+      }
+      if(deviceState->nextVersion < message->version){
+          deviceState->nextVersion=message->version;
+          deviceState->received=0;
+          deviceState->sent=0;
+      }
+      if(deviceState->nextVersion == message->version){
+        deviceState->received++;        
+      }
+
+      deviceState->dirty=true;
+		  ]]></OnReceive>
+		</InputPin>
+
+		<OutputPin name="share_out" messageTypeId="share">
+		  <OnSend><![CDATA[
+			assert(abs_diff(deviceState->currHeat,deviceState->nextHeat) > graphProperties->threshold || deviceState->currVersion != deviceState->nextVersion );
+      
+      if( abs_diff(deviceState->currHeat,deviceState->nextHeat) > graphProperties->threshold ){
+        deviceState->currHeat=deviceState->nextHeat;      
+        deviceState->nextVersion+=1;
+        deviceState->sent=0;
+        deviceState->received=0;
+      }
+
+      assert(deviceState->sent==0);
+
+      deviceState->currVersion=deviceState->nextVersion;
+      deviceState->sent=deviceProperties->neighbours;
+
+      message->version=deviceState->currVersion;
+      message->colour=deviceProperties->colour;
+      message->temperature=deviceState->currHeat;
+
+      deviceState->totalSent += deviceProperties->neighbours;
+
+      deviceState->dirty=true;
+		  ]]></OnSend>
+    </OutputPin>
+
+    <OutputPin name="termination_out" messageTypeId="termination">
+		  <OnSend><![CDATA[
+			assert(deviceState->dirty);
+      assert(abs_diff(deviceState->currHeat,deviceState->nextHeat) <= graphProperties->threshold);
+      assert(deviceState->currVersion == deviceState->currVersion);
+
+      deviceState->clock++;
+
+      message->version=deviceState->currVersion;
+      message->sent=deviceState->sent;
+      message->received=deviceState->received;
+      message->count=1;
+      message->linkClock=deviceState->clock;
+      message->totalSent=deviceState->totalSent;
+      message->index=deviceProperties->termination_index;
+
+      deviceState->dirty=false;
+		  ]]></OnSend>
+		</OutputPin>
+
+    <InputPin name="modification_in" messageTypeId="modification">
+		  <OnReceive><![CDATA[
+      if(deviceProperties->x == message->x && deviceProperties->y == message->y){
+        handler_log(2, "modification of (%u,%u) -> boundary=%u, initial=%d", message->x, message->y, message->boundary, message->heat);
+
+        deviceState->nextVersion+=1;
+        deviceState->sent=0;
+        deviceState->received=0;
+
+        deviceState->boundary=message->boundary;
+        deviceState->nextHeat=message->heat;
+
+        deviceState->dirty=true;
+      }
+		  ]]></OnReceive>
+		</InputPin>
+	</DeviceType>
+
+  <DeviceType id="merger">
+    <Properties>
+      <Scalar type="uint8_t" name="degree" />
+      <Scalar type="uint8_t" name="termination_index" />
+      
+    </Properties>
+
+    <State>
+      <Scalar name="version" type="uint32_t" />
+      <Scalar name="clock" type="uint32_t" />
+      
+      <Array name="count" type="uint32_t" length="4" />
+      <Array name="sent" type="uint32_t" length="4" />
+      <Array name="received" type="uint32_t" length="4" />
+      <Array name="linkClock" type="uint32_t" length="4" />
+      <Array name="totalSent" type="uint64_t" length="4" />
+
+      <Scalar name="dirty" type="uint8_t" />
+    </State>
+
+    <ReadyToSend><![CDATA[
+      *readyToSend = deviceState->dirty ? RTS_FLAG_termination_out : 0;
+    ]]></ReadyToSend>
+
+    <OnInit>
+    <![CDATA[
+      // Accept all defaults
+
+      // Check the degree property doesn't exceed the array size
+      assert( deviceProperties->degree <= sizeof(deviceState->count)/sizeof(deviceState->count[0]) );
+    ]]>
+    </OnInit>
+
+    <InputPin name="termination_in" messageTypeId="termination">
+      <OnReceive><![CDATA[
+
+      unsigned index=message->index;
+      assert(index<deviceProperties->degree);
+    
+    if(deviceState->version < message->version){
+      deviceState->version=message->version;
+      for(unsigned i=0; i<deviceProperties->degree; i++){
+        deviceState->sent[i]=0;
+        deviceState->received[i]=0;
+        deviceState->count[i]=0;
+      }
+    }
+    if(deviceState->version == message->version){
+      if(deviceState->linkClock[index] < message->linkClock){
+
+        deviceState->count[index]=message->count;
+        deviceState->received[index]=message->received;
+        deviceState->sent[index]=message->sent;
+
+        deviceState->dirty=true;
+      }
+    }
+
+    if(deviceState->linkClock[index] < message->linkClock){
+      deviceState->totalSent[index]=message->totalSent;
+      deviceState->linkClock[index]=message->linkClock;
+    }
+
+    ]]></OnReceive>
+    </InputPin>
+
+    <OutputPin name="termination_out" messageTypeId="termination">
+    <OnSend><![CDATA[
+    assert(deviceState->dirty);
+    
+    // TODO: this could be optimised to only send down when the total count
+    // matches the sum of all cells recursively above this on the tree.
+
+    deviceState->clock++;
+
+    message->version=deviceState->version;
+    message->count=0;
+    message->sent=0;
+    message->received=0;
+    message->index=deviceProperties->termination_index;
+    message->linkClock=deviceState->clock;
+
+    for(unsigned i=0; i<deviceProperties->degree; i++){
+      message->count+=deviceState->count[i];
+      message->sent+=deviceState->sent[i];
+      message->received+=deviceState->received[i];
+      message->totalSent+=deviceState->totalSent[i];
+    }
+
+    deviceState->dirty=false;
+    ]]></OnSend>
+    </OutputPin>
+  </DeviceType>
+
+  <DeviceType id="fanout">
+    <Properties>
+      <Scalar type="uint32_t" name="split_val" />  <!-- value < split_val -> left, otherwise right -->
+      <Scalar type="uint32_t" name="split_axis" /> <!-- 0 -> split on x, 1 -> split on y -->
+    </Properties>
+
+    <State>
+      <Scalar type="float" name="heat" />
+
+      <Scalar type="uint16_t" name="x" />
+      <Scalar type="uint16_t" name="y" />
+      
+      <Scalar type="uint8_t" name="boundary" />
+
+      <Scalar type="uint8_t" name="valid" />
+    </State>
+
+    <ReadyToSend><![CDATA[
+      *readyToSend = 0;
+      if( deviceState->valid ){
+        uint32_t val = deviceProperties->split_axis==0 ? deviceState->x : deviceState->y;
+        if(val < deviceProperties->split_val){
+          *readyToSend = RTS_FLAG_modification_out_left;
+        }else{
+          *readyToSend = RTS_FLAG_modification_out_right;
+        }
+      }
+    ]]></ReadyToSend>
+
+
+    <InputPin name="modification_in" messageTypeId="modification">
+      <OnReceive><![CDATA[
+      assert(!deviceState->valid);
+
+      deviceState->x=message->x;
+      deviceState->y=message->y;
+      deviceState->heat=message->heat;
+      deviceState->boundary=message->boundary;
+
+      deviceState->valid=1;
+      ]]></OnReceive>
+    </InputPin>
+
+    <OutputPin name="modification_out_left" messageTypeId="modification">
+      <OnSend><![CDATA[
+      message->x=deviceState->x;
+      message->y=deviceState->y;
+      message->boundary=deviceState->boundary;
+      message->heat=deviceState->heat;
+
+      deviceState->valid=0;
+      ]]></OnSend>
+    </OutputPin>
+
+    <OutputPin name="modification_out_right" messageTypeId="modification">
+      <OnSend><![CDATA[
+      message->x=deviceState->x;
+      message->y=deviceState->y;
+      message->boundary=deviceState->boundary;
+      message->heat=deviceState->heat;
+
+      deviceState->valid=0;
+      ]]></OnSend>
+    </OutputPin>
+
+  </DeviceType>
+
+  <DeviceType id="root">
+    <Properties>
+      <Scalar type="uint32_t" name="totalCells" />
+
+      <Scalar type="uint32_t" name="max_steps" />
+
+      <Scalar type="uint32_t" name="width" />
+      <Scalar type="uint32_t" name="height" />
+    </Properties>
+
+    <State>
+      <Scalar type="uint32_t" name="steps" />
+      <Scalar type="uint32_t" name="state" default="76543210" />
+      <Scalar type="uint32_t" name="rts" />
+    </State>
+
+    <SharedCode><![CDATA[
+      uint32_t rand(uint32_t &x)
+      {
+        x=x*1664525+1013904223;
+        return x;
+      }
+
+      unsigned rand_range(uint32_t &state, unsigned maxExclusive)
+      {
+        assert(0 < maxExclusive  &&  maxExclusive < (1<<30) );
+        unsigned pow2=1;
+        while( pow2 <= maxExclusive ){
+          pow2=pow2<<1;
+        }
+
+        unsigned mask=pow2-1;
+        while(1){
+          uint32_t x=rand(state) & mask;
+          if(x < maxExclusive){
+            return x;
+          }
+        }
+      }
+    ]]></SharedCode>
+
+    <ReadyToSend><![CDATA[
+      *readyToSend = deviceState->rts;
+    ]]></ReadyToSend>
+
+    <InputPin name="termination_in" messageTypeId="termination">
+      <OnReceive><![CDATA[
+      assert(message->index==0); // Root doesn't do any merging
+
+      handler_log(2, "version=%u, count=%u (of %u), sent=%u, received=%u, totalSentHi=%u, totalSentLo=%u",
+          message->version, message->count, deviceProperties->totalCells, message->sent, message->received,
+          uint32_t(message->totalSent>>32), uint32_t(message->totalSent&0xFFFFFFFFul) 
+          );
+
+      if(message->count==deviceProperties->totalCells && message->sent==message->received){
+        deviceState->steps++;
+
+        handler_log(1, "steps = %u, max_steps = %u, totalSentHi=%u, totalSentLo=%u",
+            deviceState->steps, deviceProperties->max_steps,
+            uint32_t(message->totalSent>>32), uint32_t(message->totalSent&0xFFFFFFFFul)
+        );
+        if(deviceState->steps >= deviceProperties->max_steps){
+          handler_exit(0);
+        }else{
+          deviceState->rts=RTS_FLAG_modification_out;
+        }
+      }
+      ]]></OnReceive>
+    </InputPin>
+
+    <OutputPin name="modification_out" messageTypeId="modification">
+      <OnSend><![CDATA[
+      message->x=rand_range(deviceState->state, deviceProperties->width);
+      message->y=rand_range(deviceState->state, deviceProperties->height);
+      //message->heat=(rand(deviceState->state)>>25) - (int)(rand(deviceState->state)>>25);
+
+      message->heat=(rand(deviceState->state)>>31) ? 127 : -127;
+
+      message->boundary=1;
+      
+      deviceState->rts=0;
+      ]]></OnSend>
+    </OutputPin>
+
+  </DeviceType>
+
+
+
+    </DeviceTypes>
+  </GraphType>
+</Graphs>

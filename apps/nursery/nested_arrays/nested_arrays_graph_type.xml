@@ -1,0 +1,89 @@
+<?xml version='1.0'?>
+<Graphs xmlns="https://poets-project.org/schemas/virtual-graph-schema-v3">
+<GraphType xmlns="https://poets-project.org/schemas/virtual-graph-schema-v3" id="nested_arrays">
+  <SharedCode><![CDATA[
+#ifdef POETS_LEGACY_HAS_HANDLER_EXIT
+#define _do_handler_exit(code) handler_exit(code)
+#else
+#define _do_handler_exit(code) ((void)0)
+#endif
+
+#define fake_handler_exit(code) \
+{ \
+    if((code)==0){ \
+        handler_log(0, "_HANDLER_EXIT_SUCCESS_9be65737_"); \
+    }else{ \
+        handler_log(0, "_HANDLER_EXIT_FAIL_9be65737_"); \
+    } \
+    _do_handler_exit(code); \
+}
+]]></SharedCode>
+  <Types>
+      <TypeDef id="a_C">
+	<Array name = "_" length = "3">
+          <Array name = "_" length = "4">
+            <Tuple name = "_">
+              <Scalar name = "a" type = "uint32_t"/>
+              <Scalar name = "b" type = "uint32_t"/>
+              <Tuple name = "t_sD">
+                <Scalar name = "x" type = "uint32_t"/>
+                <Scalar name = "y" type = "uint32_t"/>
+                <Scalar name = "z" type = "uint32_t"/>
+              </Tuple>
+            </Tuple>
+          </Array>
+        </Array>
+      </TypeDef>
+  </Types>
+  <MessageTypes>
+    <MessageType id="__init__"/>
+    <MessageType id="exchange">
+      <Message>
+        <Scalar name="credit" type="uint32_t"/>
+      </Message>
+    </MessageType>
+  </MessageTypes>
+  <DeviceTypes>
+    <DeviceType id="node">
+      <Properties>
+        <Scalar name="max_count" type="uint32_t"/>
+        <Array name = "a_C" length = "3">
+          <Array name = "a_D" length = "4">
+            <Tuple name = "t_D">
+              <Scalar name = "a" type = "uint32_t"/>
+              <Scalar name = "b" type = "uint32_t"/>
+              <Tuple name = "t_sD">
+                <Scalar name = "x" type = "uint32_t"/>
+                <Scalar name = "y" type = "uint32_t"/>
+                <Scalar name = "z" type = "uint32_t"/>
+              </Tuple>
+            </Tuple>
+          </Array>
+        </Array>
+      </Properties>
+      <State>
+        <Scalar name="count" type="uint32_t"/>
+        <Array name="x" length="5">
+          <Array name="_" length="5">
+            <Array name="_" length="5" type="uint32_t" />
+          </Array>
+        </Array>
+      </State>
+      <OutputPin name="fire" messageTypeId="exchange">
+        <OnSend><![CDATA[
+		handler_log(0, "node_fire");
+		deviceState->count++;
+    deviceState->x[1][1][2]=2;
+		  ]]></OnSend>
+      </OutputPin>
+      <ReadyToSend><![CDATA[
+		handler_log(0, "node_rts");
+			*readyToSend = 0; 
+			if(deviceState->count < deviceProperties->max_count ){
+				*readyToSend = RTS_FLAG_fire;
+			}
+		]]></ReadyToSend>
+    </DeviceType>
+  </DeviceTypes>
+</GraphType>
+</Graphs>

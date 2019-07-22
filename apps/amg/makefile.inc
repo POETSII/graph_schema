@@ -8,6 +8,8 @@ demos/amg/amg_poisson_$1.xml : apps/amg/make_poisson_graph_instance.py apps/amg/
 	mkdir -p $$(dir $$@)
 	$$(PYTHON) apps/amg/make_poisson_graph_instance.py  $$(subst _, ,$1) > $$@
 
+ALL_TEST_XML += demos/amg/amg_poisson_$1.xml
+
 demos/amg/amg_poisson_$1.snap : demos/amg/amg_poisson_$1.xml bin/epoch_sim providers/amg.graph.so demos/amg/amg_poisson_$1.checked
 	bin/epoch_sim  --log-level 0 --snapshots 100 $$@ --stats-delta 100 demos/amg/amg_poisson_$1.xml
 

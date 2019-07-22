@@ -82,6 +82,7 @@ public:
   {
     if(p){
       assert(p->_ref_count==0);
+      assert(p->_total_size_bytes >= sizeof(T) );
       p->_ref_count=1;
     }
   }
@@ -92,6 +93,8 @@ public:
   {
     if(p){
       assert(p->_ref_count==0);
+      assert(p->_total_size_bytes >= sizeof(T) );
+      assert(p->_total_size_bytes >= sizeof(TO) );
       p->_ref_count=1;
     }
   }
@@ -214,6 +217,13 @@ public:
     return DataPtr((T*)p);
   }
 
+  void copy_to(typed_data_t *dst) const
+  {
+    assert(m_p &&dst);
+    assert(dst->_total_size_bytes==m_p->_total_size_bytes);
+    memcpy(dst+1, payloadPtr(), payloadSize());
+  }
+
   const uint8_t *payloadPtr() const
   {
     if(m_p){
@@ -293,10 +303,25 @@ namespace std
 template<class T>
 DataPtr<T> make_data_ptr()
 {
-  return DataPtr<T>((T*)malloc(sizeof(T)));
+  auto p=(T*)malloc(sizeof(T));
+  p->_ref_count=0;
+  p->_total_size_bytes=sizeof(T);
+  return DataPtr<T>(p);
 }
 
 typedef DataPtr<typed_data_t> TypedDataPtr;
+
+TypedDataPtr clone(const typed_data_t *p)
+{
+  TypedDataPtr res;
+  if(p){
+    typed_data_t *pc=(typed_data_t*)malloc(p->_total_size_bytes);
+    memcpy(pc, p, p->_total_size_bytes);
+    pc->_ref_count=0;
+    res.attach(pc);
+  }
+  return res;
+}
 
 class TypedDataSpec;
 class MessageType;
@@ -378,7 +403,6 @@ public:
 
   virtual const std::string &getName() const=0;
   virtual unsigned getIndex() const=0;
-  virtual bool isApplication() const=0;
 
   virtual const MessageTypePtr &getMessageType() const=0;
 
@@ -478,8 +502,11 @@ public:
 		      const typed_data_t *deviceProperties,
 		      typed_data_t *deviceState,
 		      typed_data_t *message,
-		      bool *doSend
+		      bool *doSend,
+          unsigned *sendIndex=0
 		      ) const=0;
+
+  virtual bool isIndexedSend() const=0;
 
   virtual const std::string &getHandlerCode() const=0;
 };
@@ -496,9 +523,13 @@ public:
   virtual const TypedDataSpecPtr &getPropertiesSpec() const=0;
   virtual const TypedDataSpecPtr &getStateSpec() const=0;
 
+  virtual const std::string &getOnInitCode() const=0;
+
   virtual const std::string &getReadyToSendCode() const=0;
 
   virtual const std::string &getSharedCode() const=0;
+
+  virtual bool isExternal() const=0;
 
   virtual unsigned getInputCount() const=0;
   virtual const InputPinPtr &getInput(unsigned index) const=0;
@@ -523,6 +554,13 @@ public:
 				   const typed_data_t *deviceProperties,
 				   const typed_data_t *deviceState
 				   ) const=0;
+
+    virtual void onHardwareIdle(
+           OrchestratorServices *orchestrator,
+           const typed_data_t *graphProperties,
+           const typed_data_t *deviceProperties,
+           typed_data_t *deviceState
+           ) const=0;
 
   virtual rapidjson::Document &getMetadata() =0;
 };

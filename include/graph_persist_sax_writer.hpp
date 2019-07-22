@@ -26,7 +26,7 @@ private:
     State_PostEdgeInstances
   };
   
-  const xmlChar *m_ns=(const xmlChar *)"https://poets-project.org/schemas/virtual-graph-schema-v2";
+  const xmlChar *m_ns=(const xmlChar *)"https://poets-project.org/schemas/virtual-graph-schema-v3";
 
 
   
@@ -91,9 +91,6 @@ private:
     xmlTextWriterStartElement(m_dst, (const xmlChar *)"InputPin");
     xmlTextWriterWriteAttribute(m_dst, (const xmlChar *)"name", (const xmlChar *)ip->getName().c_str() );
     xmlTextWriterWriteAttribute(m_dst, (const xmlChar *)"messageTypeId", (const xmlChar *)ip->getMessageType()->getId().c_str() );
-    if(ip->isApplication()){
-      xmlTextWriterWriteAttribute(m_dst, (const xmlChar *)"application", (const xmlChar *)"true" );
-    }
 
     writeMetaData(ip->getMetadata(), "MetaData");
 
@@ -114,10 +111,6 @@ private:
     xmlTextWriterWriteAttribute(m_dst, (const xmlChar *)"name", (const xmlChar *)op->getName().c_str() );
     xmlTextWriterWriteAttribute(m_dst, (const xmlChar *)"messageTypeId", (const xmlChar *)op->getMessageType()->getId().c_str() );
     
-    if(op->isApplication()){
-      xmlTextWriterWriteAttribute(m_dst, (const xmlChar *)"application", (const xmlChar*)"true" );
-    }
-
     writeMetaData(op->getMetadata(), "MetaData");
 
     xmlTextWriterStartElement(m_dst, (const xmlChar *)"OnSend");
@@ -134,6 +127,10 @@ private:
     xmlTextWriterWriteAttribute(m_dst, (const xmlChar *)"id", (const xmlChar *)deviceType->getId().c_str() );
 
     writeTypedDataSpec(deviceType->getPropertiesSpec(), "Properties");
+
+    xmlTextWriterStartElement(m_dst, (const xmlChar *)"OnInit");
+    xmlTextWriterWriteCDATA(m_dst, (const xmlChar *)deviceType->getOnInitCode().c_str());
+    xmlTextWriterEndElement(m_dst);
 
     xmlTextWriterStartElement(m_dst, (const xmlChar *)"ReadyToSend");
     xmlTextWriterWriteCDATA(m_dst, (const xmlChar *)deviceType->getReadyToSendCode().c_str());
@@ -372,6 +369,7 @@ public:
    const DeviceTypePtr &dt,
    const std::string &id,
    const TypedDataPtr &properties,
+   const TypedDataPtr &state,
    rapidjson::Document &&metadata
    ) override
   {
@@ -394,6 +392,7 @@ public:
     xmlTextWriterWriteAttribute(m_dst, (const xmlChar *)"type", (const xmlChar *)dt->getId().c_str());
     
     writeTypedData(dt->getPropertiesSpec(), properties, "P");
+    writeTypedData(dt->getStateSpec(), state, "S");
     
     writeMetaData(metadata, "M");
 
@@ -428,6 +427,7 @@ public:
    uint64_t gId,
    uint64_t dstDevInst, const DeviceTypePtr &dstDevType, const InputPinPtr &dstPin,
    uint64_t srcDevInst,  const DeviceTypePtr &srcDevType, const OutputPinPtr &srcPin,
+   int sendIndex,
    const TypedDataPtr &properties,
    rapidjson::Document &&metadata
   ) override
@@ -449,6 +449,10 @@ public:
     if(dstPin->getMessageType()->getId() != srcPin->getMessageType()->getId())
       throw std::runtime_error("The pin edge types do not match.");
 
+    if(sendIndex!=-1 && srcPin->isIndexedSend()){
+      throw std::runtime_error("Attempt to specify sendIndex on non-indexed output pin.");
+    }
+
     auto it_inserted=m_seenIds.insert(id);
     if(!it_inserted.second)
       throw std::runtime_error("An edge called "+id+" has already been added.");
@@ -457,6 +461,11 @@ public:
     
     xmlTextWriterStartElement(m_dst, (const xmlChar *)"EdgeI");
     xmlTextWriterWriteAttribute(m_dst, (const xmlChar *)"path", (const xmlChar *)id.c_str());
+
+    if(sendIndex!=-1){
+      std::string tmp=std::to_string(sendIndex);
+      xmlTextWriterWriteAttribute(m_dst, (const xmlChar *)"sendIndex", (const xmlChar *)tmp.c_str());
+    }
 
     writeTypedData(dstPin->getPropertiesSpec(), properties, "P");
     

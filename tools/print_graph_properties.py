@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-from graph.load_xml import load_graph
+from graph.load_xml import load_graph_instance
 import sys
 import os
 
@@ -11,7 +11,7 @@ else:
     src=sys.stdin
     basePath=os.getcwd()
 
-graph=load_graph(src,basePath)
+graph=load_graph_instance(src,basePath)
 print("graph '{}'".format(graph.id))
 print("message type count = {}".format(len(graph.graph_type.message_types)))
 print("device type count = {}".format(len(graph.graph_type.device_types)))

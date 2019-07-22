@@ -117,6 +117,7 @@ public:
    uint64_t graphInst,
    uint64_t dstDevInst, const DeviceTypePtr &dstDevType, const InputPinPtr &dstPin,
    uint64_t srcDevInst,  const DeviceTypePtr &srcDevType, const OutputPinPtr &srcPin,
+   int sendIndex,
    const TypedDataPtr &properties,
   rapidjson::Document &&metadata
   ) override

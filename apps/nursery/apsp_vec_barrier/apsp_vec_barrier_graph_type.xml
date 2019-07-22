@@ -1,0 +1,309 @@
+<?xml version="1.0"?>
+<Graphs xmlns="https://poets-project.org/schemas/virtual-graph-schema-v3">
+	<GraphType id="apsp_vec_barrier">
+
+		<Properties>
+			<Scalar type="uint32_t" name="total_vertices" />
+			<Scalar type="uint32_t" name="gen_k" />
+		</Properties>
+
+		<SharedCode><![CDATA[
+		#include <cmath>
+		#include <utility>
+		#include <cstring>
+
+		const unsigned K_MSG=sizeof(std::declval<apsp_vec_barrier_share_message_t>().distances) / sizeof(std::declval<apsp_vec_barrier_share_message_t>().distances[0]);
+		const unsigned K_STATE=sizeof(std::declval<apsp_vec_barrier_vertex_state_t>().distances) / sizeof(std::declval<apsp_vec_barrier_vertex_state_t>().distances[0]);
+		static_assert(K_MSG==K_STATE, "Size of message and state arrays has drifted.");
+		const unsigned K=K_MSG;
+
+		const unsigned num_debug_1st_round_distances = sizeof(std::declval<apsp_vec_barrier_vertex_properties_t>().debug_1st_round_distances) / sizeof(std::declval<apsp_vec_barrier_vertex_properties_t>().debug_1st_round_distances[0]);
+		const unsigned num_debug_2nd_round_distances = sizeof(std::declval<apsp_vec_barrier_vertex_properties_t>().debug_2nd_round_distances) / sizeof(std::declval<apsp_vec_barrier_vertex_properties_t>().debug_2nd_round_distances[0]);
+
+
+		#ifdef POETS_LEGACY_HAS_HANDLER_EXIT
+        #define _do_handler_exit(code) handler_exit(code)
+        #else
+        #define _do_handler_exit(code) ((void)0)
+        #endif
+
+        #define fake_handler_exit(code) \
+        { \
+            if((code)==0){ \
+                handler_log(0, "_HANDLER_EXIT_SUCCESS_9be65737_"); \
+            }else{ \
+                handler_log(0, "_HANDLER_EXIT_FAIL_9be65737_"); \
+            } \
+            _do_handler_exit(code); \
+        }
+		]]>		</SharedCode>
+
+		<MessageTypes>
+			<MessageType id="share">
+				<Message>
+					<Scalar type="uint32_t" name="source" /> <!-- Not strictly needed - here for debug -->
+					<Array type="uint32_t" name="distances" length="8" />
+				</Message>
+			</MessageType>
+
+			<MessageType id="stats">
+				<Message>
+					<Scalar type="uint64_t" name="sum_sum_distance" /> <!-- Sum of all paths within the batch -->
+					<Scalar type="uint32_t" name="vertex_count" /> <!-- Number of vertex results aggregated within batch -->
+					<Array type="uint32_t" name="max_distances" length="8" /> <!-- max distance seen for each node within batch -->
+				</Message>
+			</MessageType>
+		</MessageTypes>
+
+		<DeviceTypes>
+
+			<DeviceType id="vertex">
+				<Properties>
+					<Scalar type="uint32_t" name="id" />
+					<Array type="uint32_t" name="debug_1st_round_distances" length="32" /> <!-- Contains distances for the first 32 vertices in the first round -->
+					<Array type="uint32_t" name="debug_2nd_round_distances" length="32" /> <!-- Contains distances for the first 32 vertices in the second round -->
+				</Properties>
+
+				<State>
+					<Scalar type="int32_t" name="stats_dirty" />
+					<Array type="uint32_t" name="stats_distances" length="8"/>
+					<Scalar type="uint32_t" name="stats_k" />
+					
+					<Scalar type="int32_t" name="distances_dirty" />
+					<Scalar type="uint32_t" name="round_base" />
+					<Scalar type="uint32_t" name="curr_k" />
+					<Array type="uint32_t" name="distances" length="8" /><!-- Must match the length in message -->
+				</State>
+
+				<SharedCode><![CDATA[
+				template<class GP, class DP, class DS>
+				void begin_round(const GP * graphProperties, const DP *deviceProperties, DS *deviceState)
+				{
+					// Start the next round
+					memset(deviceState->distances, 0xFF, sizeof(deviceState->distances)); 
+
+					// Check if we are a source for the next round
+					int32_t id_delta=deviceProperties->id - deviceState->round_base;
+					if(0 <= id_delta && id_delta < K){
+						deviceState->distances_dirty=true;
+						deviceState->distances[id_delta]=0; // Distance 0 from ourself
+					}
+					// Sometimes we need to be precise about exactly how many vertices are in this batch,
+					// but most of the time it is _slightly_ more efficient to use K (instruction count + memory accesses + reg pressure).
+					// There is only one round where curr_k < K, versus floor(n/K) where curr_k==K. Ignored for now.
+					deviceState->curr_k=std::min(K, graphProperties->total_vertices-deviceState->round_base);
+					assert(deviceState->curr_k <= K);
+
+					deviceState->round_base += K;
+				}
+				]]></SharedCode>
+
+				<InputPin name="share_in" messageTypeId="share">
+					<Properties>
+						<Scalar name="w" type="uint32_t" />
+					</Properties>
+					<OnReceive><![CDATA[
+					auto weight=edgeProperties->w;
+					for(unsigned i=0; i < deviceState->curr_k; i++){
+						auto peerDist=message->distances[i];
+						if(peerDist!=UINT_MAX){
+							auto newDist= peerDist + weight;
+							if(newDist < deviceState->distances[i]){
+								handler_log(3, "  new distance for %u <- %u : %u (prev %u), came from %u", deviceProperties->id, deviceState->round_base-K+i, newDist, deviceState->distances[i], message->source);
+								deviceState->distances[i] = newDist;
+								deviceState->distances_dirty=1;
+							}
+						}
+					}
+					handler_log(2, "stats_dirty=%u, distances_dirty=%u", deviceState->stats_dirty, deviceState->distances_dirty);
+					]]></OnReceive>
+				</InputPin>
+
+				<OutputPin name="share_out" messageTypeId="share">
+					<OnSend><![CDATA[
+					for(unsigned i=0; i<deviceState->curr_k; i++){
+						handler_log(3, "  distance for %u <- %u : %u", deviceProperties->id, deviceState->round_base-K+i, deviceState->distances[i]);
+					}
+
+					memcpy(message->distances, deviceState->distances, sizeof(deviceState->distances));
+					deviceState->distances_dirty=false;
+					message->source=deviceProperties->id;
+					handler_log(2, "stats_dirty=%u, distances_dirty=%u", deviceState->stats_dirty, deviceState->distances_dirty);
+					]]></OnSend>
+				</OutputPin>
+
+				<OutputPin name="stats_out" messageTypeId="stats">
+					<OnSend><![CDATA[
+					uint64_t sum_sum_distance=0;
+					for(unsigned i=0; i<deviceState->stats_k; i++){
+						sum_sum_distance += deviceState->stats_distances[i];
+					}
+					message->sum_sum_distance=sum_sum_distance;
+					message->vertex_count=1;
+					memcpy(message->max_distances, deviceState->stats_distances, sizeof(deviceState->stats_distances));
+					deviceState->stats_dirty=false;
+
+					handler_log(2, "stats_dirty=%u, distances_dirty=%u, sum_sum_distance=%u", deviceState->stats_dirty, deviceState->distances_dirty, (uint32_t)sum_sum_distance);
+					]]></OnSend>
+				</OutputPin>
+
+				<ReadyToSend><![CDATA[
+				*readyToSend=0;
+				if(deviceState->distances_dirty){	// Share distances in preference to stats
+					*readyToSend = RTS_FLAG_share_out;
+				}else if(deviceState->stats_dirty){
+					*readyToSend = RTS_FLAG_stats_out;
+				}
+				]]></ReadyToSend>
+
+				<OnInit><![CDATA[
+				begin_round(graphProperties, deviceProperties, deviceState);
+				]]></OnInit>
+
+				<OnHardwareIdle><![CDATA[
+				#ifndef NDDEBUG
+				for(unsigned i=0; i<deviceState->curr_k; i++){
+					unsigned src=i+deviceState->round_base-K;
+					if( (src < num_debug_1st_round_distances) && (deviceState->round_base==K) ){
+						handler_log(4, "  distance %u <- %u = %u expected %u", deviceProperties->id, src, deviceState->distances[i], deviceProperties->debug_1st_round_distances[i]); 
+					}else if( (src < num_debug_2nd_round_distances) && (deviceState->round_base==2*K) ){
+						handler_log(4, "  distance %u <- %u = %u expected %u", deviceProperties->id, src, deviceState->distances[i], deviceProperties->debug_2nd_round_distances[i]); 
+					}else{
+						handler_log(4, "  distance %u <- %u = %u", deviceProperties->id, src, deviceState->distances[i]);
+					}
+				}
+				#endif
+				deviceState->stats_k=deviceState->curr_k;
+				// Capture stats for the previous round
+				memcpy(deviceState->stats_distances, deviceState->distances, sizeof(deviceState->distances));
+				deviceState->stats_dirty=1;
+				
+				if(deviceState->round_base < graphProperties->total_vertices){
+					begin_round(graphProperties, deviceProperties, deviceState);
+				}
+				]]></OnHardwareIdle>
+			</DeviceType>
+
+			<DeviceType id="reducer">
+				<Properties>
+					<Scalar type="uint32_t" name="vertex_cone_size" />	
+				</Properties>
+
+				<State>
+					<Scalar type="uint64_t" name="sum_sum_distance" /> <!-- Sum of all paths within the batch -->
+					<Scalar type="uint32_t" name="vertex_count" /> <!-- Number of vertex results aggregated within batch -->
+					<Array type="uint32_t" name="max_distances" length="8" /> <!-- max distance seen for each node within batch -->
+				</State>
+
+				<InputPin name="reduce_in" messageTypeId="stats">
+					<OnReceive><![CDATA[
+					for(unsigned i=0; i<K; i++){
+						deviceState->max_distances[i] = std::max(deviceState->max_distances[i], message->max_distances[i]);
+					}
+					deviceState->vertex_count+=message->vertex_count;
+					deviceState->sum_sum_distance+=message->sum_sum_distance;
+					]]></OnReceive>
+				</InputPin>
+
+				<OutputPin name="reduce_out" messageTypeId="stats">
+					<OnSend><![CDATA[
+					static_assert(sizeof(*message)==sizeof(*deviceState), "Layout doesn't match.");
+					static_assert(offsetof(MESSAGE_T, vertex_count) == offsetof(DEVICE_STATE_T, vertex_count), "Layout doesn't match.");
+					static_assert(offsetof(MESSAGE_T, sum_sum_distance) == offsetof(DEVICE_STATE_T, sum_sum_distance), "Layout doesn't match.");
+					
+					memcpy(message, deviceState, sizeof(*message));
+					memset(deviceState, 0, sizeof(*deviceState));
+					]]></OnSend>
+				</OutputPin>
+
+				<ReadyToSend><![CDATA[
+				*readyToSend=0;
+				if(deviceState->vertex_count == deviceProperties->vertex_cone_size){
+					*readyToSend = RTS_FLAG_reduce_out;
+				}
+				]]></ReadyToSend>
+
+				<OnHardwareIdle><![CDATA[
+				assert(deviceState->vertex_count==0); // We should have moved stats before the barrier
+				]]></OnHardwareIdle>
+			</DeviceType>
+
+			<DeviceType id="collector">
+				<Properties>
+					<Scalar type="uint64_t" name="refSumMaxDist" />	
+					<Scalar type="uint64_t" name="refSumSumDist" />	
+				</Properties>
+
+				<State>
+					<Scalar type="uint64_t" name="sum_max_distances" />
+					<Scalar type="uint64_t" name="sum_sum_distances" />
+					
+					<Array type="uint32_t" name="max_distances" length="8" />
+					<Scalar type="uint32_t" name="vertex_count" />
+					<Scalar type="uint32_t" name="round_base" />
+				</State>
+
+				<InputPin name="stats_in" messageTypeId="stats">
+					<OnReceive><![CDATA[
+					deviceState->sum_sum_distances += message->sum_sum_distance;
+					assert(deviceState->round_base < graphProperties->total_vertices);
+					unsigned curr_k = std::min(K, graphProperties->total_vertices - deviceState->round_base);
+					assert(curr_k <= K);
+					for(unsigned i=0; i<curr_k; i++){
+						deviceState->max_distances[i] = std::max(deviceState->max_distances[i], message->max_distances[i]);
+					}
+					deviceState->vertex_count += message->vertex_count;
+					handler_log(2, "vertex_count = %u", deviceState->vertex_count);
+					]]></OnReceive>
+				</InputPin>
+
+				<ReadyToSend><![CDATA[
+				assert(deviceState->round_base < graphProperties->total_vertices);
+				*readyToSend=0;
+				]]></ReadyToSend>
+
+				<OnInit><![CDATA[
+					assert(graphProperties->gen_k==K);
+					assert(deviceState->round_base < graphProperties->total_vertices);
+				]]></OnInit>
+
+				<OnHardwareIdle><![CDATA[
+				if(deviceState->vertex_count==0){
+					// Do nothing - very first round, with no stats
+					assert(deviceState->round_base==0);
+				}else{
+
+					assert(deviceState->vertex_count == graphProperties->total_vertices);
+					assert(deviceState->round_base < graphProperties->total_vertices);
+
+					unsigned curr_k = std::min(K, graphProperties->total_vertices - deviceState->round_base);
+					assert(curr_k <= K);
+					for(unsigned i=0; i<curr_k; i++){
+						deviceState->sum_max_distances += deviceState->max_distances[i];
+					}
+					memset(deviceState->max_distances, 0, sizeof(deviceState->max_distances));
+
+					handler_log(0, "round_base=%u, sum_sum_distance_hi=%08x:%08x, sum_max_length_hi=%08x:%08x", deviceState->round_base, uint32_t(deviceState->sum_sum_distances>>32), uint32_t(deviceState->sum_sum_distances), uint32_t(deviceState->sum_max_distances>>32), uint32_t(deviceState->sum_max_distances)); 
+
+					deviceState->round_base += K;
+					deviceState->vertex_count=0;
+
+					if(deviceState->round_base >= graphProperties->total_vertices){
+						if(deviceProperties->refSumMaxDist!=0){
+							if(deviceProperties->refSumMaxDist != deviceState->sum_max_distances){
+								handler_log(0, "  ref sum max = %u, got = %u", (uint32_t)deviceProperties->refSumMaxDist, (uint32_t)deviceState->sum_max_distances);
+								fake_handler_exit(1);
+							}
+							if(deviceProperties->refSumSumDist != deviceState->sum_sum_distances){
+								handler_log(0, "  ref sum sum = %u, got = %u", (uint32_t)deviceProperties->refSumSumDist, (uint32_t)deviceState->sum_sum_distances);
+								fake_handler_exit(1);
+							}
+						}
+						fake_handler_exit(0);
+					}
+				}
+				]]></OnHardwareIdle>
+			</DeviceType>
+		</DeviceTypes>
+	</GraphType>
+</Graphs>

@@ -99,6 +99,13 @@ def heat(valLow,valHigh,value):
     else:
         return blend_colors( (255,255,255), (255,0,0), valMid, valHigh, value)
 
+def cycle(val, wrap):
+    val=math.floor(val)
+    val=val%wrap
+    val=val/(wrap+1)
+    
+    return color_to_str( ( 0, math.floor(val*255), 0 ) )
+
 
 def write_graph(dst, graph,devStates=None,edgeStates=None):
     def out(string):

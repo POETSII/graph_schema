@@ -31,7 +31,7 @@ endif
 CPPFLAGS += -std=c++11 -g
 #CPPFLAGS += -O0
 
-CPPFLAGS += -O2 -fno-omit-frame-pointer -ggdb -DNDEBUG=1
+#CPPFLAGS += -O2 -fno-omit-frame-pointer -ggdb -DNDEBUG=1
 
 
 
@@ -169,7 +169,7 @@ providers/$1.graph.cpp providers/$1.graph.hpp : $$($1_src_xml) $(JING)
 	mkdir -p providers
 	java -jar $(JING) -c master/virtual-graph-schema-v3.rnc $$($1_src_xml)
 	$$(PYTHON) tools/render_graph_as_cpp.py $$($1_src_xml) providers/$1.graph.cpp
-	$$(PYTHON) tools/render_graph_as_cpp.py --header < $$($1_src_xml) > providers/$1.graph.hpp
+	$$(PYTHON) tools/render_graph_as_cpp.py --header $$($1_src_xml) providers/$1.graph.hpp
 
 providers/$1.graph.so : providers/$1.graph.cpp
 	g++ $$(CPPFLAGS) -Wno-unused-but-set-variable $$(SO_CPPFLAGS) $$< -o $$@ $$(LDFLAGS) $(LDLIBS)
@@ -213,6 +213,8 @@ include apps/storm/makefile.inc
 
 include apps/amg/makefile.inc
 include apps/apsp/makefile.inc
+include apps/betweeness_centrality/makefile.inc
+include apps/relaxation_heat/makefile.inc
 
 include apps/firefly_sync/makefile.inc
 #include apps/firefly_nosync/makefile.inc
@@ -221,7 +223,9 @@ include apps/gals_heat_float/makefile.inc
 
 # Non-default
 include apps/nursery/airfoil/airfoil.inc
-include apps/nursery/relaxation_heat/makefile.inc
+include apps/nursery/nested_arrays/makefile.inc
+include apps/nursery/apsp_vec_barrier/apsp_vec_barrier.inc
+
 
 #TODO : Defunct?
 include tools/partitioner.inc
@@ -229,9 +233,19 @@ include tools/partitioner.inc
 demos : $(ALL_DEMOS)
 
 
-all_tools : bin/print_graph_properties bin/epoch_sim
-#bin/queue_sim
+all_tools : bin/print_graph_properties bin/epoch_sim bin/graph_sim
 
+#############################
+# Most testing of graphs is done with epoch_sim. Give graph_sim some exercise here
+
+%.xml.graph_sim : %.xml
+	bin/graph_sim $< && touch $@
+
+test_graph_sim : $(foreach p,$(ALL_TEST_XML), $(p).graph_sim )
+
+ALL_TESTS += test_graph_sim
+
+##
 
 VIRTUAL_ALL_TESTS := $(patsubst test/virtual/%.xml,%,$(wildcard test/virtual/*.xml))
 

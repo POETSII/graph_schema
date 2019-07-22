@@ -30,6 +30,7 @@ graphType=graphTypes["clock_tree"]
 rootType=graphType.device_types["root"]
 branchType=graphType.device_types["branch"]
 leafType=graphType.device_types["leaf"]
+#listenerType=graphType.device_types["output_listener"]
 
 instName="clock_{}_{}".format(d,b)
 
@@ -61,6 +62,10 @@ def create(prefix, parent,depth):
     return node
 
 
-create("root",None,d)
+root=create("root",None,d)
+
+#listener=DeviceInstance(res, "listener", listenerType)
+#res.add_device_instance(listener)
+#res.add_edge_instance(EdgeInstance(res,listener,"on_root_output",root,"output"))
 
 save_graph(res,sys.stdout)

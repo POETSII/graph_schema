@@ -46,7 +46,7 @@ def freezedict(d):
     for i in d:
         if isinstance(i, dict):
             newD[i]=freezedict(i)
-    frozendict(newD)
+    return frozendict(newD)
 
 class ScalarTypedDataSpec(TypedDataSpec):
 
@@ -54,7 +54,10 @@ class ScalarTypedDataSpec(TypedDataSpec):
 
     def _check_value(self,value):
         assert not isinstance(self.type,Typedef)
-        if self.type=="int32_t":
+        if self.type=="int64_t":
+            res=int(value)
+            assert(-2**63 <= res < 2**63)
+        elif self.type=="int32_t":
             res=int(value)
             assert(-2**31 <= res < 2**31)
         elif self.type=="int16_t":
@@ -63,6 +66,9 @@ class ScalarTypedDataSpec(TypedDataSpec):
         elif self.type=="int8_t":
             res=int(value)
             assert(-2**7 <= res < 2**7)
+        elif self.type=="uint64_t":
+            res=int(value)
+            assert(0 <= res < 2**64)
         elif self.type=="uint32_t":
             res=int(value)
             assert(0 <= res < 2**32)
@@ -127,12 +133,25 @@ class ScalarTypedDataSpec(TypedDataSpec):
             return self.create_default()
         return self._check_value(inst)
 
+    def patch(self,orig,update):
+        if isinstance(self.type,Typedef):
+            return self.type.patch(orig,update)
+        elif update is not None:
+            return update
+        elif orig is not None:
+            return orig
+        else:
+            return self.create_default()
+
     def contract(self,inst):
         if inst is not None:
             default=self.default or 0
             if inst!=default:
                 return inst
         return None
+
+    def convert_v4_init(self, v):
+        return self._check_value(v)
 
     def __eq__(self, o):
         return isinstance(o, ScalarTypedDataSpec) and self.name==o.name and self.type==o.type and self.default==o.default
@@ -200,6 +219,14 @@ class TupleTypedDataSpec(TypedDataSpec):
             inst[e.name]=e.expand(inst.get(e.name,None))
         return inst
 
+    def patch(self,orig,update):
+        res=self.expand(orig)
+        update=self.expand(update)
+        for e in self._elts_by_index:
+            res[e.name]=e.patch(res[e.name], update[e.name] )
+        return res
+
+
     def contract(self,inst):
         if inst is None:
             return inst
@@ -231,6 +258,9 @@ class TupleTypedDataSpec(TypedDataSpec):
 
         return True
 
+    def convert_v4_init(self, v):
+        assert isinstance(v,list) and len(v)==len(self._elts_by_index)
+        return { te.name:te.convert_v4_init(ve) for (te,ve) in zip(self._elts_by_index, v) }
 
 class ArrayTypedDataSpec(TypedDataSpec):
     def __init__(self,name,length,type,default=None,documentation=None):
@@ -294,6 +324,13 @@ class ArrayTypedDataSpec(TypedDataSpec):
             # TODO: Throw an error message here
             return self.create_default()
 
+    def patch(self,orig,update):
+        res=self.expand(orig)
+        update=self.expand(update)
+        for i in range(self.length):
+            res[i]=self.type.patch(res[i], update[i])
+
+
     def contract(self,inst):
         if inst is None:
             return inst
@@ -323,10 +360,11 @@ class ArrayTypedDataSpec(TypedDataSpec):
                 if not self.type.is_refinement_compatible(inst[v]):
                     return False
 
-
-
         return True
 
+    def convert_v4_init(self, v):
+        assert isinstance(v,list) and len(v)==self.length
+        return [ self.type.convert_v4_init(ve) for ve in v ]
 
 def create_default_typed_data(proto):
     if proto is None:
@@ -370,6 +408,9 @@ class Typedef(TypedDataSpec):
 
     def expand(self,inst):
         return self.type.expand(inst)
+
+    def patch(self,orig,update):
+        return self.type.expand(orig,update)
 
     def contract(self,inst):
         return self.contract(inst)
@@ -439,11 +480,14 @@ class Pin(object):
         self.parent=parent
         self.name=name
         self.message_type=message_type
-        self.is_application=is_application
         self.metadata=metadata
         self.source_file=source_file
         self.source_line=source_line
         self.documentation=documentation
+        ## NOTE: application pins are supported _only_ for the pursposes of the 2to3 converter, and
+        ## should be considered deprecated
+        assert not is_application
+        self.is_application=False
 
 
 class InputPin(Pin):
@@ -454,15 +498,20 @@ class InputPin(Pin):
         self.receive_handler=receive_handler
 
 class OutputPin(Pin):
-    def __init__(self,parent,name,message_type,is_application,metadata,send_handler,source_file,source_line,documentation=None):
+    def __init__(self,parent,name,message_type,is_application,metadata,send_handler,source_file,source_line,documentation=None,is_indexed=False):
         Pin.__init__(self,parent,name,message_type,is_application,metadata,source_file,source_line,documentation)
         self.send_handler=send_handler
+        self.is_indexed=is_indexed
 
 
 class DeviceType(object):
     def __init__(self,parent,id,properties,state,metadata=None,shared_code=[], isExternal=False, documentation=None):
         assert (state is None) or isinstance(state,TypedDataSpec)
         assert (properties is None) or isinstance(properties,TypedDataSpec)
+
+        if isExternal:
+            assert len(shared_code)==0
+
         self.id=id
         self.parent=parent
         self.state=state
@@ -478,8 +527,19 @@ class DeviceType(object):
         self.init_handler=""
         self.init_source_file=None
         self.init_source_line=None
+        self.on_device_idle_handler=""
+        self.on_device_idle_source_file=None
+        self.on_device_idle_source_line=None
+        self.on_hardware_idle_handler=""
+        self.on_hardware_idle_source_file=None
+        self.on_hardware_idle_source_line=None
         self.isExternal=isExternal
         self.documentation=documentation
+    
+    def get_indexed_outputs(self):
+        "Returns a list of any output ports that are indexed"
+        return [op for op in self.outputs_by_index if op.is_indexed]
+
 
     def add_input(self,name,message_type,is_application,properties,state,metadata,receive_handler,source_file=None,source_line={},documentation=None):
         assert (state is None) or isinstance(state,TypedDataSpec)
@@ -495,14 +555,14 @@ class DeviceType(object):
         self.inputs_by_index.append(p)
         self.pins[name]=p
 
-    def add_output(self,name,message_type,is_application, metadata,send_handler,source_file=None,source_line=None,documentation=None):
+    def add_output(self,name,message_type,is_application, metadata,send_handler,source_file=None,source_line=None,documentation=None, is_indexed=False):
         if name in self.pins:
             raise GraphDescriptionError("Duplicate pin {} on device type {}".format(name,self.id))
         if message_type.id not in self.parent.message_types:
             raise GraphDescriptionError("Unregistered message type {} on pin {} of device type {}".format(message_type.id,name,self.id))
         if message_type != self.parent.message_types[message_type.id]:
             raise GraphDescriptionError("Incorrect message type object {} on pin {} of device type {}".format(message_type.id,name,self.id))
-        p=OutputPin(self, name, self.parent.message_types[message_type.id], is_application, metadata, send_handler, source_file, source_line, documentation)
+        p=OutputPin(self, name, self.parent.message_types[message_type.id], is_application, metadata, send_handler, source_file, source_line, documentation, is_indexed)
         self.outputs[name]=p
         self.outputs_by_index.append(p)
         self.pins[name]=p
@@ -550,13 +610,8 @@ class GraphType(object):
 
     def add_device_type(self,device_type):
         if device_type.id in self.device_types:
-            raise GraphDescriptionError("Device type already exists.")
+            raise GraphDescriptionError("Device type '{}' already exists.".format(device_type.id))
         self.device_types[device_type.id]=device_type
-
-    def add_external_type(self, external_type):
-        if external_type.id in self.external_types:
-            raise GraphDescriptionError("External device type already exists.")
-        self.external_types[external_type.id]=external_type
 
 class GraphTypeReference(object):
     def __init__(self,id,src=None):
@@ -605,7 +660,7 @@ class DeviceInstance(object):
 
 class EdgeInstance(object):
 
-    def __init__(self,parent,dst_device,dst_pin,src_device,src_pin,properties=None,metadata=None):
+    def __init__(self,parent,dst_device,dst_pin,src_device,src_pin,properties=None,metadata=None,send_index=None):
         # type : (GraphInstance, DeviceInstance, Union[str,InputPin], DeviceInstance, Union[str,OutputPin], Optional[Dict], Optional[Dict] ) -> None
         self.parent=parent
 
@@ -623,16 +678,16 @@ class EdgeInstance(object):
         else:
             assert src_device.device_type.outputs[src_pin.name]==src_pin
 
-        if __debug__ and (dst_pin.message_type != src_pin.message_type):
-            raise GraphDescriptionError("Dest pin has type {}, source pin type {}".format(dst_pin.message_type.id,src_pin.message_type.id))
+        if __debug__:
+            if(dst_pin.message_type != src_pin.message_type):
+                raise GraphDescriptionError("Dest pin has type {}, source pin type {}".format(dst_pin.message_type.id,src_pin.message_type.id))
 
-        if __debug__ and (not is_refinement_compatible(dst_pin.properties,properties)):
-            raise GraphDescriptionError("Properties are not compatible: proto={}, value={}.".format(dst_pin.properties, properties))
+            if (not is_refinement_compatible(dst_pin.properties,properties)):
+                raise GraphDescriptionError("Properties are not compatible: proto={}, value={}.".format(dst_pin.properties, properties))
 
-        if __debug__ and dst_pin.is_application:
-            raise GraphDescriptionError("Attempt to connect edge instance to application input pin")
-        if __debug__ and src_pin.is_application:
-            raise GraphDescriptionError("Attempt to connect edge instance to application output pin")
+            if (send_index is not None) and not src_pin.is_indexed:
+                raise GraphDescriptionError("Attempt to set sendIndex on non-indexed output pin {}.".format(src_pin.name))
+
 
         self.id = "{}:{}-{}:{}".format(dst_device.id,dst_pin.name,src_device.id,src_pin.name)
 
@@ -643,6 +698,7 @@ class EdgeInstance(object):
         self.src_pin=src_pin
         self.properties=properties
         self.metadata=metadata
+        self.send_index=send_index;
 
 
 class GraphInstance:
@@ -681,6 +737,40 @@ class GraphInstance:
 
         if not is_refinement_compatible(di.device_type.properties,di.properties):
             raise GraphDescriptionError("DeviceInstance properties don't match device type.")
+    
+    def _validate_indexed_edges(self,di):
+        indexed={} # Map of { (di.id,port.name) : [ ei ] }
+
+        # Map of { dt.id : [port.name] }, only containing indexed ports
+        indexed_port_types={ dt.id : [p.name for p in dt.get_indexed_outputs()] for dt in self.device_types.values() }
+        indexed_port_types={ (id,ports) for (id,ports) in indexed_port_types if len(ports)>0 }
+
+        # Set of { (di.id, port.name) } pairs
+        indexed_port_instances=set()
+        for di in self.device_instances.values():
+            ports=indexed_port_types.get(di.device_type.id)
+            if ports:
+                for p in ports:
+                    indexed_port_instances[(di.id,p)]=[]
+        
+        # Find the relevent edge indices
+        for ei in self.edge_instances.values():
+            src=(ei.src_device.id,ei.src_pin.name)
+            ports=indexed_port_instances.get(src)
+            if ports:
+                ports.append(ei.send_index)
+        
+        # Now actually check that each indexed port list is either all None, or is contiguous
+        for ((di_id,port_name),indices) in indexed_port_instances.items():
+            if indices.count(None) == len(indices):
+                continue
+            
+            indices.sort()
+            for i in range(len(indices)):
+                if i==indices[i]:
+                    continue
+                raise GraphDescriptionError("""Device instance '{}', output port '{}' is indexed and has at least one explicit index, but the {}'th index is {}.""".format(di_id, port_name, i, indices[i]))
+
 
     def _validate_edge_instance(self,ei):
         pass
@@ -706,14 +796,14 @@ class GraphInstance:
 
         return di
 
-    def create_device_instance(self, id,device_type,properties=None,metadata=None):
+    def create_device_instance(self, id,device_type,properties=None,state=None,metadata=None):
         if isinstance(device_type,str):
             assert isinstance(self.graph_type,GraphType)
             if device_type not in self.graph_type.device_types:
                 raise RuntimeError("No such device type called '{}'".format(device_type))
             device_type=self.graph_type.device_types[device_type]
         assert isinstance(device_type,DeviceType)
-        di=DeviceInstance(self,id,device_type,properties,metadata)
+        di=DeviceInstance(self,id,device_type,properties,state,metadata)
         return self.add_device_instance(di)
 
 
@@ -767,6 +857,7 @@ class GraphInstance:
             self._validate_device_instance(di)
         for ei in self.edge_instances:
             self._validate_edge_instances(ei)
+        self._validate_indexed_edges()
 
         self._validated=True
 
