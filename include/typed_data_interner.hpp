@@ -1,7 +1,7 @@
 #ifndef typed_data_interner_hpp
 #define typed_data_interner_hpp
 
-#include "graph.hpp"
+#include "graph_core.hpp"
 
 #include <unordered_set>
 
