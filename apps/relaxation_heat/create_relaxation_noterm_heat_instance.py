@@ -59,7 +59,7 @@ for x in range(0,n):
         colour=cell_colour(x,y)
         
         props={ "initial_boundary":boundary, "initial_heat":initial, "colour":colour, "neighbours":0, "x":x, "y":y } # We will update neighbours later
-        di=DeviceInstance(res,"c_{}_{}".format(x,y), cellType, props, meta)
+        di=DeviceInstance(res,"c_{}_{}".format(x,y), cellType, props, None, meta)
         nodes[(x,y)]=di
         res.add_device_instance(di)
             

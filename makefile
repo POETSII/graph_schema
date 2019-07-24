@@ -29,7 +29,7 @@ endif
 endif
 
 CPPFLAGS += -std=c++11 -g
-#CPPFLAGS += -O0
+CPPFLAGS += -O0
 
 #CPPFLAGS += -O2 -fno-omit-frame-pointer -ggdb -DNDEBUG=1
 
@@ -220,6 +220,7 @@ include apps/firefly_sync/makefile.inc
 #include apps/firefly_nosync/makefile.inc
 
 include apps/gals_heat_float/makefile.inc
+include apps/gals_heat_protocol_only/makefile.inc
 
 # Non-default
 include apps/nursery/airfoil/airfoil.inc

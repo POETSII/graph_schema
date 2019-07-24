@@ -1,0 +1,138 @@
+<?xml version='1.0' encoding='ASCII'?>
+<Graphs xmlns="https://poets-project.org/schemas/virtual-graph-schema-v3">
+  <GraphType id="gals_heat_protocol_only">
+    <Documentation>
+    Locally synchronous heat, but with no values moving about.
+
+	This  is mainly a test-case for debuggers and logic checkers, as it reduces the state space.
+    </Documentation>
+
+		<MetaData>
+			"location.dimension" : 2
+		</MetaData>
+
+    <SharedCode><![CDATA[
+        #ifdef POETS_LEGACY_HAS_HANDLER_EXIT
+        #define _do_handler_exit(code) handler_exit(code)
+        #else
+        #define _do_handler_exit(code) ((void)0)
+        #endif
+
+        #define fake_handler_exit(code) \
+        { \
+            if((code)==0){ \
+                handler_log(0, "_HANDLER_EXIT_SUCCESS_9be65737_"); \
+            }else{ \
+                handler_log(0, "_HANDLER_EXIT_FAIL_9be65737_"); \
+            } \
+            _do_handler_exit(code); \
+        }
+    ]]></SharedCode>
+
+	<Properties>
+      <Scalar type="uint32_t" name="maxTime" default="65" />
+    </Properties>
+    <SharedCode><![CDATA[
+
+    ]]></SharedCode>
+    <MessageTypes>
+      <MessageType id="finished"/>
+      <MessageType id="update">
+        <Message>
+          <Scalar name="t" type="uint32_t"/>
+        </Message>
+      </MessageType>
+    </MessageTypes>
+    <DeviceTypes>
+      <DeviceType id="cell">
+        <Properties>
+          <Scalar name="nhood" type="uint32_t"/>
+        </Properties>
+        <State>
+          <Scalar name="t" type="uint32_t"/>
+          <Scalar name="cs" type="uint32_t"/>
+          <Scalar name="ns" type="uint32_t"/>
+        </State>
+        <OnInit><![CDATA[
+		  deviceState->t=0;
+		  deviceState->cs = deviceProperties->nhood;
+		  deviceState->ns=0;
+
+		  ]]></OnInit>
+        <InputPin name="in" messageTypeId="update">
+          <OnReceive><![CDATA[
+			handler_log(3, "m=(t=%d) tNow=%d, sNow=%d, sNext=%d", message->t, deviceState->t, deviceState->cs, deviceState->ns);
+			if(message->t==deviceState->t){
+				deviceState->cs++;
+		  	}else{
+				deviceState->ns++;
+
+				assert(
+					(deviceState->t + 1 == message->t) // Either it is one step ahead
+					||
+					(deviceState->t == graphProperties->maxTime+1)  // Or we are idle and don't care
+				);
+			}
+		]]></OnReceive>
+        </InputPin>
+        <OutputPin name="finished" messageTypeId="finished">
+          <OnSend><![CDATA[
+			deviceState->t++; // We advance beyond the end of time and go idle
+			// And send an empty pulse to exit node
+			]]></OnSend>
+        </OutputPin>
+        <OutputPin name="out" messageTypeId="update">
+          <OnSend><![CDATA[
+
+		  handler_log(3, "tNow=%d, sNow=%d, sNext=%d", deviceState->t, deviceState->cs, deviceState->ns);
+
+			assert(deviceState->cs == deviceProperties->nhood);
+
+			deviceState->t ++;
+			
+			deviceState->cs = deviceState->ns;
+
+			deviceState->ns=0;
+
+			message->t=deviceState->t;
+			
+			// It is possible that all our neighbours are ahead and have broadcast, so
+			// we could immediately be ready to go.
+
+			handler_log(2, "msg=(%u), t=%u, cs=%u, ns=%u", message->t, deviceState->t, deviceState->cs, deviceState->ns);
+		  ]]></OnSend>
+        </OutputPin>
+        <ReadyToSend><![CDATA[
+		*readyToSend = 0;
+		if(deviceState->t < graphProperties->maxTime){
+			if(deviceState->cs>=deviceProperties->nhood){
+				*readyToSend = RTS_FLAG_out;
+			}
+		}else if(deviceState->t == graphProperties->maxTime){
+			*readyToSend = RTS_FLAG_finished;
+		}
+		]]></ReadyToSend>
+      </DeviceType>
+      <DeviceType id="exit_node">
+        <Properties>
+          <Scalar name="fanin" type="uint32_t"/>
+        </Properties>
+        <State>
+          <Scalar name="done" type="uint32_t"/>
+        </State>
+        <InputPin name="done" messageTypeId="finished">
+          <OnReceive><![CDATA[
+				deviceState->done++;
+				handler_log(2, "done=0x%x, fanin=0x%x", deviceState->done, deviceProperties->fanin);
+				if(deviceState->done == deviceProperties->fanin){
+					fake_handler_exit(0);
+				}
+				]]></OnReceive>
+        </InputPin>
+        <ReadyToSend><![CDATA[
+			*readyToSend=0;
+			]]></ReadyToSend>
+      </DeviceType>
+    </DeviceTypes>
+  </GraphType>
+</Graphs>

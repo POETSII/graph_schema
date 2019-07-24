@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-from graph.load_xml import load_graph
+from graph.load_xml import load_graph_instance
 from graph.snapshots import extractSnapshotInstances
 import sys
 import os
@@ -27,9 +27,9 @@ deviceTypeToShape={}
 edgeTypeToColor={}
 
 if args.graph=="-":
-    graph=load_graph(sys.stdin, "<stdin>")
+    graph=load_graph_instance(sys.stdin, "<stdin>")
 else:
-    graph=load_graph(args.graph, args.graph)
+    graph=load_graph_instance(args.graph, args.graph)
 
 
 bind_dev=[]

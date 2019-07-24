@@ -113,7 +113,7 @@ for i in range(0,n):
     props={"index":i, "degree":len(connections[i])}
     meta={}
     
-    nodes[i]=DeviceInstance(res, "n{}".format(i), nodeType, props, meta)
+    nodes[i]=DeviceInstance(res, "n{}".format(i), nodeType, props, None, meta)
     res.add_device_instance(nodes[i])
     
     begin=EdgeInstance(res,nodes[i],"begin_in",controller,"begin_out")

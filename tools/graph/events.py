@@ -11,6 +11,7 @@ from typing import *
 from graph.core import expand_typed_data
 
 from graph.load_xml import *
+from graph.load_xml_v3 import deNS, ns, get_attrib
 
 class Event(object):
     def __init__(self, eventId:str, time:float, elapsed:float, tags:List[Tuple[bool,str]]) -> None:

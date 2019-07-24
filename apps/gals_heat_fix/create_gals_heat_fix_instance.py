@@ -78,17 +78,17 @@ for x in range(0,n):
         edgeY = y==0 or y==n-1
         if x==n//2 and y==n//2:
             props={ "updateDelta":toFix(5.0*dt), "updateMax":toFix(5.0), "neighbours":4 }
-            di=DeviceInstance(res,"v_{}_{}".format(x,y), dirichletType, props, meta)
+            di=DeviceInstance(res,"v_{}_{}".format(x,y), dirichletType, props, None, meta)
             nodes[(x,y)]=di
             res.add_device_instance(di)
         elif edgeX != edgeY:
             props={ "updateDelta":toFix(10.0*dt*(x/n)), "updateMax":toFix(1.0), "neighbours":1 }
-            di=DeviceInstance(res,"v_{}_{}".format(x,y), dirichletType, props, meta)
+            di=DeviceInstance(res,"v_{}_{}".format(x,y), dirichletType, props, None, meta)
             nodes[(x,y)]=di
             res.add_device_instance(di)
         elif not (edgeX or edgeY):
             props={ "iv":toFix(urand()*2-1), "nhood":4, "wSelf":weightSelfFix }
-            di=DeviceInstance(res,"c_{}_{}".format(x,y), devType, props, meta)
+            di=DeviceInstance(res,"c_{}_{}".format(x,y), devType, props, None, meta)
             nodes[(x,y)]=di
             res.add_device_instance(di)
             

@@ -7,13 +7,14 @@
 
 class TypedDataInterner
 {
-private:
+public: 
     struct entry_t
     {
         uint64_t hash;
         TypedDataPtr data;
         size_t index;
     };
+private:
     
     struct equal_entry_t
     {
@@ -48,35 +49,20 @@ private:
         auto it=m_dataInstances.find( entry );
         if(it==m_dataInstances.end()){
             entry.data=o.clone();
-            assert( entry.data==o && entry.data.get()!=o.get() && entry.data.is_unique() );
+            assert( entry.data==o );
+            assert( entry.data.get()== 0 || entry.data.get()!=o.get() );
+            assert( entry.data.get()==0 || entry.data.is_unique() );
             it=m_dataInstances.insert(it, entry);
             m_indexToInstance.push_back(&(*it));
         }
         return *it;
     }
 public:
-    TypedDataPtr intern(const TypedDataPtr &o)
+    const entry_t *intern(const TypedDataPtr &o)
     {
-        return internImpl(o).data;
-    }
-
-    uint32_t internToIndex(const TypedDataPtr &o)
-    {
-        return internImpl(o).index;
+        return &internImpl(o);
     }
     
-    
-    TypedDataPtr indexToData(uint32_t index)
-    {
-        assert(index<m_indexToInstance.size());
-        return m_indexToInstance[index]->data;
-    }
-    
-    uint64_t indexToHash(uint32_t index)
-    {
-        assert(index<m_indexToInstance.size());
-        return m_indexToInstance[index]->hash;
-    }
 };
 
 #endif
