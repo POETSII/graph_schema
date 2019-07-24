@@ -31,6 +31,10 @@
 
 	<Properties>
       <Scalar type="uint32_t" name="maxTime" default="65" />
+      <Scalar type="int32_t" name="assertion_time" default="-1"/>
+      <Scalar type="int32_t" name="assertion_cs" default="-1"/>
+      <Scalar type="int32_t" name="assertion_ns" default="-1"/>
+      <Scalar type="int32_t" name="multiple_terminals" default="0"/>
     </Properties>
     <SharedCode><![CDATA[
 
@@ -62,9 +66,16 @@
         <InputPin name="in" messageTypeId="update">
           <OnReceive><![CDATA[
 			handler_log(3, "m=(t=%d) tNow=%d, sNow=%d, sNext=%d", message->t, deviceState->t, deviceState->cs, deviceState->ns);
-			if(message->t==deviceState->t){
+
+      if(message->t==graphProperties->assertion_time
+          && deviceState->ns == graphProperties->assertion_ns
+          && deviceState->cs == graphProperties->assertion_cs){
+          assert(0);
+      }
+      
+      if(message->t==deviceState->t){
 				deviceState->cs++;
-		  	}else{
+		  }else{
 				deviceState->ns++;
 
 				assert(
@@ -77,12 +88,15 @@
         </InputPin>
         <OutputPin name="finished" messageTypeId="finished">
           <OnSend><![CDATA[
+        assert(deviceState->t == graphProperties->maxTime);
+      assert(deviceState->cs==0 && deviceState->ns==0);
 			deviceState->t++; // We advance beyond the end of time and go idle
 			// And send an empty pulse to exit node
 			]]></OnSend>
         </OutputPin>
         <OutputPin name="out" messageTypeId="update">
           <OnSend><![CDATA[
+        assert(deviceState->t < graphProperties->maxTime);
 
 		  handler_log(3, "tNow=%d, sNow=%d, sNext=%d", deviceState->t, deviceState->cs, deviceState->ns);
 
@@ -95,6 +109,12 @@
 			deviceState->ns=0;
 
 			message->t=deviceState->t;
+
+      if(!graphProperties->multiple_terminals){
+        if(message->t == graphProperties->maxTime){
+          *doSend=0;
+        }
+      }
 			
 			// It is possible that all our neighbours are ahead and have broadcast, so
 			// we could immediately be ready to go.

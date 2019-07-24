@@ -61,7 +61,7 @@ struct HashSim
 
     unsigned target_device_index;
     unsigned target_device_pin;
-    TypedDataPtr properties;
+    interned_typed_data_t properties;
     unsigned edge_address; // Global contiguous edge address across all edge instances, starting from 0
 
     uint64_t salt;
@@ -138,7 +138,7 @@ private:
     unsigned address=m_edge_info.size();
     edge_info ei;
     ei.edge_address=address;
-    ei.properties=properties;
+    ei.properties=intern(properties);
     ei.target_device_index=dstDevInst;
     ei.target_device_pin=dstPin->getIndex();
     ei.salt=m_urng64() | 1;
@@ -161,12 +161,18 @@ public:
 
   struct message_instance
   {
-    unsigned edge_address;
+    /*
+      The pin properties are moved in here as is allows for state collapsing when
+      lots of identical messages are headed into the same pin with the same properties
+     */
+    unsigned dest_device;
+    unsigned dest_pin;
+    interned_typed_data_t properties; // Just a pointer
     interned_typed_data_t message; // Just a pointer
 
     bool operator==(const message_instance &o) const
     {
-      return edge_address==o.edge_address && message==o.message;
+      return !memcmp(this, &o, sizeof(*this));
     }
   };
 
@@ -197,12 +203,16 @@ public:
 
   world_hash_t world_hash_add_message(world_hash_t hash, const message_instance &msg) const
   {
-    return world_hash_add(hash, m_edge_info[msg.edge_address].salt * uint128_t(msg.message->hash));
+    uint64_t a=m_edge_info[msg.dest_device].salt * ((msg.dest_pin<<1)|1);
+    uint64_t b=msg.message->hash * 0x174b1ebe9d99d899ull + msg.properties->hash * 0xbef7d22dc910d44Bull;
+    return world_hash_add(hash,  uint128_t(a) * b);
   }
 
   world_hash_t world_hash_remove_message(world_hash_t hash, const message_instance &msg) const
   {
-    return world_hash_remove(hash, m_edge_info[msg.edge_address].salt * uint128_t(msg.message->hash));
+    uint64_t a=m_edge_info[msg.dest_device].salt * ((msg.dest_pin<<1)|1);
+    uint64_t b=msg.message->hash * 0x174b1ebe9d99d899ull + msg.properties->hash * 0xbef7d22dc910d44Bull;
+    return world_hash_remove(hash, uint128_t(a) * b);
   }
 
   world_hash_t world_hash_add_exit(world_hash_t hash, int code) const
@@ -468,13 +478,13 @@ public:
 
           for(auto ea : di.edges.at(m_source_pin)){
             const edge_info &ei = get_parent()->m_edge_info.at(ea);
-            message_instance mi{ea, message};
+            message_instance mi{ ei.target_device_index, ei.target_device_pin, ei.properties, message };
             state.messages.push_back(mi);
             state.hash=get_parent()->world_hash_add_message(state.hash, mi);
           }
         }else{
           const edge_info &ei = get_parent()->m_edge_info.at( di.edges.at(m_source_pin).at(sendIndex) );
-          message_instance mi{ei.edge_address, message};
+          message_instance mi{ ei.target_device_index, ei.target_device_pin, ei.properties, message };
           state.messages.push_back(mi);
           state.hash=get_parent()->world_hash_add_message(state.hash, mi);
         }
@@ -510,18 +520,16 @@ public:
       std::swap(*it, state.messages.back());
       state.messages.resize(state.messages.size()-1);
 
-      const edge_info &ei=get_parent()->m_edge_info[m_message.edge_address];
+      const auto &di=d_info(m_message.dest_device);
+      auto &ds=state.devices[m_message.dest_device];
 
-      const auto &di=d_info(ei.target_device_index);
-      auto &ds=state.devices[ei.target_device_index];
-
-      auto pin=di.type->getInput(ei.target_device_pin);
+      auto pin=di.type->getInput(m_message.dest_pin);
 
       auto oldState=ds.state;
       TypedDataPtr newStateR=oldState->data.clone();
 
       EmptyOrchestratorServices orch;
-      pin->onReceive(&orch, graph_properties(), di.properties.get(), newStateR.get(), ei.properties.get(), nullptr, m_message.message->data.get());
+      pin->onReceive(&orch, graph_properties(), di.properties.get(), newStateR.get(), m_message.properties->data.get(), nullptr, m_message.message->data.get());
       ds.state=get_parent()->intern(newStateR);
       ds.rts=di.type->calcReadyToSend(&orch, graph_properties(), di.properties.get(), ds.state->data.get());
       state.hash=get_parent()->world_hash_update_device(state.hash, di.device_address, oldState, ds.state);
@@ -576,15 +584,15 @@ public:
   };
 
   template<class TCB>
-  void enum_successor_events(const world_state &state, const std::shared_ptr<Event> &predecessor, TCB cb)
+  int enum_successor_events(const world_state &state, const std::shared_ptr<Event> &predecessor, TCB cb)
   {
     if(state.exited){
-      return;
+      return 0;
     }
 
     if(state.devices.empty()){
       cb(std::make_shared<InitEvent>(this));
-      return;
+      return 0;
     }
 
     bool any=false;
@@ -593,7 +601,10 @@ public:
       unsigned rts_index=0;
       while(rts_bits){
         if(rts_bits&1){
-          cb(std::make_shared<SendEvent>(this, predecessor, state, i, rts_index));
+          int res=cb(std::make_shared<SendEvent>(this, predecessor, state, i, rts_index));
+          if(res){
+            return res;
+          }
           any=true;
         }
         rts_bits>>=1;
@@ -601,29 +612,35 @@ public:
       }
     }
     for(const auto &m : state.messages){
-      cb(std::make_shared<RecvEvent>(this, predecessor,state,m));
+      int res=cb(std::make_shared<RecvEvent>(this, predecessor,state,m));
+      if(res){
+        return res;
+      }
       any=true;
     }
 
     if(!any){
-      cb(std::make_shared<HardwareIdleEvent>(this, predecessor, state));
-      fprintf(stderr, "Hardware Idle\n");
-      exit(1);
+      int res=cb(std::make_shared<HardwareIdleEvent>(this, predecessor, state));
+      if(res){
+        return res;
+      }
+      return 1;
     }
+    return 0;
   }
 
   template<class TCB>
-  void enum_successor_state_events(const world_state &state, const std::shared_ptr<Event> &predecessor, TCB cb)
+  int enum_successor_state_events(const world_state &state, const std::shared_ptr<Event> &predecessor, TCB cb)
   {
     world_state tmp; // This adds to the stack cost, so for depth-first enum might cause problems
 
     // Closure probably doesn't add to cost here, should be inlined out
-    enum_successor_events(state, predecessor, [&](const std::shared_ptr<Event> &ev){
+    return enum_successor_events(state, predecessor, [&](const std::shared_ptr<Event> &ev){
       // Not too happy about the cost of the alloc/copy here, but should
       // be only a couple of allocs plus memcpy as the structures are PODs
       tmp=state;
       ev->apply(tmp);
-      cb( ev, std::move(tmp) ); // Either they grab it or they don't. If they don't, we re-use the storage
+      return cb( ev, std::move(tmp) ); // Either they grab it or they don't. If they don't, we re-use the storage
     });
   }
 };
@@ -641,13 +658,26 @@ namespace std
   };
 };
 
-void breadth_first_visit(HashSim &sim)
+struct visit_params
+{
+  std::ostream *dot_file=0;
+  int breadth_cap=INT_MAX;
+  int depth_cap=INT_MAX;
+  bool exit_on_exit_failure=true;
+  bool exit_on_stall=true;
+};
+
+int breadth_first_visit(HashSim &sim, visit_params &params)
 {
   using world_hash_t = HashSim::world_hash_t;
   using world_state = HashSim::world_state;
   using Event = HashSim::Event;
 
-  std::unordered_set<world_hash_t> visited;
+  auto dot_file=params.dot_file;
+
+  bool exhaustive=true;
+
+  std::unordered_set<world_hash_t> explored;
 
   struct state_path
   {
@@ -658,62 +688,146 @@ void breadth_first_visit(HashSim &sim)
   std::vector<state_path> curr, next;
 
   world_state init;
+  init.exited=false;
+  init.exitcode=0;
+  init.hash=0;
   curr.push_back(state_path{init, std::shared_ptr<Event>()});
 
-  bool doDot=false;
-  if(doDot){
-    std::cout<<"digraph state_space {\n";
+  if(dot_file){
+    *dot_file<<"digraph state_space {\n";
   }
 
+  int leavers;
+  int unique_terminal_states=0;
+
+  auto on_edge=[&](const world_state &prev, const std::shared_ptr<Event> &ev, const world_state &next)
+  {
+      ++leavers;
+
+      if(dot_file){
+        *dot_file<<"  n"<<prev.hash<<" -> n"<<next.hash<<" [ label=\""<<ev->get_type()<<"\"];\n";
+      }
+      return 0;
+  };
+
+  auto on_new_state=[&](const world_state &prev, const std::shared_ptr<Event> &ev, const world_state &next)
+  {
+    if(next.exited){
+      unique_terminal_states++;
+    }
+    if(dot_file){
+      *dot_file<<"  n"<<next.hash<<"[peripheries=2];\n";
+    }
+    if(next.exitcode==0){
+      if(dot_file){
+        *dot_file<<"  n"<<next.hash<<"[fillcolor=green];\n";
+      }
+    }else{
+      if(dot_file){
+        *dot_file<<"  n"<<next.hash<<"[fillcolor=red];\n";
+      }
+      fprintf(stderr, "Found failure condition: exiting.\n");
+      return 1;
+    }
+    return 0;
+  };
+
+
+  std::mt19937 urng;
+
   unsigned d=0;
-  while(d<1000 && !curr.empty()){
+  while(!curr.empty()){
+    if(d > params.depth_cap){
+      fprintf(stderr, "Reached depth cap of %u. Exiting.\n", params.depth_cap);
+      exhaustive=false;
+      break;
+    }
+
     next.clear();
 
-    fprintf(stderr, "Beginning depth %d, state size=%u\n", d, curr.size());
-    if(doDot){
-      std::cout<<"// Round "<<d<<"\n";
+    fprintf(stderr, "Beginning depth %d, state size=%u, explored=%u\n", d, curr.size(), explored.size());
+    if(dot_file){
+      *dot_file << "//Round "<<d<<"\n";
     }
-    unsigned merged=0;
-    for(const auto &sp : curr){
-      sim.enum_successor_state_events(sp.state, sp.predecessor,
-        [&](const std::shared_ptr<Event> &ev, world_state &&state){
-          if(doDot){
-            std::cout<<"  n"<<sp.state.hash<<" -> n"<<state.hash<<" [ label=\""<<ev->get_type()<<"\"];\n";
 
-            if(state.exited){
-              std::cout<<"  n"<<state.hash<<"[peripheries=2];\n";
+    // Mark everything in the current set as explored
+    for(const auto &s : curr){
+      explored.insert(s.state.hash);  
+    }
+
+    leavers=0;
+
+    std::unordered_set<world_hash_t> visited;
+
+    unsigned merged_global=0, merged_local=0;
+    for(const auto &sp : curr){
+      
+      int res=sim.enum_successor_state_events(sp.state, sp.predecessor,
+        [&](const std::shared_ptr<Event> &ev, world_state &&state){
+
+          int r=on_edge(sp.state, ev, state);
+          if(r){
+            return r;
+          }
+          
+          // State so far not explored?
+          auto it=explored.find(state.hash);
+          if(it!=explored.end()){
+            merged_global++;
+          }else{
+            // State not yet seen in this round?
+            auto it2=visited.find(state.hash);
+            if(it2!=visited.end()){
+              merged_local++;
+            }else{
+              visited.insert(state.hash);
+              if(!state.exited){
+                next.push_back(state_path{ std::move(state), ev });
+              }
+              on_new_state(sp.state, ev, state);
             }
           }
-
-          //std::cerr<<"    "<< (ev ? ev->get_pre_hash() : uint128_t(0))<<" -> "<<(ev ? ev->get_type() : "<none>")<<" -> "<<state.hash<<"\n";
-
-          auto it=visited.find(state.hash);
-          if(it==visited.end()){
-            // New state
-            visited.insert(state.hash);
-            next.push_back(state_path{ std::move(state), ev });
-          }else{
-            merged++;
-          }
+          return 0;
         }
       );
+      if(res){
+        return res;
+      }
+
+      if(leavers==0){
+        if(dot_file){
+          *dot_file<<"  n"<<sp.state.hash<<"[fillcolor=red];\n";
+        }
+        if(params.exit_on_stall){
+          // TODO: How does this interact with HardwareIdle?
+          fprintf(stderr, "Found stall state (non-final state with no transitions): exiting.");
+          return 1;
+        }
+      }
     }
-    fprintf(stderr, "Finished depth %d, next size=%u, skipped=%u\n", d, next.size(), merged);
+    fprintf(stderr, "Finished depth %d, next size=%u, global merge=%u, local merge=%u, unique_terminals=%u\n", d, next.size(), merged_global, merged_local, unique_terminal_states);
     d++;
     std::swap(curr, next);
 
-    //if(curr.size()>5){
-    //  curr.resize(5);
-    //}
-    /* std::cerr<<"  curr=\n";
-    for(auto c : curr){
-      std::cerr<<"    "<< (c.predecessor ? c.predecessor->get_pre_hash() : uint128_t(0))<<" -> "<<(c.predecessor ? c.predecessor->get_type() : "<none>")<<" -> "<<c.state.hash<<"\n";
-    }*/
+    if(curr.size()> params.breadth_cap){
+      fprintf(stderr, "  Capping breadth to %u states.\n", params.breadth_cap);
+      std::shuffle(curr.begin(), curr.end(), urng);
+      curr.resize(params.breadth_cap);
+      exhaustive=false;
+    }
   }
 
-  if(doDot){
-    std::cout<<"}\n";
+  if(dot_file){
+    *dot_file<<"}\n";
   }
+
+  if(!exhaustive){
+    fprintf(stderr, "Simulation was not exhaustive due to capping.\n");
+  }else{
+    fprintf(stderr, "Completed exhaustive simulation of all states and transitions.\n");
+  }
+
+  return 0;
 };
 
 int main(int argc, char *argv[])
@@ -737,7 +851,10 @@ int main(int argc, char *argv[])
 
     loadGraph(&registry, srcPath, parser.get_document()->get_root_node(), &sim);
 
-    breadth_first_visit(sim);
+    visit_params params;
+
+    int res=breadth_first_visit(sim, params);
+    return res;
 
   }catch(std::exception &e){
     std::cerr<<"Exception: "<<e.what()<<"\n";

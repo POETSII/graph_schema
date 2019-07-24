@@ -126,7 +126,9 @@ public:
     enum event_type{
         init_event,
         send_event,
-        recv_event
+        recv_event,
+        device_idle_event,
+        hardware_idle_event
     };
 
     struct event_t
@@ -406,6 +408,91 @@ public:
         }
     };
 
+    struct hardware_idle_event_t
+        : device_event_t
+    {
+        hardware_idle_event_t()
+        {}
+
+        hardware_idle_event_t(
+            // event
+            const char *eventId,
+            double time,
+            double elapsed,
+            std::vector<std::pair<bool,std::string> > &&_tags,
+            // device event
+            const DeviceTypePtr &dt,
+            const char *dev,
+            uint32_t rts,
+            uint64_t seq,
+            const std::vector<std::string> &logs,
+            const TypedDataPtr &state,
+            // message event
+            const char *_barrierId
+        )
+            : device_event_t(eventId, time, elapsed, std::move(_tags), dt, dev, rts, seq, logs, state )
+            , barrierId(_barrierId)
+        {}
+
+        std::string barrierId;
+
+        virtual event_type type() const override
+        { return hardware_idle_event; }
+
+        void writeContents(XMLWriter &dst) const 
+        {
+            dst.writeAttribute("barrierId", barrierId);
+            
+            device_event_t::writeContents(dst);
+        }
+        
+        void write(XMLWriter &dst) const override
+        {
+            dst.startElement("HardwareIdleEvent");
+            writeContents(dst);
+            dst.endElement("HardwareIdleEvent");
+        }
+    };
+
+    struct device_idle_event_t
+        : device_event_t
+    {
+        device_idle_event_t()
+        {}
+
+        device_idle_event_t(
+            // event
+            const char *eventId,
+            double time,
+            double elapsed,
+            std::vector<std::pair<bool,std::string> > &&_tags,
+            // device event
+            const DeviceTypePtr &dt,
+            const char *dev,
+            uint32_t rts,
+            uint64_t seq,
+            const std::vector<std::string> &logs,
+            const TypedDataPtr &state
+        )
+            : device_event_t(eventId, time, elapsed, std::move(_tags), dt, dev, rts, seq, logs, state )
+        {}
+
+        virtual event_type type() const override
+        { return device_idle_event; }
+
+        void writeContents(XMLWriter &dst) const 
+        {
+            device_event_t::writeContents(dst);
+        }
+        
+        void write(XMLWriter &dst) const override
+        {
+            dst.startElement("DeviceIdleEvent");
+            writeContents(dst);
+            dst.endElement("DeviceIdleEvent");
+        }
+    };
+
 
     virtual ~LogWriter()
     {}
@@ -532,6 +619,70 @@ public:
         ev.pin=pin->getName();
         // send event
         ev.sendEventId=sendEventId;
+        
+        onEvent(&ev);
+    }
+
+    void onHardwareIdleEvent(
+        // event
+        const char *eventId,
+        double time,
+        double elapsed,
+        std::vector<std::pair<bool,std::string> > &&_tags,
+        // device event
+        const DeviceTypePtr &dt,
+        const char *dev,
+        uint32_t rts,
+        uint64_t seq,
+        const std::vector<std::string> &logs,
+        const TypedDataPtr &state,
+        // hardware idle event
+        const char *barrierId
+    ) {
+        hardware_idle_event_t ev;
+        // event
+        ev.eventId=eventId;
+        ev.time=time;
+        ev.elapsed=elapsed;
+        ev.tags=std::move(_tags);
+        // device event
+        ev.dev=dev;
+        ev.rts=rts;
+        ev.seq=seq;
+        ev.L=logs;
+        ev.S=toStr(dt->getStateSpec(), state);
+        // hardware idle event
+        ev.barrierId=barrierId;
+        
+        onEvent(&ev);
+    }
+
+    void onDeviceIdleEvent(
+        // event
+        const char *eventId,
+        double time,
+        double elapsed,
+        std::vector<std::pair<bool,std::string> > &&_tags,
+        // device event
+        const DeviceTypePtr &dt,
+        const char *dev,
+        uint32_t rts,
+        uint64_t seq,
+        const std::vector<std::string> &logs,
+        const TypedDataPtr &state
+    ) {
+        device_idle_event_t ev;
+        // event
+        ev.eventId=eventId;
+        ev.time=time;
+        ev.elapsed=elapsed;
+        ev.tags=std::move(_tags);
+        // device event
+        ev.dev=dev;
+        ev.rts=rts;
+        ev.seq=seq;
+        ev.L=logs;
+        ev.S=toStr(dt->getStateSpec(), state);
         
         onEvent(&ev);
     }

@@ -88,6 +88,29 @@ class RecvEvent(MessageEvent):
         self.sendEventId=sendEventId
         self.type="recv"
 
+class HardwareIdleEvent(DeviceEvent):
+    def __init__(self,
+        eventId:str, time:float, elapsed:float, tags:List[Tuple[bool,str]],
+        dev:str, rts:int, seq:int, L:List[str], S:Optional[dict], barrierId:str
+    ) -> None:
+        DeviceEvent.__init__(self,
+            eventId,time,elapsed,tags,
+            dev, rts, seq, L, S
+        )
+        self.barrierId=barrierId
+        self.type="hardware_idle"
+
+class DeviceIdleEvent(DeviceEvent):
+    def __init__(self,
+        eventId:str, time:float, elapsed:float, tags:List[Tuple[bool,str]],
+        dev:str, rts:int, seq:int, L:List[str], S:Optional[dict]
+    ) -> None:
+        DeviceEvent.__init__(self,
+            eventId,time,elapsed,tags,
+            dev, rts, seq, L, S
+        )
+        self.type="device_idle"
+
 class LogWriter(object):
     def __init__(self):
         pass
@@ -100,6 +123,13 @@ class LogWriter(object):
     
     def onRecvEvent(self,sendEvent):
         raise NotImplementedError
+
+    def onHardwareIdleEvent(self,sendEvent):
+        raise NotImplementedError
+
+    def onDeviceIdleEvent(self,sendEvent):
+        raise NotImplementedError
+
 
 def _load_tags(n):
     res=[]
@@ -197,6 +227,54 @@ def extractRecvEvent(n,writer):
         sendEventId
     ) )
 
+def extractHardwareIdleEvent(n,writer):
+    eventId=get_attrib(n,"eventId")
+    time=float(get_attrib(n,"time"))
+    elapsed=float(get_attrib(n,"elapsed"))
+    tags=_load_tags(n)
+    dev=get_attrib(n,"dev")
+    rts=int(get_attrib(n,"rts"),0)
+    seq=int(get_attrib(n,"seq"))
+    barrierId=get_attrib(n,"barrierId")
+    
+    L=[]
+    for l in n.findall("p:L",ns):
+        L.append(l.text)
+    
+    S=n.find("p:S",ns)
+    if S is not None and S.text is not None:
+        #print(S.text)
+        S=json.loads("{"+S.text+"}")
+    
+    e=HardwareIdleEvent(
+        eventId, time, elapsed,tags,
+        dev, rts, seq, L, S, barrierId
+    )
+    writer.onHardwareIdleEvent(e)
+
+def extractDeviceIdleEvent(n,writer):
+    eventId=get_attrib(n,"eventId")
+    time=float(get_attrib(n,"time"))
+    elapsed=float(get_attrib(n,"elapsed"))
+    tags=_load_tags(n)
+    dev=get_attrib(n,"dev")
+    rts=int(get_attrib(n,"rts"),0)
+    seq=int(get_attrib(n,"seq"))
+    
+    L=[]
+    for l in n.findall("p:L",ns):
+        L.append(l.text)
+    
+    S=n.find("p:S",ns)
+    if S is not None and S.text is not None:
+        #print(S.text)
+        S=json.loads("{"+S.text+"}")
+    
+    e=DeviceIdleEvent(
+        eventId, time, elapsed,tags,
+        dev, rts, seq, L, S
+    )
+    writer.onDeviceIdleEvent(e)
 
 def extractEvent(n,writer):
     if deNS(n.tag)=="p:InitEvent":
@@ -205,6 +283,10 @@ def extractEvent(n,writer):
         extractSendEvent(n,writer)  
     elif deNS(n.tag)=="p:RecvEvent":
         extractRecvEvent(n,writer)
+    elif deNS(n.tag)=="p:HardwareIdleEvent":
+        extractHardwareIdleEvent(n,writer)
+    elif deNS(n.tag)=="p:DeviceIdleEvent":
+        extractDeviceIdleEvent(n,writer)
     else:
         raise XMLSyntaxError("DIdn't understand node type.", n)
 

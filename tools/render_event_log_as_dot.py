@@ -17,6 +17,8 @@ def write_graph(dst, src):
         print(string,file=dst)
         
     eventsBySeq={} # Map of deviceId : [ (seq,eventId) ]
+
+    eventsByBarrier={} # Map of barrierId : [eventId]
     
     class LogSink(LogWriter):
         def onInitEvent(self,e):
@@ -28,6 +30,14 @@ def write_graph(dst, src):
         def onRecvEvent(self,e):
             out('  "{}" -> "{}";'.format(e.sendEventId,e.eventId))
             eventsBySeq.setdefault(e.dev,[]).append( (e.seq,e) )
+
+        def onHardwareIdleEvent(self,e):
+            eventsBySeq.setdefault(e.dev,[]).append( (e.seq,e) )
+            eventsByBarrier.setdefault(e.barrierId,[]).append(e)
+
+        def onDeviceIdleEvent(self,e):
+            eventsBySeq.setdefault(e.dev,[]).append( (e.seq,e) )
+
 
     sink=LogSink()
     
@@ -85,11 +95,15 @@ def write_graph(dst, src):
             curr={k:v for (k,v) in e.S.items() }
             content='"{}" [ shape=none, margin=0, label=< <TABLE>'.format(e.eventId)
             if e.type=="init":
-                content+='<TR><TD colspan="2">{} : __init__</TD></TR>'.format(e.dev)
+                content+='<TR ><TD bgcolor="blue" colspan="2">{} : __init__</TD></TR>'.format(e.dev)
             elif e.type=="send":
-                content+='<TR><TD colspan="2">{} : Send : {}</TD></TR>'.format(e.dev,e.pin)
+                content+='<TR><TD bgcolor="green" colspan="2">{} : Send : {}</TD></TR>'.format(e.dev,e.pin)
             elif e.type=="recv":
-                content+='<TR><TD colspan="2">{} : Recv : {}</TD></TR>'.format(e.dev,e.pin)
+                content+='<TR><TD bgcolor="orange" colspan="2">{} : Recv : {}</TD></TR>'.format(e.dev,e.pin)
+            elif e.type=="hardware_idle":
+                content+='<TR><TD bgcolor="yellow" colspan="2">{} : HwIdle</TD></TR>'.format(e.dev)
+            elif e.type=="device_idle":
+                content+='<TR><TD bgcolor="purple" colspan="2">{} : DevIdle</TD></TR>'.format(e.dev)
             else:
                 raise RuntimeError("Unknown type.")
             content+=makeState(curr,prev,ko)
@@ -104,6 +118,12 @@ def write_graph(dst, src):
             out('    "{}" -> "{}" [ style="dotted" ] ;'.format(order[i-1].eventId,order[i].eventId))
         out('  }')
 
+    for (bid,events) in eventsByBarrier.items():
+        out('  subgraph barrier_{} {{'.format(bid))
+        out('    rank=same;')
+        for e in events:
+            out('    "{}";'.format(e.eventId))
+        out('  }')
     out("}")
 
 dst=sys.stdout
