@@ -163,7 +163,7 @@
 	    handler_log(4, "from %d, new_time = %g, new_spin  %d", edgeProperties->direction, message->time, message->spin);
 	  }
 
-	  deviceState->rts = (deviceState->times[0] >= graphProperties->endTime) ? 0 : RTS_FLAG_out;
+	  deviceState->rts = RTS_FLAG_out;
 
 	  for(unsigned i=1; i<5; i++){
             if(deviceState->times[i] < deviceState->times[0]){
@@ -202,8 +202,8 @@
 	  deviceState->rts = RTS_FLAG_out;
 	  for(unsigned i=1; i<5; i++){
             if(deviceState->times[0] > deviceState->times[i]){
-	      handler_log(4, "  time[%d] = %g < time[0] = %g", i, deviceState->times[i], deviceState->times[0]);
-	      deviceState->rts = 0;
+	            handler_log(4, "  time[%d] = %g < time[0] = %g", i, deviceState->times[i], deviceState->times[0]);
+	            deviceState->rts = 0;
             }
 	    }
 	    handler_log(3, "sendAgain = %x", deviceState->rts);
