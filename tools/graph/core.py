@@ -433,11 +433,14 @@ class MessageType(object):
         self.message=message
         self.metadata=metadata
         self.numid=numid
-        size = self._checkMessageSize(self.message)
-        if size > 44:
-            raise RuntimeError("ERROR: Message \"" + self.id + "\" has a payload that's too large.\n"
-                             + "A message header is 20 bytes, and this payload is " + str(size) + " bytes.\n"
-                             + "The total is therefore " + str(20+size) + " bytes, and must be a maximum of 64")
+        # DT10: Removing this check for now, as it is over-specialised for POETS ecosystem.
+        # For other hardware impls it is wrong, and also stops simulation of apps with
+        # larger messages which are legal. 
+        # size = self._checkMessageSize(self.message)
+        # if size > 44:
+        #    raise RuntimeError("ERROR: Message \"" + self.id + "\" has a payload that's too large.\n"
+        #                     + "A message header is 20 bytes, and this payload is " + str(size) + " bytes.\n"
+        #                     + "The total is therefore " + str(20+size) + " bytes, and must be a maximum of 64")
         self.documentation=documentation
 
     def _checkMessageSize(self, payload):

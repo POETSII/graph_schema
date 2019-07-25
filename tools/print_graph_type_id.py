@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-from graph.load_xml import load_graph
+from graph.load_xml import load_graph_type
 import sys
 import os
 
@@ -11,5 +11,5 @@ else:
     src=sys.stdin
     basePath=os.getcwd()
 
-graph=load_graph(src,basePath)
-print("{}".format(graph.graph_type.id))
+graph_type=load_graph_type(src,basePath)
+print("{}".format(graph_type.id))
