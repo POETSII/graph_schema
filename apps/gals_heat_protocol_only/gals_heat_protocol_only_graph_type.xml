@@ -51,6 +51,7 @@
       <DeviceType id="cell">
         <Properties>
           <Scalar name="nhood" type="uint32_t"/>
+          <Scalar name="assertion_node" type="uint32_t"/>
         </Properties>
         <State>
           <Scalar name="t" type="uint32_t"/>
@@ -67,10 +68,12 @@
           <OnReceive><![CDATA[
 			handler_log(3, "m=(t=%d) tNow=%d, sNow=%d, sNext=%d", message->t, deviceState->t, deviceState->cs, deviceState->ns);
 
-      if(message->t==graphProperties->assertion_time
-          && deviceState->ns == graphProperties->assertion_ns
-          && deviceState->cs == graphProperties->assertion_cs){
-          assert(0);
+      if(deviceProperties->assertion_node){
+        if(message->t==graphProperties->assertion_time
+            && deviceState->ns == graphProperties->assertion_ns
+            && deviceState->cs == graphProperties->assertion_cs){
+            assert(0);
+        }
       }
       
       if(message->t==deviceState->t){
@@ -89,7 +92,9 @@
         <OutputPin name="finished" messageTypeId="finished">
           <OnSend><![CDATA[
         assert(deviceState->t == graphProperties->maxTime);
-      assert(deviceState->cs==0 && deviceState->ns==0);
+        if(!graphProperties->multiple_terminals){
+          assert(deviceState->cs==0 && deviceState->ns==0);
+        }
 			deviceState->t++; // We advance beyond the end of time and go idle
 			// And send an empty pulse to exit node
 			]]></OnSend>

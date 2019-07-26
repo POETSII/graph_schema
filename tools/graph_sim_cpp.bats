@@ -56,7 +56,7 @@ setup() {
 @test "simulate ising_spin using graph_sim and capture truncated event log" {
     WD=$(make_test_wd)
     run bin/graph_sim --max-events 10 --log-events $WD/event.log apps/ising_spin/ising_spin_8x8.xml
-    OO=$(cat $WD/event.log | grep -E -c '<SendEvent|<RecvEvent' event.log)
+    OO=$(cat $WD/event.log | grep -E -c '<SendEvent|<RecvEvent')
     [ "${OO}" == "11" ]
     (cd $WD && ../../tools/render_event_log_as_dot.py event.log)
     (cd $WD && dot -Tsvg -O graph.dot)    

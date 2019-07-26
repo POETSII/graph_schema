@@ -11,7 +11,7 @@
 class XMLWriter
 {
 private:    
-    xmlTextWriterPtr m_dst;
+    xmlTextWriterPtr m_dst=0;
     std::vector<std::string> m_stack;
 public: 
     void openFileDocument(
