@@ -17,10 +17,15 @@ src=sys.argv[1]
 Ne=80
 Ni=20
 
+max_time=1000
+
+if len(sys.argv)>1:
+    Ne=int(sys.argv[1])
 if len(sys.argv)>2:
-    Ne=int(sys.argv[2])
+    Ni=int(sys.argv[2])
 if len(sys.argv)>3:
-    Ni=int(sys.argv[3])
+    max_time=int(sys.argv[3])
+
 
 N=Ne+Ni
 
@@ -30,7 +35,7 @@ clockType=graphType.device_types["clock"]
 
 instName="fully_connected_{}_{}".format(Ne,Ni)
 
-properties={}
+properties={"max_t":max_time}
 res=GraphInstance(instName, graphType, properties)
 
 clock=DeviceInstance(res, "clock", clockType, None, {"neuronCount":N})

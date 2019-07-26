@@ -7,17 +7,23 @@ define gals_heat_float_instance_template
 # $2 = delta
 # $3 = maxsteps
 # $4 = filters
+# $5 = test : "" or no
+
 
 demos/gals_heat_float/gals_heat_float_$1.xml : apps/gals_heat_float/create_gals_heat_float_instance.py apps/gals_heat_float/gals_heat_float_graph_type.xml
 	mkdir -p $$(dir $$@)
 	$$(PYTHON) apps/gals_heat_float/create_gals_heat_float_instance.py  $$(subst _, ,$1) > $$@
 
+ifeq (,$5)
 ALL_TEST_XML += demos/gals_heat_float/gals_heat_float_$1.xml
+endif
 
 demos/gals_heat_float/gals_heat_float_$1.snap demos/gals_heat_float/gals_heat_float_$1.kv : demos/gals_heat_float/gals_heat_float_$1.xml bin/epoch_sim providers/gals_heat_float.graph.so demos/gals_heat_float/gals_heat_float_$1.checked
 	bin/epoch_sim  --log-level 0 --max-steps $3 --snapshots $2 demos/gals_heat_float/gals_heat_float_$1.snap --key-value demos/gals_heat_float/gals_heat_float_$1.kv  demos/gals_heat_float/gals_heat_float_$1.xml
 
+ifeq (,$5)
 ALL_gals_heat_float_TESTS += demos/gals_heat_float/gals_heat_float_$1.snap demos/gals_heat_float/gals_heat_float_$1.kv
+endif
 
 demos/gals_heat_float/gals_heat_float_$1.mp4 : demos/gals_heat_float/gals_heat_float_$1.xml demos/gals_heat_float/gals_heat_float_$1.snap
 	mkdir -p demos/gals_heat_float/gals_heat_float_$1.tmp
@@ -50,12 +56,14 @@ gals_heat_float_FILTERS_VALUE = \
   --bind-dev "cell" "state" "v" "color" "heat(-20000000, +20000000, value)"
 
 
-$(eval $(call gals_heat_float_instance_template,4,1,100,$(gals_heat_float_FILTERS_VALUE)))
-$(eval $(call gals_heat_float_instance_template,9,1,100,$(gals_heat_float_FILTERS_VALUE)))
-$(eval $(call gals_heat_float_instance_template,16,1,100,$(gals_heat_float_FILTERS_TIME)))
-$(eval $(call gals_heat_float_instance_template,32,10,10000,$(gals_heat_float_FILTERS_VALUE)))
+$(eval $(call gals_heat_float_instance_template,4_1000,1,100,$(gals_heat_float_FILTERS_VALUE)))
+$(eval $(call gals_heat_float_instance_template,9_1000,1,100,$(gals_heat_float_FILTERS_VALUE)))
+$(eval $(call gals_heat_float_instance_template,16_1000,1,100,$(gals_heat_float_FILTERS_TIME)))
 
-$(eval $(call gals_heat_float_instance_template,55,200,100,$(gals_heat_float_FILTERS_VALUE)))
+#TODO: bring back demos
+#$(eval $(call gals_heat_float_instance_template,32,10,10000,$(gals_heat_float_FILTERS_VALUE)))
+
+#$(eval $(call gals_heat_float_instance_template,55,200,100,$(gals_heat_float_FILTERS_VALUE)))
 
 # Needs to be manually rendered with graph_to_field
 #$(eval $(call gals_heat_float_instance_template,128,200,50000,$(gals_heat_float_FILTERS_VALUE)))

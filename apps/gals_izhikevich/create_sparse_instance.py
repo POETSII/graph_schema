@@ -17,6 +17,7 @@ src=sys.argv[1]
 Ne=80
 Ni=20
 K=20
+max_t=1000
 
 if len(sys.argv)>2:
     Ne=int(sys.argv[2])
@@ -24,6 +25,8 @@ if len(sys.argv)>3:
     Ni=int(sys.argv[3])
 if len(sys.argv)>4:
     K=int(sys.argv[4])
+if len(sys.argv)>5:
+    max_t=int(sys.argv[5])
 
 N=Ne+Ni
 K=min(N,K)
@@ -33,7 +36,7 @@ neuronType=graphType.device_types["neuron"]
 
 instName="sparse_{}_{}_{}".format(Ne,Ni,K)
 
-properties=None
+properties={"max_t":max_t}
 res=GraphInstance(instName, graphType, properties)
 
 nodes=[None]*N

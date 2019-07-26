@@ -10,7 +10,7 @@ define relaxation_heat_instance_template
 # $3 = maxsteps
 # $4 = filters
 # $5 = use_field (should be "" or "yes")
-# $6 = demo_only (should be "" or "no")
+# $6 = demo_only (should be "" or "yes")
 
 demos/relaxation_heat/relaxation_heat_$1.xml : apps/relaxation_heat/create_relaxation_heat_instance.py apps/relaxation_heat/relaxation_heat_graph_type.xml
 	mkdir -p $$(dir $$@)
@@ -62,9 +62,9 @@ relaxation_heat_FILTERS_VALUE = \
 $(eval $(call relaxation_heat_instance_template,9,1,1000,$(relaxation_heat_FILTERS_VALUE)))
 $(eval $(call relaxation_heat_instance_template,16,1,1000,$(relaxation_heat_FILTERS_TIME)))
 
-$(eval $(call relaxation_heat_instance_template,32,10,50000,$(relaxation_heat_FILTERS_VALUE),yes,no))
+#$(eval $(call relaxation_heat_instance_template,32,10,50000,$(relaxation_heat_FILTERS_VALUE),yes,yes))
 
-$(eval $(call relaxation_heat_instance_template,128,10,50000,$(relaxation_heat_FILTERS_VALUE),yes,no))
+#$(eval $(call relaxation_heat_instance_template,128,10,50000,$(relaxation_heat_FILTERS_VALUE),yes,yes))
 
 
 
