@@ -4,6 +4,8 @@
 #include <iostream>
 #include <fstream>
 #include <streambuf>
+#include <random>
+#include <regex>
 
 std::string read_file(const std::string &path)
 {
@@ -56,7 +58,17 @@ int main()
         }
     }
 
-    std::string kernel_source(read_file("kernel_template.cl"));
+    //std::string kernel_source(read_file("kernel_instance_3dev.cl"));
+    std::string kernel_source(read_file("tmp.cl"));
+
+    std::smatch m;
+    if(!std::regex_search(kernel_source, m, std::regex("__TOTAL_DEVICES__=([0-9]+);"))){
+        fprintf(stderr, "Couldn't find __TOTAL_DEVICES__ string in open cl source.");
+        exit(1);
+    }
+
+    const int NUM_DEVICES=std::stoi(m[1]);
+    std::cerr<<"Num devices="<<NUM_DEVICES<<"\n";
     
     std::vector<std::string> programStrings { kernel_source };
     std::cerr<<"Constructing program.\n";
@@ -77,18 +89,31 @@ int main()
 
     std::cerr<<"Creating functors\n";
     auto f_init= cl::KernelFunctor<>(program, "kinit");
-    auto f_step= cl::KernelFunctor<>(program, "kstep");
+    auto f_step= cl::KernelFunctor<unsigned>(program, "kstep");
+
+    auto k_init= cl::Kernel(program, "kinit");
+    auto k_step= cl::Kernel(program, "kstep");
 
     std::cerr<<"Calling init\n";
-    f_init( cl::EnqueueArgs(cl::NDRange(2))).wait();
+    f_init( cl::EnqueueArgs(cl::NDRange(NUM_DEVICES))).wait();
     std::cerr<<"Init done.\n";
 
-    for(unsigned i=0; i<10; i++){
-        std::cerr<<"Step\n";
-        if(i%2){
-            f_step( cl::EnqueueArgs(cl::NDRange(2))).wait();
-        }else{
-            f_step( cl::EnqueueArgs(cl::NDRange(1))).wait();
-        }
+    cl::Context context(devices);
+
+    cl::CommandQueue queue(context, devices[0]);
+
+    std::mt19937 rng;
+
+    k_step.setArg(0, (uint32_t)1);
+
+    for(unsigned i=0; i<400; i++){
+        std::cerr<<"Step "<<i<<"\n";
+        
+        queue.enqueueNDRangeKernel(k_step, cl::NDRange(0), cl::NDRange(NUM_DEVICES));
+        queue.enqueueBarrierWithWaitList();
+
+        //f_step( cl::EnqueueArgs(cl::NDRange(width)), count).wait();
     }
+
+    queue.finish();
 }
