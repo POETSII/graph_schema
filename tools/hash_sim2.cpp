@@ -133,8 +133,13 @@ private:
    uint64_t srcDevInst,  const DeviceTypePtr &srcDevType, const OutputPinPtr &srcPin,
    int sendIndex, // -1 if it is not indexed pin, or if index is not explicitly specified
    const TypedDataPtr &properties,
+   const TypedDataPtr &state,
    rapidjson::Document &&metadata=rapidjson::Document()
   ) override {
+    if(state && state.payloadSize()>0){
+      throw std::runtime_error("Hash sim cannot deal with edge state at the moment.");
+    }
+    
     unsigned address=m_edge_info.size();
     edge_info ei;
     ei.edge_address=address;

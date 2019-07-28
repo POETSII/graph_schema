@@ -2,10 +2,8 @@
 
 import io
 import sys
+from collections import OrderedDict
 from typing import *
-
-n=32
-max_t=100
 
 class Input:
     def __init__(self, owner:"Dev", index):
@@ -26,6 +24,13 @@ class Dev:
         self.inputs=[ Input(self,i) for i in range(nInputs) ]
         self.outputs=[ Output(self, i) for i in range(nOutputs) ]
         self.incoming=[] # List[Tuple[Input,Output,int]]
+
+class Graph:
+    def __init__(self, props_init):
+        self.devices=OrderedDict()
+        self.props_init=props_init
+
+    def add_device(self, id, device_index_props_type, props_init)
 
 def connect(dst_pin, src_pin):
     incoming_index=len(dst_pin.owner.incoming) # unique slot within the destination pin

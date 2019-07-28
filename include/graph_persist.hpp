@@ -167,7 +167,7 @@ public:
     std::call_once(warned, [](){ fprintf(stderr, "This client is using the old version of GraphLoadEvents::onEdgeInstance, and should be updated."); });
 
 
-    if(state){
+    if(state && state.payloadSize()>0){
       throw std::runtime_error("Edge instance has state, but client has not overriden the appropriate method.");
     }else{
       onEdgeInstance(graphInst, dstDevInst, dstDevType, dstPin, srcDevInst, srcDevType, srcPin, sendIndex, properties, std::move(metadata));
