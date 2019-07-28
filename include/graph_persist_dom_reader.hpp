@@ -677,40 +677,48 @@ void loadGraph(Registry *registry, const filepath &srcPath, xmlpp::Element *pare
     }
 
     auto et=dstPin->getPropertiesSpec();
-
+    auto st=dstPin->getStateSpec();
 
     TypedDataPtr edgeProperties;
     xmlpp::Element *eProperties=0;
+    TypedDataPtr edgeState;
+    xmlpp::Element *eState=0;
     {
       const auto &children=eEdge->get_children();
-      if(children.size()<10){
-        for(const auto &nChild : children){
-          assert(nChild->get_name().is_ascii());
+      for(const auto &nChild : children){
+        assert(nChild->get_name().is_ascii());
 
-          if(!strcmp(nChild->get_name().c_str(),"P")){
-            eProperties=(xmlpp::Element*)nChild;
-            break;
-          }
+        if(!strcmp(nChild->get_name().c_str(),"P")){
+          eProperties=(xmlpp::Element*)nChild;
+        }else if(!strcmp(nChild->get_name().c_str(),"S")){
+          eState=(xmlpp::Element*)nChild;
         }
-      }else{
-        eProperties=find_single(eEdge, "./g:P", ns);
       }
     }
+
     if(eProperties){
       edgeProperties=et->load(eProperties);
-    }else{
+    }else if(et){
       edgeProperties=et->create();
+    }
+    if(eState){
+      edgeState=st->load(eState);
+    }else if(st){
+      edgeState=st->create();
     }
 
     rapidjson::Document metadata;
     if(parseMetaData){
+      // TODO: For efficiency this should be rolled into the above loop for properties and state
       metadata=parse_meta_data(eEdge, "g:M", ns);
     }
+
     events->onEdgeInstance(gId,
                 dstDevice.first, dstDevice.second, dstPin,
                 srcDevice.first, srcDevice.second, srcPin,
                 sendIndex,
                 edgeProperties,
+                edgeState,
                 std::move(metadata)
     );
   }

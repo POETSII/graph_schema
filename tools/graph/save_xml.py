@@ -339,6 +339,7 @@ def save_edge_instance(parent, ei):
         n.attrib["sendIndex"]=ei.send_index
 
     save_typed_struct_instance(n, _edge_instance_properties_type, ei.dst_pin.properties, ei.properties)
+    save_typed_struct_instance(n, _edge_instance_state_type, ei.dst_pin.state, ei.state)
     save_metadata(n, _edge_instance_metadata_type, ei.metadata)
 
     return n

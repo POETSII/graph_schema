@@ -147,9 +147,6 @@
         <Properties>
           <Scalar name="direction" type="uint32_t"/>
         </Properties>
-        <State>
-          <Scalar name="time" type="float" default="0.0"/>
-        </State>
         <OnReceive><![CDATA[
 
 	  if(message->time >= deviceState->times[edgeProperties->direction]){

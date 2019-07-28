@@ -6,6 +6,8 @@
 
 #include "graph.hpp"
 
+#include <mutex>
+
 #if 0
 // Boost not installed on keystone
 //#include <boost/filesystem.hpp>
@@ -129,6 +131,24 @@ public:
   virtual void onEndEdgeInstances(uint64_t /*graphToken*/)
   {}
 
+  /*
+    Transitional: to move between clients with explicit state and those with implicit, there
+    is this fall-back.
+    It should be considered deprecated, and will be removed at some point.
+   */
+  virtual void onEdgeInstance
+  (
+   uint64_t graphInst,
+   uint64_t dstDevInst, const DeviceTypePtr &dstDevType, const InputPinPtr &dstPin,
+   uint64_t srcDevInst,  const DeviceTypePtr &srcDevType, const OutputPinPtr &srcPin,
+   int sendIndex, // -1 if it is not indexed pin, or if index is not explicitly specified
+   const TypedDataPtr &properties,
+   rapidjson::Document &&metadata=rapidjson::Document()
+
+  ) {
+    throw std::runtime_error("Listener has not overriden either version of onEdgeInstance.");
+  }
+
     //! Tells the consumer that the a new edge is being added
   /*! It is required that both device instances have already been
     added (otherwise the ids would not been known).
@@ -140,8 +160,19 @@ public:
    uint64_t srcDevInst,  const DeviceTypePtr &srcDevType, const OutputPinPtr &srcPin,
    int sendIndex, // -1 if it is not indexed pin, or if index is not explicitly specified
    const TypedDataPtr &properties,
-   rapidjson::Document &&metadata=rapidjson::Document()
-  ) =0;
+   const TypedDataPtr &state,
+    rapidjson::Document &&metadata=rapidjson::Document()
+  ) {
+    static std::once_flag warned;
+    std::call_once(warned, [](){ fprintf(stderr, "This client is using the old version of GraphLoadEvents::onEdgeInstance, and should be updated."); });
+
+
+    if(state){
+      throw std::runtime_error("Edge instance has state, but client has not overriden the appropriate method.");
+    }else{
+      onEdgeInstance(graphInst, dstDevInst, dstDevType, dstPin, srcDevInst, srcDevType, srcPin, sendIndex, properties, std::move(metadata));
+    }
+  }
 };
 
 extern "C" void loadGraph(Registry *registry, const filepath &srcPath, xmlpp::Element *elt, GraphLoadEvents *events);

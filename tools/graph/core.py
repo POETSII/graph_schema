@@ -663,8 +663,10 @@ class DeviceInstance(object):
 
 class EdgeInstance(object):
 
-    def __init__(self,parent,dst_device,dst_pin,src_device,src_pin,properties=None,metadata=None,send_index=None):
-        # type : (GraphInstance, DeviceInstance, Union[str,InputPin], DeviceInstance, Union[str,OutputPin], Optional[Dict], Optional[Dict] ) -> None
+    # Upgrade note: The state argument added as keyword only, as it is obscure, and experience from adding state to
+    # DeviceInstance caused a lot of problems
+    def __init__(self,parent,dst_device,dst_pin,src_device,src_pin,properties=None,metadata=None,send_index=None, *, state=None):
+        # type : (GraphInstance, DeviceInstance, Union[str,InputPin], DeviceInstance, Union[str,OutputPin], Optional[Dict], Optional[Dict], Optional[Dict] ) -> None
         self.parent=parent
 
         if isinstance(dst_pin,str):
@@ -700,6 +702,7 @@ class EdgeInstance(object):
         self.dst_pin=dst_pin
         self.src_pin=src_pin
         self.properties=properties
+        self.state=state
         self.metadata=metadata
         self.send_index=send_index;
 
