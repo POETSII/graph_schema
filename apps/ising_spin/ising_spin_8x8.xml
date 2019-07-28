@@ -27,13 +27,14 @@
 ]]></SharedCode>
   <SharedCode><![CDATA[
 
+  #ifndef __OPENCL_VERSION__
 	#include <cmath>
+  #endif
 
-
-    uint32_t urng(uint32_t &state)
+    uint32_t urng(uint32_t *state)
     {
-      state = state*1664525+1013904223;
-      return state;
+      *state = (*state)*1664525+1013904223;
+      return *state;
     }
 
     uint32_t rng_init(uint32_t x, uint32_t y)
@@ -45,13 +46,13 @@
       return y;
     }
 
-    float frng(uint32_t &state)
+    float frng(uint32_t *state)
     { return urng(state)*2.328306400e-10f; }
 
-    float erng(uint32_t &state)
+    float erng(uint32_t *state)
     { return -log(frng(state)); }
 
-    void chooseNextEvent(const float *probabilities, uint32_t &rng, int32_t *spins, float *times)
+    void chooseNextEvent(const float *probabilities, uint32_t *rng, int32_t *spins, float *times)
     {
       int sumStates=0;
       for(unsigned i=1; i<5; i++){ // Only sum neighbours
@@ -94,29 +95,29 @@
       <OnInit><![CDATA[
 	  // Initialise RNG and choose random starting spin
 	  uint32_t seed;
-	  auto x=deviceProperties->x, y=deviceProperties->y;
-	  auto W=graphProperties->width, H=graphProperties->height;
+	  int x=deviceProperties->x, y=deviceProperties->y;
+	  int W=graphProperties->width, H=graphProperties->height;
 
 	  seed=rng_init( x, (y+H-1)%H );
-	  deviceState->spins[1]=(urng(seed)>>31) ? +1 : -1;
-	  deviceState->times[1]=erng(seed);
+	  deviceState->spins[1]=(urng(&seed)>>31) ? +1 : -1;
+	  deviceState->times[1]=erng(&seed);
 
 	  seed=rng_init( (x+1)%W, y );
-	  deviceState->spins[2]=(urng(seed)>>31) ? +1 : -1;
-	  deviceState->times[2]=erng(seed);
+	  deviceState->spins[2]=(urng(&seed)>>31) ? +1 : -1;
+	  deviceState->times[2]=erng(&seed);
 
 	  seed=rng_init( x, (y+1)%H );
-	  deviceState->spins[3]=(urng(seed)>>31) ? +1 : -1;
-	  deviceState->times[3]=erng(seed);
+	  deviceState->spins[3]=(urng(&seed)>>31) ? +1 : -1;
+	  deviceState->times[3]=erng(&seed);
 
 	  seed=rng_init( (x+W-1)%W, y );
-	  deviceState->spins[4]=(urng(seed)>>31) ? +1 : -1;
-	  deviceState->times[4]=erng(seed);
+	  deviceState->spins[4]=(urng(&seed)>>31) ? +1 : -1;
+	  deviceState->times[4]=erng(&seed);
 
 	  // Final one is this node
 	  seed=rng_init( x, y );
-	  deviceState->spins[0]=(urng(seed)>>31) ? +1 : -1;
-	  deviceState->times[0]=erng(seed);
+	  deviceState->spins[0]=(urng(&seed)>>31) ? +1 : -1;
+	  deviceState->times[0]=erng(&seed);
 	  deviceState->rng=seed; // Store the rng state back
 
 	  deviceState->spin=deviceState->spins[0];
@@ -129,7 +130,7 @@
 
 	  deviceState->rts = (deviceState->times[0] >= graphProperties->endTime) ? 0 : RTS_FLAG_out;
 	  for(unsigned i=1; i<5; i++){
-	    handler_log(3, "   times[%d] = %g", deviceState->times[i]);
+	    handler_log(3, "   times[%d] = %g", i, deviceState->times[i]);
 	    if(deviceState->times[0] >= deviceState->times[i]){
               deviceState->rts=0; // We are not the earliest cell in neighbourhood
 	    }
@@ -180,8 +181,8 @@
 	  }
 
 	  float prevTime=deviceState->times[0];
-	  auto prevSpin=deviceState->spins[0];
-          chooseNextEvent(graphProperties->probabilities, deviceState->rng, deviceState->spins, deviceState->times);
+	  int prevSpin=deviceState->spins[0];
+          chooseNextEvent(graphProperties->probabilities, &deviceState->rng, deviceState->spins, deviceState->times);
           message->spin = deviceState->spins[0];
 	  message->time = deviceState->times[0];
 

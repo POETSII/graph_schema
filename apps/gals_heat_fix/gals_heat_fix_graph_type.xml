@@ -48,7 +48,7 @@
 
 		int32_t fix_mul(int32_t x, int32_t y)
 		{
-			auto xy=x*(int64_t)y;
+			int64_t xy=x*(int64_t)y;
 			xy += (1<<23);
 			xy = xy>>24;
 			assert( -2147483648 <= xy && xy <= 2147483647 );
@@ -208,7 +208,7 @@
           </Properties>
           <OnReceive><![CDATA[
 			handler_log(3, "m=(t=%d,v=%d) tNow=%d, sNow=%d, aNow=%d, sNext=%d, aNext=%d", message->t, message->v, deviceState->t, deviceState->cs, deviceState->ca, deviceState->ns, deviceState->na);
-			auto wv=fix_mul( edgeProperties->w , message->v );
+			int32_t wv=fix_mul( edgeProperties->w , message->v );
 		  if(message->t==deviceState->t){
 				deviceState->ca = fix_add(deviceState->ca, wv );
 				deviceState->cs++;

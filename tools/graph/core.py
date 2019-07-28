@@ -492,6 +492,8 @@ class Pin(object):
         assert not is_application
         self.is_application=False
 
+        self.index=None # Will be hooked up by the parent
+
 
 class InputPin(Pin):
     def __init__(self,parent,name,message_type,is_application,properties,state,metadata,receive_handler,source_file=None,source_line=None,documentation=None):
@@ -554,9 +556,11 @@ class DeviceType(object):
         if message_type != self.parent.message_types[message_type.id]:
             raise GraphDescriptionError("Incorrect message type object {} on pin {} of device type {}".format(message_type.id,name,self.id))
         p=InputPin(self, name, self.parent.message_types[message_type.id], is_application, properties, state, metadata, receive_handler, source_file, source_line, documentation)
+        index=len(self.inputs_by_index)
         self.inputs[name]=p
         self.inputs_by_index.append(p)
         self.pins[name]=p
+        p.index=index
 
     def add_output(self,name,message_type,is_application, metadata,send_handler,source_file=None,source_line=None,documentation=None, is_indexed=False):
         if name in self.pins:
@@ -566,9 +570,11 @@ class DeviceType(object):
         if message_type != self.parent.message_types[message_type.id]:
             raise GraphDescriptionError("Incorrect message type object {} on pin {} of device type {}".format(message_type.id,name,self.id))
         p=OutputPin(self, name, self.parent.message_types[message_type.id], is_application, metadata, send_handler, source_file, source_line, documentation, is_indexed)
+        index=len(self.outputs_by_index)
         self.outputs[name]=p
         self.outputs_by_index.append(p)
         self.pins[name]=p
+        p.index=index
 
 
 class GraphType(object):
