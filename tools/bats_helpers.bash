@@ -40,3 +40,29 @@ make_test_wd() {
 
     echo $wd
 }
+
+
+# Looks for the xml v4 spec directory, and stores it in PIP0020_DIR.
+# If the directory is not found, then PIP0020_DIR=="" and returns non-zero status
+function find_PIP0020_DIR () {
+    if [[ ! -d "$POETS_PIP_REPO" ]] ; then
+        if [[ -d ../poets_improvement_proposals ]] ; then
+            POETS_PIP_REPO="$(pwd)/../poets_improvement_proposals"
+        fi
+    fi
+
+    PIP0020_DIR=""
+    if [[ -d "$POETS_PIP_REPO/proposed/PIP-0020" ]] ; then
+        PIP0020_DIR="$POETS_PIP_REPO/proposed/PIP-0020"
+    elif [[ -d "$POETS_PIP_REPO/accepted/PIP-0020" ]] ; then
+        PIP0020_DIR="$POETS_PIP_REPO/accepted/PIP-0020"
+    fi
+
+    if [[ ! -d "$PIP0020_DIR" ]] ; then
+        >&3 echo "Couldn't find PIP0020 (xml v4 spec) directory ."
+        PIP0020_DIR=""
+        return 1
+    else
+        return 0
+    fi
+}

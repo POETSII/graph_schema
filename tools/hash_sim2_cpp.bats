@@ -1,7 +1,7 @@
 load bats_helpers
 
 setup() {
-    make_target bin/hash_sim2 gals_heat_protocol_only_provider
+    make bin/hash_sim2 gals_heat_protocol_only_provider
 }
 
 @test "bin/hash_sim2 exists" {

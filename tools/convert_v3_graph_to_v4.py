@@ -10,17 +10,22 @@ import os
 source=sys.stdin
 sourcePath="[XML-file]"
 
-if len(sys.argv) != 2:
+dest=sys.stdout
+
+if len(sys.argv) < 2:
     raise RuntimeError("This converts exactly one XML file. Please provide one path to an XML file")
 
-sys.stderr.write("Reading graph type from '{}'\n".format(sys.argv[1]))
-source=open(sys.argv[1],"rt")
-sourcePath=os.path.abspath(sys.argv[1])
+source=sys.argv[1]
+sys.stderr.write("Reading graph type from '{}'\n".format(source))
+sourcePath=os.path.abspath(source)
 
-dest=sys.stdout
-destPath="[XML-file]"
+if len(sys.argv)>2:
+    dest=sys.argv[2]
 
 # LOAD XML
 (type,instance)=load_graph(source, sourcePath)
 
-save_graph(instance, dest)
+if instance:
+    save_graph(instance, dest)
+else:
+    save_graph(type, dest)

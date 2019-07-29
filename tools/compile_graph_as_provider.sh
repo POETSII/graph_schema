@@ -30,7 +30,7 @@ LDLIBS+=" -ldl -fPIC"
 #name=$(basename ${input_file} .xml)
 name=$(${graph_schema_dir}/tools/print_graph_type_id.py ${input_file}) || exit 1
 
-java -jar ${JING} -c ${graph_schema_dir}/master/virtual-graph-schema-v2.rnc ${input_file} || exit 1
+java -jar ${JING} -c ${graph_schema_dir}/master/virtual-graph-schema-v3.rnc ${input_file} || exit 1
 
 python3 ${graph_schema_dir}/tools/render_graph_as_cpp.py ${input_file} ${working_dir}/${name}.graph.cpp || exit 1
 

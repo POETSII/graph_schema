@@ -330,6 +330,7 @@ def save_device_instance(parent, di):
 
 _edge_instance_tag_type=toNS("p:EdgeI")
 _edge_instance_properties_type=toNS("p:P")
+_edge_instance_state_type=toNS("p:S")
 _edge_instance_metadata_type=toNS("p:M")
 
 def save_edge_instance(parent, ei):
