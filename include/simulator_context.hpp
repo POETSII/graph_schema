@@ -544,6 +544,18 @@ private:
             }
         }
 
+        void check_for_exit(const char *msg)
+        {
+            if(!strcmp(msg, "_HANDLER_EXIT_SUCCESS_9be65737_")){
+                fprintf(stderr, "Pseudo application exit, success.\n");
+                exit(0);
+            }
+            if(!strcmp(msg, "_HANDLER_EXIT_FAIL_9be65737_")){
+                fprintf(stderr, "Pseudo application exit, fail.\n");
+                exit(1);
+            }
+        }
+
         void application_exit(int code) override
         {
             fprintf(stderr, "Application exit %d\n", code);
@@ -570,6 +582,7 @@ private:
                 vfprintf(stderr, msg, args);
                 fprintf(stderr, "\n");
             }
+            check_for_exit(msg);
         }
     };
 
@@ -590,6 +603,7 @@ private:
                 vfprintf(stderr, msg, args);
                 fprintf(stderr, "\n");
             }
+            check_for_exit(msg);
         }
     };
 
@@ -611,6 +625,7 @@ private:
                 vfprintf(stderr, msg, args);
                 fprintf(stderr, "\n");
             }
+            check_for_exit(msg);
         }
     };
 
@@ -863,9 +878,9 @@ public:
             if(srcPin.beginEdgeIndex==invalid_edge_index){
                 srcPin.beginEdgeIndex=index;
                 srcPin.endEdgeIndex=index;
-                if(!srcPin.isIndexedSend){
-                    srcPin.beginExternalIndex=index+1;
-                }
+            }
+            if(!isExternal[edge.route.destDeviceAddress]){
+                srcPin.beginExternalIndex=index+1;
             }
             
             if(!srcPin.isIndexedSend){
@@ -884,8 +899,7 @@ public:
 
         for(const auto & dev : m_devices) {
             for (const auto &pin : dev.outputPins) {
-                fprintf(stderr, "%s/%s : [%u,%u)\n", dev.name.c_str(), pin.pin->getName().c_str(), pin.beginEdgeIndex, pin.endEdgeIndex);
-
+                fprintf(stderr, "%s/%s : [%u,%u,%u)\n", dev.name.c_str(), pin.pin->getName().c_str(), pin.beginEdgeIndex, pin.beginExternalIndex, pin.endEdgeIndex);
             }
         }
     }
@@ -1159,6 +1173,7 @@ protected:
         if(doSend) {
             // TODO: Currently we just drop external destinations
             add_messages(range, payload, sendEventId);
+            //fprintf(stderr, "  %u -> %u dests, numMessages=%u\n", address, range.end-range.begin, count_messages());
         }
 
         if(readyToSend){
@@ -1211,6 +1226,8 @@ public:
     {
         auto numMessages=count_messages();
         auto numReady=count_ready();
+
+        //fprintf(stderr, "numMessages=%u, numReady=%u\n", numMessages, numReady);
 
         if(numMessages==0 && numReady==0)
             return false;
@@ -1271,6 +1288,7 @@ protected:
 
     void add_messages(const edge_index_range_t &range, const TypedDataPtr &payload, uint64_t sendEventId) override
     {
+        //fprintf(stderr, "  numInt=%u, numExt=%u\n", range.beginExternals-range.begin, range.end-range.beginExternals);
         assert(range.begin<range.beginExternals);
         for(auto ei=range.begin; ei<range.beginExternals; ei++){
             m_messageQueue.push(message_t{ei, payload,sendEventId});

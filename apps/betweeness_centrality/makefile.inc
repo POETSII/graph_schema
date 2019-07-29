@@ -21,13 +21,15 @@ ALL_betweeness_centrality_TESTS += demos/betweeness_centrality/betweeness_centra
 
 endef
 
+ifeq ($(NO_APP_TESTS),)
+
 
 $(eval $(call betweeness_centrality_instance_template,16_16_2_2,1,1000))
 $(eval $(call betweeness_centrality_instance_template,16_16_20_20,1,1000))
 $(eval $(call betweeness_centrality_instance_template,100_40_4_4,10,1000))
 $(eval $(call betweeness_centrality_instance_template,1000_40_100_1,10,3000))
 
-
+endif
 
 betweeness_centrality_tests : $(ALL_betweeness_centrality_TESTS)
 

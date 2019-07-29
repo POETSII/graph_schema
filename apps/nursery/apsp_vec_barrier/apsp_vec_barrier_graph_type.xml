@@ -91,7 +91,7 @@
 					// Sometimes we need to be precise about exactly how many vertices are in this batch,
 					// but most of the time it is _slightly_ more efficient to use K (instruction count + memory accesses + reg pressure).
 					// There is only one round where curr_k < K, versus floor(n/K) where curr_k==K. Ignored for now.
-					deviceState->curr_k=std::min(K, graphProperties->total_vertices-deviceState->round_base);
+					deviceState->curr_k=std::max(0, std::min((int)K, (int)graphProperties->total_vertices-(int)deviceState->round_base));
 					assert(deviceState->curr_k <= K);
 
 					deviceState->round_base += K;
@@ -161,6 +161,9 @@
 				]]></OnInit>
 
 				<OnHardwareIdle><![CDATA[
+				assert(!deviceState->stats_dirty);
+				assert(!deviceState->distances_dirty);
+
 				#ifndef NDDEBUG
 				for(unsigned i=0; i<deviceState->curr_k; i++){
 					unsigned src=i+deviceState->round_base-K;
@@ -176,11 +179,16 @@
 				deviceState->stats_k=deviceState->curr_k;
 				// Capture stats for the previous round
 				memcpy(deviceState->stats_distances, deviceState->distances, sizeof(deviceState->distances));
-				deviceState->stats_dirty=1;
+				if(deviceState->stats_k){
+					deviceState->stats_dirty=1;
+				}
 				
 				if(deviceState->round_base < graphProperties->total_vertices){
 					begin_round(graphProperties, deviceProperties, deviceState);
+				}else{
+					deviceState->curr_k=0;
 				}
+
 				]]></OnHardwareIdle>
 			</DeviceType>
 
@@ -258,7 +266,6 @@
 				</InputPin>
 
 				<ReadyToSend><![CDATA[
-				assert(deviceState->round_base < graphProperties->total_vertices);
 				*readyToSend=0;
 				]]></ReadyToSend>
 
@@ -269,8 +276,8 @@
 
 				<OnHardwareIdle><![CDATA[
 				if(deviceState->vertex_count==0){
-					// Do nothing - very first round, with no stats
-					assert(deviceState->round_base==0);
+					// Do nothing - very first round, with no stats, or after the last round
+					assert(deviceState->round_base==0 || deviceState->round_base >= graphProperties->total_vertices);
 				}else{
 
 					assert(deviceState->vertex_count == graphProperties->total_vertices);

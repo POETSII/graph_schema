@@ -40,17 +40,19 @@ GALS_IZHIKEVICH_FILTERS_I = \
   --bind-dev "neuron" "state" "Icount" "color" "blend_colors( (255,255,0), (255,0,255), 0, 20, value)" \
    --bind-edge "synapse" "firings" "relative" "color" "blend_colors( (255,0,0,10), (255,0,0,150), 0, 1, value)"
 
+ifeq ($(NO_APP_TESTS),)
 
 
-$(eval $(call gals_izhikevich_instance_template,8_2_10,100,10000,$(GALS_IZHIKEVICH_FILTERS)))
+$(eval $(call gals_izhikevich_instance_template,8_2_10_5000,100,10000,$(GALS_IZHIKEVICH_FILTERS)))
 
-$(eval $(call gals_izhikevich_instance_template,50_10_20,1,100,$(GALS_IZHIKEVICH_FILTERS_I)))
-$(eval $(call gals_izhikevich_instance_template,50_10_60,100,10000,$(GALS_IZHIKEVICH_FILTERS)))
+$(eval $(call gals_izhikevich_instance_template,50_10_20_50,1,100,$(GALS_IZHIKEVICH_FILTERS_I)))
+$(eval $(call gals_izhikevich_instance_template,50_10_60_5000,100,10000,$(GALS_IZHIKEVICH_FILTERS)))
 
 
-$(eval $(call gals_izhikevich_instance_template,80_20_100,1000,10000,$(GALS_IZHIKEVICH_FILTERS)))
-$(eval $(call gals_izhikevich_instance_template,200_50_50,1000,10000,$(GALS_IZHIKEVICH_FILTERS)))
+$(eval $(call gals_izhikevich_instance_template,80_20_5000,1000,10000,$(GALS_IZHIKEVICH_FILTERS)))
+$(eval $(call gals_izhikevich_instance_template,200_50_50_5000,1000,10000,$(GALS_IZHIKEVICH_FILTERS)))
 
+endif
 
 gals_izhikevich_tests : $(ALL_GALS_IZHIKEVICH_TESTS)
 

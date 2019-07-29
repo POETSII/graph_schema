@@ -2,6 +2,9 @@
 <Graphs xmlns="https://poets-project.org/schemas/virtual-graph-schema-v3">
   <GraphType id="clocked_izhikevich">
     <Types/>
+    <Properties>
+      <Scalar name="max_t" type="uint32_t" />
+    </Properties>
     <SharedCode><![CDATA[
     uint32_t urng(uint32_t &state)
     {
@@ -155,7 +158,7 @@
 
           deviceState->fireValue = v >= 30;
           if(deviceState->fireValue){
-            handler_log(1, "FIRE!");
+            handler_log(3, "FIRE!");
 
             v=deviceProperties->c;
             u += deviceProperties->d;
@@ -194,6 +197,7 @@
         </Properties>
         <State>
           <Scalar name="waitCount" type="uint32_t"/>
+          <Scalar name="t" type="uint32_t"/>
         </State>
         <OnInit><![CDATA[
           deviceState->waitCount = deviceProperties->neuronCount;
@@ -211,6 +215,10 @@
           handler_log(3,"tick : waitCount = %d\n", deviceState->waitCount);
           assert(deviceState->waitCount==0);
           deviceState->waitCount=deviceProperties->neuronCount;
+          deviceState->t++;
+          if(deviceState->t > graphProperties->max_t){
+            *doSend=false;
+          }
           ]]></OnSend>
         </OutputPin>
         <ReadyToSend><![CDATA[

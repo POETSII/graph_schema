@@ -51,6 +51,8 @@ halo_exchange_FILTERS_TIME = \
 halo_exchange_FILTERS_VALUE = \
   --bind-dev "cell" "state" "v" "color" "heat(-20000000, +20000000, value)"
 
+ifeq ($(NO_APP_TESTS),)
+
 
 $(eval $(call halo_exchange_instance_template,4,1,100,$(halo_exchange_FILTERS_VALUE)))
 $(eval $(call halo_exchange_instance_template,9,1,100,$(halo_exchange_FILTERS_VALUE)))
@@ -60,6 +62,7 @@ $(eval $(call halo_exchange_instance_template,32,10,10000,$(halo_exchange_FILTER
 # Needs to be manually rendered with graph_to_field
 #$(eval $(call halo_exchange_instance_template,128,200,50000,$(halo_exchange_FILTERS_VALUE)))
 
+endif
 
 halo_exchange_tests : $(ALL_halo_exchange_TESTS)
 

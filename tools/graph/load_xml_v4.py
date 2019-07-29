@@ -260,7 +260,7 @@ def load_edge_instance(graph,eiNode):
     state=load_struct_instance(dst_pin_type.state, eiNode, "S")
     metadata=None
     
-    return EdgeInstance(graph,dst_device,dst_pin_name,src_device,src_pin_name,properties,metadata, send_index)
+    return EdgeInstance(graph,dst_device,dst_pin_name,src_device,src_pin_name,properties,metadata, send_index, state=state)
 
 def load_graph_instance(graphTypes, graphNode):
     devITag = "{{{}}}DevI".format(ns["p"])

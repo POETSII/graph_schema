@@ -1,15 +1,14 @@
 <?xml version='1.0' encoding='ASCII'?>
 <Graphs xmlns="https://poets-project.org/schemas/virtual-graph-schema-v3">
-  <GraphType id="ising_spin">
-    <Types/>
-    <Properties>
-      <Scalar name="endTime" type="float" default="10.0"/>
-      <Scalar name="width" type="uint32_t"/>
-      <Scalar name="height" type="uint32_t"/>
-      <Array name="probabilities" length="10" type="float"/>
-    </Properties>
-
-		<SharedCode><![CDATA[
+  <GraphType xmlns="https://poets-project.org/schemas/virtual-graph-schema-v3" id="ising_spin">
+  <Properties>
+    <Scalar name="endTime" type="float" default="10.0"/>
+    <Scalar name="width" type="uint32_t"/>
+    <Scalar name="height" type="uint32_t"/>
+    <Array name="probabilities" length="10" type="float"/>
+  </Properties>
+  <MetaData>"nativeDimension": 2</MetaData>
+  <SharedCode><![CDATA[
         #ifdef POETS_LEGACY_HAS_HANDLER_EXIT
         #define _do_handler_exit(code) handler_exit(code)
         #else
@@ -26,18 +25,16 @@
             _do_handler_exit(code); \
         }
 ]]></SharedCode>
+  <SharedCode><![CDATA[
 
-    <MetaData>"nativeDimension": 2</MetaData>
-
-    <SharedCode><![CDATA[
-
+  #ifndef __OPENCL_VERSION__
 	#include <cmath>
+  #endif
 
-
-    uint32_t urng(uint32_t &state)
+    uint32_t urng(uint32_t *state)
     {
-      state = state*1664525+1013904223;
-      return state;
+      *state = (*state)*1664525+1013904223;
+      return *state;
     }
 
     uint32_t rng_init(uint32_t x, uint32_t y)
@@ -49,13 +46,13 @@
       return y;
     }
 
-    float frng(uint32_t &state)
+    float frng(uint32_t *state)
     { return urng(state)*2.328306400e-10f; }
 
-    float erng(uint32_t &state)
+    float erng(uint32_t *state)
     { return -log(frng(state)); }
 
-    void chooseNextEvent(const float *probabilities, uint32_t &rng, int32_t *spins, float *times)
+    void chooseNextEvent(const float *probabilities, uint32_t *rng, int32_t *spins, float *times)
     {
       int sumStates=0;
       for(unsigned i=1; i<5; i++){ // Only sum neighbours
@@ -72,55 +69,55 @@
     }
 
     ]]></SharedCode>
-    <MessageTypes>
-      <MessageType id="__print__"/>
-      <MessageType id="update">
-        <Message>
-          <Scalar name="time" type="float" default="0.0"/>
-          <Scalar name="spin" type="uint32_t"/>
-        </Message>
-      </MessageType>
-    </MessageTypes>
-    <DeviceTypes>
-      <DeviceType id="cell">
-        <Properties>
-          <Scalar name="x" type="uint32_t"/>
-          <Scalar name="y" type="uint32_t"/>
-        </Properties>
-        <State>
-          <Scalar name="rng" type="uint32_t"/>
-          <Array name="spins" length="5" type="int32_t"/>
-          <Array name="times" length="5" type="float"/>
-          <Scalar name="spin" type="int32_t"/>
-          <Scalar name="lastFlipTime" type="float"/>
-          <Scalar name="rts" type="uint32_t"/>
-        </State>
-        <OnInit><![CDATA[
+  <MessageTypes>
+    <MessageType id="__print__"/>
+    <MessageType id="update">
+      <Message>
+        <Scalar name="time" type="float" default="0.0"/>
+        <Scalar name="spin" type="uint32_t"/>
+      </Message>
+    </MessageType>
+  </MessageTypes>
+  <DeviceTypes>
+    <DeviceType id="cell">
+      <Properties>
+        <Scalar name="x" type="uint32_t"/>
+        <Scalar name="y" type="uint32_t"/>
+      </Properties>
+      <State>
+        <Scalar name="rng" type="uint32_t"/>
+        <Array name="spins" length="5" type="int32_t"/>
+        <Array name="times" length="5" type="float"/>
+        <Scalar name="spin" type="int32_t"/>
+        <Scalar name="lastFlipTime" type="float"/>
+        <Scalar name="rts" type="uint32_t"/>
+      </State>
+      <OnInit><![CDATA[
 	  // Initialise RNG and choose random starting spin
 	  uint32_t seed;
-	  auto x=deviceProperties->x, y=deviceProperties->y;
-	  auto W=graphProperties->width, H=graphProperties->height;
+	  int x=deviceProperties->x, y=deviceProperties->y;
+	  int W=graphProperties->width, H=graphProperties->height;
 
 	  seed=rng_init( x, (y+H-1)%H );
-	  deviceState->spins[1]=(urng(seed)>>31) ? +1 : -1;
-	  deviceState->times[1]=erng(seed);
+	  deviceState->spins[1]=(urng(&seed)>>31) ? +1 : -1;
+	  deviceState->times[1]=erng(&seed);
 
 	  seed=rng_init( (x+1)%W, y );
-	  deviceState->spins[2]=(urng(seed)>>31) ? +1 : -1;
-	  deviceState->times[2]=erng(seed);
+	  deviceState->spins[2]=(urng(&seed)>>31) ? +1 : -1;
+	  deviceState->times[2]=erng(&seed);
 
 	  seed=rng_init( x, (y+1)%H );
-	  deviceState->spins[3]=(urng(seed)>>31) ? +1 : -1;
-	  deviceState->times[3]=erng(seed);
+	  deviceState->spins[3]=(urng(&seed)>>31) ? +1 : -1;
+	  deviceState->times[3]=erng(&seed);
 
 	  seed=rng_init( (x+W-1)%W, y );
-	  deviceState->spins[4]=(urng(seed)>>31) ? +1 : -1;
-	  deviceState->times[4]=erng(seed);
+	  deviceState->spins[4]=(urng(&seed)>>31) ? +1 : -1;
+	  deviceState->times[4]=erng(&seed);
 
 	  // Final one is this node
 	  seed=rng_init( x, y );
-	  deviceState->spins[0]=(urng(seed)>>31) ? +1 : -1;
-	  deviceState->times[0]=erng(seed);
+	  deviceState->spins[0]=(urng(&seed)>>31) ? +1 : -1;
+	  deviceState->times[0]=erng(&seed);
 	  deviceState->rng=seed; // Store the rng state back
 
 	  deviceState->spin=deviceState->spins[0];
@@ -133,28 +130,25 @@
 
 	  deviceState->rts = (deviceState->times[0] >= graphProperties->endTime) ? 0 : RTS_FLAG_out;
 	  for(unsigned i=1; i<5; i++){
-	    handler_log(3, "   times[%d] = %g", deviceState->times[i]);
+	    handler_log(3, "   times[%d] = %g", i, deviceState->times[i]);
 	    if(deviceState->times[0] >= deviceState->times[i]){
               deviceState->rts=0; // We are not the earliest cell in neighbourhood
 	    }
 	  }
 
 	  ]]></OnInit>
-        <InputPin name="__print__" messageTypeId="__print__">
-          <OnReceive><![CDATA[
+      <InputPin name="__print__" messageTypeId="__print__">
+        <OnReceive><![CDATA[
 	  handler_log(0, "ready=%x, times={%g,%g,%g,%g,%g}",
 	    deviceState->rts,
 	    deviceState->times[0], deviceState->times[1], deviceState->times[2], deviceState->times[3], deviceState->times[4]);
 	  ]]></OnReceive>
-        </InputPin>
-        <InputPin name="in" messageTypeId="update">
-          <Properties>
-            <Scalar name="direction" type="uint32_t"/>
-          </Properties>
-          <State>
-            <Scalar name="time" type="float" default="0.0"/>
-          </State>
-          <OnReceive><![CDATA[
+      </InputPin>
+      <InputPin name="in" messageTypeId="update">
+        <Properties>
+          <Scalar name="direction" type="uint32_t"/>
+        </Properties>
+        <OnReceive><![CDATA[
 
 	  if(message->time >= deviceState->times[edgeProperties->direction]){
   	    deviceState->spins[edgeProperties->direction]=message->spin;
@@ -163,7 +157,7 @@
 	    handler_log(4, "from %d, new_time = %g, new_spin  %d", edgeProperties->direction, message->time, message->spin);
 	  }
 
-	  deviceState->rts = (deviceState->times[0] >= graphProperties->endTime) ? 0 : RTS_FLAG_out;
+	  deviceState->rts = RTS_FLAG_out;
 
 	  for(unsigned i=1; i<5; i++){
             if(deviceState->times[i] < deviceState->times[0]){
@@ -173,9 +167,9 @@
 	  }
 
 	  ]]></OnReceive>
-        </InputPin>
-        <OutputPin name="out" messageTypeId="update">
-          <OnSend><![CDATA[
+      </InputPin>
+      <OutputPin name="out" messageTypeId="update" indexed="false">
+        <OnSend><![CDATA[
 	  deviceState->rts=0;
 
 
@@ -187,8 +181,8 @@
 	  }
 
 	  float prevTime=deviceState->times[0];
-	  auto prevSpin=deviceState->spins[0];
-          chooseNextEvent(graphProperties->probabilities, deviceState->rng, deviceState->spins, deviceState->times);
+	  int prevSpin=deviceState->spins[0];
+          chooseNextEvent(graphProperties->probabilities, &deviceState->rng, deviceState->spins, deviceState->times);
           message->spin = deviceState->spins[0];
 	  message->time = deviceState->times[0];
 
@@ -202,17 +196,17 @@
 	  deviceState->rts = RTS_FLAG_out;
 	  for(unsigned i=1; i<5; i++){
             if(deviceState->times[0] > deviceState->times[i]){
-	      handler_log(4, "  time[%d] = %g < time[0] = %g", i, deviceState->times[i], deviceState->times[0]);
-	      deviceState->rts = 0;
+	            handler_log(4, "  time[%d] = %g < time[0] = %g", i, deviceState->times[i], deviceState->times[0]);
+	            deviceState->rts = 0;
             }
 	    }
 	    handler_log(3, "sendAgain = %x", deviceState->rts);
 	  ]]></OnSend>
-        </OutputPin>
-        <ReadyToSend><![CDATA[
+      </OutputPin>
+      <ReadyToSend><![CDATA[
 	*readyToSend = deviceState->rts;
 	]]></ReadyToSend>
-      </DeviceType>
-    </DeviceTypes>
-  </GraphType>
+    </DeviceType>
+  </DeviceTypes>
+</GraphType>
 </Graphs>

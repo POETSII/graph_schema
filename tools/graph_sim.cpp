@@ -186,7 +186,11 @@ int main(int argc, char *argv[])
     fprintf(stderr, "Inited\n");
 
     unsigned long steps=0;
-    while(strategy->step() && steps < maxEvents){
+    while(strategy->step()){
+        if(steps >= maxEvents){
+            fprintf(stderr, "maxEvents exceeded.\n");
+            break;
+        }
         //fprintf(stderr, "Stepped\n");
         ++steps;
     }

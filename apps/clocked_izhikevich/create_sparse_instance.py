@@ -21,12 +21,16 @@ Ne=80
 Ni=20
 K=20
 
+max_time=1000
+
 if len(sys.argv)>1:
     Ne=int(sys.argv[1])
 if len(sys.argv)>2:
     Ni=int(sys.argv[2])
 if len(sys.argv)>3:
     K=int(sys.argv[3])
+if len(sys.argv)>4:
+    max_time=int(sys.argv[4])
 
 N=Ne+Ni
 K=min(N,K)
@@ -37,7 +41,7 @@ clockType=graphType.device_types["clock"]
 
 instName="sparse_{}_{}_{}".format(Ne,Ni,K)
 
-properties=None
+properties={"max_t":max_time}
 res=GraphInstance(instName, graphType, properties)
 
 clock=DeviceInstance(res, "clock", clockType, {"neuronCount":N})

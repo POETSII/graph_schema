@@ -48,10 +48,15 @@ CLOCK_TREE_FILTERS = \
 	--bind-dev "branch" "state" "status" "color" "'gray' if value==0 else 'green' if value==1 else 'red'" \
 	--bind-dev "leaf" "rts" "-" "color" "'red' if value>0 else 'green'" \
 
+ifeq ($(NO_APP_TESTS),)
+
+
 $(eval $(call clock_tree_instance_template,8_3,50,$(CLOCK_TREE_FILTERS)))
 $(eval $(call clock_tree_instance_template,8_2,50,$(CLOCK_TREE_FILTERS)))
 $(eval $(call clock_tree_instance_template,6_3,50,$(CLOCK_TREE_FILTERS)))
 $(eval $(call clock_tree_instance_template,4_4,50,$(CLOCK_TREE_FILTERS),1))
+
+endif
 
 clock_tree_tests : $(ALL_CLOCK_TREE_TESTS)
 

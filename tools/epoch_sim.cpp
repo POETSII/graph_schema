@@ -451,14 +451,32 @@ struct EpochSim
 
   void do_hardware_idle()
   {
+    auto barrierId="b"+std::to_string(nextSeqUnq());
+
     fprintf(stderr, "onHardwareIdle\n");
     for(auto &d : m_devices){
-
       if(!d.type->isExternal()){
-        assert(!m_log); //Need to add logging for hardware idle
         ReceiveOrchestratorServicesImpl services{logLevel, stderr, d.name, "Idle handler", m_onExportKeyValue, m_onDeviceExit, m_onCheckpoint  };
         d.type->onHardwareIdle(&services, m_graphProperties.get(), d.properties.get(), d.state.get()  );
         d.readyToSend = d.type->calcReadyToSend(&services, m_graphProperties.get(), d.properties.get(), d.state.get());
+
+        if(m_log){
+          auto id=nextSeqUnq();
+          auto idStr=std::to_string(id);
+          m_log->onHardwareIdleEvent(
+            idStr.c_str(),
+            0.0,
+            0.0,
+            std::vector<std::pair<bool,std::string> >(), // No tags
+            d.type,
+            d.name,
+            d.readyToSend,
+            id,
+            std::vector<std::string>(),
+            d.state,
+            barrierId.c_str()
+          );
+        }
       }
     }
   }
@@ -987,6 +1005,10 @@ int main(int argc, char *argv[])
         graph.writeSnapshot(snapshotWriter.get(), i, snapshotSequenceNum);
         nextSnapshot += snapshotDelta;
         snapshotSequenceNum++;
+      }
+
+      if(graph.m_deviceExitCalled){
+        exit(graph.m_deviceExitCode);
       }
 
       if(running){

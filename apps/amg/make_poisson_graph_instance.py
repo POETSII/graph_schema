@@ -60,7 +60,7 @@ def make_poisson_graph_instance(instName,n,m):
                 "omega":L.omega
             }
             meta=None
-            di=DeviceInstance(res, diName, leafType, props, meta)
+            di=DeviceInstance(res, diName, leafType, props, None, meta)
             fineNodes.append(di)
             res.add_device_instance(di)
         
@@ -110,7 +110,7 @@ def make_poisson_graph_instance(instName,n,m):
                 "omega":L.omega
             }
             meta=None
-            di=DeviceInstance(res, diName, branchType, props, meta)
+            di=DeviceInstance(res, diName, branchType, props, None, meta)
             fineNodes.append(di)
             res.add_device_instance(di)
         
@@ -154,7 +154,7 @@ def make_poisson_graph_instance(instName,n,m):
             "inv_Adiag" : 1.0 / L.A[0,0]
         }
         meta=None
-        di=DeviceInstance(res, diName, rootType, props, meta)
+        di=DeviceInstance(res, diName, rootType, props, None, meta)
         res.add_device_instance(di)
         
         return [di]

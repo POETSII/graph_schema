@@ -433,11 +433,14 @@ class MessageType(object):
         self.message=message
         self.metadata=metadata
         self.numid=numid
-        size = self._checkMessageSize(self.message)
-        if size > 44:
-            raise RuntimeError("ERROR: Message \"" + self.id + "\" has a payload that's too large.\n"
-                             + "A message header is 20 bytes, and this payload is " + str(size) + " bytes.\n"
-                             + "The total is therefore " + str(20+size) + " bytes, and must be a maximum of 64")
+        # DT10: Removing this check for now, as it is over-specialised for POETS ecosystem.
+        # For other hardware impls it is wrong, and also stops simulation of apps with
+        # larger messages which are legal. 
+        # size = self._checkMessageSize(self.message)
+        # if size > 44:
+        #    raise RuntimeError("ERROR: Message \"" + self.id + "\" has a payload that's too large.\n"
+        #                     + "A message header is 20 bytes, and this payload is " + str(size) + " bytes.\n"
+        #                     + "The total is therefore " + str(20+size) + " bytes, and must be a maximum of 64")
         self.documentation=documentation
 
     def _checkMessageSize(self, payload):
@@ -488,6 +491,8 @@ class Pin(object):
         ## should be considered deprecated
         assert not is_application
         self.is_application=False
+
+        self.index=None # Will be hooked up by the parent
 
 
 class InputPin(Pin):
@@ -551,9 +556,11 @@ class DeviceType(object):
         if message_type != self.parent.message_types[message_type.id]:
             raise GraphDescriptionError("Incorrect message type object {} on pin {} of device type {}".format(message_type.id,name,self.id))
         p=InputPin(self, name, self.parent.message_types[message_type.id], is_application, properties, state, metadata, receive_handler, source_file, source_line, documentation)
+        index=len(self.inputs_by_index)
         self.inputs[name]=p
         self.inputs_by_index.append(p)
         self.pins[name]=p
+        p.index=index
 
     def add_output(self,name,message_type,is_application, metadata,send_handler,source_file=None,source_line=None,documentation=None, is_indexed=False):
         if name in self.pins:
@@ -563,9 +570,11 @@ class DeviceType(object):
         if message_type != self.parent.message_types[message_type.id]:
             raise GraphDescriptionError("Incorrect message type object {} on pin {} of device type {}".format(message_type.id,name,self.id))
         p=OutputPin(self, name, self.parent.message_types[message_type.id], is_application, metadata, send_handler, source_file, source_line, documentation, is_indexed)
+        index=len(self.outputs_by_index)
         self.outputs[name]=p
         self.outputs_by_index.append(p)
         self.pins[name]=p
+        p.index=index
 
 
 class GraphType(object):
@@ -660,8 +669,10 @@ class DeviceInstance(object):
 
 class EdgeInstance(object):
 
-    def __init__(self,parent,dst_device,dst_pin,src_device,src_pin,properties=None,metadata=None,send_index=None):
-        # type : (GraphInstance, DeviceInstance, Union[str,InputPin], DeviceInstance, Union[str,OutputPin], Optional[Dict], Optional[Dict] ) -> None
+    # Upgrade note: The state argument added as keyword only, as it is obscure, and experience from adding state to
+    # DeviceInstance caused a lot of problems
+    def __init__(self,parent,dst_device,dst_pin,src_device,src_pin,properties=None,metadata=None,send_index=None, *, state=None):
+        # type : (GraphInstance, DeviceInstance, Union[str,InputPin], DeviceInstance, Union[str,OutputPin], Optional[Dict], Optional[Dict], Optional[Dict] ) -> None
         self.parent=parent
 
         if isinstance(dst_pin,str):
@@ -697,6 +708,7 @@ class EdgeInstance(object):
         self.dst_pin=dst_pin
         self.src_pin=src_pin
         self.properties=properties
+        self.state=state
         self.metadata=metadata
         self.send_index=send_index;
 

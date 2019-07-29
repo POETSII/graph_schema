@@ -623,6 +623,7 @@ def load_edge_instance(graph,eiNode):
     assert src_pin_name in src_device.device_type.outputs
 
     properties=None
+    state=None
     metadata=None
     for n in eiNode: # walk over children rather than using find. Better performance
         if n.tag==_ns_P:
@@ -634,13 +635,22 @@ def load_edge_instance(graph,eiNode):
             value=json.loads("{"+n.text+"}")
             assert(spec.is_refinement_compatible(value))
             properties=spec.expand(value)
+        elif n.tag==_ns_S:
+            assert not state
+
+            spec=dst_device.device_type.inputs[dst_pin_name].state
+            assert spec is not None, "Can't have state value for edge with no state spec"
+
+            value=json.loads("{"+n.text+"}")
+            assert(spec.is_refinement_compatible(value))
+            state=spec.expand(value)
         elif n.tag==_ns_M:
             assert not metadata
             metadata=json.loads("{"+n.text+"}")
         else:
             assert "Unknown tag type in EdgeI"
 
-    return EdgeInstance(graph,dst_device,dst_pin_name,src_device,src_pin_name,properties,metadata, send_index)
+    return EdgeInstance(graph,dst_device,dst_pin_name,src_device,src_pin_name,properties,metadata, send_index, state=state)
 
 def load_graph_instance(graphTypes, graphNode, namespace=None, loadDocumentation=False):
     if namespace==None:

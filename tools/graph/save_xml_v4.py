@@ -211,7 +211,7 @@ def save_edge_instance(parent, ei):
     state=None
     if ei.dst_pin.state != None:
         state = ei.dst_pin.state.create_default()
-    if hasattr(ei, "state"):
+    if hasattr(ei, "state") and ei.state is not None:
         state=ei.dst_pin.state.expand(state)
     save_typed_struct_instance_attrib(n, "S", ei.dst_pin.state, state)
     
@@ -279,37 +279,50 @@ def save_graph_instance(parent, graph):
     return gn
 
 
-def save_graph(graph,dst):
+def save_graph(graph:Union[GraphType,GraphInstance], dst):
+    if isinstance(dst,str):
+        if dst.endswith(".gz"):
+            import gzip
+            with gzip.open(dst, 'wt', compresslevel=6) as dstFile:
+                return save_graph(graph,dstFile)
+        else:
+            with open(dst,"wt") as dstFile:
+                assert not isinstance(dstFile,str)
+                return save_graph(graph,dstFile)
+
+    ####################################################
+    ## dst is some kind of stream
+
     nsmap = { None : "https://poets-project.org/schemas/virtual-graph-schema-v4" }
     root=etree.Element(toNS("p:Graphs"), nsmap=nsmap)
     root.attrib["formatMinorVersion"]="0"
 
-    if dst is str:
-        if dst.endswith(".gz"):
-            import gzip
-            with gzip.open(dst, 'wt', compresslevel=6) as dstFile:
-                save_graph(graph,dstFile)
-        else:
-            with open(dst,"wt") as dstFile:
-                assert not isinstance(dstFile,str)
-                save_graph(graph,dstFile)
+
+    if isinstance(graph,GraphInstance):
+        gt=graph.graph_type
+        gi=graph
     else:
-        sys.stderr.write("save_graph: Constructing graph type tree\n")
-        save_graph_type(root,graph.graph_type)
+        assert isinstance(graph,GraphType)
+        gt=graph
+        gi=None
+
+    sys.stderr.write("save_graph: Constructing graph type tree\n")
+    save_graph_type(root,gt)
+    if gi is not None:
         sys.stderr.write("save_graph: Constructing graph inst tree\n")
-        save_graph_instance(root,graph)
+        save_graph_instance(root,gi)
 
-        sys.stderr.write("save_graph: writing\n")
-        # The wierdness is because stdout is in text mode, so we send
-        # it via a string. Ideally it would write it straight to the file...
-        tree = etree.ElementTree(root)
-        #s=etree.tostring(root,pretty_print=True,xml_declaration=True).decode("utf8")
-        #dst.write(s)
+    sys.stderr.write("save_graph: writing\n")
+    # The wierdness is because stdout is in text mode, so we send
+    # it via a string. Ideally it would write it straight to the file...
+    tree = etree.ElementTree(root)
+    #s=etree.tostring(root,pretty_print=True,xml_declaration=True).decode("utf8")
+    #dst.write(s)
 
-        # TODO : Fix this!
-        if (sys.version_info > (3, 0)):
-            # Python3
-            tree.write(dst.buffer, pretty_print=True, xml_declaration=True)
-        else:
-            #Python2
-            tree.write(dst, pretty_print=True, xml_declaration=True)
+    # TODO : Fix this!
+    if (sys.version_info > (3, 0)):
+        # Python3
+        tree.write(dst.buffer, pretty_print=True, xml_declaration=True)
+    else:
+        #Python2
+        tree.write(dst, pretty_print=True, xml_declaration=True)

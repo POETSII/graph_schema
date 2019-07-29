@@ -575,6 +575,12 @@ struct QueueSim
   int m_exitCode=0;
   bool m_exitCodeSet=false;
 
+  std::function<void (const char *, uint32_t,uint32_t)> onExportKeyValue=[=](const char *, uint32_t, uint32_t)
+  {
+    fprintf(stderr, "key value not supported in queue sim.\n");
+    throw std::runtime_error("key value not supported in queue sim.");
+  };
+
   std::function<void(const char*, int)> onHandlerExit=[=](const char *device, int code){
     fprintf(stderr, "Device exit from %s, code =%d\n", device, code);
     onExit(device, code);
@@ -612,6 +618,7 @@ struct QueueSim
   }
 
   void onExit(const char *device, int code){
+    std::unique_lock<std::mutex> lk(m_idleMutex);
     if(!m_exitCodeSet){
       m_exitCodeSet=true;
       m_exitCode=code;
@@ -636,20 +643,10 @@ struct QueueSim
       double now=getNow();
       
       if(logLevel>3){
-        fprintf(stderr, "  queue %u: trying __init__ on %p=%s, type=%p\n", queue.index, device, device->id, device->type.get());
+        fprintf(stderr, "  queue %u: init on %p=%s, type=%p\n", queue.index, device, device->id, device->type.get());
       }
-      auto init=device->type->getInput("__init__");
-      if(!init){
-        if(logLevel>3){
-          fprintf(stderr,"  No init on %s\n", device->id);
-        }
-      }else{
-        if(logLevel>3){
-          fprintf(stderr,"  Init %s\n", device->id);
-        }
 
-        init->onReceive(&services, graphPropertiesPtr, device->properties.get(), device->state.get(), 0, 0, 0);
-      }
+      device->type->init(&services, graphPropertiesPtr, device->properties.get(), device->state.get());
       device->rtsFlags = device->type->calcReadyToSend( &services, graphPropertiesPtr, device->properties.get(), device->state.get());
       if(device->rtsFlags){
         device->readyIndex=lmo(device->rtsFlags);
@@ -807,6 +804,7 @@ struct QueueSim
 
   virtual uint64_t onDeviceInstance(
     uint64_t gId, const DeviceTypePtr &dt, const std::string &id, const TypedDataPtr &deviceProperties,
+    const TypedDataPtr &deviceState,
     rapidjson::Document &&_metadata
    ) override
   {
@@ -833,12 +831,11 @@ struct QueueSim
         owner=chooseOwner(pid);
       }      
       
-      TypedDataPtr state=dt->getStateSpec()->create();
       device_t d;
       d.id=pid;
       d.type=dt;
       d.properties=deviceProperties;
-      d.state=state;
+      d.state=deviceState;
       d.owner=owner;
       d.outputCount=dt->getOutputCount();
       d.rtsFlags=0;
@@ -849,6 +846,10 @@ struct QueueSim
         out.id=intern(pid.c_str());
         out.spec=out.pin->getMessageType()->getMessageSpec();
         d.outputs.push_back(out);
+
+        if(out.pin->isIndexedSend()){
+          throw std::runtime_error("Indexed sends not yet supported by queue_sim.");
+        }
       }
       d.readyIndex=-1;
       d.isOnReady=false;
@@ -873,7 +874,7 @@ struct QueueSim
     return index;
   }
 
-  void onEdgeInstance(uint64_t gId, uint64_t dstDevIndex, const DeviceTypePtr &dstDevType, const InputPinPtr &dstInput, uint64_t srcDevIndex, const DeviceTypePtr &srcDevType, const OutputPinPtr &srcOutput, const TypedDataPtr &properties, rapidjson::Document &&) override
+  void onEdgeInstance(uint64_t gId, uint64_t dstDevIndex, const DeviceTypePtr &dstDevType, const InputPinPtr &dstInput, uint64_t srcDevIndex, const DeviceTypePtr &srcDevType, const OutputPinPtr &srcOutput, int sendIndex, const TypedDataPtr &properties, rapidjson::Document &&) override
   {
     device_t *dstDevice=m_devices.at(dstDevIndex);
     device_t *srcDevice=m_devices.at(srcDevIndex);
@@ -910,28 +911,6 @@ struct QueueSim
     out.fanout++;
   }
 
-
-  void writeSnapshot(SnapshotWriter *dst, double orchestratorTime, unsigned sequenceNumber)
-  {
-    dst->startSnapshot(m_graphType, m_id.c_str(), orchestratorTime, sequenceNumber);
-
-    throw std::runtime_error("Not implemented.");
-    
-    /*
-    for(auto &dev : m_devices){
-        dst->writeDeviceInstance(dev.type, dev.name, dev.state, dev.readyToSend.get());
-  for(unsigned i=0; i<dev.inputs.size(); i++){
-    const auto &et=dev.type->getInput(i)->getEdgeType();
-    for(auto &slot : dev.inputs[i]){
-      dst->writeEdgeInstance(et, slot.id, slot.state, slot.firings, 0, 0);
-      slot.firings=0;
-    }
-  }
-  }*/
-    
-    dst->endSnapshot();
-  }
-
   double m_statsSends=0;
   unsigned m_epoch=0;
 
@@ -943,8 +922,6 @@ void usage()
   fprintf(stderr, "queue_sim [options] sourceFile?\n");
   fprintf(stderr, "\n");
   fprintf(stderr, "  --log-level n\n");
-  fprintf(stderr, "  --snapshots interval destFile\n");
-  fprintf(stderr, "  --prob-send probability\n");
   fprintf(stderr, "  --log-events destFile\n");
   fprintf(stderr, "  --threads count (default is number of cpus).\n");
   exit(1);
@@ -975,9 +952,6 @@ int main(int argc, char *argv[])
 
     std::string srcFilePath="-";
 
-    std::string snapshotSinkName;
-    unsigned snapshotDelta=0;
-
     unsigned statsDelta=1;
 
     std::string logSinkName;
@@ -999,14 +973,6 @@ int main(int argc, char *argv[])
         }
         logLevel=strtoul(argv[ia+1], 0, 0);
         ia+=2;
-      }else if(!strcmp("--snapshots",argv[ia])){
-        if(ia+2 >= argc){
-          fprintf(stderr, "Missing two arguments to --snapshots interval destination \n");
-          usage();
-        }
-        snapshotDelta=strtoul(argv[ia+1], 0, 0);
-        snapshotSinkName=argv[ia+2];
-        ia+=3;
       }else if(!strcmp("--log-events",argv[ia])){
         if(ia+1 >= argc){
           fprintf(stderr, "Missing two arguments to --log-events destination \n");
@@ -1068,11 +1034,6 @@ int main(int argc, char *argv[])
       fprintf(stderr, "Loaded\n");
     }
 
-    std::unique_ptr<SnapshotWriter> snapshotWriter;
-    if(snapshotDelta!=0){
-      snapshotWriter.reset(new SnapshotWriterToFile(snapshotSinkName.c_str()));
-    }
-
     if(nQueues==1){
       graph.m_busyCount++;
       graph.loop(0);
@@ -1094,6 +1055,10 @@ int main(int argc, char *argv[])
 
     if(logLevel>1){
       fprintf(stderr, "Done\n");
+    }
+
+    if(graph.m_exitCodeSet){
+      return graph.m_exitCode;
     }
 
   }catch(std::exception &e){

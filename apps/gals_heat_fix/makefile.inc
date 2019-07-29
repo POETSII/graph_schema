@@ -49,6 +49,8 @@ gals_heat_fix_FILTERS_TIME = \
 gals_heat_fix_FILTERS_VALUE = \
   --bind-dev "cell" "state" "v" "color" "heat(-20000000, +20000000, value)"
 
+ifeq ($(NO_APP_TESTS),)
+
 
 $(eval $(call gals_heat_fix_instance_template,4,1,100,$(gals_heat_fix_FILTERS_VALUE)))
 $(eval $(call gals_heat_fix_instance_template,9,1,100,$(gals_heat_fix_FILTERS_VALUE)))
@@ -58,6 +60,7 @@ $(eval $(call gals_heat_fix_instance_template,32,10,10000,$(gals_heat_fix_FILTER
 # Needs to be manually rendered with graph_to_field
 #$(eval $(call gals_heat_fix_instance_template,128,200,50000,$(gals_heat_fix_FILTERS_VALUE)))
 
+endif
 
 gals_heat_fix_tests : $(ALL_gals_heat_fix_TESTS)
 

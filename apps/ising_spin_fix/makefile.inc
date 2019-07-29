@@ -52,6 +52,9 @@ endef
 ising_spin_fix_FILTERS = \
 	--bind-dev "cell" "state" "spin" "color" "blend_colors( (255,255,0), (255,0,255), -1, +1, value)"
 
+ifeq ($(NO_APP_TESTS),)
+
+
 $(eval $(call ising_spin_fix_instance_template,3_1,50,$(ising_spin_fix_FILTERS)))
 $(eval $(call ising_spin_fix_instance_template,16_2,50,$(ising_spin_fix_FILTERS)))
 $(eval $(call ising_spin_fix_instance_template,32_1,50,$(ising_spin_fix_FILTERS)))
@@ -60,6 +63,7 @@ $(eval $(call ising_spin_fix_instance_template,40_0.5,50,$(ising_spin_fix_FILTER
 # Too big to render as a graph. Render manually using render_graph_to_field
 #$(eval $(call ising_spin_fix_instance_template,256_0.5,50,$(ising_spin_fix_FILTERS)))
 
+endif
 
 ising_spin_fix_tests : $(ALL_ising_spin_fix_TESTS)
 

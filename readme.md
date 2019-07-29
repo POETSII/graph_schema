@@ -12,7 +12,7 @@ This repository is intended to describe the format for graphs via:
   detailed validation, as well as providing application independent ways of
   working with graphs.
 
-- Examples : Compliant graph examples.
+- Applications : Compliant applications and graph generators.
 
 There will be many different kinds of graphs used, but for the moment
 this repository focusses on _virtual_ graphs, i.e. graphs which do
@@ -22,6 +22,13 @@ other graphs could also be added here, but that is up for discussion.
 
 The policy is that things should not be merged to master
 unless `make test` works.
+
+Current TODO list
+-----------------
+
+- Add externals to epoch_sim
+- Add externals to graph_sim
+- Correctly hook up __halt__ if it is present (then deprecate fake_handler_exit)
 
 Version 4 features
 ------------------
@@ -718,8 +725,14 @@ You have three main tools in your debugging tool-box:
 
 If you're more dedicated/desperate you can also bring to bear some more advanced methods:
 
-4 - Checkpointing against predicted device state at key points.
+4 - Checkpointing against predicted device state at key points. There used to
+    be support for this in graph_schema, but it was removed as part of the
+    standardisation for v3 (probably a mistake).
 
-5 - Model checking. Not discussed here.
+5 - Model checking. There is a tool called 'bin/hash_sim2' which will perform model
+    checking of a graph using a depth-first search. While this tool can be very
+    useful, you have to deal with the standard model checking problems of state
+    explosion. Probably you'll need to adapt your graph to reduce the state-space
+    and encourage merging of states, and you might need to hack the simulator a bit.
 
 5 - Formal methods. Not discussed here.

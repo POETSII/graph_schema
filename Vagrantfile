@@ -15,7 +15,7 @@ Vagrant.configure(2) do |config|
 
   # Every Vagrant development environment requires a box. You can search for
   # boxes at https://atlas.hashicorp.com/search.
-  config.vm.box = "ubuntu/xenial64"
+  config.vm.box = "ubuntu/bionic64"
 
   # Disable automatic box update checking. If you disable this, then
   # boxes will only be checked for updates when the user runs
@@ -57,17 +57,12 @@ Vagrant.configure(2) do |config|
   #   # Display the VirtualBox GUI when booting the machine
   #   vb.gui = true
   #
-  vcpu = Etc.nprocessors > 4 ? 4 : ( Etc.nprocessors > 1 ? Etc.nprocessors - 1 : 1 )
-   
-   vb.cpus = vcpu
+  hcpu = Etc.nprocessors
+  vcpu = hcpu > 4 ? 4 : ( hcpu > 1 ? hcpu - 1 : 1 )
+  vb.cpus = vcpu
   
    # Customize the amount of memory on the VM:
-   # 1  hcpu -> 1 vcpu : 5GB
-   # 2  hcpu -> 1 vcpu : 5GB
-   # 3  hcpu -> 2 vcpu : 6GB
-   # 4  hcpu -> 3 vcpu : 7GB
-   # 5+ hcpu -> 4 vcpu : 8GB
-    vb.memory = 4000 + vcpu * 1000     
+   vb.memory = 3000     
   
    # If clock drifts more than 500ms, then force it (instead of smooth adjust)
    vb.customize ["guestproperty","set", :id, "/VirtualBox/GuestAdd/VBoxService/--timesync-set-threshold", "500"]
@@ -81,6 +76,6 @@ Vagrant.configure(2) do |config|
   # Enable provisioning with a shell script. Additional provisioners such as
   # Puppet, Chef, Ansible, Salt, and Docker are also available. Please see the
   # documentation for more information about their specific syntax and use.
-  config.vm.provision "shell", path: "provision_ubuntu16.sh"
+  config.vm.provision "shell", path: "provision_ubuntu18.sh"
 
 end

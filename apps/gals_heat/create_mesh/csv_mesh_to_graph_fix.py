@@ -111,7 +111,7 @@ for p in patches.values():
 
     hull=[ [ps[0],ps[1]] for ps in p.points ]
     meta={"x":p.centre[0], "y":p.centre[1], "hull":hull, "area":p.area, "length":p.length}
-    di=DeviceInstance(res,p.id, type, props, meta)
+    di=DeviceInstance(res,p.id, type, props, None, meta)
     nodes[p.id]=di
     res.add_device_instance(di)
     

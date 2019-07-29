@@ -739,12 +739,12 @@ public:
       fprintf(m_dst, "%s%s:%s : ", m_prefix.c_str(), m_device, m_input);
       vfprintf(m_dst, msg, args);
       fprintf(m_dst, "\n");
-      if(!strcmp("_HANDLER_EXIT_FAIL_9be65737_", msg)){
-        application_exit(1);
-      }
-      if(!strcmp("_HANDLER_EXIT_SUCCESS_9be65737_", msg)){
-        application_exit(0);
-      }
+    }
+    if(!strcmp("_HANDLER_EXIT_FAIL_9be65737_", msg)){
+      m_onApplicationExit("handler_exit(1)", 1);
+    }
+    if(!strcmp("_HANDLER_EXIT_SUCCESS_9be65737_", msg)){
+      m_onApplicationExit("handler_exit(0)", 0);
     }
   }
 
