@@ -4,13 +4,17 @@ export PYTHONPATH = tools
 
 SHELL=/bin/bash
 
+LIBXML_PKG_CONFIG_CPPFLAGS := $(shell pkg-config --cflags libxml++-2.6)
+LIBXML_PKG_CONFIG_LDLIBS := $(shell pkg-config --libs-only-l libxml++-2.6)
+LIBXML_PKG_CONFIG_LDFLAGS := $(shell pkg-config --libs-only-L --libs-only-other libxml++-2.6)
+
 CPPFLAGS += -I include -W -Wall -Wno-unused-parameter -Wno-unused-variable
-CPPFLAGS += $(shell pkg-config --cflags libxml++-2.6)
+CPPFLAGS += $(LIBXML_PKG_CONFIG_CPPFLAGS)
 CPPFLAGS += -Wno-unused-local-typedefs
 CPPFLAGS += -I providers
 
-LDLIBS += $(shell pkg-config --libs-only-l libxml++-2.6)
-LDFLAGS += $(shell pkg-config --libs-only-L --libs-only-other libxml++-2.6)
+LDLIBS += $(LIBXML_PKG_CONFIG_LDLIBS)
+LDFLAGS += $(LIBXML_PKG_CONFIG_LDFLAGS)
 
 #LDLIBS += -lboost_filesystem -lboost_system
 
@@ -47,9 +51,9 @@ endif
 ff :
 	echo $(FFMPEG)
 
-FFMPEG = $(shell which ffmpeg)
+FFMPEG := $(shell which ffmpeg)
 ifeq ($(FFMPEG),)
- FFMPEG = $(shell which avconv)
+ FFMPEG := $(shell which avconv)
 endif
 
 # TODO : OS X specific
@@ -234,7 +238,7 @@ include tools/partitioner.inc
 demos : $(ALL_DEMOS)
 
 
-all_tools : bin/print_graph_properties bin/epoch_sim bin/graph_sim
+all_tools : bin/print_graph_properties bin/epoch_sim bin/graph_sim bin/hash_sim2
 
 #############################
 # Most testing of graphs is done with epoch_sim. Give graph_sim some exercise here
@@ -255,10 +259,15 @@ tt :
 
 validate-virtual : $(foreach t,$(VIRTUAL_ALL_TESTS),validate-virtual/$(t) output/virtual/$(t).svg output/virtual/$(t).graph.cpp output/virtual/$(t).graph.so)
 
-test_list :
-	echo $(ALL_TESTS)
+.PHONY : test
 
-test : all_tools $(ALL_TESTS)
+test :
+	@>&2 echo "# Cleaning directory"
+	@make clean 2> /dev/null > /dev/null
+	@>&2 echo "# Building tools and providers"
+	@make -j4 -k all_tools all_providers 2>/dev/null > /dev/null
+	@>&2 echo "# Running bats"
+	@bats -t -r .
 
 softswitch : $(ALL_SOFTSWITCH)
 	echo $(ALL_SOFTSWITCH)

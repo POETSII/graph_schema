@@ -49,6 +49,9 @@ firefly_sync_FILTERS_VALUE = \
 
 # DT10 : I don't think these are actually active. Delete all of this?
 
+ifeq ($(NO_APP_TESTS),)
+
+
 #$(eval $(call firefly_sync_instance_template,4,1,100,$(firefly_sync_FILTERS_VALUE)))
 #$(eval $(call firefly_sync_instance_template,9,1,100,$(firefly_sync_FILTERS_VALUE)))
 #$(eval $(call firefly_sync_instance_template,16,1,100,$(firefly_sync_FILTERS_TIME)))
@@ -57,6 +60,7 @@ firefly_sync_FILTERS_VALUE = \
 # Needs to be manually rendered with graph_to_field
 ##$(eval $(call firefly_sync_instance_template,128,200,50000,$(firefly_sync_FILTERS_VALUE)))
 
+endif
 
 firefly_sync_tests : $(ALL_firefly_sync_TESTS)
 

@@ -17,6 +17,8 @@ ALL_amg_TESTS += demos/amg/amg_poisson_$1.snap
 
 endef
 
+ifeq ($(NO_APP_TESTS),)
+
 $(eval $(call amg_poisson_instance_template,2_2,$(amg_FILTERS)))
 $(eval $(call amg_poisson_instance_template,3_3,$(amg_FILTERS)))
 $(eval $(call amg_poisson_instance_template,4_4,$(amg_FILTERS)))
@@ -25,6 +27,8 @@ $(eval $(call amg_poisson_instance_template,4_3,$(amg_FILTERS)))
 $(eval $(call amg_poisson_instance_template,8_8,$(amg_FILTERS)))
 #$(eval $(call amg_poisson_instance_template,16_16,$(amg_FILTERS)))
 $(eval $(call amg_poisson_instance_template,32_32,$(amg_FILTERS)))
+
+endif
 
 amg_tests : $(ALL_amg_TESTS)
 

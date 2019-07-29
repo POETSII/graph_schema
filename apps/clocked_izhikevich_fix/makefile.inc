@@ -39,12 +39,16 @@ clocked_izhikevich_fix_FILTERS = \
 
 #   --bind-edge "pulse" "firings" "relative" "color" "blend_colors( (255,0,0,0), (255,0,0,255), 0, 65536, value)" 
 
+
+ifeq ($(NO_APP_TESTS),)
+
 $(eval $(call clocked_izhikevich_fix_instance_template,8_2_10,100000,$(clocked_izhikevich_fix_FILTERS)))
 
 $(eval $(call clocked_izhikevich_fix_instance_template,50_10_60_100,10000,$(clocked_izhikevich_fix_FILTERS)))
 $(eval $(call clocked_izhikevich_fix_instance_template,80_20_100_100,10000,$(clocked_izhikevich_fix_FILTERS)))
 $(eval $(call clocked_izhikevich_fix_instance_template,200_50_50_100,10000,$(clocked_izhikevich_fix_FILTERS)))
 
+endif
 
 clocked_izhikevich_fix_tests : $(ALL_clocked_izhikevich_fix_TESTS)
 

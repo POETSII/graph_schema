@@ -42,9 +42,12 @@ endef
 storm_FILTERS = \
 	--bind-dev "node" "state" "credit" "color" "'gray' if value==0 else blend_colors([0,0,0],[255,0,0],0,math.log(0x10000000),math.log(value))" \
 
+ifeq ($(NO_APP_TESTS),)
 
 $(eval $(call storm_instance_template,16_4_8,$(storm_FILTERS)))
 $(eval $(call storm_instance_template,256_8_256,$(storm_FILTERS)))
+
+endif
 
 storm_tests : $(ALL_storm_TESTS)
 

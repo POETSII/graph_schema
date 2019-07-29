@@ -1,5 +1,9 @@
 load ../../tools/bats_helpers
 
+function setup {
+    make bin/epoch_sim bin/graph_sim amg_provider
+}
+
 function test_graph {
     run bin/epoch_sim $1
     [[ $status -eq 0 ]]

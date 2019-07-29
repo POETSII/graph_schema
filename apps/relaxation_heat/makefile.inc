@@ -58,6 +58,8 @@ relaxation_heat_FILTERS_TIME = \
 relaxation_heat_FILTERS_VALUE = \
   --device-type-filter cell --bind-dev "cell" "state" "currHeat" "color" "heat(-127, +127, value)"
 
+ifeq ($(NO_APP_TESTS),)
+
 
 $(eval $(call relaxation_heat_instance_template,9,1,1000,$(relaxation_heat_FILTERS_VALUE)))
 $(eval $(call relaxation_heat_instance_template,16,1,1000,$(relaxation_heat_FILTERS_TIME)))
@@ -66,6 +68,7 @@ $(eval $(call relaxation_heat_instance_template,16,1,1000,$(relaxation_heat_FILT
 
 #$(eval $(call relaxation_heat_instance_template,128,10,50000,$(relaxation_heat_FILTERS_VALUE),yes,yes))
 
+endif
 
 
 relaxation_heat_tests : $(ALL_relaxation_heat_TESTS)
