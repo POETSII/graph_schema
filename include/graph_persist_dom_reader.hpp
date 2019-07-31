@@ -102,6 +102,14 @@ TypedDataSpecPtr loadTypedDataSpec(xmlpp::Element *eTypedDataSpec)
   return std::make_shared<TypedDataSpecImpl>(elt);
 }
 
+TypedDataSpecPtr makeTypedDataSpec(
+  const std::vector<TypedDataSpecElementPtr> &members
+){
+  auto elt=makeTuple("_", members.begin(), members.end());
+
+  return std::make_shared<TypedDataSpecImpl>(elt);
+}
+
 MessageTypePtr loadMessageTypeElement(xmlpp::Element *eMessageType)
 {
   xmlpp::Node::PrefixNsMap ns;

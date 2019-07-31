@@ -4,7 +4,7 @@
 #include "rapidjson/document.h"
 
 
-#include "graph.hpp"
+#include "graph_core.hpp"
 
 #include <mutex>
 
