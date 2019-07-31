@@ -52,20 +52,22 @@ struct POEMS
     struct edge;
     struct device;
     struct message;
+    struct device_cluster;
 
     /* We want these optimised for the send case, where once a message is sent we
         have to walk the entire output edge list. We are also mostly (hopefully)
         delivering locally within the cluster.
         
-        An tradeoff is that indexed sends need to be able to jump
+        A tradeoff is that indexed sends need to be able to jump
         directly to a specific edge, so we either neeed fixed size cells,
         or an array of pointers to variable sized cells. Here we'll keep
         the edges fixed-size, and put properties/state in a side buffer*/
     struct edge{
-        device *dest_device;     // Used after data structure is built
+        device_cluster *dest_cluster; // Used on the sending side to get to the right cluster
+        device *dest_device;            // Used on the receiving side to get into the right device
         union{
             unsigned properties_then_state_offset; // Used during building of data structure
-            void *properties_then_state;  // Used after data structure is built
+            void *properties_then_state;  // Used after data structure is built on receiving side.
         };
         uint16_t is_local;       // Both devices are within the same local cluster (i.e. the same thread)
         uint16_t handler_index;  // combines device type and pin index
@@ -88,16 +90,6 @@ struct POEMS
 
     struct device
     {
-        /////////////////////////
-        // Shared amongst threads
-
-        // Assume the start is nicely aligned
-        std::atomic<message *> incoming_queue;
-        char _padding_[128-sizeof(std::atomic<message*>)];
-
-        /////////////////////////
-        // Private to thread
-
         bool active;
         unsigned device_type_index;
 
@@ -117,35 +109,6 @@ struct POEMS
         static void operator delete(void* p, unsigned extra)
         {
             ::operator delete(p);
-        }
-
-        /////////////////////////////////////////
-        // Message queue stuff
-
-        void push(message * &msg)
-        {
-            message *working=msg;
-            msg=0;
-
-            message *head=incoming_queue.load(std::memory_order_relaxed);
-            do{
-                working->next = head;               
-            }while(incoming_queue.compare_exchange_weak(head, working, std::memory_order_release, std::memory_order_relaxed));
-        }
-
-        message *pop()
-        {
-            // The weak check first allows us to early out if it doesn't
-            // look full. It can substantially improve performance when
-            // racing through empty clusters.
-            // We have an extra check in the idle convergence which is able
-            // to tell if all sent messages are received.
-            // The only slight concern is that the memory is not eventually
-            // consistent - is that even possible?
-            if(!incoming_queue.load(std::memory_order_relaxed)){
-                return nullptr;
-            }
-            return incoming_queue.exchange(nullptr, std::memory_order_acquire);
         }
     };
 
@@ -187,7 +150,7 @@ struct POEMS
                 m->next=0;
                 m->p_edge=&edge;
                 memcpy(m->payload, payload_buffer, size);
-                edge.dest_device->push(m);
+                edge.dest_cluster->push(m);
                 nonLocalMessagesSent++;
             }
         }
@@ -195,27 +158,35 @@ struct POEMS
         return true;
     }
 
-    static void try_recv(shared_pool<message>::local_pool &pool, const void *gp, device *dev, int &nonLocalMessagesReceived)
+    static void try_recv(shared_pool<message>::local_pool &pool, const void *gp, message *head, int &nonLocalMessagesReceived)
     {
-        message *head=dev->pop();
-        if(head){
+        while(head){
+            const auto *pedge=head->p_edge;
+            auto *dev=pedge->dest_device;
             dev->active=true; // Any messages mean we need to check rts at some point
-            while(head){
-                const auto &edge=*head->p_edge;
-                provider_do_recv(edge.handler_index, gp, dev->properties_then_state, edge.properties_then_state, head->payload);
-                auto curr=head;
-                head=head->next;
-                pool.free(curr);
-                nonLocalMessagesReceived++;
-            }
+            provider_do_recv(pedge->handler_index, gp, dev->properties_then_state, pedge->properties_then_state, head->payload);
+            auto curr=head;
+            head=head->next;
+            pool.free(curr);
+            nonLocalMessagesReceived++;
         }
     }
 
     struct device_cluster
     {
+        /////////////////////////
+        // Shared amongst threads
+
+        // Assume the start of struct is nicely aligned
+        std::atomic<message *> incoming_queue;
+        char _padding_[128-sizeof(std::atomic<message*>)];
+
+        /////////////////////////
+        // Private to thread
+
         std::vector<device*> devices;
-        bool active; // Is any device in the cluster currently active?
-        bool provider_do_hardware_idle; // Is there a pending hardware idle?  implies active is true.
+        bool active=false; // Is any device in the cluster currently active?
+        bool provider_do_hardware_idle=false; // Is there a pending hardware idle?  implies active is true.
         
         uint64_t nonLocalMessagesSent=0;
         uint64_t nonLocalMessagesReceived=0;
@@ -224,6 +195,41 @@ struct POEMS
         uint64_t numClusterSteps=0;
         uint64_t numNoSendClusterSteps=0;
         uint64_t numNoActivityClusterSteps=0;
+
+        device_cluster()
+            : incoming_queue(0)
+        {}
+
+                /////////////////////////////////////////
+        // Message queue stuff
+
+        void push(message * &msg)
+        {
+            message *working=msg;
+            msg=0;
+
+            message *head=incoming_queue.load(std::memory_order_relaxed);
+            do{
+                working->next = head;               
+            }while(incoming_queue.compare_exchange_weak(head, working, std::memory_order_release, std::memory_order_relaxed));
+        }
+
+        message *pop()
+        {
+            // The weak check first allows us to early out if it doesn't
+            // look full. It can substantially improve performance when
+            // racing through empty clusters (this was true when using per-device
+            // input queue, but probably still true for very large numbers of
+            // clusters).
+            // We have an extra check in the idle convergence which is able
+            // to tell if all sent messages are received.
+            // The only slight concern is that the memory is not eventually
+            // consistent - is that even possible?
+            if(!incoming_queue.load(std::memory_order_relaxed)){
+                return nullptr;
+            }
+            return incoming_queue.exchange(nullptr, std::memory_order_acquire);
+        }
     };
 
     /*
@@ -250,27 +256,30 @@ struct POEMS
                 dev->active=true;
             }
             cluster.provider_do_hardware_idle=false;
+            assert(cluster.active); // We are still active
         }
-
-        /* The only way of quickly skipping a cluster would be to have a per-cluster atomic
-            version counter which is incremented when anything is pushed into the
-            cluster. However, that require two atomic ops per inter-cluster push.
-            For most graphs with relatively even spread-out messaging that isn't needed,
-            as something will probably be active in each cluster. */
 
         int nonLocalMessagesSentDelta=0, nonLocalMessagesReceivedDelta=0;
         int localMessagesSentAndReceivedDelta=0;
+        
+        // Receiving might set interior dev->active high
+        auto *head=cluster.pop();
+        bool anyReceived=(head!=nullptr);
+        try_recv(pool, gp, head, nonLocalMessagesReceivedDelta);
+
         bool anyActive=false;
-        for(device *dev : cluster.devices)
+        if(cluster.active || anyReceived)
         {
-            // Receiving might set dev->active high
-            try_recv(pool, gp, dev, nonLocalMessagesReceivedDelta);
-            if(dev->active){
-                // This can modulate dev->active to high or low, and can also set any active
-                // flag in the cluster high due to local receives.
-                anyActive=anyActive or try_send(pool, gp, dev, nonLocalMessagesSentDelta, localMessagesSentAndReceivedDelta);
+            for(auto *dev : cluster.devices){
+                if(dev->active){
+                    // This can modulate dev->active to high or low, and can also set any active
+                    // flag in the cluster high due to local receives.
+                    anyActive=anyActive or try_send(pool, gp, dev, nonLocalMessagesSentDelta, localMessagesSentAndReceivedDelta);
+                }
             }
         }
+
+        cluster.active=anyActive;
 
         nonLocalMessagesSent=nonLocalMessagesSentDelta;
         nonLocalMessagesReceived=nonLocalMessagesReceivedDelta;
@@ -281,8 +290,6 @@ struct POEMS
         cluster.numClusterSteps++;
         cluster.numNoSendClusterSteps += (nonLocalMessagesSentDelta==0) && (localMessagesSentAndReceivedDelta==0);
         cluster.numNoActivityClusterSteps += (nonLocalMessagesSentDelta==0) && (localMessagesSentAndReceivedDelta==0) && (nonLocalMessagesReceivedDelta==0);
-        
-        cluster.active=anyActive;
     }
 
     // Target number of devices in a cluster
@@ -295,11 +302,11 @@ struct POEMS
     // Most expensive
     // thing is the idle detection atomics, but they become cheaper the
     // more work is going on.
-    unsigned m_cluster_size=1000;
+    unsigned m_cluster_size=100;
 
     const void *m_gp;
     std::vector<device*> m_devices;
-    std::vector<device_cluster> m_clusters;
+    std::vector<device_cluster*> m_clusters;
     tbb::concurrent_queue<device_cluster*> m_cluster_queue;
 
     /* Idle detection.
@@ -373,20 +380,20 @@ struct POEMS
                 // Verify that all clusters are inactive
                 uint64_t totalLocalMessages=0;
                 bool active=false;
-                for(auto &cluster : m_clusters){
-                    if(cluster.active){
+                for(auto *cluster : m_clusters){
+                    if(cluster->active){
                         active=true;
                         break;
                     }
-                    totalLocalMessages += cluster.localMessagesSentAndReceived;
+                    totalLocalMessages += cluster->localMessagesSentAndReceived;
                 }
                 if(!active){
                     // Yes! We have reach idle: all messages sent have been received, and no cluster is active
                     fprintf(stderr, "Idle: nonLocal=%llu, local=%llu\n", (unsigned long long)totalNonLocalSent, (unsigned long long)totalLocalMessages);
 
-                    for(auto &cluster : m_clusters){
-                        cluster.active=true; // Wake up the cluster
-                        cluster.provider_do_hardware_idle=true; // And indicate idle needs to be run
+                    for(auto *cluster : m_clusters){
+                        cluster->active=true; // Wake up the cluster
+                        cluster->provider_do_hardware_idle=true; // And indicate idle needs to be run
                     }
                     // And that's it!
                 }
@@ -459,8 +466,8 @@ struct POEMS
         m_idleDetectionWaiters=0;
         m_idleDetectionInactiveThreshold=2*m_clusters.size();
 
-        for(auto &cluster : m_clusters){
-            m_cluster_queue.push(&cluster);
+        for(auto *cluster : m_clusters){
+            m_cluster_queue.push(cluster);
         }
 
         nThreads=std::min(nThreads, (unsigned)m_clusters.size());
@@ -489,8 +496,8 @@ struct POEMS
                     while(!quit.load(std::memory_order_relaxed)){
                       fprintf(stderr, "Top o loop.\n");
                         unsigned sent=0, received=0;
-                        step_cluster(lpool, m_gp, m_clusters[i], sent, received);
-                        check_for_idle(nThreads, m_clusters[i].active, sent, received);
+                        step_cluster(lpool, m_gp, *m_clusters[i], sent, received);
+                        check_for_idle(nThreads, m_clusters[i]->active, sent, received);
                     }
                     fprintf(stderr, "Thread Exiting.\n");
                 }));
@@ -645,7 +652,6 @@ public:
 
     unsigned dev_P_S_size=sizeof(device)+calc_P_S_size(properties,state);
     device *dev=new (dev_P_S_size) device();
-    dev->incoming_queue.store(nullptr);
     dev->active=false;
     dev->device_type_index=provider_get_device_type_index(dt->getId().c_str());
     copy_P_S( dev->properties_then_state, properties, state );
@@ -714,33 +720,42 @@ void onEdgeInstance
       std::shuffle(devices.begin(), devices.end(), urng);
 
       unsigned nClusters=std::max(1u, unsigned(devices.size() / m_target.m_cluster_size));
-      m_target.m_clusters.resize(nClusters);
+      assert(m_target.m_clusters.empty());
+      m_target.m_clusters.reserve(nClusters);
+      for(unsigned i=0; i<nClusters; i++){
+          m_target.m_clusters.push_back(new device_cluster());
+      }
 
       std::unordered_map<device*,device_cluster*> deviceToCluster;
 
       for(unsigned i=0; i<devices.size(); i++){
           auto d=devices[i];
-          auto c=&m_target.m_clusters[i%nClusters];
+          auto c=m_target.m_clusters[i%nClusters];
           c->devices.push_back(d);
           deviceToCluster[d]=c;
       }
 
       int locals=0;
 
-      for(auto &c : m_target.m_clusters){
-          c.active=true;
-          c.provider_do_hardware_idle=false;
+      /* For space/simplicity reasons we don't maintain back edges from devices
+         back to their incoming edges. That means that to set the edge to cluster
+         binding for the destination we have to follow it from the source. */
+      for(auto *c : m_target.m_clusters){
+          c->active=true;
+          c->provider_do_hardware_idle=false;
 
-          for(auto d : c.devices){
+          for(auto d : c->devices){
               provider_do_init(d->device_type_index, m_target.m_gp, d->properties_then_state);
               d->active=true;
 
               for(auto &o : d->output_ports){
                   for(edge &e : o.edges){
-                      if( deviceToCluster[e.dest_device] == &c ){
+                      auto *dc=deviceToCluster[e.dest_device];
+                      if( dc == c ){
                           e.is_local=true;
                          locals++;
                       }
+                      e.dest_cluster=dc;
                   }
               }
           }
