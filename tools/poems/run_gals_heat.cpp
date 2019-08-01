@@ -87,6 +87,6 @@ int main()
 
     builder.onEndGraphInstance(gid);
 
-    fprintf(stderr, "Running.\n");
+    fprintf(stderr, "Running, setup=%f.\n", clock()/(double)CLOCKS_PER_SEC);
     instance.run(4);
 }

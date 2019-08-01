@@ -42,7 +42,7 @@ struct update_message_t
 using cell_in_state_t = empty_struct_tag;
 
 
-POETS_ALWAYS_INLINE void do_recv_cell_in(const void *gp, void *dp_ds, void *ep_es, const void *m)
+POETS_ALWAYS_INLINE bool do_recv_cell_in(const void *gp, void *dp_ds, void *ep_es, const void *m)
 {
     auto graphProperties=(const gals_heat_properties_t*)gp;
     auto deviceProperties=get_P<cell_properties_t,cell_state_t>(dp_ds);
@@ -70,10 +70,11 @@ POETS_ALWAYS_INLINE void do_recv_cell_in(const void *gp, void *dp_ds, void *ep_e
         deviceState->ns++;
         deviceState->na += edgeProperties->w * message->v;
     }
+    return deviceState->rts!=0;
 }
 
 
-void provider_do_recv(uint32_t handler_index, const void *gp, void *dp_ds, void *ep_es, const void *m)
+bool provider_do_recv(uint32_t handler_index, const void *gp, void *dp_ds, void *ep_es, const void *m)
 {
     switch(handler_index)
     {

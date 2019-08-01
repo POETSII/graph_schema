@@ -14,6 +14,7 @@
 #include <unordered_set>
 #include <chrono>
 
+#include <metis.h>
 #include <tbb/concurrent_queue.h>
 #include "contrib/concurrentqueue.hpp"
 
@@ -29,7 +30,10 @@ unsigned provider_get_device_type_index(const char *device_type_id);
 
 unsigned provider_get_receive_handler_index(unsigned device_type_index, unsigned input_pin_index);
 
-void provider_do_recv(uint32_t handler_index, const void *gp, void *dp_ds, void *ep_es, const void *m);
+/*! Returns false if it is guaranteed the device is no longer active.
+    Returns true if the device is active, or _might_ be active.
+*/
+bool provider_do_recv(uint32_t handler_index, const void *gp, void *dp_ds, void *ep_es, const void *m);
 
 /* This sends at most one message. Internally it calculates rts, and then
     if it finds a bit will call the handler. If nothing is rts, then it will
@@ -174,10 +178,15 @@ struct POEMS
             return 0 != (devices_active_mask[offset/64] & 1ull<<(offset%64));
         }
 
-        void set_device_active(unsigned offset)
+        void set_device_active(unsigned offset, bool isActive)
         {
             assert(offset < devices.size());
-            devices_active_mask[offset/64] |= 1ull<<(offset%64);
+            uint64_t mask=1ull<<(offset%64);
+            if(isActive){
+                devices_active_mask[offset/64] |= mask;
+            }else{
+                devices_active_mask[offset/64] &= ~mask;
+            }
         }
 
         void push(message * &msg)
@@ -201,7 +210,7 @@ struct POEMS
         }
     };
 
-    static bool try_send(shared_pool<message>::local_pool &pool, const void *gp, device *dev, int &nonLocalMessagesSent, int &localMessagesSent)
+    static bool try_send(shared_pool<message>::local_pool &pool, device_cluster *cluster, const void *gp, device *dev, int &nonLocalMessagesSent, int &localMessagesSent)
     {
         char payload_buffer[MAX_PAYLOAD_SIZE];
 
@@ -209,6 +218,7 @@ struct POEMS
         int sendIndex=-1;
         unsigned size;
         bool active=provider_do_send(dev->device_type_index, gp, dev->properties_then_state, output_port_index, size, sendIndex, payload_buffer);
+        cluster->set_device_active(dev->offset_in_cluster, active);
         if(output_port_index==-1){
             return active; // The device may have done something, but it resulted in no message
         }
@@ -230,9 +240,9 @@ struct POEMS
         for(unsigned i=0; i<nEdges; i++){
             const auto &edge=pEdges[i];
             if(edge.is_local){
-                provider_do_recv(edge.handler_index, gp, edge.dest_device->properties_then_state, edge.properties_then_state, payload_buffer);
+                bool active=provider_do_recv(edge.handler_index, gp, edge.dest_device->properties_then_state, edge.properties_then_state, payload_buffer);
                 unsigned dest_cluster_offset=edge.dest_device_offset_in_cluster;
-                edge.dest_cluster->set_device_active(dest_cluster_offset); // We'll need to see if it now wants to send in the next round
+                edge.dest_cluster->set_device_active(dest_cluster_offset, active);
                 localMessagesSent++;
             }else{
                 message *m=pool.alloc();
@@ -248,8 +258,9 @@ struct POEMS
         return true;
     }
 
-    static void try_recv(shared_pool<message>::local_pool &pool, device_cluster *cluster, const void *gp, message *head, int &nonLocalMessagesReceived)
+    static bool try_recv(shared_pool<message>::local_pool &pool, device_cluster *cluster, const void *gp, message *head, int &nonLocalMessagesReceived)
     {
+        bool anyActive=false;
         while(head){
             const auto *pedge=head->p_edge;
             auto *dev=pedge->dest_device;
@@ -257,14 +268,16 @@ struct POEMS
             assert(pedge->dest_cluster==cluster);
             assert(dev->cluster==cluster);
             assert(cluster->devices[dev->offset_in_cluster]==dev);
-            cluster->set_device_active(dev->offset_in_cluster); // Any messages mean we need to check rts at some point
-            provider_do_recv(pedge->handler_index, gp, dev->properties_then_state, pedge->properties_then_state, head->payload);
+            bool active=provider_do_recv(pedge->handler_index, gp, dev->properties_then_state, pedge->properties_then_state, head->payload);
+            cluster->set_device_active(dev->offset_in_cluster, active); // Any messages mean we need to check rts at some point
+            anyActive = anyActive || active;
             auto curr=head;
             head=head->next;
             pool.free(curr);
             nonLocalMessagesReceived++;
             assert(nonLocalMessagesReceived < 1000000);
         }
+        return anyActive;
     }
 
 
@@ -304,11 +317,10 @@ struct POEMS
         
         // Receiving might set interior dev->active high
         auto *head=cluster.pop();
-        bool anyReceived=(head!=nullptr);
-        try_recv(pool, &cluster, gp, head, nonLocalMessagesReceivedDelta);
+        bool anyActiveFromReceive=try_recv(pool, &cluster, gp, head, nonLocalMessagesReceivedDelta);
 
         bool anyActive=false;
-        if(cluster.active || anyReceived)
+        if(cluster.active || anyActiveFromReceive)
         {
             for(unsigned i_base=0; i_base<cluster.devices_active_mask.size(); i_base++){
                 uint64_t m=cluster.devices_active_mask[i_base];
@@ -328,7 +340,7 @@ struct POEMS
                 unsigned i=i_base*64;
                 while(m){
                     if(m&1){
-                        anyActive=anyActive or try_send(pool, gp, cluster.devices[i], nonLocalMessagesSentDelta, localMessagesSentAndReceivedDelta);
+                        anyActive=anyActive or try_send(pool, &cluster, gp, cluster.devices[i], nonLocalMessagesSentDelta, localMessagesSentAndReceivedDelta);
                     }
                     m>>=1;
                     i++;
@@ -359,7 +371,7 @@ struct POEMS
     // Most expensive
     // thing is the idle detection atomics, but they become cheaper the
     // more work is going on.
-    unsigned m_cluster_size=32;
+    unsigned m_cluster_size=1024;
 
     const void *m_gp;
     std::vector<device*> m_devices;
@@ -797,11 +809,89 @@ void onEdgeInstance
     }
   }
 
+  void assign_clusters_random(std::vector<device*> &devices, std::vector<device_cluster*> &clusters)
+  {
+      unsigned nClusters=clusters.size();
+    for(unsigned i=0; i<devices.size(); i++){
+        auto d=devices[i];
+        auto c=m_target.m_clusters[i%nClusters];
+        unsigned offset=c->devices.size();
+        c->devices.push_back(d);
+        d->cluster=c;
+        d->offset_in_cluster=offset;
+    }
+  }
+
+void assign_clusters_metis(std::vector<device*> &devices, std::vector<device_cluster*> &clusters)
+{
+    fprintf(stderr, "Assigning giant cluster indices\n");
+    // Pretend we have one giant cluster, and assign indices
+    for(unsigned i=0; i<devices.size(); i++){
+        auto *d = devices[i];
+        d->offset_in_cluster=i;
+    }
+
+    fprintf(stderr, "Building weighted graph\n");
+    // Build a weighted graph
+    std::vector<std::unordered_map<int,float> > graph;
+    graph.resize(devices.size());
+
+    for(device *d : devices){
+        unsigned src_i=d->offset_in_cluster;
+        for(auto &ev : d->output_ports){
+            for(edge &e : ev.edges){
+                unsigned dst_i=e.dest_device->offset_in_cluster;
+                // Edges must be bidirectional for metis
+                graph[src_i][dst_i] += 1;
+                graph[dst_i][src_i] += 1;
+            }
+        }
+    }
+
+    fprintf(stderr, "Converting to metis\n");
+    // Convert to metis
+    std::vector<idx_t> xadj;
+    std::vector<idx_t> adjncy;
+    std::vector<idx_t> adjwgt;
+
+    unsigned start_i=0;
+    for(unsigned src_i=0; src_i<graph.size(); src_i++){    
+        xadj.push_back(start_i);
+        const auto &edges = graph[src_i];
+        for(const auto &e : edges){
+            adjncy.push_back(e.first);
+            adjwgt.push_back(e.second);
+        }
+        start_i=adjncy.size();
+    }
+    xadj.push_back(start_i);
+
+    idx_t nvtxs=devices.size();
+    idx_t ncon=1; // Needs to be at least 1 ?
+    idx_t nparts=clusters.size();
+    idx_t objval=0;
+    std::vector<idx_t> part(nvtxs);
+    int code=METIS_PartGraphRecursive(
+        &nvtxs, &ncon, &xadj[0], &adjncy[0], NULL /* vwgt*/, NULL /* vsize */, &adjwgt[0], &nparts, NULL /* tpwgts */,
+            NULL /* ubvec */, NULL/*options*/, &objval, &part[0]);
+    if(code!=METIS_OK){
+        throw std::runtime_error("Error from metis.");
+    }
+
+    fprintf(stderr, "Applying metis partition\n");
+    for(unsigned i=0; i<devices.size(); i++){
+        auto d=devices[i];
+        unsigned pi=part[d->offset_in_cluster];
+        auto c=m_target.m_clusters[pi];
+        unsigned offset=c->devices.size();
+        c->devices.push_back(d);
+        d->cluster=c;
+        d->offset_in_cluster=offset;
+    }
+  }
+
   void onEndGraphInstance(uint64_t /*graphToken*/) override
   {
-      // TODO: We need to cluster these things to get good efficiency.
-      // For now, just random clustering.
-
       std::mt19937 urng;
 
       std::vector<device*> devices(m_target.m_devices);
@@ -809,22 +899,19 @@ void onEdgeInstance
       std::shuffle(devices.begin(), devices.end(), urng);
 
       unsigned nClusters=std::max(1u, unsigned(devices.size() / m_target.m_cluster_size));
+      
+      fprintf(stderr, "Splitting %u devices into %u clusters; about %u devices/cluster\n", devices.size(), nClusters, devices.size()/nClusters);
+      
       assert(m_target.m_clusters.empty());
       m_target.m_clusters.reserve(nClusters);
       for(unsigned i=0; i<nClusters; i++){
           m_target.m_clusters.push_back(new device_cluster());
       }
 
-      for(unsigned i=0; i<devices.size(); i++){
-          auto d=devices[i];
-          auto c=m_target.m_clusters[i%nClusters];
-          unsigned offset=c->devices.size();
-          c->devices.push_back(d);
-          d->cluster=c;
-          d->offset_in_cluster=offset;
-      }
+      assign_clusters_metis(devices, m_target.m_clusters);
 
       int locals=0;
+      int nonLocals=0;
 
       /* For space/simplicity reasons we don't maintain back edges from devices
          back to their incoming edges. That means that to set the edge to cluster
@@ -841,7 +928,7 @@ void onEdgeInstance
                 auto d = c->devices[i];
                 provider_do_init(d->device_type_index, m_target.m_gp, d->properties_then_state);
 
-                c->set_device_active(i);
+                c->set_device_active(i, true);
 
                 for(auto &o : d->output_ports){
                     for(edge &e : o.edges){
@@ -849,6 +936,8 @@ void onEdgeInstance
                         if( dc == c ){
                             e.is_local=true;
                             locals++;
+                        }else{
+                            nonLocals++;
                         }
                         e.dest_cluster=dc;
                         e.dest_device_offset_in_cluster=e.dest_device->offset_in_cluster;
@@ -859,7 +948,7 @@ void onEdgeInstance
 
         m_target.sanity();
 
-      fprintf(stderr, "Made %u edges local.\n", locals);
+      fprintf(stderr, "Made %u of %u edges local (%f\%).\n", locals, nonLocals+locals, locals*100.0/(locals+nonLocals));
   }
 
 
