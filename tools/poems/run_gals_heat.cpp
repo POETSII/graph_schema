@@ -88,5 +88,5 @@ int main()
     builder.onEndGraphInstance(gid);
 
     fprintf(stderr, "Running.\n");
-    instance.run(1);
+    instance.run(4);
 }

@@ -22,9 +22,10 @@ struct cell_state_t
     uint32_t t;
     float v;
     float ca;
-    uint32_t na;
+    float na;
     uint32_t cs;
-    uint16_t ns;
+    uint32_t ns;
+    uint32_t rts;
 };
 
 struct cell_in_properties_t
@@ -55,9 +56,16 @@ POETS_ALWAYS_INLINE void do_recv_cell_in(const void *gp, void *dp_ds, void *ep_e
 
     //fprintf(stderr, "  recv %p : t=%u, m.t=%u\n", dp_ds, deviceState->t, message->t);
 
+    assert(deviceState->t == message->t or deviceState->t+1==message->t);
+
     if(deviceState->t == message->t){
         deviceState->cs++;
         deviceState->ca += edgeProperties->w * message->v;
+        if(deviceState->cs==deviceProperties->degree){
+            if(deviceState->t < graphProperties->max_t){
+                deviceState->rts = 1;
+            }
+        }
     }else{
         deviceState->ns++;
         deviceState->na += edgeProperties->w * message->v;
@@ -69,8 +77,8 @@ void provider_do_recv(uint32_t handler_index, const void *gp, void *dp_ds, void 
 {
     switch(handler_index)
     {
-        case 0: return do_recv_cell_in(gp, dp_ds, ep_es, m);
         default: assert(0);
+        case 0: return do_recv_cell_in(gp, dp_ds, ep_es, m);
     }
 }
 
@@ -83,12 +91,9 @@ POETS_ALWAYS_INLINE void calc_rts_cell(const void *gp, void *dp_ds, uint32_t *rt
     ///////////////////////////////////////
     // Handler
 
-    *rts=0;
-    if(deviceState->t < graphProperties->max_t){
-        if(deviceState->cs==deviceProperties->degree){
-            *rts=(1<<0); // Cheating
-        }
-    }
+    assert(deviceState->cs <= deviceProperties->degree);
+
+    *rts=deviceState->rts;
 }
 
 POETS_ALWAYS_INLINE void do_compute_cell(const void *gp, void *dp_ds)
@@ -109,14 +114,15 @@ POETS_ALWAYS_INLINE void do_init_cell(const void *gp, void *dp_ds)
     deviceState->ca=deviceProperties->wSelf * deviceState->v;
     deviceState->ns=0;
     deviceState->na=0;
+    deviceState->rts=1;
 }
 
 void provider_do_init(unsigned device_type_index, const void *gp, void *dp_ds)
 {
     switch(device_type_index)
     {
-        case 0: do_init_cell(gp, dp_ds); break;
         default: assert(0); break;
+        case 0: do_init_cell(gp, dp_ds); break;
     }
 }
 
@@ -141,6 +147,13 @@ POETS_ALWAYS_INLINE void do_send_cell_out(const void *gp, void *dp_ds, unsigned 
 
     message->t=deviceState->t;
     message->v=deviceState->v;
+
+    deviceState->rts=0;
+    if(deviceState->cs==deviceProperties->degree){
+        if(deviceState->t < graphProperties->max_t){
+            deviceState->rts = 1;
+        }
+    }
 
     //fprintf(stderr, "  devices[%p]... -> time %u\n", dp_ds, deviceState->t);
 }
@@ -173,8 +186,8 @@ POETS_ALWAYS_INLINE bool do_send_cell(const void *gp, void *dp_ds, int &output_p
 bool provider_do_send(uint32_t device_index, const void *gp, void *dp_ds, int &output_port, unsigned &size, int &sendIndex, void *m)
 {
     switch(device_index){
+    default: assert(0);
     case 0: return do_send_cell(gp, dp_ds, output_port, size, sendIndex, m);
-    default: assert(0); return false;
     }
 }
 

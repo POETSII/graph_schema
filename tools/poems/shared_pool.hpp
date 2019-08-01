@@ -17,6 +17,8 @@ private:
     std::mutex m_mutex;
     std::vector<T*> m_global_pool;
 
+    std::atomic<uint64_t> m_allocedMessages = 0;
+
     void alloc_block(std::vector<T*> &pool)
     {
         assert(pool.empty());
@@ -32,20 +34,40 @@ private:
             }
         }
 
+        unsigned newNeeded=target-pool.size();
+        
         for(unsigned i=pool.size(); i<target; i++){
             pool.push_back((T*)malloc(m_alloc_size));
         }
+
+        m_allocedMessages.fetch_add(newNeeded, std::memory_order_relaxed);
     }
 
     void free_block(unsigned n, T **begin)
     {
         std::lock_guard<std::mutex> lk(m_mutex);
-        m_global_pool.insert(m_global_pool.end(), begin, begin+n);
+        auto curr_size=m_global_pool.size();
+        try{
+            #ifndef NDEBUG
+            for(unsigned i=0; i<m_global_pool.size(); i++){
+                assert(m_global_pool[i]);
+            }
+            #endif
+            assert(m_global_pool.size()+n < m_allocedMessages.load()); // Bit imprecise
+            m_global_pool.insert(m_global_pool.end(), begin, begin+n);
+            fprintf(stderr, "Free %u\n", n);
+        }catch(...){
+            fprintf(stderr, "Exception in free_block, total_alloced=%f MB, global_pool size=%llu, global_pool implied total = %f MB, n=%u\n",
+                get_alloced_bytes()/(1024.0*1024), (unsigned long long)curr_size, double(curr_size)*m_alloc_size/(1024.0*1024.0), n
+            );
+            throw;
+        }
     }
 
 public:
     shared_pool(unsigned alloc_size)
         : m_alloc_size(alloc_size)
+        , m_allocedMessages(0)
     {}
 
     ~shared_pool()
@@ -55,6 +77,12 @@ public:
         }
         m_global_pool.clear();
     }
+
+    uint64_t get_alloced_messages() const
+    { return m_allocedMessages.load(std::memory_order_relaxed); }
+
+    uint64_t get_alloced_bytes() const
+    { return get_alloced_messages() * m_alloc_size; }
 
     struct local_pool
     {
@@ -81,9 +109,6 @@ public:
         {
             if(m_local_pool.empty()){
                 m_global_pool.alloc_block(m_local_pool);
-            }
-            for(unsigned i=0; i<m_local_pool.size(); i++){
-                assert(m_local_pool[i]);
             }
             auto res=m_local_pool.back();
             assert(res);
