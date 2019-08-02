@@ -1,13 +1,45 @@
 #include "poems.hpp"
 #include "gals_heat_type.hpp"
 
-int main()
+int main(int argc, char *argv[])
 {
+    int n=1000;
+    int max_t=10;
+    int nThreads=std::thread::hardware_concurrency();
+    int cluster_size=1024;
+    bool use_metis=true;
+
     POEMS instance;
 
-    POEMSBuilder builder(instance);
+    if(argc>1){
+        n=atoi(argv[1]);
+    }
+    if(argc>2){
+        max_t=atoi(argv[2]);
+    }
+    if(argc>3){
+        nThreads=atoi(argv[3]);
+    }
+    if(argc>4){
+        cluster_size=atoi(argv[4]);
+    }
+    if(argc>5){
+        if(!strcmp(argv[5],"random")){
+            use_metis=false;
+        }else if(!strcmp(argv[5],"metis")){
+            use_metis=true;
+        }else{
+            throw std::runtime_error("Unknown partition method.");
+        }
+    }
 
-    int n=1000;
+    fprintf(stderr, "n=%u, max_t=%u, nThreads=%u, cluster_size=%u, use_metus=%u\n",
+        n, max_t, nThreads, cluster_size, use_metis
+    );
+
+    instance.m_cluster_size=cluster_size;
+
+    POEMSBuilder builder(instance);
 
     auto gt=make_gals_heat_graph_type();
     auto dt=gt->getDeviceType("cell");
@@ -15,7 +47,7 @@ int main()
     auto out=dt->getOutput("out");
 
     auto gp=gt->getPropertiesSpec()->create();
-    ((gals_heat_properties_t*)gp.payloadPtr())->max_t=10;
+    ((gals_heat_properties_t*)gp.payloadPtr())->max_t=max_t;
 
     auto gid=builder.onBeginGraphInstance(
         gt, "wibble", gp, rapidjson::Document()
@@ -88,5 +120,5 @@ int main()
     builder.onEndGraphInstance(gid);
 
     fprintf(stderr, "Running, setup=%f.\n", clock()/(double)CLOCKS_PER_SEC);
-    instance.run(4);
+    instance.run(nThreads);
 }

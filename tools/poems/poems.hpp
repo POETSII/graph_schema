@@ -373,6 +373,9 @@ struct POEMS
     // more work is going on.
     unsigned m_cluster_size=1024;
 
+    // This really shouldn't live here
+    bool use_metis=true;
+
     const void *m_gp;
     std::vector<device*> m_devices;
     std::vector<device_cluster*> m_clusters;
@@ -900,7 +903,7 @@ void assign_clusters_metis(std::vector<device*> &devices, std::vector<device_clu
 
       unsigned nClusters=std::max(1u, unsigned(devices.size() / m_target.m_cluster_size));
       
-      fprintf(stderr, "Splitting %u devices into %u clusters; about %u devices/cluster\n", devices.size(), nClusters, devices.size()/nClusters);
+      fprintf(stderr, "Splitting %u devices into %u clusters; about %u devices/cluster\n", devices.size(), nClusters, unsigned(devices.size()/nClusters));
       
       assert(m_target.m_clusters.empty());
       m_target.m_clusters.reserve(nClusters);
@@ -908,7 +911,11 @@ void assign_clusters_metis(std::vector<device*> &devices, std::vector<device_clu
           m_target.m_clusters.push_back(new device_cluster());
       }
 
-      assign_clusters_metis(devices, m_target.m_clusters);
+      if(m_target.use_metis && nClusters>1){
+          assign_clusters_metis(devices, m_target.m_clusters);
+      }else{
+          assign_clusters_random(devices, m_target.m_clusters);
+      }
 
       int locals=0;
       int nonLocals=0;
@@ -948,7 +955,7 @@ void assign_clusters_metis(std::vector<device*> &devices, std::vector<device_clu
 
         m_target.sanity();
 
-      fprintf(stderr, "Made %u of %u edges local (%f\%).\n", locals, nonLocals+locals, locals*100.0/(locals+nonLocals));
+      fprintf(stderr, "Made %u of %u edges local (%f%%).\n", locals, nonLocals+locals, locals*100.0/(locals+nonLocals));
   }
 
 
