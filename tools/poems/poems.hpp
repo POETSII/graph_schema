@@ -20,35 +20,9 @@
 
 #include "shared_pool.hpp"
 
-#include "graph_persist.hpp"
+#include "../../include/graph_persist.hpp"
 
-
-///////////////////////////////////////////////////////
-// Things what the provider emits
-
-unsigned provider_get_device_type_index(const char *device_type_id);
-
-unsigned provider_get_receive_handler_index(unsigned device_type_index, unsigned input_pin_index);
-
-/*! Returns false if it is guaranteed the device is no longer active.
-    Returns true if the device is active, or _might_ be active.
-*/
-bool provider_do_recv(uint32_t handler_index, const void *gp, void *dp_ds, void *ep_es, const void *m);
-
-/* This sends at most one message. Internally it calculates rts, and then
-    if it finds a bit will call the handler. If nothing is rts, then it will
-    try to call the compute handler.
-    If there is a message to send, then output_port should be set to the index.
-    The return value indicates whether any handler was called (regardless of whether there is a message to send). */
-bool provider_do_send(uint32_t device_index, const void *gp, void *dp_ds, int &output_port, unsigned &size,int  &sendIndex, void *m);
-
-void provider_do_hardware_idle(uint32_t device_index, const void *gp, void *dp_ds);
-
-void provider_do_init(uint32_t device_index, const void *gp, void *dp_ds);
-
-// TODO: this needs to be injected before compiling this 
-const int MAX_PAYLOAD_SIZE = 64;
-
+#include "../sprovider/sprovider_types.h"
 
 //////////////////////////////////////////////////
 // Simulation logic
@@ -78,7 +52,7 @@ struct POEMS
         };
         uint32_t dest_device_offset_in_cluster;
         uint16_t is_local;       // Both devices are within the same local cluster (i.e. the same thread)
-        uint16_t handler_index;  // combines device type and pin index
+        uint16_t pin_index;  // combines device type and pin index
     };
 
     struct edge_vector
@@ -93,7 +67,7 @@ struct POEMS
         const edge *p_edge;
         // Payload immediately follows for locality
         // All messages are sized to hold the largest possible message
-        uint8_t payload[MAX_PAYLOAD_SIZE]; 
+        uint8_t payload[SPROVIDER_MAX_PAYLOAD_SIZE]; 
     };
 
     struct device
@@ -212,12 +186,13 @@ struct POEMS
 
     static bool try_send(shared_pool<message>::local_pool &pool, device_cluster *cluster, const void *gp, device *dev, int &nonLocalMessagesSent, int &localMessagesSent)
     {
-        char payload_buffer[MAX_PAYLOAD_SIZE];
+        char payload_buffer[SPROVIDER_MAX_PAYLOAD_SIZE];
 
         int output_port_index=-1;
         int sendIndex=-1;
+        int action_taken=-2;
         unsigned size;
-        bool active=provider_do_send(dev->device_type_index, gp, dev->properties_then_state, output_port_index, size, sendIndex, payload_buffer);
+        bool active=sprovider_try_send_or_compute(nullptr, dev->device_type_index, gp, dev->properties_then_state, &action_taken, &output_port_index, &size, &sendIndex, payload_buffer);
         cluster->set_device_active(dev->offset_in_cluster, active);
         if(output_port_index==-1){
             return active; // The device may have done something, but it resulted in no message
@@ -240,7 +215,8 @@ struct POEMS
         for(unsigned i=0; i<nEdges; i++){
             const auto &edge=pEdges[i];
             if(edge.is_local){
-                bool active=provider_do_recv(edge.handler_index, gp, edge.dest_device->properties_then_state, edge.properties_then_state, payload_buffer);
+                auto dest_dev=edge.dest_device;
+                bool active=sprovider_do_recv(nullptr, dest_dev->device_type_index, edge.pin_index, gp, dest_dev->properties_then_state, edge.properties_then_state, payload_buffer);
                 unsigned dest_cluster_offset=edge.dest_device_offset_in_cluster;
                 edge.dest_cluster->set_device_active(dest_cluster_offset, active);
                 localMessagesSent++;
@@ -268,7 +244,7 @@ struct POEMS
             assert(pedge->dest_cluster==cluster);
             assert(dev->cluster==cluster);
             assert(cluster->devices[dev->offset_in_cluster]==dev);
-            bool active=provider_do_recv(pedge->handler_index, gp, dev->properties_then_state, pedge->properties_then_state, head->payload);
+            bool active=sprovider_do_recv(nullptr, dev->device_type_index, pedge->pin_index, gp, dev->properties_then_state, pedge->properties_then_state, head->payload);
             cluster->set_device_active(dev->offset_in_cluster, active); // Any messages mean we need to check rts at some point
             anyActive = anyActive || active;
             auto curr=head;
@@ -305,7 +281,7 @@ struct POEMS
             // delivery into a device which has not yet had hardware idle.
             for(device *dev : cluster.devices){
                 assert(cluster.is_device_active(dev->offset_in_cluster)); // Otherwise how did we get into hardware idle?
-                provider_do_hardware_idle(dev->device_type_index, gp, dev->properties_then_state);
+                sprovider_do_hardware_idle(nullptr, dev->device_type_index, gp, dev->properties_then_state);
                 // The device is still ready to send
             }
             cluster.provider_do_hardware_idle=false;
@@ -541,7 +517,7 @@ struct POEMS
 
     void run(unsigned nThreads)
     {
-        shared_pool<message> gpool(sizeof(message)+MAX_PAYLOAD_SIZE);
+        shared_pool<message> gpool(sizeof(message)+SPROVIDER_MAX_PAYLOAD_SIZE);
 
         std::atomic<bool> quit;
         quit.store(false);
@@ -635,79 +611,8 @@ struct POEMS
 };
 
 
-////////////////////////////////////////////////////////////
-// Needed for providers
 
-#define POETS_ALWAYS_INLINE inline __attribute__((always_inline))
-
-struct empty_struct_tag;
-
-template<class P, class S>
-struct pair_prop_state
-{
-    static const int props_size = ((sizeof(P)+7)>>3)*8;
-    static const int state_size = ((sizeof(S)+7)>>3)*8;
-    static const int size = props_size+state_size;
-};
-
-template<class P>
-struct pair_prop_state<P,empty_struct_tag>
-{
-    static const int props_size = ((sizeof(P)+7)>>3)*8;
-    static const int state_size = 0;
-    static const int size = props_size+state_size;
-};
-
-template<class S>
-struct pair_prop_state<empty_struct_tag,S>
-{
-    static const int props_size = 0;
-    static const int state_size = ((sizeof(S)+7)>>3)*8;
-    static const int size = props_size+state_size;
-};
-
-template<>
-struct pair_prop_state<empty_struct_tag,empty_struct_tag>
-{
-    static const int props_size = 0;
-    static const int state_size = 0;
-    static const int size = props_size+state_size;
-};
-
-template<class P,class S>
-POETS_ALWAYS_INLINE const P *get_P(void *pv)
-{ return (const P*)pv; }
-
-template<class P,class S>
-POETS_ALWAYS_INLINE S *get_S(void *pv)
-{ return (S*)((char*)pv+pair_prop_state<P,S>::props_size); }
-
-
-
-#include "graph_core.hpp"
-
-POETS_ALWAYS_INLINE size_t calc_TDS_size(const TypedDataPtr &p)
-{
-    return ((p.payloadSize()+7)>>3)*8;
-}
-
-POETS_ALWAYS_INLINE size_t calc_P_S_size(const TypedDataPtr &p, const TypedDataPtr &s)
-{
-    return calc_TDS_size(p)+calc_TDS_size(s);
-}
-
-POETS_ALWAYS_INLINE void copy_P_S(void *dst, const TypedDataPtr &p, const TypedDataPtr &s)
-{
-    memcpy(dst, p.payloadPtr(), calc_TDS_size(p));
-    memcpy(((char*)dst)+calc_TDS_size(p), s.payloadPtr(), calc_TDS_size(s));
-}
-
-const void *alloc_copy_P(const TypedDataPtr &p)
-{
-    void *res=malloc(calc_TDS_size(p));
-    memcpy(res, p.payloadPtr(), calc_TDS_size(p));
-    return res;
-}
+#include "../sprovider/sprovider_helpers.hpp"
 
 
 
@@ -724,6 +629,20 @@ public:
 private:
     POEMS &m_target;
     std::unordered_map<std::string,unsigned> m_deviceIdToIndex;
+
+    unsigned device_type_id_to_index(const std::string &s)
+    {
+        /*
+        For moderate numbers of device types it is faster to just search than to
+        build a hash-table. Shouldn't be the main bottlneck anyway.
+         */
+        for(unsigned i=0; i<SPROVIDER_DEVICE_TYPE_COUNT; i++){
+            if(!strcmp(SPROVIDER_DEVICE_TYPE_INFO[i].id, s.c_str())){
+                return i;
+            }
+        }
+        throw std::runtime_error("Device type id '"+s+"' not known to static provider.");
+    }
 public:
     POEMSBuilder(POEMS &target)
         : m_target(target)
@@ -757,7 +676,7 @@ public:
     device *dev=new (dev_P_S_size) device();
     dev->cluster=0;
     dev->offset_in_cluster=-1;
-    dev->device_type_index=provider_get_device_type_index(dt->getId().c_str());
+    dev->device_type_index=device_type_id_to_index(dt->getId());
     copy_P_S( dev->properties_then_state, properties, state );
 
     dev->output_ports.resize(dt->getOutputCount());
@@ -785,7 +704,7 @@ void onEdgeInstance
 
     edge e;
     e.dest_device=m_target.m_devices.at(dstDevInst);
-    e.handler_index=provider_get_receive_handler_index(e.dest_device->device_type_index, dstPin->getIndex());
+    e.pin_index=dstPin->getIndex();
     e.is_local=false; // No local stuff to start with.
     auto &output=m_target.m_devices.at(srcDevInst)->output_ports.at(srcPin->getIndex());
     unsigned output_edge_offset=output.edges.size();
@@ -933,7 +852,7 @@ void assign_clusters_metis(std::vector<device*> &devices, std::vector<device_clu
 
             for(unsigned i=0; i<nDevices; i++){
                 auto d = c->devices[i];
-                provider_do_init(d->device_type_index, m_target.m_gp, d->properties_then_state);
+                sprovider_do_init(nullptr, d->device_type_index, m_target.m_gp, d->properties_then_state);
 
                 c->set_device_active(i, true);
 

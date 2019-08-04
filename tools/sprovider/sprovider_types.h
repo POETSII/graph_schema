@@ -1,5 +1,5 @@
-#ifndef sprovider_hpp
-#define sprovider_hpp
+#ifndef sprovider_types_hpp
+#define sprovider_types_hpp
 
 #ifndef SPROVIDER_GLOBAL_CONST
 #if __OPENCL__
@@ -8,6 +8,8 @@
 #define SPROVIDER_GLOBAL_CONST const
 #endif
 #endif
+
+#define SPROVIDER_ALWAYS_INLINE inline __attribute__((always_inline))
 
 #ifndef SPROVIDER_ENABLE_FUNCTION_POINTERS
 #if __OPENCL__
@@ -50,26 +52,23 @@ typedef bool active_flag_t;
     The handler functions return a boolean "active" flag which
     describes what happened and the future activity that might happen:
     
-    - try_send : Returns true if any activity was completed, and false if nothing
-      happened. If something happened, then it is possible that more activity
+    - try_send :If something happened, then it is possible that more activity
       might be possible. If nothing happened then no more activity will occur until
       an external event happens:
-      - true: something definitely happened (precise); another event might happen (approx)
+      - true: something might have happened (approx); another event might happen (approx)
       - false: nothing happened (precise); no further event will happen (precise)
+      If you want to check whether and what happened, then you can inspect *action_taken.
     
-    - do_* : By definition some activity must happen, so this returns a flag indicating
-      whether there _might_ be more activity. If false is returned then the device
-      was not active, and will remain inactive until some other event occurs to the device.
-      If true is returned then there might be more activity, but we don't know.
+    - do_* : By definition some activity must happen, and there _might_ be more activity.
+      If false is returned then the device will remain inactive until some other event occurs to the device.
       - true: something definitely happened (precise); another event might happen (approx)
       - false: something definitely happened (precise); no further event will happen (precise)
     
     Despite the slightly different meanings, the impact is the same:
-    - true: you need to eventually execute try_send in order to check if the device is idle.
+    - true: you need to use try_send or calc_rts to verify if the device is idle.
     - false: the device is definitely idle until some external event happens.
 
 
-/*
     All *_padded refer to the size padded up to 4 bytes.
  */
 
@@ -134,20 +133,48 @@ static active_flag_t sprovider_do_recv(void *_ctxt, unsigned _device_type_index,
 /* This sends at most one message or does a compute step. Internally it calculates rts, and then
     if it finds a bit will call the handler. If nothing is rts, then it will
     try to call the compute handler.
-    If there is a message to send, then *output_port should be set to the index, otherwise
-    it should be left un-changed.
-    If compute was done then output_port is un-changed.
+
+    This will only attempt exactly one send or device idle handler; it will _not_ search through
+    the rts bits and call handlers until one wants to send. This was a design decision as it
+    is relatively unlikely that a device plans to have multiple output bits set, but doesn't want
+    to send on them and can only work that out in the handler.
+
+    PRE: on input *action_taken should be -2
+    PRE: on input *output_port should be negative
+
+    There are three channels of information coming back to the caller:
+    - *action_taken : If an action was taken, then this is set to either the index of the port, or -1 for the compute handler, or -2 if nothing happened
+    - *output_port : If a send handler was called _and_ *doSend was true, then this is the index of the pin to send on
+    - return value : regardless of whether a step was taken, this is the active flag afterwards
+
+    The three channels are for three purposes:
+    - *action_taken : tracking statistics on how many handlers were called. Could be ignored for maximum speed.
+    - *output_port : Tells the messaging system whether to put messages into the network. Can never be ignored.
+    - return value : Indicates if there are more events. Will be used for efficient scheduling, but could be safely ignored.
+
+    Possible combinations of output are:
+    - *action_taken >= 0 : A send handler was called
+      - *output_port == *action_taken : the message should be sent (output_port and action_taken must match)
+      - *output_port < 0 : The message was cancelled
+      Return value could be true or false.
+    - *action_taken == -1 : The compute handler was called
+      - *output_port < 0 : There is no message to send
+      Return value could be true of false
+    - *action_taken == -2 : No action could be taken
+      - *output_port < 0 : There is no message to send
+      Return value must be false as it is gauranteed the device is idle.
+
 */
-static active_flag_t sprovider_try_send(void *_ctxt, unsigned _device_type_index, const void *gp, void *dp_ds, int *output_port, unsigned *message_size, int *sendIndex, void *m);
+static active_flag_t sprovider_try_send_or_compute(void *_ctxt, unsigned _device_type_index, const void *gp, void *dp_ds, int *action_taken, int *output_port, unsigned *message_size, int *sendIndex, void *m);
 
 /* It is the caller's responsibility to make sure that the given handler is
 value for the current device state. */
-static active_flag_t sprovider_do_send(void *_ctxt, unsigned _device_type_index, unsigned _pin_index, const void *gp, void *dp_ds, int *output_port, unsigned *message_size, int *sendIndex, void *m);
+static active_flag_t sprovider_do_send(void *_ctxt, unsigned _device_type_index, unsigned _pin_index, const void *gp, void *dp_ds, bool *doSend, int *sendIndex, void *m);
 
 
 /* This must return a completely precise active flag, so it
   must return (*rts) !=0 or *requestCompute */
-static active_flag_t sprovider_calc_rts(void *_ctxt, unsigned _device_type_index, const void *gp, const void *dp_ds, unsigned *rts, int *requestCompute);
+static active_flag_t sprovider_calc_rts(void *_ctxt, unsigned _device_type_index, const void *gp, const void *dp_ds, unsigned *rts, bool *requestCompute);
 
 /* It is the caller's responsibility to ensure that this only gets called if the
     device is actually idle. */
@@ -157,15 +184,15 @@ static active_flag_t sprovider_do_hardware_idle(void *_ctxt, unsigned _device_ty
     device has requestCompute high. */
 static active_flag_t sprovider_do_device_idle(void *_ctxt, unsigned _device_type_index, const void *gp, void *dp_ds);
 
-static active_flag_t sprovider_do_init(void *_ctxt, unsigned _device_type_index, const void *gp, const void *dp_ds);
+static active_flag_t sprovider_do_init(void *_ctxt, unsigned _device_type_index, const void *gp, void *dp_ds);
 
 
 
 ////////////////////////////////////////////////////////////////////
 // This section is stuff that must be generated
-#if 0
+/* 
 
-/* Total number of device types */
+// Total number of device types 
 SPROVIDER_GLOBAL_CONST int SPROVIDER_DEVICE_TYPE_COUNT = 0;
 
 SPROVIDER_GLOBAL_CONST sprovider_graph_info_t SPROVIDER_GRAPH_TYPE_INFO;
@@ -174,6 +201,6 @@ SPROVIDER_GLOBAL_CONST sprovider_device_info_t SPROVIDER_DEVICE_TYPE_INFO[SPROVI
 
 SPROVIDER_GLOBAL_CONST int SPROVIDER_MAX_PAYLOAD_SIZE = 64;
 
-#endif
+*/
 
 #endif

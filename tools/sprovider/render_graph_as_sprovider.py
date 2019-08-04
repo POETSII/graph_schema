@@ -195,7 +195,7 @@ def render_graph_type_handlers_as_sprovider(gt:GraphType, options:RenderOptions)
     // clear how to do this in a platform independent way. e.g. it could be:
     // - `__thread` for C
     // - `thread_local` for C++
-    // - `__private` for OpenCL, except you can't have private globals...
+    // - `__private` for OpenCL; well, except you can't have private globals...
     // - ? for Tinsel. Probably need a TEB like in the old softswitch
     void *_ctxt = 0;
     
@@ -374,8 +374,10 @@ def render_graph_type_handlers_as_sprovider(gt:GraphType, options:RenderOptions)
         """)
 
         dst.write(f"""
-        static active_flag_t {iprefix}_try_send_{dt.id}(void *_ctxt, const void *_gpV, const void *_dpdsV, int *_output_port, unsigned *_output_size, int *sendIndex, void *_msgV) {{
+        static active_flag_t {iprefix}_try_send_or_compute_{dt.id}(void *_ctxt, const void *_gpV, const void *_dpdsV, int *_action_taken, int *_output_port, unsigned *_message_size, int *_send_index, void *_msgV) {{
             {shared_prefix}
+            assert(*_action_taken == -2);
+            assert(*_output_port < 0);
             uint32_t _readyToSend=0;
             bool _readyToCompute=false;
             bool _doSend=true;
@@ -391,6 +393,7 @@ def render_graph_type_handlers_as_sprovider(gt:GraphType, options:RenderOptions)
                 if(!_readyToCompute){{
                     return false;
                 }}
+                *_action_taken = -1;
                 //////////////////////////////////////////
                 {adapt_handler(dt.on_device_idle_handler)}
                 ////////////////////////////////////////////
@@ -409,6 +412,7 @@ def render_graph_type_handlers_as_sprovider(gt:GraphType, options:RenderOptions)
                 //////////////////
                 if(_doSend){{
                     *_output_port={i};
+                    *_message_size=sizeof(MESSAGE_T);
                 }}
             }}
             break;
@@ -427,7 +431,7 @@ def render_graph_type_handlers_as_sprovider(gt:GraphType, options:RenderOptions)
     #####################################################
     ## Now do the standard muxing entry points
 
-    dst.write(f"""static active_flag_t sprovider_do_init(void *_ctxt, uint _device_type_index, const void *_gpV,  void *_dpdsV){{
+    dst.write(f"""static active_flag_t sprovider_do_init(void *_ctxt, unsigned _device_type_index, const void *_gpV,  void *_dpdsV){{
        switch(_device_type_index){{
        default:  SPROVIDER_UNREACHABLE;
     """)
@@ -435,7 +439,7 @@ def render_graph_type_handlers_as_sprovider(gt:GraphType, options:RenderOptions)
         dst.write(f"   case {i}: return {iprefix}_do_init_{dt.id}(_ctxt, _gpV, _dpdsV);\n")
     dst.write("}\n}\n\n")
 
-    dst.write(f"""static active_flag_t sprovider_do_hardware_idle(void *_ctxt, uint _device_type_index, const void *_gpV, void *_dpdsV){{
+    dst.write(f"""static active_flag_t sprovider_do_hardware_idle(void *_ctxt, unsigned _device_type_index, const void *_gpV, void *_dpdsV){{
        switch(_device_type_index){{
        default:  SPROVIDER_UNREACHABLE;
     """)
@@ -443,7 +447,7 @@ def render_graph_type_handlers_as_sprovider(gt:GraphType, options:RenderOptions)
         dst.write(f"   case {i}: return {iprefix}_do_hardware_idle_{dt.id}(_ctxt, _gpV, _dpdsV);\n")
     dst.write("}\n}\n\n")
 
-    dst.write(f"""static active_flag_t sprovider_do_device_idle(void *_ctxt, uint _device_type_index, const void *_gpV, void *_dpdsV){{
+    dst.write(f"""static active_flag_t sprovider_do_device_idle(void *_ctxt, unsigned _device_type_index, const void *_gpV, void *_dpdsV){{
        switch(_device_type_index){{
        default:  SPROVIDER_UNREACHABLE;
     """)
@@ -451,7 +455,7 @@ def render_graph_type_handlers_as_sprovider(gt:GraphType, options:RenderOptions)
         dst.write(f"   case {i}: return {iprefix}_do_device_idle_{dt.id}(_ctxt, _gpV, _dpdsV);\n")
     dst.write("}\n}\n\n")
 
-    dst.write(f"""static active_flag_t sprovider_calc_rts(void *_ctxt, uint _device_type_index, const void *_gpV, void *_dpdsV, uint32_t *readyToSend, bool *requestCompute){{
+    dst.write(f"""static active_flag_t sprovider_calc_rts(void *_ctxt, unsigned _device_type_index, const void *_gpV, void *_dpdsV, uint32_t *readyToSend, bool *requestCompute){{
        switch(_device_type_index){{
        default:  SPROVIDER_UNREACHABLE;
     """)
@@ -459,12 +463,20 @@ def render_graph_type_handlers_as_sprovider(gt:GraphType, options:RenderOptions)
         dst.write(f"   case {i}: return {iprefix}_calc_rts_{dt.id}(_ctxt, _gpV, _dpdsV, readyToSend, requestCompute);\n")
     dst.write("}\n}\n\n")        
 
-    dst.write(f"""static active_flag_t sprovider_do_send(void *_ctxt, unsigned _device_type_index, unsigned _pin_index, const void *_gpV, const void *_dpdsV, bool *doSend, int *sendIndex, void *_msgV){{
+    dst.write(f"""static active_flag_t sprovider_do_send(void *_ctxt, unsigned _device_type_index, unsigned _pin_index, const void *_gpV, const void *_dpdsV, bool *_do_send, int *_send_index, void *_msgV){{
         switch(_device_type_index){{
         default: SPROVIDER_UNREACHABLE;
     """)
     for (i,dt) in enumerate(gt.device_types.values()):
-        dst.write(f"""    case {i}: return {iprefix}_do_send_{dt.id}(_ctxt, _pin_index, _gpV, _dpdsV, doSend, sendIndex, _msgV);\n""")
+        dst.write(f"""    case {i}: return {iprefix}_do_send_{dt.id}(_ctxt, _pin_index, _gpV, _dpdsV, _do_send, _send_index, _msgV);\n""")
+    dst.write("}\n}\n\n")
+
+    dst.write(f"""static active_flag_t sprovider_try_send_or_compute(void *_ctxt, unsigned _device_type_index, const void *_gpV, const void *_dpdsV, int *_action_taken, int *_output_port, unsigned *_message_size, int *_send_index, void *_msgV){{
+        switch(_device_type_index){{
+        default: SPROVIDER_UNREACHABLE;
+    """)
+    for (i,dt) in enumerate(gt.device_types.values()):
+        dst.write(f"""    case {i}: return {iprefix}_try_send_or_compute_{dt.id}(_ctxt, _gpV, _dpdsV, _action_taken, _output_port, _message_size, _send_index, _msgV);\n""")
     dst.write("}\n}\n\n")
 
     dst.write(f"""static active_flag_t sprovider_do_recv(void *_ctxt, unsigned _device_type_index, unsigned _pin_index, const void *_gpV, void *_dpdsV, void *_epesV, const void *_msgV){{
