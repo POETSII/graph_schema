@@ -16,6 +16,17 @@ class TypedDataSpec(object):
     def add_documentation(self, documentation):
         self.documentation = documentation
 
+    def size_in_bytes(self):
+        """Returns the size in bytes when expressed as a packed structure,
+            which is mandated by the spec."""
+        raise NotImplementedError()
+
+    def is_aligned_to_word_boundaries(self, offset:int=0):
+        """Return True if all data members are naturally aligned for a 32-bit
+            architecture. If this is not true then memory accesses will fail
+            in Tinsel."""
+        raise NotImplementedError()
+
 
 # https://stackoverflow.com/a/48725499
 class frozendict(dict):
@@ -51,6 +62,8 @@ def freezedict(d):
 class ScalarTypedDataSpec(TypedDataSpec):
 
     _primitives=set(["int64_t","uint64_t","int32_t","uint32_t","int16_t","uint16_t","int8_t","uint8_t","float","double"])
+    _sizes={"int64_t":8,"uint64_t":8,"int32_t":4,"uint32_t":4,"int16_t":2,"uint16_t":2,"int8_t":1,"uint8_t":1,"float":4,"double":8}
+
 
     def _check_value(self,value):
         assert not isinstance(self.type,Typedef)
@@ -152,6 +165,13 @@ class ScalarTypedDataSpec(TypedDataSpec):
 
     def convert_v4_init(self, v):
         return self._check_value(v)
+
+    def size_in_bytes(self):
+        return self._sizes[self.type]
+
+    def is_aligned_to_word_boundaries(self, offset:int=0):
+        return (offset % self._sizes[self.type]) == 0
+
 
     def __eq__(self, o):
         return isinstance(o, ScalarTypedDataSpec) and self.name==o.name and self.type==o.type and self.default==o.default
@@ -262,6 +282,17 @@ class TupleTypedDataSpec(TypedDataSpec):
         assert isinstance(v,list) and len(v)==len(self._elts_by_index)
         return { te.name:te.convert_v4_init(ve) for (te,ve) in zip(self._elts_by_index, v) }
 
+    def size_in_bytes(self):
+        return sum( e.size_in_bytes() for e in self._elts_by_index )
+
+    def is_aligned_to_word_boundaries(self, offset:int=0):
+        for e in self._elts_by_index:
+            if not e.is_aligned_to_word_boundaries(offset):
+                return False
+            offset += e.size_in_bytes()
+        return True
+
+
 class ArrayTypedDataSpec(TypedDataSpec):
     def __init__(self,name,length,type,default=None,documentation=None):
         TypedDataSpec.__init__(self,name)
@@ -365,6 +396,23 @@ class ArrayTypedDataSpec(TypedDataSpec):
     def convert_v4_init(self, v):
         assert isinstance(v,list) and len(v)==self.length
         return [ self.type.convert_v4_init(ve) for ve in v ]
+
+    def size_in_bytes(self):
+        return self.type.size_in_bytes() * self.length
+
+    def is_aligned_to_word_boundaries(self, offset:int=0):
+        """An array is aligned if the elements would be aligned at
+        each possible offset"""
+
+        type_size=self.type.size_in_bytes()
+        
+        # Will the following elements all be aligned?
+        # We only need to look at the first four, as we are only interested in words.
+        # Any problems that occur will occur within the first four then repeat
+        for i in range(0,min(4,self.length)):
+            if not self.is_aligned_to_word_boundaries(offset+type_size*i):
+                return False
+        return True
 
 def create_default_typed_data(proto):
     if proto is None:
@@ -540,6 +588,11 @@ class DeviceType(object):
         self.on_hardware_idle_source_line=None
         self.isExternal=isExternal
         self.documentation=documentation
+
+    @property
+    def is_external(self):
+        """This adds an alias with camel case. Eventually the isExteral should be dropped.""" 
+        return self.isExternal
     
     def get_indexed_outputs(self):
         "Returns a list of any output ports that are indexed"
