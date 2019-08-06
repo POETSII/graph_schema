@@ -23,6 +23,7 @@
 #include "graph_persist.hpp"
 
 
+
 ///////////////////////////////////////////////////////
 // Things what the provider emits
 

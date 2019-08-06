@@ -39,6 +39,8 @@ int main(int argc, char *argv[])
 
     instance.m_cluster_size=cluster_size;
 
+    auto begin_setup=std::chrono::high_resolution_clock::now();
+
     POEMSBuilder builder(instance);
 
     auto gt=make_gals_heat_graph_type();
@@ -119,6 +121,7 @@ int main(int argc, char *argv[])
 
     builder.onEndGraphInstance(gid);
 
-    fprintf(stderr, "Running, setup=%f.\n", clock()/(double)CLOCKS_PER_SEC);
+    auto end_setup=std::chrono::high_resolution_clock::now();
+    fprintf(stderr, "Running, setup=%f.\n", std::chrono::duration<double>(end_setup-begin_setup).count());
     instance.run(nThreads);
 }
