@@ -233,6 +233,15 @@ public:
     }
   }
 
+  uint8_t *payloadPtr()
+  {
+    if(m_p){
+      return ((uint8_t*)m_p)+sizeof(typed_data_t);
+    }else{
+      return 0;
+    }
+  }
+
   size_t payloadSize() const
   {
     if(m_p){

@@ -13,6 +13,7 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <chrono>
+#include <cstdarg>
 
 #include <metis.h>
 #include <tbb/concurrent_queue.h>
@@ -24,8 +25,31 @@
 
 #include "../sprovider/sprovider_types.h"
 
+#include "../sprovider/sprovider_helpers.hpp"
+
 //////////////////////////////////////////////////
 // Simulation logic
+
+void sprovider_handler_log(int level, const char *msg, ...)
+{
+    if(level<2){
+        char buffer[256]={0};
+        va_list args;
+        va_start(args, msg);
+        vsnprintf(buffer, sizeof(buffer)-1, msg, args);
+        va_end(args);
+        fputs(buffer, stderr);
+        fputc('\n', stderr);
+    }
+
+    if(!strcmp(msg,"_HANDLER_EXIT_SUCCESS_9be65737_")){
+        exit(0);
+    }
+    if(!strcmp(msg,"_HANDLER_EXIT_FAIL_9be65737_")){
+        exit(1);
+    }
+
+}
 
 struct POEMS
 {
@@ -71,7 +95,12 @@ struct POEMS
     };
 
     struct device
-    {
+    {   
+        #ifndef NDEBUG
+        const char *id;
+        DeviceTypePtr device_type;
+        #endif
+
         unsigned device_type_index;
         device_cluster *cluster;
         unsigned offset_in_cluster;
@@ -184,8 +213,12 @@ struct POEMS
         }
     };
 
-    static bool try_send(shared_pool<message>::local_pool &pool, device_cluster *cluster, const void *gp, device *dev, int &nonLocalMessagesSent, int &localMessagesSent)
+    bool try_send(shared_pool<message>::local_pool &pool, device_cluster *cluster, const void *gp, device *dev, int &nonLocalMessagesSent, int &localMessagesSent)
     {
+#ifndef NDEBUG
+        //fprintf(stderr, "try_send device %s\n", dev->id);
+#endif
+
         char payload_buffer[SPROVIDER_MAX_PAYLOAD_SIZE];
 
         int output_port_index=-1;
@@ -193,10 +226,25 @@ struct POEMS
         int action_taken=-2;
         unsigned size;
         bool active=sprovider_try_send_or_compute(nullptr, dev->device_type_index, gp, dev->properties_then_state, &action_taken, &output_port_index, &size, &sendIndex, payload_buffer);
+        assert(
+            (action_taken==-2 && output_port_index < 0 && !active)
+            ||
+            (action_taken==-1 && output_port_index < 0)
+            ||
+            (action_taken==output_port_index)
+        );
         cluster->set_device_active(dev->offset_in_cluster, active);
-        if(output_port_index==-1){
+        if(output_port_index<0){
+#ifndef NDEBUG
+            //fprintf(stderr, "   no message, action=%d, active=%d\n", action_taken, active);
+#endif
             return active; // The device may have done something, but it resulted in no message
         }
+
+#ifndef NDEBUG
+        //fprintf(stderr, "   message, action=%d, active=%d\n", action_taken, active);
+#endif
+
 
         // If we got here then doSend was true
 
@@ -219,6 +267,10 @@ struct POEMS
                 bool active=sprovider_do_recv(nullptr, dest_dev->device_type_index, edge.pin_index, gp, dest_dev->properties_then_state, edge.properties_then_state, payload_buffer);
                 unsigned dest_cluster_offset=edge.dest_device_offset_in_cluster;
                 edge.dest_cluster->set_device_active(dest_cluster_offset, active);
+#ifndef NDEBUG
+                //fprintf(stderr, "     Delivering from %s:%u to %s:%u\n", dev->id, output_port_index, dest_dev->id, dest_dev->device_type_index);
+                //dump_state(stderr, dest_dev->cluster, dest_dev);
+#endif
                 localMessagesSent++;
             }else{
                 message *m=pool.alloc();
@@ -230,11 +282,10 @@ struct POEMS
                 nonLocalMessagesSent++;
             }
         }
-        
         return true;
     }
 
-    static bool try_recv(shared_pool<message>::local_pool &pool, device_cluster *cluster, const void *gp, message *head, int &nonLocalMessagesReceived)
+    bool try_recv(shared_pool<message>::local_pool &pool, device_cluster *cluster, const void *gp, message *head, int &nonLocalMessagesReceived)
     {
         bool anyActive=false;
         while(head){
@@ -264,7 +315,7 @@ struct POEMS
         active flags, hardware detection, and so on - as long as clusters are moving,
         we will always find outstanding messages.
      */
-    static void step_cluster(
+    void step_cluster(
         shared_pool<message>::local_pool &pool,
         const void *gp,
         device_cluster &cluster,
@@ -273,6 +324,14 @@ struct POEMS
     ){
 #ifndef NDEBUG
         cluster.sanity();
+#endif
+
+#ifndef NDEBUG
+        /* fprintf(stderr, "Step cluster %p\n", &cluster);
+        for(auto *d : cluster.devices){
+            fprintf(stderr, "  %s : %d\n", d->id, cluster.is_device_active(d->offset_in_cluster));
+        }
+        */
 #endif
 
         if(cluster.provider_do_hardware_idle){
@@ -316,7 +375,8 @@ struct POEMS
                 unsigned i=i_base*64;
                 while(m){
                     if(m&1){
-                        anyActive=anyActive or try_send(pool, &cluster, gp, cluster.devices[i], nonLocalMessagesSentDelta, localMessagesSentAndReceivedDelta);
+                        bool active=try_send(pool, &cluster, gp, cluster.devices[i], nonLocalMessagesSentDelta, localMessagesSentAndReceivedDelta);
+                        anyActive=anyActive or active;
                     }
                     m>>=1;
                     i++;
@@ -357,6 +417,15 @@ struct POEMS
     std::vector<device_cluster*> m_clusters;
     tbb::concurrent_queue<device_cluster*> m_cluster_queue;
     //moodycamel::ConcurrentQueue<device_cluster*> m_cluster_queue;
+
+    uint64_t total_received_messages_approx()
+    {
+        uint64_t received=m_globalNonLocalReceives.load();
+        for(auto *c : m_clusters){
+            received += c->localMessagesSentAndReceived;
+        }
+        return received;
+    }
 
     void sanity()
     {
@@ -458,6 +527,8 @@ struct POEMS
                         cluster->provider_do_hardware_idle=true; // And indicate idle needs to be run
                     }
                     // And that's it!
+
+                    exit(0); // TEMP
                 }
             }
 
@@ -607,12 +678,38 @@ struct POEMS
         }
     }
 
+    void dump_state(FILE *dst, device_cluster *cluster, device *dev)
+    {
+#ifndef NDEBUG
+        fprintf(dst, "  Device %s : %s\n", dev->id, SPROVIDER_DEVICE_TYPE_INFO[dev->device_type_index].id);
+#else   
+    fprintf(dst, "  Device %p : %s\n", dev, SPROVIDER_DEVICE_TYPE_INFO[dev->device_type_index].id);
+#endif
+        uint32_t rts=0;
+        bool rtc=false;
+        bool active=cluster->is_device_active(dev->offset_in_cluster);
+        bool gactive=sprovider_calc_rts(nullptr, dev->device_type_index, m_gp, dev->properties_then_state, &rts, &rtc);
+        fprintf(dst, "    rts=0x%x, rtc=%u, active=%u,  sys active=%u\n", rts, rtc, gactive, active);
+#ifndef NDEBUG
+        fprintf(dst, "    properties=%s\n", get_json_properties(dev->device_type, dev->properties_then_state  ).c_str());
+        std::string sss=get_json_state(dev->device_type, dev->properties_then_state  );
+        fprintf(dst, "         state=%s\n", sss.c_str());
+#endif
+    }
+
+    void dump_state(FILE *dst)
+    {
+        for(auto *cluster : m_clusters){
+            fprintf(dst, "Cluster %p:\n", cluster);
+            for(auto *dev : cluster->devices){
+                dump_state(dst, cluster, dev);        
+            }
+            fprintf(dst, "Head message = %p\n", cluster->incoming_queue.load());
+        }
+    }
+
     void add_edge(edge_vector &ev, unsigned handler_index);
 };
-
-
-
-#include "../sprovider/sprovider_helpers.hpp"
 
 
 
@@ -648,6 +745,15 @@ public:
         : m_target(target)
     {}
 
+    void check_size( const char *thing_type, unsigned esize, const TypedDataPtr &value)
+    {
+        unsigned gsize = value ? value.payloadSize() : 0;
+        if(gsize!=esize){
+            fprintf(stderr, "Found %s with expected size of %u but got size %u. Graph mismatch?\n", thing_type, esize, gsize);
+            exit(1);
+        }
+    }
+
   uint64_t onBeginGraphInstance(
     const GraphTypePtr &graph,
     const std::string &id,
@@ -655,9 +761,21 @@ public:
     rapidjson::Document &&metadata
   ) override
   {
+      if(graph->getId()!=SPROVIDER_GRAPH_TYPE_INFO.id){
+          fprintf(stderr, "Simulator is compiled for graph type '%s', but file contained '%s'\n", SPROVIDER_GRAPH_TYPE_INFO.id, graph->getId());
+          exit(1);
+      }
+      check_size("graph properties", SPROVIDER_GRAPH_TYPE_INFO.properties_size, properties);
+
     m_target.m_gp=alloc_copy_P(properties);
     return 0;
   }
+
+    void dump_tds(std::string name, TypedDataSpecPtr spec, TypedDataPtr val)
+    {
+
+        std::cerr<<name<<" = "<< (spec ? spec->toJSON(val) : "None") <<"\n";
+    }
 
   uint64_t onDeviceInstance
   (
@@ -669,19 +787,38 @@ public:
    rapidjson::Document &&metadata=rapidjson::Document()
   ) override
   {
+    unsigned device_type_index=device_type_id_to_index(dt->getId());
+
     unsigned index=m_deviceIdToIndex.size();
     m_deviceIdToIndex.insert(std::make_pair(id, index));
+
+    unsigned expected_state_size=SPROVIDER_DEVICE_TYPE_INFO[device_type_index].state_size;
+    unsigned expected_properties_size=SPROVIDER_DEVICE_TYPE_INFO[device_type_index].properties_size;
+
+    check_size("device properties", expected_properties_size, properties);
+    check_size("device state", expected_state_size, state);
 
     unsigned dev_P_S_size=sizeof(device)+calc_P_S_size(properties,state);
     device *dev=new (dev_P_S_size) device();
     dev->cluster=0;
     dev->offset_in_cluster=-1;
-    dev->device_type_index=device_type_id_to_index(dt->getId());
+    dev->device_type_index=device_type_index;
     copy_P_S( dev->properties_then_state, properties, state );
 
     dev->output_ports.resize(dt->getOutputCount());
 
+    #ifndef NDEBUG
+    dev->id=strdup(id.c_str());
+    dev->device_type=dt;
+    #endif
+/*
+    std::cerr<<"Instance "<<id<<"\n";
+    dump_tds("  props", dt->getPropertiesSpec(), properties);
+    dump_tds("  state", dt->getStateSpec(), state);
+*/
     m_target.m_devices.push_back(dev);
+
+    sprovider_do_init(nullptr, dev->device_type_index, m_target.m_gp, dev->properties_then_state);
     
     return index;
   }
@@ -710,6 +847,10 @@ void onEdgeInstance
     unsigned output_edge_offset=output.edges.size();
     unsigned output_p_s_offset=output.data.size();
     unsigned output_p_s_size=calc_P_S_size(properties,state);
+
+    const auto &input_info=SPROVIDER_DEVICE_TYPE_INFO[e.dest_device->device_type_index].inputs[e.pin_index];
+    check_size("edge properties", input_info.properties_size, properties);
+    check_size("edge state", input_info.state_size, state);
 
     output.data.resize(output.data.size()+output_p_s_size);
     copy_P_S(output.data.data()+output_p_s_offset, properties, state);
@@ -852,9 +993,10 @@ void assign_clusters_metis(std::vector<device*> &devices, std::vector<device_clu
 
             for(unsigned i=0; i<nDevices; i++){
                 auto d = c->devices[i];
-                sprovider_do_init(nullptr, d->device_type_index, m_target.m_gp, d->properties_then_state);
-
-                c->set_device_active(i, true);
+                uint32_t rts=0;
+                bool rtc=false;
+                bool active=sprovider_calc_rts(nullptr, d->device_type_index, m_target.m_gp, d->properties_then_state, &rts, &rtc);
+                c->set_device_active(i, active);
 
                 for(auto &o : d->output_ports){
                     for(edge &e : o.edges){

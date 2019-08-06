@@ -86,6 +86,8 @@
 	</Documentation>
 
 	<SharedCode><![CDATA[
+    #include <algorithm>
+
     /*
         Should assume that the bits are equally spread, rather than concentrated at low indices
         NOTE: further evidence suggesting an lmo instruction would be really useful

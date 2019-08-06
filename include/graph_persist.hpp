@@ -16,6 +16,10 @@
 // HACK.
 struct filepath
 {
+  filepath()
+    : path("")
+  {}
+
   filepath(const std::string &p)
     : path(p)
   {}

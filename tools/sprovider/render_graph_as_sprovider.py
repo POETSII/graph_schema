@@ -11,6 +11,9 @@ from graph.core import TypedDataSpec, TupleTypedDataSpec, ScalarTypedDataSpec, A
 from graph.load_xml import load_graph_type
 
 
+size = lambda x: x.size_in_bytes() if x is not None else 0
+size_pad = lambda x: (size(x)+3)&0xFFFFFFFC
+
 
 ###########################################################
 ## Some environments (OpenCL) don't like variadic macros,
@@ -219,11 +222,25 @@ def render_graph_type_handlers_as_sprovider(gt:GraphType, options:RenderOptions)
         dst.write(f"#undef DEVICE_STATE_T\n\n")
 
         shared_prefix=f"""
+        const int _graph_properties_size={size(gt.properties)};
+        const int _graph_properties_size_padded={size_pad(gt.properties)};
+        const int _device_properties_size={size(dt.properties)};
+        const int _device_properties_size_padded={size_pad(dt.properties)};
+        const int _device_state_size={size(dt.state)};
+        const int _device_state_size_padded={size_pad(dt.state)};
+        
         typedef {dt.id}_properties_t DEVICE_PROPERTIES_T;
         typedef {dt.id}_state_t DEVICE_STATE_T;
         const GRAPH_PROPERTIES_T *graphProperties=(const GRAPH_PROPERTIES_T*)_gpV;
         const DEVICE_PROPERTIES_T *deviceProperties=(const DEVICE_PROPERTIES_T*)_dpdsV;
-        DEVICE_STATE_T *deviceState=(DEVICE_STATE_T*)( (((char*)_dpdsV) + ((sizeof(DEVICE_PROPERTIES_T)+3)&0xFFFFFFFCul)));
+        DEVICE_STATE_T *deviceState=(DEVICE_STATE_T*)( ((char*)_dpdsV) + _device_properties_size_padded);
+        
+        #ifdef POEMS_ENABLE_VALGRIND_MEMCHECK
+        assert(_graph_properties_size ? 0==VALGRIND_CHECK_MEM_IS_DEFINED(graphProperties, _graph_properties_size) : 1);
+        assert(_device_properties_size ? 0==VALGRIND_CHECK_MEM_IS_DEFINED(deviceProperties, _device_properties_size) : 1);
+        assert(_device_state_size ? 0==VALGRIND_CHECK_MEM_IS_DEFINED(deviceState, _device_state_size) : 1);
+        #endif
+        
         """
         for (i,op) in enumerate(dt.outputs_by_index):
             shared_prefix+=f"const uint32_t RTS_FLAG_{op.name} = 1<<{i};\n"
@@ -292,11 +309,14 @@ def render_graph_type_handlers_as_sprovider(gt:GraphType, options:RenderOptions)
             static active_flag_t {iprefix}_do_recv_{dt.id}_{ip.name}(void *_ctxt, const void *_gpV, void *_dpdsV, void *_epesV, const void *_msgV)
             {{
                 {shared_prefix}
+                const int _edge_properties_size={size(ip.properties)};
+                const int _edge_properties_size_padded={size_pad(ip.properties)};
+                const int _edge_state_size={size(ip.state)};
                 typedef {ip.message_type.id}_message_t MESSAGE_T;
                 typedef {dt.id}_{ip.name}_properties_t EDGE_PROPERTIES_T;
                 typedef {dt.id}_{ip.name}_state_t EDGE_STATE_T;
                 const EDGE_PROPERTIES_T *edgeProperties=(const EDGE_PROPERTIES_T*)_epesV;
-                EDGE_STATE_T *edgeState=((EDGE_STATE_T*)( ((char*)_epesV) + ((sizeof(EDGE_PROPERTIES_T)+3)&0xFFFFFFFCul)));
+                EDGE_STATE_T *edgeState=(EDGE_STATE_T*)( ((char*)_epesV) + _edge_properties_size_padded);
                 const MESSAGE_T *message=(const MESSAGE_T*)_msgV;
                 //////////////////
                 {adapt_handler(ip.receive_handler)}
@@ -314,11 +334,14 @@ def render_graph_type_handlers_as_sprovider(gt:GraphType, options:RenderOptions)
         for (i,ip) in enumerate(dt.inputs_by_index):
             dst.write(f"""  case {i}:
             {{
+                const int _edge_properties_size={size(ip.properties)};
+                const int _edge_properties_size_padded={size_pad(ip.properties)};
+                const int _edge_state_size={size(ip.state)};
                 typedef {ip.message_type.id}_message_t MESSAGE_T;
                 typedef {dt.id}_{ip.name}_properties_t EDGE_PROPERTIES_T;
                 typedef {dt.id}_{ip.name}_state_t EDGE_STATE_T;
                 const EDGE_PROPERTIES_T *edgeProperties=(const EDGE_PROPERTIES_T*)_epesV;
-                EDGE_STATE_T *edgeState=((EDGE_STATE_T*)( ((char*)_epesV) + ((sizeof(EDGE_PROPERTIES_T)+3)&0xFFFFFFFCul)));
+                EDGE_STATE_T *edgeState=(EDGE_STATE_T*)( ((char*)_epesV) + _edge_properties_size_padded);
                 const MESSAGE_T *message=(const MESSAGE_T*)_msgV;
                 ///////////////////////////////
                 {adapt_handler(ip.receive_handler)}
@@ -384,7 +407,7 @@ def render_graph_type_handlers_as_sprovider(gt:GraphType, options:RenderOptions)
             bool *doSend=&_doSend;
             {{
                 uint32_t *readyToSend=&_readyToSend;
-                bool requestCompute=&_readyToCompute;
+                bool *requestCompute=&_readyToCompute;
                 ////////////////////////////////////////
                 {adapt_handler(dt.ready_to_send_handler)}
                 ////////////////////////////////////////
@@ -399,6 +422,7 @@ def render_graph_type_handlers_as_sprovider(gt:GraphType, options:RenderOptions)
                 ////////////////////////////////////////////
             }}else{{
                 unsigned _pin_index=__builtin_ctz(_readyToSend);
+                *_action_taken=_pin_index;
                 switch(_pin_index){{        
                     default:  SPROVIDER_UNREACHABLE;
             """)
@@ -412,7 +436,7 @@ def render_graph_type_handlers_as_sprovider(gt:GraphType, options:RenderOptions)
                 //////////////////
                 if(_doSend){{
                     *_output_port={i};
-                    *_message_size=sizeof(MESSAGE_T);
+                    *_message_size={size(op.message_type.message)};
                 }}
             }}
             break;
@@ -463,7 +487,7 @@ def render_graph_type_handlers_as_sprovider(gt:GraphType, options:RenderOptions)
         dst.write(f"   case {i}: return {iprefix}_calc_rts_{dt.id}(_ctxt, _gpV, _dpdsV, readyToSend, requestCompute);\n")
     dst.write("}\n}\n\n")        
 
-    dst.write(f"""static active_flag_t sprovider_do_send(void *_ctxt, unsigned _device_type_index, unsigned _pin_index, const void *_gpV, const void *_dpdsV, bool *_do_send, int *_send_index, void *_msgV){{
+    dst.write(f"""static active_flag_t sprovider_do_send(void *_ctxt, unsigned _device_type_index, unsigned _pin_index, const void *_gpV, void *_dpdsV, bool *_do_send, int *_send_index, void *_msgV){{
         switch(_device_type_index){{
         default: SPROVIDER_UNREACHABLE;
     """)
@@ -471,7 +495,7 @@ def render_graph_type_handlers_as_sprovider(gt:GraphType, options:RenderOptions)
         dst.write(f"""    case {i}: return {iprefix}_do_send_{dt.id}(_ctxt, _pin_index, _gpV, _dpdsV, _do_send, _send_index, _msgV);\n""")
     dst.write("}\n}\n\n")
 
-    dst.write(f"""static active_flag_t sprovider_try_send_or_compute(void *_ctxt, unsigned _device_type_index, const void *_gpV, const void *_dpdsV, int *_action_taken, int *_output_port, unsigned *_message_size, int *_send_index, void *_msgV){{
+    dst.write(f"""static active_flag_t sprovider_try_send_or_compute(void *_ctxt, unsigned _device_type_index, const void *_gpV, void *_dpdsV, int *_action_taken, int *_output_port, unsigned *_message_size, int *_send_index, void *_msgV){{
         switch(_device_type_index){{
         default: SPROVIDER_UNREACHABLE;
     """)
@@ -495,7 +519,7 @@ def render_graph_type_as_sprovider(gt:GraphType, options:RenderOptions):
     #ifndef sprovider_{gt.id}_hpp
     #define sprovider_{gt.id}_hpp
 
-    #include "sprovider.h"
+    #include "sprovider_types.h"
     """)
 
     render_graph_type_structs_as_sprovider(gt, options)
@@ -524,8 +548,8 @@ def render_graph_type_info_as_sprovider(gt:GraphType, options:RenderOptions):
         {1 if has_any_hardware_idle else 0},
         {1 if has_any_device_idle else 0},
         {1 if has_any_indexed_send else 0},
-        sizeof(GRAPH_PROPERTIES_T),
-        (sizeof(GRAPH_PROPERTIES_T)+3)&0xFFFFFFFCul
+        {size(gt.properties)},
+        {size_pad(gt.properties)}
     }};
 
     SPROVIDER_GLOBAL_CONST sprovider_device_info_t SPROVIDER_DEVICE_TYPE_INFO[SPROVIDER_DEVICE_TYPE_COUNT] = {{
@@ -540,12 +564,13 @@ def render_graph_type_info_as_sprovider(gt:GraphType, options:RenderOptions):
             {1 if dt.is_external else 0},
             {1 if non_trivial_handler(dt.on_hardware_idle_handler) else 0}, // has_hardware_idle. TODO: be precise
             {1 if non_trivial_handler(dt.on_device_idle_handler) else 0}, // has_device_idle. TODO: be precise
-            sizeof({gt.id}_{dt.id}_properties_t),
-            (sizeof({gt.id}_{dt.id}_properties_t)+3)&0xFFFFFFFCul,
-            sizeof({gt.id}_{dt.id}_state_t),
-            (sizeof({gt.id}_{dt.id}_state_t)+3)&0xFFFFFFFCul,
-            ((sizeof({gt.id}_{dt.id}_properties_t)+3)&0xFFFFFFFCul) + ((sizeof({gt.id}_{dt.id}_state_t)+3)&0xFFFFFFFCul),
-            0,0,
+            {size(dt.properties)}, // properties size
+            {size_pad(dt.properties)}, // padded properties size
+            {size(dt.state)}, // state size
+            {size_pad(dt.state)}, // padded state size
+            {size_pad(dt.properties) + size_pad(dt.state)}, // padded properties + state size
+            {len(dt.inputs_by_index)}, // Number of inputs
+            {len(dt.outputs_by_index)}, // Number of outputs
             {{
         """)
 
@@ -557,13 +582,13 @@ def render_graph_type_info_as_sprovider(gt:GraphType, options:RenderOptions):
             {{
                 "{ip.name}",
                 {j},
-                sizeof({mt.id}_message_t),
-                ((sizeof({mt.id}_message_t)+3)&0xFFFFFFFCul),
-                sizeof({dt.id}_{ip.name}_properties_t),
-                ((sizeof({dt.id}_{ip.name}_properties_t)+3)&0xFFFFFFFCul),
-                sizeof({dt.id}_{ip.name}_state_t),
-                ((sizeof({dt.id}_{ip.name}_state_t)+3)&0xFFFFFFFCul),
-                ((sizeof({dt.id}_{ip.name}_properties_t)+3)&0xFFFFFFFCul) + ((sizeof({dt.id}_{ip.name}_state_t)+3)&0xFFFFFFFCul)
+                {size(mt.message)},
+                {size_pad(mt.message)},
+                {size(ip.properties)},
+                {size_pad(ip.properties)},
+                {size(ip.state)},
+                {size_pad(ip.state)},
+                {size_pad(ip.properties)+size_pad(ip.state)},
             }}
             """)
 
@@ -577,8 +602,8 @@ def render_graph_type_info_as_sprovider(gt:GraphType, options:RenderOptions):
             {{
                 "{op.name}",
                 {j},
-                sizeof({mt.id}_message_t),
-                ((sizeof({mt.id}_message_t)+3)&0xFFFFFFFCul),
+                {size(mt.message)},
+                {size_pad(mt.message)},
                 {1 if op.is_indexed else 0}              
             }}
             """)
@@ -595,7 +620,7 @@ def render_graph_type_info_as_sprovider(gt:GraphType, options:RenderOptions):
     max_payload_size=0
     for mt in gt.message_types.values():
         if mt.message:
-            max_payload_size=max(max_payload_size, mt.message.size_in_bytes())
+            max_payload_size=max(max_payload_size, size(mt.message))
     dst.write(f"""
     SPROVIDER_GLOBAL_CONST int SPROVIDER_MAX_PAYLOAD_SIZE = {max_payload_size};
     """)

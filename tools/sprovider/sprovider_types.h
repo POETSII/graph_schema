@@ -25,6 +25,10 @@
 #define SPROVIDER_UNREACHABLE {assert(0); __builtin_unreachable();}
 #endif
 
+#ifdef POEMS_ENABLE_VALGRIND_MEMCHECK
+#include <valgrind/memcheck.h>
+#endif
+
 /////////////////////////////////////
 // These are intended to allow for independent compilation of
 // compilers for testing purposes. In a simulator they would
