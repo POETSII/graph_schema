@@ -44,6 +44,7 @@ def make_random(n,d,w):
         connections[i] = [ (i+j)%n for j in random.sample(range(w),d)]
     return connections
     
+sys.stderr.write("Creating connections\n")
 wideConnections=make_random(n,d,w)
 
 instName="storm_{}_{}_{}".format(n,d,w)
@@ -54,6 +55,7 @@ res=GraphInstance(instName, graphType, properties)
 
 nodes=[]
 
+sys.stderr.write("Creating devices\n")
 progress=[]
 for i in range(0,n):
     wide=wideConnections[i]
@@ -62,12 +64,15 @@ for i in range(0,n):
     nodes.append(DeviceInstance(res, "n{}".format(i), nodeType, props))
     res.add_device_instance(nodes[i])
     
+sys.stderr.write("Creating edges\n")
 for i in range(0,n):
-    sys.stderr.write(" Edges : Node {} of {}\n".format( i, n) )
+    if (i%100)==0:
+        sys.stderr.write(" Edges : Node {} of {}\n".format( i, n) )
     
     res.add_edge_instance(EdgeInstance(res, nodes[(i+1)%n], "credit", nodes[i], "narrow"))
     
     for di in wideConnections[i]:
         res.add_edge_instance(EdgeInstance(res, nodes[di], "credit", nodes[i], "wide"))
-    
+
+sys.stderr.write("Writing graph\n")
 save_graph(res,sys.stdout)        

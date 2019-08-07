@@ -221,6 +221,15 @@ public:
     const_iterator end() const
     { return const_iterator{m_elements.end()}; }
 
+    const_iterator find(const T &value) const
+    {
+        auto itPlace=m_index.find(value);
+        if(itPlace==m_index.end()){
+            return end();
+        }
+        return const_iterator{ m_elements.begin()+itPlace->second };
+    }
+
     void insert(const T &x)
     {
         auto it=m_index.find(x);
@@ -472,6 +481,8 @@ public:
         uint32_t &readyToSend
     ) =0;
 
+    virtual void executeHardwareIdle() =0;
+
 };
 
 
@@ -586,6 +597,28 @@ private:
         }
     };
 
+    struct HardwareIdleServicesHandler
+        : public OrchestratorServicesBase
+    {
+        device_t *device;
+        unsigned outputPinIndex;
+
+        HardwareIdleServicesHandler(SimulationEngineFast *_engine, device_t *_device)
+            : OrchestratorServicesBase(_engine)
+            , device(_device)
+        {}
+
+        void vlog(unsigned level, const char *msg, va_list args) override
+        {
+            if(level<engine->m_logLevel){
+                fprintf(stderr, "%s : ", ((const std::string &)device->name).c_str());
+                vfprintf(stderr, msg, args);
+                fprintf(stderr, "\n");
+            }
+            check_for_exit(msg);
+        }
+    };
+
     struct InitServicesHandler
         : public OrchestratorServicesBase
     {
@@ -641,10 +674,16 @@ private:
 
     std::shared_ptr<LogWriter> m_logWriter;
     uint64_t m_logIdUnq=0;
+    uint64_t m_barrierIdUnq=0;
 
     uint64_t make_log_id()
     {
         return m_logIdUnq++;
+    }
+
+    std::string make_barrier_id()
+    {
+        return "barrier_"+std::to_string(m_barrierIdUnq++);
     }
 
     // We want a default message to clone for output messages, but this
@@ -1108,6 +1147,52 @@ public:
             sendEventId=id;
         }
     }  
+
+    virtual void executeHardwareIdle(    ) override final
+    {
+        std::string hardwareIdleEventId=make_barrier_id();
+
+        for(auto &device : m_devices){
+            if(device.type->isExternal()){
+                continue; // TODO: Is this correct for externals...?
+            }
+
+            assert( !device.RTS );
+
+            HardwareIdleServicesHandler services(this, &device);
+            
+            device.type->onHardwareIdle(
+                &services,
+                m_graphProperties.get(),
+                device.properties.get(),
+                device.state.get()
+            );
+
+            device.RTS=device.type->calcReadyToSend(
+                &services,
+                m_graphProperties.get(),
+                device.properties.get(),
+                device.state.get()
+            );
+
+            if(m_logWriter){
+                auto id=make_log_id();
+                m_logWriter->onHardwareIdleEvent(
+                    std::to_string(id).c_str(),
+                    (double)id,
+                    0.0,
+                    {},
+                    device.type,
+                    device.name.c_str(),
+                    device.RTS,
+                    id,
+                    {},
+                    device.state,
+                    hardwareIdleEventId.c_str()
+                );
+            }
+        }
+    }
 };
 
 
@@ -1146,6 +1231,9 @@ protected:
     virtual void add_messages(const edge_index_range_t &range, const TypedDataPtr &payload, uint64_t sendEventId)=0;
     virtual message_t pop_message()=0;
     virtual size_t count_messages() const=0;
+
+    virtual void check_invariants() const
+    {};
 
 
     void step_send()
@@ -1220,17 +1308,26 @@ public:
                 add_ready( address );
             }
         }
+
     }
 
     bool step()
     {
+
         auto numMessages=count_messages();
         auto numReady=count_ready();
 
         //fprintf(stderr, "numMessages=%u, numReady=%u\n", numMessages, numReady);
 
-        if(numMessages==0 && numReady==0)
-            return false;
+        if(numMessages==0 && numReady==0){
+            m_engine->executeHardwareIdle();
+            for(device_address_t address=0; address<m_engine->getDeviceCount(); address++){
+                if( m_engine->getDeviceRTS(address) ){
+                    add_ready( address );
+                }
+            }
+            return true;
+        }
 
         bool doSend;
         if(m_probSend>=1.0 || (numMessages==0)){
@@ -1254,6 +1351,7 @@ public:
         }else{
             step_recv();
         }
+
         return true;
 
     }
@@ -1318,6 +1416,13 @@ class OutOfOrderStrategy
 private:
     std::vector<message_t> m_messageSet;
     RandomSelectionSet<device_address_t> m_readySet;
+
+    void check_invariants() const override
+    {
+        for(unsigned i=0; i<m_engine->getDeviceCount(); i++){
+            assert( (m_engine->getDeviceRTS(i)==0)  == ( m_readySet.find(i) == m_readySet.end() ) );
+        }
+    }
 
     device_address_t pick_ready() override
     { return m_readySet.get_random(m_urng); }

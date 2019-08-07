@@ -11,6 +11,8 @@
 		#include <cmath>
 		#include <utility>
 		#include <cstring>
+		#include <algorithm>
+		#include <climits>
 
 		const unsigned K_MSG=sizeof(std::declval<apsp_vec_barrier_share_message_t>().distances) / sizeof(std::declval<apsp_vec_barrier_share_message_t>().distances[0]);
 		const unsigned K_STATE=sizeof(std::declval<apsp_vec_barrier_vertex_state_t>().distances) / sizeof(std::declval<apsp_vec_barrier_vertex_state_t>().distances[0]);
@@ -115,7 +117,7 @@
 							}
 						}
 					}
-					handler_log(2, "stats_dirty=%u, distances_dirty=%u", deviceState->stats_dirty, deviceState->distances_dirty);
+					handler_log(3, "stats_dirty=%u, distances_dirty=%u", deviceState->stats_dirty, deviceState->distances_dirty);
 					]]></OnReceive>
 				</InputPin>
 
@@ -128,7 +130,7 @@
 					memcpy(message->distances, deviceState->distances, sizeof(deviceState->distances));
 					deviceState->distances_dirty=false;
 					message->source=deviceProperties->id;
-					handler_log(2, "stats_dirty=%u, distances_dirty=%u", deviceState->stats_dirty, deviceState->distances_dirty);
+					handler_log(3, "stats_dirty=%u, distances_dirty=%u", deviceState->stats_dirty, deviceState->distances_dirty);
 					]]></OnSend>
 				</OutputPin>
 
@@ -275,10 +277,18 @@
 				]]></OnInit>
 
 				<OnHardwareIdle><![CDATA[
+				static int idle=0;
+				if(++idle==10){
+					exit(1);
+				}
+
+				handler_log(0, "Here, round_base=%u, vertex_count=%u", deviceState->round_base, deviceState->vertex_count);
+
 				if(deviceState->vertex_count==0){
 					// Do nothing - very first round, with no stats, or after the last round
 					assert(deviceState->round_base==0 || deviceState->round_base >= graphProperties->total_vertices);
 				}else{
+					handler_log(0, "There");
 
 					assert(deviceState->vertex_count == graphProperties->total_vertices);
 					assert(deviceState->round_base < graphProperties->total_vertices);
