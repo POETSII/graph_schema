@@ -46,3 +46,11 @@ load ../bats_helpers
     $WD/wibble.sim $WD/wibble.xml
 }
 
+@test "Compile and test clocked izhikevich for POEMS" {
+    WD=$(make_test_wd)
+    apps/clocked_izhikevich/create_sparse_instance.py 8000 2000 20 100  > $WD/wibble.xml
+    tools/poems/compile_poems_sim.sh $WD/wibble.xml -o $WD/wibble.sim
+    [[ -x $WD/wibble.sim ]]
+    $WD/wibble.sim $WD/wibble.xml
+}
+

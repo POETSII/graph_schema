@@ -72,12 +72,10 @@ for i in range(N):
     res.add_edge_instance(EdgeInstance(res,nodes[i],"tick",clock,"tick",None))
     res.add_edge_instance(EdgeInstance(res,clock,"tock",nodes[i],"tock",None))
 
-for dst in range(N):
-    free=list(range(N))
-    random.shuffle(free)
-    for i in range(K):
-        src=free[i]
+sys.stderr.write("Creating edges\n")
 
+for dst in range(N):
+    for src in random.sample(range(N), K):
         if src<Ne:
             S=0.5*urand()
         else:
@@ -85,5 +83,5 @@ for dst in range(N):
         ei=EdgeInstance(res, nodes[dst], "input", nodes[src], "fire", {"weight":S} )
         res.add_edge_instance(ei)
 
-
+sys.stderr.write("Saving graph\n")
 save_graph(res,sys.stdout)
