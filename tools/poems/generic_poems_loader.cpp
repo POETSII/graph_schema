@@ -2,6 +2,18 @@
 
 #include "graph_persist_dom_reader.hpp"
 
+FILE *g_stats_file;
+std::string g_stats_prefix;
+
+void stats_log(const std::string &thing, const std::string &sub_thing, const std::string &value)
+{
+    if(g_stats_file){
+        std::stringstream acc;  
+        acc<<g_stats_prefix<<thing<<","<<sub_thing<<","<<value<<"\n";
+        fputs(acc.str().c_str(), g_stats_file);
+    }
+}
+
 std::function<void()> _at_exit_hook;
 
 void at_exit_raw()
@@ -11,8 +23,10 @@ void at_exit_raw()
 
 int main(int argc, char *argv[])
 {    
+    set_now_start();
+
     filepath source_path;
-    int max_t=10;
+    filepath stats_file_path;
     int nThreads=std::thread::hardware_concurrency();
     int cluster_size=1024;
     int use_metis=1;
@@ -39,6 +53,14 @@ int main(int argc, char *argv[])
         val=std::atoi(s.c_str());
         return true;
     };
+    auto parse_path_opt=[&](const char *name, filepath &val){
+        std::string s;
+        if(!parse_str_opt(name, s)){
+            return false;
+        }
+        val=filepath(s);
+        return true;
+    };
 
     auto usage=[&]()
     {
@@ -47,6 +69,7 @@ usage : %s [--threads n] [--cluster-size n] [--use-metis 0|1] <source.xml>
 --threads : How many threads to use for simulation (default is std::thread::hardware_concurrency)
 --cluster-size : Target number of devices per cluster (default is 1024)
 --use-metis : Whether to cluster using metis (default is 1)
+--stats-file file : A file to log execution information to.
 )", argv[0]);
     };
 
@@ -57,6 +80,7 @@ usage : %s [--threads n] [--cluster-size n] [--use-metis 0|1] <source.xml>
         }else if(parse_int_opt("--threads", nThreads)) {}
         else if(parse_int_opt("--cluster-size", cluster_size)) {}
         else if(parse_int_opt("--use-metis", use_metis)) {}
+        else if(parse_path_opt("--stats-file", stats_file_path)) {}
         else{
             if(source_path.native()!=""){
                 fprintf(stderr, "Received more than one source path (mis-spelled option?)\n");
@@ -70,8 +94,8 @@ usage : %s [--threads n] [--cluster-size n] [--use-metis 0|1] <source.xml>
 
     POEMS instance;
 
-    fprintf(stderr, "max_t=%u, nThreads=%u, cluster_size=%u, use_metus=%u, source_path=%s\n",
-        max_t, nThreads, cluster_size, use_metis, source_path.c_str()
+    fprintf(stderr, "nThreads=%u, cluster_size=%u, use_metus=%u, source_path=%s\n",
+        nThreads, cluster_size, use_metis, source_path.c_str()
     );
 
     if(nThreads<=0){
@@ -83,12 +107,24 @@ usage : %s [--threads n] [--cluster-size n] [--use-metis 0|1] <source.xml>
         exit(1);
     }
 
+    if(stats_file_path.native()!=""){
+        g_stats_file=fopen(stats_file_path.c_str(), "wt");
+        if(!g_stats_file){
+            fprintf(stderr, "Couldn't open stats file '%s'.\n", stats_file_path.c_str());
+            exit(1);
+        }
+    }
+
+    stats_log("threads_used", "", std::to_string(nThreads));
+    stats_log("cluster_size", "", std::to_string(cluster_size));
+    stats_log("use_metis", "", std::to_string(use_metis));
+
+
     instance.use_metis=use_metis;
     instance.m_cluster_size=cluster_size;
 
-    RegistryImpl registry;
-
     POEMSBuilder builder(instance);
+    builder.stats_log=stats_log;
 
     filepath srcDir;
 
@@ -102,7 +138,7 @@ usage : %s [--threads n] [--cluster-size n] [--use-metis 0|1] <source.xml>
     xmlpp::DomParser parser;
     parser.parse_file(source_path.c_str());
 
-    loadGraph(&registry, srcDir, parser.get_document()->get_root_node(), &builder);
+    loadGraph(nullptr, srcDir, parser.get_document()->get_root_node(), &builder);
 
     fprintf(stderr, "Running, setup=%f.\n", clock()/(double)CLOCKS_PER_SEC);
 

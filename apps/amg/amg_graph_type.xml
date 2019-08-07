@@ -10,6 +10,7 @@
     <SharedCode><![CDATA[
         #include <cmath>
         #include <cfloat>
+        #include <algorithm>
 
         #ifdef POETS_LEGACY_HAS_HANDLER_EXIT
         #define _do_handler_exit(code) handler_exit(code)
@@ -26,6 +27,14 @@
             } \
             _do_handler_exit(code); \
         }
+
+      enum State{
+            State_Idle,
+            State_PreSmooth,
+            State_PreResidual,
+            State_Coarse,     
+            State_PostSmooth
+        };
 ]]></SharedCode>
     <MessageTypes>
       <MessageType id="linear_problem">
@@ -186,6 +195,10 @@
         </State>
         <SharedCode><![CDATA[
 
+        /*
+        We now share the actual declaration of states, even though semantics are
+        slightly different in device types.
+
         enum State{
             State_Idle,         // Waiting for a problem to solve
                                 // [fineSeen==fineCount] : send/peer_out -> State_PreSmooth
@@ -202,6 +215,7 @@
             State_PostSmooth    // Doing final smoothing before returning
                                 // [postSmoothSeen==peerCount] : send/coarse_down -> State_Idle
         };
+        */
 
         ]]></SharedCode>
         <InputPin name="fine_up" messageTypeId="fine_to_coarse">
@@ -422,6 +436,10 @@
         </State>
         <SharedCode><![CDATA[
 
+        /*
+        We now share the actual declaration of states, even though semantics are
+        slightly different in device types.
+
         enum State{
             State_Idle,         // Waiting for a problem to solve
                                 // [r > residualTolerance] : send/peer_out -> State_PreSmooth
@@ -432,11 +450,12 @@
             State_PreResidual,  // Exchange for residual
                                 // [preResidualSeen==peerCount] : send/peer_out -> State_Pre
 
-            State_Coarse,       // Waiting till we get a message back from coarse
+            State_Coarse       // Waiting till we get a message back from coarse
                                 // [coarseSeen==coarseCount ^ r <= residualTolerance] : send/fine_down -> State_Idle
                                 // [coarseSeen==coarseCount ^ r > residualTolerance]  : send/peer_out -> State_PreSmooth
 
         };
+        */
 
         ]]></SharedCode>
         <InputPin name="problem" messageTypeId="linear_problem">

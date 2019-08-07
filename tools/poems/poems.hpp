@@ -14,6 +14,7 @@
 #include <unordered_set>
 #include <chrono>
 #include <cstdarg>
+#include <functional>
 
 #include <metis.h>
 #include <tbb/concurrent_queue.h>
@@ -50,6 +51,19 @@ void sprovider_handler_log(int level, const char *msg, ...)
     }
 
 }
+
+static std::chrono::high_resolution_clock::time_point g_now_start;
+
+void set_now_start()
+{
+    g_now_start=std::chrono::high_resolution_clock::now();
+}
+
+double now()
+{
+    return (std::chrono::high_resolution_clock::now()-g_now_start).count();
+}
+
 
 struct POEMS
 {
@@ -725,6 +739,7 @@ public:
     using device_cluster = POEMS::device_cluster;    
 private:
     POEMS &m_target;
+    std::vector<DeviceTypePtr> m_deviceTypes;
     std::unordered_map<std::string,unsigned> m_deviceIdToIndex;
 
     unsigned device_type_id_to_index(const std::string &s)
@@ -745,31 +760,62 @@ public:
         : m_target(target)
     {}
 
-    void check_size( const char *thing_type, unsigned esize, const TypedDataPtr &value)
+    std::function<void(const std::string &, const std::string &, const std::string &)> stats_log
+        = [](const std::string &, const std::string &, const std::string &)
+        {};
+
+    void check_size( const char *thing_type, const char *thing_id, unsigned esize, const TypedDataPtr &value)
     {
         unsigned gsize = value ? value.payloadSize() : 0;
         if(gsize!=esize){
-            fprintf(stderr, "Found %s with expected size of %u but got size %u. Graph mismatch?\n", thing_type, esize, gsize);
+            fprintf(stderr, "Found %s %s with expected size of %u but got size %u. Graph mismatch?\n", thing_type, thing_id, esize, gsize);
             exit(1);
         }
     }
 
-  uint64_t onBeginGraphInstance(
+
+    uint64_t onBeginGraphInstance(
     const GraphTypePtr &graph,
     const std::string &id,
     const TypedDataPtr &properties,
     rapidjson::Document &&metadata
-  ) override
-  {
-      if(graph->getId()!=SPROVIDER_GRAPH_TYPE_INFO.id){
-          fprintf(stderr, "Simulator is compiled for graph type '%s', but file contained '%s'\n", SPROVIDER_GRAPH_TYPE_INFO.id, graph->getId());
-          exit(1);
-      }
-      check_size("graph properties", SPROVIDER_GRAPH_TYPE_INFO.properties_size, properties);
+    ) override
+    {
+        stats_log("loading", "onBeginGraphInstance", std::to_string( now() ));
 
-    m_target.m_gp=alloc_copy_P(properties);
-    return 0;
-  }
+        if(graph->getId()!=SPROVIDER_GRAPH_TYPE_INFO.id){
+            fprintf(stderr, "Simulator is compiled for graph type '%s', but file contained '%s'\n", SPROVIDER_GRAPH_TYPE_INFO.id, graph->getId().c_str());
+            exit(1);
+        }
+
+        std::vector<DeviceTypePtr> device_types=graph->getDeviceTypes();
+        for(unsigned i=0; i<device_types.size(); i++){
+            auto dt=device_types[i];
+            const auto &dti=SPROVIDER_DEVICE_TYPE_INFO[i];
+            if(dt->getId()!=dti.id){
+                fprintf(stderr, "Expected device index %u to have id %s, but got %s\n", i, dti.id, dt->getId().c_str());
+                exit(1);
+            }
+
+            unsigned expected_state_size=dti.state_size;
+            unsigned expected_properties_size=dti.properties_size;
+            unsigned got_state_size=dt->getStateSpec() ? dt->getStateSpec()->payloadSize() : 0;
+            unsigned got_properties_size=dt->getPropertiesSpec() ? dt->getPropertiesSpec()->payloadSize() : 0;
+
+            if(expected_state_size!=got_state_size){
+                fprintf(stderr, "Device type %s has state size of %u internally, but graph loaded thinks it is %u\n.",
+                    dt->getId().c_str(), expected_state_size, got_state_size
+                );
+                auto def=dt->getStateSpec()->create();
+                std::cerr<<"Default state = "<<dt->getStateSpec()->toJSON(def)<<"\n";
+                exit(1);
+            }
+        }
+
+        check_size("graph properties", id.c_str(), SPROVIDER_GRAPH_TYPE_INFO.properties_size, properties);
+        m_target.m_gp=alloc_copy_P(properties);
+        return 0;
+    }
 
     void dump_tds(std::string name, TypedDataSpecPtr spec, TypedDataPtr val)
     {
@@ -795,8 +841,8 @@ public:
     unsigned expected_state_size=SPROVIDER_DEVICE_TYPE_INFO[device_type_index].state_size;
     unsigned expected_properties_size=SPROVIDER_DEVICE_TYPE_INFO[device_type_index].properties_size;
 
-    check_size("device properties", expected_properties_size, properties);
-    check_size("device state", expected_state_size, state);
+    check_size("device properties", id.c_str(), expected_properties_size, properties);
+    check_size("device state", id.c_str(), expected_state_size, state);
 
     unsigned dev_P_S_size=sizeof(device)+calc_P_S_size(properties,state);
     device *dev=new (dev_P_S_size) device();
@@ -849,8 +895,8 @@ void onEdgeInstance
     unsigned output_p_s_size=calc_P_S_size(properties,state);
 
     const auto &input_info=SPROVIDER_DEVICE_TYPE_INFO[e.dest_device->device_type_index].inputs[e.pin_index];
-    check_size("edge properties", input_info.properties_size, properties);
-    check_size("edge state", input_info.state_size, state);
+    check_size("edge properties", "?", input_info.properties_size, properties);
+    check_size("edge state", "?", input_info.state_size, state);
 
     output.data.resize(output.data.size()+output_p_s_size);
     copy_P_S(output.data.data()+output_p_s_offset, properties, state);
@@ -963,7 +1009,7 @@ void assign_clusters_metis(std::vector<device*> &devices, std::vector<device_clu
 
       unsigned nClusters=std::max(1u, unsigned(devices.size() / m_target.m_cluster_size));
       
-      fprintf(stderr, "Splitting %u devices into %u clusters; about %u devices/cluster\n", devices.size(), nClusters, unsigned(devices.size()/nClusters));
+      fprintf(stderr, "Splitting %u devices into %u clusters; about %u devices/cluster\n", unsigned(devices.size()), nClusters, unsigned(devices.size()/nClusters));
       
       assert(m_target.m_clusters.empty());
       m_target.m_clusters.reserve(nClusters);

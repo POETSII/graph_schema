@@ -6,6 +6,7 @@
 
 #include "graph_persist_dom_reader.hpp"
 
+#pragma pack(push,1)
 struct gals_heat_properties_t
 {
     uint32_t max_t;
@@ -39,6 +40,7 @@ struct update_message_t
     uint32_t t;
     float v;
 };
+#pragma pack(pop)
 
 using cell_in_state_t = empty_struct_tag;
 
@@ -337,7 +339,8 @@ GraphTypePtr make_gals_heat_graph_type()
                 makeScalar("ca", "float"),
                 makeScalar("na", "uint32_t"),
                 makeScalar("cs", "uint32_t"),
-                makeScalar("ns", "uint16_t")
+                makeScalar("ns", "uint32_t"),
+                makeScalar("rts", "uint32_t")
             }),
             {in},
             {out},
@@ -348,7 +351,7 @@ GraphTypePtr make_gals_heat_graph_type()
 
     auto gt=std::shared_ptr<GraphTypeDynamic>(
         new GraphTypeDynamic(
-            "gals_heat_fake",
+            "gals_heat_poems",
             makeTypedDataSpec({
                 makeScalar("max_t", "float")
             }),
