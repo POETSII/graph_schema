@@ -141,6 +141,7 @@
             message->x = deviceState->fineAcc * deviceProperties->inv_Adiag;
             message->max_r = deviceState->fineMaxResidual;
             handler_log(3, "msg.maxMaxResidual=%g", deviceState->fineMaxResidual);
+            assert(message->max_r>=0);
 
             deviceState->fineSeen=0;
             deviceState->fineAcc=0;
@@ -228,7 +229,9 @@
 
             deviceState->fineSeen++;  // Might enable send on peer_out
             deviceState->fineAcc+=edgeProperties->R * message->b;
+            assert(message->max_r>=0);
             deviceState->fineMaxResidual=std::max(deviceState->fineMaxResidual, message->max_r);
+            assert(deviceState->fineMaxResidual>=0);
 
             handler_log(2, "fineSeen=%d, fineAcc=%f", deviceState->fineSeen, deviceState->fineAcc);
             ]]></OnReceive>
@@ -269,6 +272,9 @@
             assert(deviceState->state == State_Coarse);
             assert(deviceState->coarseSeen < deviceProperties->coarseCount);
 
+            if(!(deviceState->max_r == -1 || deviceState->max_r==message->max_r)){
+              handler_log(0, "coarse_down/receive: deviceState->max_r=%g, message->max_r=%g", deviceState->max_r, message->max_r);
+            }
             // We should receive exactly the same max_r from _all_ coarse nodes, as it all comes from one root.
             assert(deviceState->max_r == -1 || deviceState->max_r==message->max_r);
 
@@ -363,6 +369,7 @@
 
             message->x = deviceState->x;
             message->max_r = deviceState->max_r;
+            assert(message->max_r>=0);
             ]]></OnSend>
         </OutputPin>
         <ReadyToSend><![CDATA[
@@ -667,7 +674,6 @@
         }else if(deviceState->i == 16){
             *readyToSend=RTS_FLAG_finished;
         }
-        handler_log(2, "test RTS : 0x%x", *readyToSend);
         ]]></ReadyToSend>
       </DeviceType>
       <DeviceType id="exit">
@@ -680,6 +686,7 @@
         <InputPin name="finished" messageTypeId="done">
           <OnReceive><![CDATA[
             deviceState->seen++;
+            handler_log(1, "finished/done : seen=%u out of %u", deviceState->seen, deviceProperties->nodes);
             if(deviceState->seen==deviceProperties->nodes){
                 fake_handler_exit(0);
             }

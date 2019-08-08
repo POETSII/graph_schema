@@ -217,6 +217,8 @@
         </InputPin>
         <OutputPin name="finished" messageTypeId="finished">
           <OnSend><![CDATA[
+			assert(deviceState->t==graphProperties->maxTime);
+		  	handler_log(2, "Sending finished pulse.");
 			deviceState->t++; // We advance beyond the end of time and go idle
 			// And send an empty pulse to exit node
 			]]></OnSend>
@@ -225,7 +227,7 @@
           <OnSend><![CDATA[
 
 		  handler_log(3, "tNow=%d, sNow=%d, aNow=%.4f, sNext=%d, aNext=%f", deviceState->t, deviceState->cs, deviceState->ca, deviceState->ns, deviceState->na);
-
+		  assert(deviceState->t<graphProperties->maxTime);
 			assert(deviceState->cs == deviceProperties->nhood);
 
 			deviceState->t += deviceProperties->dt;
@@ -269,7 +271,8 @@
         </State>
         <InputPin name="done" messageTypeId="finished">
           <OnReceive><![CDATA[
-				deviceState->done++;
+		  		deviceState->done++;
+				handler_log(2, "Got finished pulse, done=%u out of %u", deviceState->done, deviceProperties->fanin);
 				if(deviceState->done == deviceProperties->fanin){
 					fake_handler_exit(0);
 				}

@@ -109,12 +109,15 @@ def typed_data_spec_to_c_decl(dt:TypedDataSpec, name:Optional[str]=None) -> str:
 
 def render_typed_data_spec_as_struct(dt:TupleTypedDataSpec, id:str, dst:io.TextIOBase):
     assert isinstance(dt, (TupleTypedDataSpec,type(None)) )
+    dst.write("#pragma pack(push,1)\n")
     dst.write("typedef struct {\n")
     if dt is not None:
         for e in dt.elements_by_index:
             dst.write(typed_data_spec_to_c_decl(e))
             dst.write(";\n")
     dst.write(f"}} {id};\n\n")
+    dst.write("#pragma pack(pop)\n")
+    dst.write(f"SPROVIDER_STATIC_ASSERT( sizeof({id}) == {1 if dt is None or dt.size_in_bytes()==0 else dt.size_in_bytes()} );\n")
 
 class RenderOptions:
     def __init__(self):
@@ -132,7 +135,8 @@ def render_graph_type_structs_as_sprovider(gt:GraphType, options:RenderOptions):
 
     render_typed_data_spec_as_struct(gt.properties,  f"{gt.id}_properties_t", dst)
     for mt in gt.message_types.values(): # type:MessageType
-        render_typed_data_spec_as_struct( mt.message, f"{mt.id}_message_t", dst)
+        render_typed_data_spec_as_struct( mt.message, f"{gt.id}_{mt.id}_message_t", dst)
+        dst.write(f"typedef {gt.id}_{mt.id}_message_t  {mt.id}_message_t;\n")
     
     for dt in gt.device_types.values(): # type:DeviceType
         render_typed_data_spec_as_struct( dt.properties, f"{gt.id}_{dt.id}_properties_t", dst)
@@ -287,6 +291,19 @@ def render_graph_type_handlers_as_sprovider(gt:GraphType, options:RenderOptions)
         static active_flag_t {iprefix}_do_hardware_idle_{dt.id}(void *_ctxt, const void *_gpV, const void *_dpdsV)
         {{
             {shared_prefix}
+            #ifndef NDEBUG
+            {{
+                uint32_t _rtsHidden=0;
+                bool _readyToComputeHidden=false;
+                uint32_t *readyToSend=&_rtsHidden;
+                bool *requestCompute=&_readyToComputeHidden;
+                ///////////////////////
+                // RTS handler
+                {adapt_handler(dt.ready_to_send_handler)}
+                ///////////////////////
+                assert(_rtsHidden==0 && _readyToComputeHidden==0);
+            }}
+            #endif
             //////////////////
             {adapt_handler(dt.on_hardware_idle_handler)}
             //////////////////

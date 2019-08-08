@@ -55,7 +55,6 @@ private:
             #endif
             assert(m_global_pool.size()+n < m_allocedMessages.load()); // Bit imprecise
             m_global_pool.insert(m_global_pool.end(), begin, begin+n);
-            fprintf(stderr, "Free %u\n", n);
         }catch(...){
             fprintf(stderr, "Exception in free_block, total_alloced=%f MB, global_pool size=%llu, global_pool implied total = %f MB, n=%u\n",
                 get_alloced_bytes()/(1024.0*1024), (unsigned long long)curr_size, double(curr_size)*m_alloc_size/(1024.0*1024.0), n

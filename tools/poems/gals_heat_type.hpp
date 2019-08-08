@@ -233,7 +233,7 @@ active_flag_t sprovider_do_recv(void *_ctxt, unsigned _device_type_index, unsign
 active_flag_t sprovider_do_hardware_idle(void *_ctxt, unsigned _device_index, const void *gp, void *dp_ds)
 {
     fprintf(stderr, "Hardware idle.\n");
-    exit(1);
+    exit(0);
     return false;
 }
 

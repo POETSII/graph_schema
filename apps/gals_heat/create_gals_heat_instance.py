@@ -101,7 +101,7 @@ for x in range(0,n):
         if x!=0 and not edgeY:
             add_channel(x,y, -1, 0)        
 
-finished=DeviceInstance(res, "finished",exitNodeType, None, None) 
+finished=DeviceInstance(res, "finished",exitNodeType, {"fanin":len(nodes)}, None) 
 res.add_device_instance(finished)
 
 for (id,di) in nodes.items():

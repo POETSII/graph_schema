@@ -221,6 +221,7 @@
 					static_assert(offsetof(MESSAGE_T, vertex_count) == offsetof(DEVICE_STATE_T, vertex_count), "Layout doesn't match.");
 					static_assert(offsetof(MESSAGE_T, sum_sum_distance) == offsetof(DEVICE_STATE_T, sum_sum_distance), "Layout doesn't match.");
 					
+					static_assert(sizeof(*message)==44);
 					memcpy(message, deviceState, sizeof(*message));
 					memset(deviceState, 0, sizeof(*deviceState));
 					]]></OnSend>

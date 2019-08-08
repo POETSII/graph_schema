@@ -30,6 +30,7 @@ int main(int argc, char *argv[])
     int nThreads=std::thread::hardware_concurrency();
     int cluster_size=1024;
     int use_metis=1;
+    int log_level=1;
 
     int ai=1;
 
@@ -81,6 +82,7 @@ usage : %s [--threads n] [--cluster-size n] [--use-metis 0|1] <source.xml>
         else if(parse_int_opt("--cluster-size", cluster_size)) {}
         else if(parse_int_opt("--use-metis", use_metis)) {}
         else if(parse_path_opt("--stats-file", stats_file_path)) {}
+        else if(parse_int_opt("--log-level", log_level)) {}
         else{
             if(source_path.native()!=""){
                 fprintf(stderr, "Received more than one source path (mis-spelled option?)\n");
@@ -94,8 +96,8 @@ usage : %s [--threads n] [--cluster-size n] [--use-metis 0|1] <source.xml>
 
     POEMS instance;
 
-    fprintf(stderr, "nThreads=%u, cluster_size=%u, use_metus=%u, source_path=%s\n",
-        nThreads, cluster_size, use_metis, source_path.c_str()
+    fprintf(stderr, "nThreads=%u, cluster_size=%u, use_metus=%u, source_path=%s, log_level=%u\n",
+        nThreads, cluster_size, use_metis, source_path.c_str(), log_level
     );
 
     if(nThreads<=0){
@@ -106,6 +108,11 @@ usage : %s [--threads n] [--cluster-size n] [--use-metis 0|1] <source.xml>
         fprintf(stderr, "Invalid cluster size.\n");
         exit(1);
     }
+    if(log_level > SPROVIDER_MAX_LOG_LEVEL){
+        fprintf(stderr, "Warning: requested log level of %u is higher than compiler-in log level limit of %u\n", log_level, SPROVIDER_MAX_LOG_LEVEL);
+    }
+
+    sprovider_handler_log_level=log_level;
 
     if(stats_file_path.native()!=""){
         g_stats_file=fopen(stats_file_path.c_str(), "wt");

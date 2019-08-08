@@ -936,11 +936,11 @@ public:
         }
 
 
-        for(const auto & dev : m_devices) {
+        /*for(const auto & dev : m_devices) {
             for (const auto &pin : dev.outputPins) {
                 fprintf(stderr, "%s/%s : [%u,%u,%u)\n", dev.name.c_str(), pin.pin->getName().c_str(), pin.beginEdgeIndex, pin.beginExternalIndex, pin.endEdgeIndex);
             }
-        }
+        }*/
     }
 
     /////////////////////////////////////////////////////////////////////////////////////

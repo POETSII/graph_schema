@@ -21,8 +21,10 @@
 
 #if __OPENCL__
 #define SPROVIDER_UNREACHABLE (void)0
+#define SPROVIDER_STATIC_ASSERT(c) 
 #else
 #define SPROVIDER_UNREACHABLE {assert(0); __builtin_unreachable();}
+#define SPROVIDER_STATIC_ASSERT(c) static_assert(c, #c) 
 #endif
 
 #ifdef POEMS_ENABLE_VALGRIND_MEMCHECK
@@ -34,9 +36,14 @@
 // compilers for testing purposes. In a simulator they would
 // be determined by the surrounding environment
 
+#ifndef SPROVIDER_MAX_LOG_LEVEL
+#define SPROVIDER_MAX_LOG_LEVEL 100
+#endif
+
 #ifndef handler_log
 void sprovider_handler_log(int level, const char *msg, ...);
-#define handler_log(level, ...) sprovider_handler_log(level, __VA_ARGS__)
+#define handler_log(level, ...) \
+  if(level <= SPROVIDER_MAX_LOG_LEVEL){ sprovider_handler_log(level, __VA_ARGS__); }
 #endif
 
 #ifndef assert

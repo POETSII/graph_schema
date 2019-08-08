@@ -6,6 +6,23 @@
       <Scalar name="max_t" type="uint32_t" />
     </Properties>
     <SharedCode><![CDATA[
+        #ifdef POETS_LEGACY_HAS_HANDLER_EXIT
+        #define _do_handler_exit(code) handler_exit(code)
+        #else
+        #define _do_handler_exit(code) ((void)0)
+        #endif
+
+        #define fake_handler_exit(code) \
+        { \
+            if((code)==0){ \
+                handler_log(0, "_HANDLER_EXIT_SUCCESS_9be65737_"); \
+            }else{ \
+                handler_log(0, "_HANDLER_EXIT_FAIL_9be65737_"); \
+            } \
+            _do_handler_exit(code); \
+        }
+
+
     uint32_t urng(uint32_t &state)
     {
       state = state*1664525+1013904223;
@@ -212,12 +229,13 @@
         </InputPin>
         <OutputPin name="tick" messageTypeId="tick">
           <OnSend><![CDATA[
-          handler_log(3,"tick : waitCount = %d\n", deviceState->waitCount);
+          handler_log(2,"tick : waitCount = %d\n", deviceState->waitCount);
           assert(deviceState->waitCount==0);
           deviceState->waitCount=deviceProperties->neuronCount;
           deviceState->t++;
           if(deviceState->t > graphProperties->max_t){
             *doSend=false;
+            fake_handler_exit(0);
           }
           ]]></OnSend>
         </OutputPin>

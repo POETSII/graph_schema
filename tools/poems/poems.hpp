@@ -18,7 +18,6 @@
 
 #include <metis.h>
 #include <tbb/concurrent_queue.h>
-#include "contrib/concurrentqueue.hpp"
 
 #include "shared_pool.hpp"
 
@@ -31,9 +30,11 @@
 //////////////////////////////////////////////////
 // Simulation logic
 
+static unsigned sprovider_handler_log_level = SPROVIDER_MAX_LOG_LEVEL;
+
 void sprovider_handler_log(int level, const char *msg, ...)
 {
-    if(level<2){
+    if(level<=sprovider_handler_log_level){
         char buffer[256]={0};
         va_list args;
         va_start(args, msg);
@@ -49,7 +50,6 @@ void sprovider_handler_log(int level, const char *msg, ...)
     if(!strcmp(msg,"_HANDLER_EXIT_FAIL_9be65737_")){
         exit(1);
     }
-
 }
 
 static std::chrono::high_resolution_clock::time_point g_now_start;
@@ -143,6 +143,7 @@ struct POEMS
                 for(edge &e : op.edges){
                     assert(e.dest_cluster==e.dest_device->cluster);
                     assert(e.dest_device_offset_in_cluster==e.dest_device->offset_in_cluster);
+                    
                 }
             }
         }
@@ -178,12 +179,22 @@ struct POEMS
             : incoming_queue(0)
         {}
 
-        void sanity()
+        void sanity(const void *gp)
         {
             for(unsigned i=0; i<devices.size();i++){
+                auto *dev=devices[i];
+
                 assert(devices[i]->cluster==this);
                 assert(devices[i]->offset_in_cluster==i);
                 devices[i]->sanity();
+
+                uint32_t rts=0;
+                bool rtc=0;
+                bool active=sprovider_calc_rts(nullptr, dev->device_type_index, gp, dev->properties_then_state, &rts, &rtc);
+                if(rtc!=0 || rts!=0){
+                    assert(is_device_active(dev->offset_in_cluster));
+                }
+                assert(active ? 1 : (rtc==0 && rts==0));
             }
         }
 
@@ -337,7 +348,7 @@ struct POEMS
         unsigned &nonLocalMessagesReceived
     ){
 #ifndef NDEBUG
-        cluster.sanity();
+        cluster.sanity(gp);
 #endif
 
 #ifndef NDEBUG
@@ -353,12 +364,21 @@ struct POEMS
             // We _must_ run hardware idle seperately, as otherwise we might do local
             // delivery into a device which has not yet had hardware idle.
             for(device *dev : cluster.devices){
-                assert(cluster.is_device_active(dev->offset_in_cluster)); // Otherwise how did we get into hardware idle?
-                sprovider_do_hardware_idle(nullptr, dev->device_type_index, gp, dev->properties_then_state);
-                // The device is still ready to send
+                assert(!cluster.is_device_active(dev->offset_in_cluster)); // Otherwise how did we get into hardware idle?
+                #ifndef NDEBUG
+                uint32_t rts=0;
+                bool rtc=0;
+                sprovider_calc_rts(nullptr, dev->device_type_index, gp, dev->properties_then_state, &rts, &rtc);
+                assert(rts==0 && rtc==0);
+                #endif
+                bool active=sprovider_do_hardware_idle(nullptr, dev->device_type_index, gp, dev->properties_then_state);
+                cluster.set_device_active(dev->offset_in_cluster, active);
             }
             cluster.provider_do_hardware_idle=false;
             assert(cluster.active); // We are still active
+#ifndef NDEBUG
+            cluster.sanity(gp);
+#endif
         }
 
         int nonLocalMessagesSentDelta=0, nonLocalMessagesReceivedDelta=0;
@@ -398,6 +418,10 @@ struct POEMS
             }
         }
 
+#ifndef NDEBUG
+        cluster.sanity(gp);
+#endif
+
         cluster.active=anyActive;
 
         nonLocalMessagesSent=nonLocalMessagesSentDelta;
@@ -436,6 +460,7 @@ struct POEMS
     {
         uint64_t received=m_globalNonLocalReceives.load();
         for(auto *c : m_clusters){
+            // Warning: this is _not_ synchronised
             received += c->localMessagesSentAndReceived;
         }
         return received;
@@ -451,7 +476,7 @@ struct POEMS
             assert( clusters.find(d->cluster) != clusters.end() );
         }
         for(auto *c : m_clusters){
-            c->sanity();
+            c->sanity(m_gp);
         }
     }
 
@@ -494,6 +519,9 @@ struct POEMS
     std::atomic<unsigned> m_idleDetectionWaiters; // Number of threads currently blocked on idle detection
     uint8_t _pad2_[128];
 
+    uint64_t m_lastCheckpointTotalMessageCount=-1;
+    unsigned m_nonMessageRoundCount=0;
+
     unsigned m_idleDetectionInactiveThreshold; // Number of clusters plus some safety factor
     std::mutex m_idleDetectionMutex;
     std::condition_variable m_idleDetectionCond;
@@ -531,18 +559,39 @@ struct POEMS
                         break;
                     }
                     totalLocalMessages += cluster->localMessagesSentAndReceived;
+
+                    #ifndef NDEBUG
+                    for(auto *dev : cluster->devices){
+                        uint32_t rts=0;
+                        bool rtc=0;
+                        bool aa=sprovider_calc_rts(nullptr, dev->device_type_index, m_gp, dev->properties_then_state, &rts, &rtc);
+                        assert(!aa);
+                        assert( aa ? 1 : rts==0 && rtc==0);
+                        assert(rts==0 && rtc==0);        
+                    }
+                    #endif
                 }
                 if(!active){
                     // Yes! We have reach idle: all messages sent have been received, and no cluster is active
-                    fprintf(stderr, "Idle: nonLocal=%llu, local=%llu\n", (unsigned long long)totalNonLocalSent, (unsigned long long)totalLocalMessages);
+                    uint64_t totalMessages=totalNonLocalSent+totalLocalMessages;
+                    fprintf(stderr, "Idle: nonLocal=%llu, local=%llu, total=%llu\n", (unsigned long long)totalNonLocalSent, (unsigned long long)totalLocalMessages, (unsigned long long)totalMessages);
+
+                    if(m_lastCheckpointTotalMessageCount!=totalMessages){
+                        m_nonMessageRoundCount=0;
+                        m_lastCheckpointTotalMessageCount=totalMessages;
+                    }else{
+                        m_nonMessageRoundCount++;
+                        if(m_nonMessageRoundCount>10){
+                            fprintf(stderr, "Error: system has completed %u idle steps without sending a message. Terminating.\n", m_nonMessageRoundCount);
+                            exit(1);
+                        }
+                    }
 
                     for(auto *cluster : m_clusters){
                         cluster->active=true; // Wake up the cluster
                         cluster->provider_do_hardware_idle=true; // And indicate idle needs to be run
                     }
                     // And that's it!
-
-                    exit(0); // TEMP
                 }
             }
 
@@ -626,8 +675,11 @@ struct POEMS
             std::unique_lock<std::mutex> lk(quitMutex);
             while(!quit.load()){
                 quitCond.wait_for(lk, std::chrono::milliseconds(500));
-                fprintf(stderr, "nlSends=%llu, nlRecvs=%llu, inactiveClustes=%llu, allocBytes = %f MBytes\n",
-                    (unsigned long long)m_globalNonLocalSends.load(), (unsigned long long)m_globalNonLocalReceives.load(),
+
+                fprintf(stderr, "nlInFlight=%lld, nlRecvs=%llu, allRecvs=%llu, inactiveClustes=%llu, allocBytes = %f MBytes\n",
+                     (long long)((int64_t)m_globalNonLocalSends.load()-m_globalNonLocalReceives.load()),
+                     (unsigned long long)m_globalNonLocalReceives.load(),
+                     (unsigned long long)total_received_messages_approx(),
                     (unsigned long long)m_globalInactiveClusters.load(),
                     gpool.get_alloced_bytes()/(1024.0*1024.0)
                 );
@@ -651,17 +703,13 @@ struct POEMS
         }else if(nThreads==m_clusters.size()){
             for(unsigned i=0; i<nThreads; i++){
                 threads.emplace_back( std::thread([&, i](){
-                    fprintf(stderr, "Thread starting.\n");
                     auto lpool=gpool.create_local_pool();
 
-                    fprintf(stderr, "Loop starting.\n");
                     while(!quit.load(std::memory_order_relaxed)){
-                      fprintf(stderr, "Top o loop.\n");
                         unsigned sent=0, received=0;
                         step_cluster(lpool, m_gp, *m_clusters[i], sent, received);
                         check_for_idle(nThreads, m_clusters[i]->active, sent, received);
                     }
-                    fprintf(stderr, "Thread Exiting.\n");
                 }));
             }
         }else{

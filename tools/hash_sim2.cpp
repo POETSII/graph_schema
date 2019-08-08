@@ -572,19 +572,13 @@ public:
         auto oldState=ds.state;
         TypedDataPtr newStateR=oldState->data.clone();
 
-        throw std::runtime_error("Not implemented - need to hookin on hardware idle.");
-
-        /*
-        auto pin=di.type->getHard
-
         EmptyOrchestratorServices orch;
-        pin->onHardwareIdle(&orch, graph_properties(), di.properties.get(), newStateR.get());
-        ds.state=m_parent->intern(newStateR);
-        ds.rts=di.type->calcReadyToSend(&orch, graph_properties(), di.properties, ds.state->data);
-        state.hash=world_hash_update_device(state.hash, oldState, ds.state);
+        di.type->onHardwareIdle(&orch, graph_properties(), di.properties.get(), newStateR.get());
+        ds.state=get_parent()->intern(newStateR);
+        ds.rts=di.type->calcReadyToSend(&orch, graph_properties(), di.properties.get(), ds.state->data.get());
+        state.hash=get_parent()->world_hash_update_device(state.hash, di.device_address, oldState, ds.state);
 
         check_exit(state, orch);
-        */
       }
     }
   };
@@ -630,7 +624,7 @@ public:
       if(res){
         return res;
       }
-      return 1;
+      return 0;
     }
     return 0;
   }
@@ -720,20 +714,20 @@ int breadth_first_visit(HashSim &sim, visit_params &params)
   {
     if(next.exited){
       unique_terminal_states++;
-    }
-    if(dot_file){
-      *dot_file<<"  n"<<next.hash<<"[peripheries=2];\n";
-    }
-    if(next.exitcode==0){
       if(dot_file){
-        *dot_file<<"  n"<<next.hash<<"[fillcolor=green];\n";
+        *dot_file<<"  n"<<next.hash<<"[peripheries=2];\n";
       }
-    }else{
-      if(dot_file){
-        *dot_file<<"  n"<<next.hash<<"[fillcolor=red];\n";
+      if(next.exitcode==0){
+        if(dot_file){
+          *dot_file<<"  n"<<next.hash<<"[fillcolor=green];\n";
+        }
+      }else{
+        if(dot_file){
+          *dot_file<<"  n"<<next.hash<<"[fillcolor=red];\n";
+        }
+        fprintf(stderr, "Found failure condition: exiting.\n");
+        return 1;
       }
-      fprintf(stderr, "Found failure condition: exiting.\n");
-      return 1;
     }
     return 0;
   };
@@ -797,10 +791,11 @@ int breadth_first_visit(HashSim &sim, visit_params &params)
         }
       );
       if(res){
+        fprintf(stderr, "Breaking from breadth_first_search due to res!=0\n");
         return res;
       }
 
-      if(leavers==0){
+      /* if(leavers==0){
         if(dot_file){
           *dot_file<<"  n"<<sp.state.hash<<"[fillcolor=red];\n";
         }
@@ -809,7 +804,7 @@ int breadth_first_visit(HashSim &sim, visit_params &params)
           fprintf(stderr, "Found stall state (non-final state with no transitions): exiting.");
           return 1;
         }
-      }
+      }*/
     }
     fprintf(stderr, "Finished depth %d, next size=%u, global merge=%u, local merge=%u, unique_terminals=%u\n", d, next.size(), merged_global, merged_local, unique_terminal_states);
     d++;

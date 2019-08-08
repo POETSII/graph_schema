@@ -30,6 +30,12 @@ Current TODO list
 - Add externals to graph_sim
 - Correctly hook up __halt__ if it is present (then deprecate fake_handler_exit)
 
+Current BUG list
+----------------
+
+- Algrebraic multi-grid has a protocol error that only turns up with large-scale problems
+  and out-of-order execution. Suspicion is that it is a race-ahead problem.
+
 Version 4 features
 ------------------
 
