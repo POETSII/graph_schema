@@ -70,7 +70,7 @@ private:
 
   void writeTypedData(const TypedDataSpecPtr &spec, const TypedDataPtr &data, const char *name)
   {
-    if(data){
+    if(!spec->is_default(data)){
       std::string json{spec->toJSON(data)};
       if(json.size()>2){ // If it is <=2 it is either empty or just "{}"
         assert(json[json.size()-1]=='}');
@@ -127,6 +127,7 @@ private:
     xmlTextWriterWriteAttribute(m_dst, (const xmlChar *)"id", (const xmlChar *)deviceType->getId().c_str() );
 
     writeTypedDataSpec(deviceType->getPropertiesSpec(), "Properties");
+    writeTypedDataSpec(deviceType->getStateSpec(), "State");
 
     xmlTextWriterStartElement(m_dst, (const xmlChar *)"OnInit");
     xmlTextWriterWriteCDATA(m_dst, (const xmlChar *)deviceType->getOnInitCode().c_str());
@@ -242,14 +243,16 @@ private:
 
   void writeTypedDataSpec(TypedDataSpecPtr spec, const char *name)
   {
-    xmlTextWriterStartElement(m_dst, (const xmlChar *)name);
+    if(spec){
+      xmlTextWriterStartElement(m_dst, (const xmlChar *)name);
 
-    std::shared_ptr<TypedDataSpecElementTuple> elements=spec->getTupleElement();
-    for(auto e : *elements){
-      writeTypedDataSpecElement(e);
+      std::shared_ptr<TypedDataSpecElementTuple> elements=spec->getTupleElement();
+      for(auto e : *elements){
+        writeTypedDataSpecElement(e);
+      }
+
+      xmlTextWriterEndElement(m_dst);
     }
-
-    xmlTextWriterEndElement(m_dst);
   }
   
   void writeMetaData(const rapidjson::Document &data, const char *name)
@@ -429,6 +432,7 @@ public:
    uint64_t srcDevInst,  const DeviceTypePtr &srcDevType, const OutputPinPtr &srcPin,
    int sendIndex,
    const TypedDataPtr &properties,
+   const TypedDataPtr &state,
    rapidjson::Document &&metadata
   ) override
   {
@@ -468,6 +472,7 @@ public:
     }
 
     writeTypedData(dstPin->getPropertiesSpec(), properties, "P");
+    writeTypedData(dstPin->getStateSpec(), state, "S");
     
     writeMetaData(metadata, "M");
 
