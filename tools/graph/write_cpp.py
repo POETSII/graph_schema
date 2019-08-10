@@ -490,26 +490,39 @@ def render_typed_data_as_spec(proto,name,elt_name,dst,asHeader=False):
     dst.write("class {}_Spec : public TypedDataSpec {{\n".format(name))
     dst.write("private:\n")
     dst.write("  std::shared_ptr<TypedDataSpecElementTuple> m_tupleElt;\n")
+    dst.write("  std::vector<char> m_default;\n")
     dst.write("public:\n")
     dst.write("  {}_Spec(){{\n".format(name))
     dst.write("    m_tupleElt=\n".format(name))
     render_typed_data_as_elements(proto, dst,"      ")
     dst.write("    ;\n")
+    dst.write("    m_default.resize(payloadSize());\n")
+    dst.write("    m_tupleElt->createBinaryDefault(&m_default[0], m_default.size());\n");
+    dst.write("    ")
     dst.write("  }\n")
     dst.write("  std::shared_ptr<TypedDataSpecElementTuple> getTupleElement() override { return m_tupleElt; }\n")
-    dst.write("  size_t totalSize() const override {{ return sizeof({})-sizeof(typed_data_t); }}\n".format(name))
-    dst.write("  size_t payloadSize() const override {{ return sizeof({}); }}\n".format(name))
+    dst.write("  size_t payloadSize() const override {{ return sizeof({})-sizeof(typed_data_t); }}\n".format(name))
+    dst.write("  size_t totalSize() const override {{ return sizeof({}); }}\n".format(name))
     dst.write("  TypedDataPtr create() const override {\n")
     if proto:
         dst.write("    {} *res=({}*)malloc(sizeof({}));\n".format(name,name,name))
         dst.write("    res->_ref_count=0;\n")
         dst.write("    res->_total_size_bytes=sizeof({});\n".format(name))
-        for elt in proto.elements_by_index:
-            render_typed_data_init(elt, dst, "    res->");
+        #for elt in proto.elements_by_index:
+        #    render_typed_data_init(elt, dst, "    res->");
+        dst.write("    memcpy( ((char*)res)+sizeof(typed_data_t), &m_default[0], m_default.size() );")
         dst.write("    return TypedDataPtr(res);\n")
     else:
         dst.write("    return TypedDataPtr();\n")
     dst.write("  }\n")
+    dst.write("""
+    virtual bool is_default(const TypedDataPtr &v) const override
+    {
+      if(!v) return true;
+      assert(v.payloadSize()==m_default.size());
+      return 0==memcmp(v.payloadPtr(), &m_default[0], m_default.size());
+    }
+    """)
     dst.write("  TypedDataPtr load(xmlpp::Element *elt) const override {\n")
     if proto is None:
         dst.write("    return TypedDataPtr();\n")

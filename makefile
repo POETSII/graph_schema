@@ -231,7 +231,7 @@ include apps/gals_heat_protocol_only/makefile.inc
 include apps/nursery/airfoil/airfoil.inc
 include apps/nursery/nested_arrays/makefile.inc
 include apps/nursery/apsp_vec_barrier/apsp_vec_barrier.inc
-
+include apps/nursery/barrier_izhikevich_clustered/barrier_izhikevich_clustered.inc
 
 #TODO : Defunct?
 include tools/partitioner.inc

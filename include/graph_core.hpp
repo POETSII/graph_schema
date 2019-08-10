@@ -360,7 +360,11 @@ public:
   //! Size of the entire typed_data_t instance, including standard header
   virtual size_t totalSize() const=0;
 
+  //! Creates a default-values instance of the data structure
   virtual TypedDataPtr create() const=0;
+
+  //! Return true if the given instance is either NULL, or is identical to the spec default
+  virtual bool is_default(const TypedDataPtr &v) const=0;
 
   virtual TypedDataPtr load(xmlpp::Element *parent) const=0;
 

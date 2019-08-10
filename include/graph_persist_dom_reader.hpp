@@ -404,7 +404,7 @@ public:
   }
 };
 
-GraphTypePtr loadGraphTypeElement(const filepath &srcPath, xmlpp::Element *eGraphType, GraphLoadEvents *events)
+GraphTypePtr loadGraphTypeElement(const filepath &srcPath, xmlpp::Element *eGraphType, GraphLoadEvents *events=0)
 {
   xmlpp::Node::PrefixNsMap ns;
   ns["g"]="https://poets-project.org/schemas/virtual-graph-schema-v3";
@@ -439,7 +439,9 @@ GraphTypePtr loadGraphTypeElement(const filepath &srcPath, xmlpp::Element *eGrap
     messageTypesById[mt->getId()]=mt;
 
     messageTypes.push_back(mt);
-    events->onMessageType(mt);
+    if(events){
+      events->onMessageType(mt);
+    }
   }
 
   auto *eDeviceTypes=find_single(eGraphType, "./g:DeviceTypes", ns);
@@ -448,7 +450,9 @@ GraphTypePtr loadGraphTypeElement(const filepath &srcPath, xmlpp::Element *eGrap
 
     std::cerr<<"device type = "<<dt->getId()<<"\n";
     deviceTypes.push_back( dt );
-    events->onDeviceType(dt);
+    if(events){
+      events->onDeviceType(dt);
+    }
   }
 
   auto res=std::make_shared<GraphTypeDynamic>(
@@ -460,8 +464,9 @@ GraphTypePtr loadGraphTypeElement(const filepath &srcPath, xmlpp::Element *eGrap
     deviceTypes
     );
 
-
-  events->onGraphType(res);
+  if(events){
+    events->onGraphType(res);
+  }
 
   return res;
 }
@@ -511,6 +516,19 @@ GraphTypePtr loadGraphType(const filepath &srcPath, xmlpp::Element *parent, Grap
   }
 
   throw unknown_graph_type_error(id);
+}
+
+// Helper function to load graph type from path
+GraphTypePtr loadGraphType(const filepath &srcPath, const std::string &id)
+{
+  auto parser=std::make_shared<xmlpp::DomParser>(srcPath.native());
+  if(!*parser){
+    throw std::runtime_error("Couldn't parse XML at '"+srcPath.native()+"'");
+  }
+
+  auto root=parser->get_document()->get_root_node();
+
+  return loadGraphType(srcPath, root, nullptr, id);
 }
 
 std::map<std::string,GraphTypePtr> loadAllGraphTypes(const filepath &srcPath, xmlpp::Element *parent, GraphLoadEvents *events)

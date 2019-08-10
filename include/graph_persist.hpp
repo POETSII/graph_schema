@@ -1,6 +1,7 @@
 #ifndef graph_persist_hpp
 #define graph_persist_hpp
 
+#define RAPIDJSON_HAS_STDSTRING 1
 #include "rapidjson/document.h"
 
 

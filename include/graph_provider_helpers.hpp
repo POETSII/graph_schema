@@ -113,12 +113,17 @@ private:
   unsigned m_payloadSize;
   unsigned m_totalSize;
 
+  std::vector<char> m_default;
+
 public:
   TypedDataSpecImpl(TypedDataSpecElementTuplePtr elt=makeTuple("_", {}))
     : m_type(elt)
     , m_payloadSize(elt->getPayloadSize())
     , m_totalSize(elt->getPayloadSize()+sizeof(typed_data_t))
-  {}
+  {
+    m_default.resize(m_payloadSize);
+    m_type->createBinaryDefault(&m_default[0], m_payloadSize);
+  }
 
   //! Gets the detailed type of the data spec
   /*! For very lightweight implementations this may not be available
@@ -142,9 +147,16 @@ public:
     p->_ref_count=0;
     p->_total_size_bytes=m_totalSize;
 
-    m_type->createBinaryDefault(((char*)p)+sizeof(typed_data_t), m_payloadSize);
+    memcpy(((char*)p)+sizeof(typed_data_t), &m_default[0], m_payloadSize);
 
     return TypedDataPtr(p);
+  }
+
+  virtual bool is_default(const TypedDataPtr &v) const override
+  {
+    if(!v) return true;
+    assert(v.payloadSize()==m_payloadSize);
+    return 0==memcmp(v.payloadPtr(), &m_default[0], m_payloadSize);
   }
 
   virtual TypedDataPtr load(xmlpp::Element *elt) const override
