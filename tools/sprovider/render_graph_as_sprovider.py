@@ -111,7 +111,9 @@ def render_typed_data_spec_as_struct(dt:TupleTypedDataSpec, id:str, dst:io.TextI
     assert isinstance(dt, (TupleTypedDataSpec,type(None)) )
     dst.write("#pragma pack(push,1)\n")
     dst.write("typedef struct {\n")
-    if dt is not None:
+    if dt is None:
+        dst.write("// Empty spec\n")
+    else:
         for e in dt.elements_by_index:
             dst.write(typed_data_spec_to_c_decl(e))
             dst.write(";\n")
@@ -140,6 +142,7 @@ def render_graph_type_structs_as_sprovider(gt:GraphType, options:RenderOptions):
     
     for dt in gt.device_types.values(): # type:DeviceType
         render_typed_data_spec_as_struct( dt.properties, f"{gt.id}_{dt.id}_properties_t", dst)
+        assert dt.state is not None
         render_typed_data_spec_as_struct( dt.state, f"{gt.id}_{dt.id}_state_t", dst)
         
         # I think these aliases are required

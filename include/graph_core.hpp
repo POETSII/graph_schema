@@ -537,6 +537,8 @@ public:
   virtual const TypedDataSpecPtr &getStateSpec() const=0;
 
   virtual const std::string &getOnInitCode() const=0;
+  virtual const std::string &getOnHardwareIdleCode() const=0;
+  virtual const std::string &getOnDeviceIdleCode() const=0;
 
   virtual const std::string &getReadyToSendCode() const=0;
 

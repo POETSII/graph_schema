@@ -31,6 +31,7 @@ int main(int argc, char *argv[])
     int cluster_size=1024;
     int use_metis=1;
     int log_level=1;
+    int max_contiguous_idle_steps=10;
 
     int ai=1;
 
@@ -70,6 +71,7 @@ usage : %s [--threads n] [--cluster-size n] [--use-metis 0|1] <source.xml>
 --threads : How many threads to use for simulation (default is std::thread::hardware_concurrency)
 --cluster-size : Target number of devices per cluster (default is 1024)
 --use-metis : Whether to cluster using metis (default is 1)
+--max-contiguous-idle-steps : How many no-message idle steps before aborting (default is 10)
 --stats-file file : A file to log execution information to.
 )", argv[0]);
     };
@@ -83,6 +85,7 @@ usage : %s [--threads n] [--cluster-size n] [--use-metis 0|1] <source.xml>
         else if(parse_int_opt("--use-metis", use_metis)) {}
         else if(parse_path_opt("--stats-file", stats_file_path)) {}
         else if(parse_int_opt("--log-level", log_level)) {}
+        else if(parse_int_opt("--max-contiguous-idle-steps", max_contiguous_idle_steps)) {}
         else{
             if(source_path.native()!=""){
                 fprintf(stderr, "Received more than one source path (mis-spelled option?)\n");
@@ -129,6 +132,7 @@ usage : %s [--threads n] [--cluster-size n] [--use-metis 0|1] <source.xml>
 
     instance.use_metis=use_metis;
     instance.m_cluster_size=cluster_size;
+    instance.m_maxNonMessageRoundCount=max_contiguous_idle_steps;
 
     POEMSBuilder builder(instance);
     builder.stats_log=stats_log;

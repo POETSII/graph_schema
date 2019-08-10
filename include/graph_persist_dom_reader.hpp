@@ -178,9 +178,9 @@ public:
   DeviceTypeDynamic(const std::string &id,
     TypedDataSpecPtr properties, TypedDataSpecPtr state,
     const std::vector<InputPinPtr> &inputs, const std::vector<OutputPinPtr> &outputs, bool isExternal,
-    std::string readyToSendCode, std::string onInitCode, std::string sharedCode
+    std::string readyToSendCode, std::string onInitCode, std::string sharedCode, std::string onHardwareIdleCode, std::string onDeviceIdleCode
   )
-    : DeviceTypeImpl(id, properties, state, inputs, outputs, isExternal, readyToSendCode, onInitCode, sharedCode)
+    : DeviceTypeImpl(id, properties, state, inputs, outputs, isExternal, readyToSendCode, onInitCode, sharedCode, onHardwareIdleCode, onDeviceIdleCode)
   {
     for(auto i : inputs){
       std::cerr<<"  input : "<<i->getName()<<"\n";
@@ -232,11 +232,11 @@ DeviceTypePtr loadDeviceTypeElement(
     throw std::runtime_error("Not supported: dynamic device type needs to be upgraded for externals.");
   }
 
-  // TODO : This is stupid. Circular initialisation stuff, but we end up with cycle of references.
-  auto futureSrc=std::make_shared<DeviceTypePtr>();
+  // TODO : This is stupid. Weak pointer to get rid of cycle of references.
+  auto futureSrc=std::make_shared<std::weak_ptr<DeviceType>>();
 
   // Passed into pins...
-  std::function<DeviceTypePtr ()> delayedSrc=  [=]() -> DeviceTypePtr { return *futureSrc; };
+  std::function<DeviceTypePtr ()> delayedSrc=  [=]() -> DeviceTypePtr { return futureSrc->lock(); };
 
   xmlpp::Node::PrefixNsMap ns;
   ns["g"]="https://poets-project.org/schemas/virtual-graph-schema-v3";
@@ -247,7 +247,7 @@ DeviceTypePtr loadDeviceTypeElement(
   std::cerr<<"Loading "<<id<<"\n";
 
   
-  std::string readyToSendCode, onInitCode;
+  std::string readyToSendCode, onInitCode, onHardwareIdleCode, onDeviceIdleCode;
   auto *eReadyToSendCode=find_single(eDeviceType, "./g:ReadyToSend", ns);
   if(eReadyToSendCode){
     auto ch=xmlNodeGetContent(eReadyToSendCode->cobj());
@@ -258,6 +258,18 @@ DeviceTypePtr loadDeviceTypeElement(
   if(eOnInitCode){
     auto ch=xmlNodeGetContent(eOnInitCode->cobj());
     onInitCode=(char*)ch;
+    xmlFree(ch);
+  }
+  auto *eOnHardwareIdleCode=find_single(eDeviceType, "./g:OnHardwareIdle", ns);
+  if(eOnHardwareIdleCode){
+    auto ch=xmlNodeGetContent(eOnHardwareIdleCode->cobj());
+    onHardwareIdleCode=(char*)ch;
+    xmlFree(ch);
+  }
+  auto *eOnDeviceIdleCode=find_single(eDeviceType, "./g:OnDeviceIdle", ns);
+  if(eOnDeviceIdleCode){
+    auto ch=xmlNodeGetContent(eOnDeviceIdleCode->cobj());
+    onDeviceIdleCode=(char*)ch;
     xmlFree(ch);
   }
 
@@ -368,7 +380,7 @@ DeviceTypePtr loadDeviceTypeElement(
   }
 
   auto res=std::make_shared<DeviceTypeDynamic>(
-    id, properties, state, inputs, outputs, isExternal, readyToSendCode, onInitCode, sharedCode
+    id, properties, state, inputs, outputs, isExternal, readyToSendCode, onInitCode, sharedCode, onHardwareIdleCode, onDeviceIdleCode
   );
 
   // Lazily fill in the thing that delayedSrc points to

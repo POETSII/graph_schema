@@ -521,6 +521,7 @@ struct POEMS
 
     uint64_t m_lastCheckpointTotalMessageCount=-1;
     unsigned m_nonMessageRoundCount=0;
+    unsigned m_maxNonMessageRoundCount=10;
 
     unsigned m_idleDetectionInactiveThreshold; // Number of clusters plus some safety factor
     std::mutex m_idleDetectionMutex;
@@ -581,7 +582,7 @@ struct POEMS
                         m_lastCheckpointTotalMessageCount=totalMessages;
                     }else{
                         m_nonMessageRoundCount++;
-                        if(m_nonMessageRoundCount>10){
+                        if(m_nonMessageRoundCount>m_maxNonMessageRoundCount){
                             fprintf(stderr, "Error: system has completed %u idle steps without sending a message. Terminating.\n", m_nonMessageRoundCount);
                             exit(1);
                         }

@@ -345,7 +345,7 @@ GraphTypePtr make_gals_heat_graph_type()
             {in},
             {out},
             false,
-            "None", "None", "None"
+            "None", "None", "None", "None", "None"
         )
     );
 

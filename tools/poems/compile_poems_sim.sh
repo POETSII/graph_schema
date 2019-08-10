@@ -21,6 +21,7 @@ input_file=""
 working_dir=$(mktemp -d)
 optimise=1
 asserts=0
+max_log_level=
 while true; do
     case "$1" in
     --help ) usage ; exit 1 ;;
@@ -29,6 +30,7 @@ while true; do
     --release ) optimise=1 ; asserts=0 ; shift ;;
     --release-with-asserts ) optimise=1 ; asserts=1 ; shift ;;
     --debug ) optimise=0 ; asserts=1 ; shift ;;
+    --max-log-level ) max_log_level=$2 ; shift 2 ;;
     -* ) >&2 echo "Unknown option $1" ; exit 1 ;;
     "" ) break ;;
     * ) if [[ "$input_file" != "" ]] ; then 
@@ -40,6 +42,14 @@ while true; do
         ;;
   esac
 done
+
+if [[ "$max_log_level" == "" ]] ; then
+    if [[ $optimize -eq 1 ]] ; then
+        max_log_level=3
+    else
+        max_log_level=100
+    fi
+fi
 
 if [[ "$input_file" == "" ]] ; then
     >&2 echo "No input file specified."
@@ -76,4 +86,4 @@ fi
 LDLIBS+="${LIBXML_PKG_CONFIG_LDLIBS} -ltbb -lmetis -ldl"
 LDFLAGS+="${LIBXML_PKG_CONFIG_LDFLAGS} -pthread"
 
-g++ ${working_dir}/poems_sim.cpp -o ${output_file} ${CPPFLAGS} ${LDFLAGS} ${LDLIBS} || exit 1
+g++ ${working_dir}/poems_sim.cpp -DSPROVIDER_MAX_LOG_LEVEL=${max_log_level} -o ${output_file} ${CPPFLAGS} ${LDFLAGS} ${LDLIBS} || exit 1

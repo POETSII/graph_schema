@@ -429,6 +429,8 @@ private:
 
   std::string m_readyToSendCode;
   std::string m_onInitCode;
+  std::string m_onHardwareIdleCode;
+  std::string m_onDeviceIdleCode;
   std::string m_sharedCode;
 
   bool m_isExternal;
@@ -448,13 +450,17 @@ protected:
       bool isExternal,
       std::string readyToSendCode=std::string(),
       std::string onInitCode=std::string(),
-      std::string sharedCode=std::string()
+      std::string sharedCode=std::string(),
+      std::string onHardwareIdleCode=std::string(),
+      std::string onDeviceIdleCode=std::string()
   )
     : m_id(id)
     , m_properties(properties)
     , m_state(state)
     , m_readyToSendCode(readyToSendCode)
     , m_onInitCode(onInitCode)
+    , m_onHardwareIdleCode(onHardwareIdleCode)
+    , m_onDeviceIdleCode(onDeviceIdleCode)
     , m_sharedCode(sharedCode)
     , m_isExternal(isExternal)
     , m_inputsByIndex(inputs)
@@ -487,6 +493,13 @@ public:
 
   virtual const std::string &getOnInitCode() const override
   { return m_onInitCode; }
+
+  virtual const std::string &getOnHardwareIdleCode() const override
+  { return m_onHardwareIdleCode; }
+
+  virtual const std::string &getOnDeviceIdleCode() const override
+  { return m_onDeviceIdleCode; }
+
 
   virtual const std::string &getSharedCode() const override
   { return m_sharedCode; }
@@ -570,6 +583,12 @@ public:
 
   virtual const std::string &getOnInitCode() const override
   { return m_base->getOnInitCode(); }
+
+  virtual const std::string &getOnHardwareIdleCode() const override
+  { return m_base->getOnHardwareIdleCode(); }
+
+  virtual const std::string &getOnDeviceIdleCode() const override
+  { return m_base->getOnDeviceIdleCode(); }
 
   virtual const std::string &getSharedCode() const override
   { return m_base->getSharedCode(); }

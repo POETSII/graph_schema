@@ -745,6 +745,7 @@ void usage()
   fprintf(stderr, "\n");
   fprintf(stderr, "  --log-level n\n");
   fprintf(stderr, "  --max-steps n\n");
+  fprintf(stderr, "  --max-contiguous-idle-steps n : Maximum number of steps without any messages before aborting.\n");
   fprintf(stderr, "  --snapshots interval destFile\n");
   fprintf(stderr, "  --log-events destFile\n");
   fprintf(stderr, "  --prob-send probability\n");
@@ -797,6 +798,7 @@ int main(int argc, char *argv[])
     unsigned statsDelta=1;
 
     int maxSteps=INT_MAX;
+    int max_contiguous_idle_steps=10;
 
     //double probSend=0.9;
     double probSend=1.0;
@@ -822,6 +824,13 @@ int main(int argc, char *argv[])
           usage();
         }
         maxSteps=strtoul(argv[ia+1], 0, 0);
+        ia+=2;
+      }else if(!strcmp("--max-contiguous-idle-steps",argv[ia])){
+        if(ia+1 >= argc){
+          fprintf(stderr, "Missing argument to --max-contiguous-idle-steps\n");
+          usage();
+        }
+        max_contiguous_idle_steps=strtoul(argv[ia+1], 0, 0);
         ia+=2;
       }else if(!strcmp("--stats-delta",argv[ia])){
         if(ia+1 >= argc){
@@ -1014,7 +1023,7 @@ int main(int argc, char *argv[])
       if(running){
         contiguous_hardware_idle_steps=0;
       }else{
-        if(contiguous_hardware_idle_steps<10){
+        if(contiguous_hardware_idle_steps<max_contiguous_idle_steps){
           graph.do_hardware_idle(); 
           contiguous_hardware_idle_steps++;
         }else if(graph.m_pExternalConnection->isReadOpen() ){

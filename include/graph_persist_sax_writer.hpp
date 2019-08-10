@@ -46,6 +46,8 @@ private:
   // This holds the actual ids.
   std::vector<std::string> m_deviceIds;
 
+  bool m_sanityChecks=true;
+
   std::string stateName(State s)
   {
     switch(s){
@@ -131,6 +133,14 @@ private:
 
     xmlTextWriterStartElement(m_dst, (const xmlChar *)"OnInit");
     xmlTextWriterWriteCDATA(m_dst, (const xmlChar *)deviceType->getOnInitCode().c_str());
+    xmlTextWriterEndElement(m_dst);
+
+    xmlTextWriterStartElement(m_dst, (const xmlChar *)"OnHardwareIdle");
+    xmlTextWriterWriteCDATA(m_dst, (const xmlChar *)deviceType->getOnHardwareIdleCode().c_str());
+    xmlTextWriterEndElement(m_dst);
+
+    xmlTextWriterStartElement(m_dst, (const xmlChar *)"OnDeviceIdle");
+    xmlTextWriterWriteCDATA(m_dst, (const xmlChar *)deviceType->getOnDeviceIdleCode().c_str());
     xmlTextWriterEndElement(m_dst);
 
     xmlTextWriterStartElement(m_dst, (const xmlChar *)"ReadyToSend");
@@ -281,9 +291,10 @@ private:
     xmlTextWriterEndElement(m_dst);
   }
 public:
-    GraphSAXWriter(xmlTextWriterPtr dst)
+    GraphSAXWriter(xmlTextWriterPtr dst, bool sanityChecks=true)
       : m_dst(dst)
       , m_state(State_Graph)
+      , m_sanityChecks(sanityChecks)
   {
       xmlTextWriterSetIndent(m_dst, 1);
       xmlTextWriterStartDocument(m_dst, NULL, NULL, NULL);
@@ -383,9 +394,11 @@ public:
       throw std::runtime_error("Not in the DeviceInstances state.");
     }
     
-    auto it_inserted=m_seenIds.insert(id);
-    if(!it_inserted.second)
-      throw std::runtime_error("A device called "+id+" has already been added.");
+    if(m_sanityChecks){
+      auto it_inserted=m_seenIds.insert(id);
+      if(!it_inserted.second)
+        throw std::runtime_error("A device called "+id+" has already been added.");
+    }
     
     m_deviceIds.push_back(id);
     uint64_t idNum=m_deviceIds.size()-1;
@@ -457,9 +470,11 @@ public:
       throw std::runtime_error("Attempt to specify sendIndex on non-indexed output pin.");
     }
 
-    auto it_inserted=m_seenIds.insert(id);
-    if(!it_inserted.second)
-      throw std::runtime_error("An edge called "+id+" has already been added.");
+    if(m_sanityChecks){
+      auto it_inserted=m_seenIds.insert(id);
+      if(!it_inserted.second)
+        throw std::runtime_error("An edge called "+id+" has already been added.");
+    }
 
     //    fprintf(stderr, "  adding : %s\n", id.c_str());
     
@@ -504,8 +519,15 @@ public:
 
 }; // detail
 
-std::shared_ptr<GraphLoadEvents> createSAXWriterOnFile(const std::string &path, bool compress=false)
+struct sax_writer_options
 {
+  bool compress=false;
+  bool sanity=true;
+};
+
+std::shared_ptr<GraphLoadEvents> createSAXWriterOnFile(const std::string &path, const sax_writer_options &options=sax_writer_options{})
+{
+  bool compress=options.compress;
   if(path.size() > 3 && path.substr(path.size()-3)==".gz" ){
     compress=true;
   }
@@ -514,7 +536,7 @@ std::shared_ptr<GraphLoadEvents> createSAXWriterOnFile(const std::string &path, 
   if(!dst)
     throw std::runtime_error("createSAXWriterOnFile("+path+") - Couldn't create xmlTextWriter");
 
-  return std::make_shared<detail::GraphSAXWriter>(dst);
+  return std::make_shared<detail::GraphSAXWriter>(dst, options.sanity);
 }
 
 

@@ -336,7 +336,7 @@ def load_device_type(graph,dtNode,sourceFile,namespace=None,loadDocumentation=Fa
     stateNode=dtNode.find("p:State",namespace)
     if stateNode is not None:
         state=load_struct_spec(id+"_state", stateNode,graph.typedefs,namespace,loadDocumentation)
-
+    
     properties=None
     propertiesNode=dtNode.find("p:Properties",namespace)
     if propertiesNode is not None:

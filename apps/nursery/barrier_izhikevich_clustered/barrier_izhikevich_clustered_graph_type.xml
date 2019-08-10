@@ -1,0 +1,209 @@
+<?xml version='1.0' encoding='ASCII'?>
+<Graphs xmlns="https://poets-project.org/schemas/virtual-graph-schema-v3">
+  <GraphType id="barrier_izhikevich_clustered">
+    <Types/>
+    <Properties>
+      <Scalar name="max_time" type="uint32_t" />
+      <Scalar name="n" type="uint32_t" />
+      <Scalar name="k" type="uint32_t" />
+      <Scalar name="c" type="uint32_t" />
+      <Scalar name="s" type="uint32_t" />
+    </Properties>
+    <SharedCode><![CDATA[
+        #ifdef POETS_LEGACY_HAS_HANDLER_EXIT
+        #define _do_handler_exit(code) handler_exit(code)
+        #else
+        #define _do_handler_exit(code) ((void)0)
+        #endif
+
+        #define fake_handler_exit(code) \
+        { \
+            if((code)==0){ \
+                handler_log(0, "_HANDLER_EXIT_SUCCESS_9be65737_"); \
+            }else{ \
+                handler_log(0, "_HANDLER_EXIT_FAIL_9be65737_"); \
+            } \
+            _do_handler_exit(code); \
+        }
+
+
+    uint32_t urng(uint32_t &state)
+    {
+      state = state*1664525+1013904223;
+      return state;
+    }
+
+    // Worlds crappiest gaussian
+    float grng(uint32_t &state)
+    {
+      uint32_t u=urng(state);
+      int32_t acc=0;
+      for(unsigned i=0;i<8;i++){
+        acc += u&0xf;
+        u=u>>4;
+      }
+      // a four-bit uniform has mean 7.5 and variance ((15-0+1)^2-1)/12 = 85/4
+      // sum of four uniforms has mean 8*7.5=60 and variance of 8*85/4=170
+      const float scale=0.07669649888473704; // == 1/sqrt(170)
+      return (acc-60.0f) * scale;
+    }
+
+    ]]></SharedCode>
+    <MessageTypes>
+      <MessageType id="spike">
+      </MessageType>
+    </MessageTypes>
+    <DeviceTypes>
+      <DeviceType id="neuron">
+        <Properties>
+          <Scalar name="seed" type="uint32_t"/>
+          <Scalar name="fanin" type="uint32_t"/> 
+          <Scalar name="a" type="float" default="0.0"/>
+          <Scalar name="b" type="float" default="0.0"/>
+          <Scalar name="c" type="float" default="0.0"/>
+          <Scalar name="d" type="float" default="0.0"/>
+          <Scalar name="Ir" type="float"/>
+        </Properties>
+        <State>
+          <Scalar name="rng" type="uint32_t"/>
+          <Scalar name="u" type="float"/>
+          <Scalar name="v" type="float"/>
+          <Scalar name="I" type="float"/>
+          <Scalar name="Icount" type="uint32_t"/>
+          <Scalar name="t" type="uint32_t" />
+          <Scalar name="fire" type="int8_t"/>
+        </State>
+        <OnInit><![CDATA[
+          deviceState->rng = deviceProperties->seed;
+
+          deviceState->v=-65;
+          deviceState->u=deviceProperties->b * deviceState->v;
+
+          deviceState->I=deviceProperties->Ir * grng(deviceState->rng);
+          deviceState->Icount=0;
+          ]]></OnInit>
+        <InputPin name="s_in" messageTypeId="spike">
+          <Properties>
+            <Scalar name="w" type="float"/>
+          </Properties>
+          <OnReceive><![CDATA[
+          assert(deviceState->Icount < deviceProperties->fanin);
+
+          deviceState->Icount++;
+          deviceState->I += edgeProperties->w;
+
+          handler_log(3, "Icount = %d (of %d)", deviceState->Icount, deviceProperties->fanin);
+          ]]></OnReceive>
+        </InputPin>
+        <OnHardwareIdle><![CDATA[
+          assert(!deviceState->fire);
+
+          float &v=deviceState->v;
+          float &u=deviceState->u;
+          float &I=deviceState->I;
+
+          handler_log(4, "v=%f, u=%f, I=%f\n", v, u, I);
+
+          v=v+0.5f*(0.04f*v*v+5*v+140-u+I); // step 0.5 ms
+          v=v+0.5f*(0.04f*v*v+5*v+140-u+I); // for numerical
+          u=u+deviceProperties->a*(deviceProperties->b*v-u);                 // stability
+
+          deviceState->t++;
+
+          bool fire = v >= 30;
+          if(fire){
+            handler_log(3, "%u, FIRE!", deviceState->t);
+
+            v=deviceProperties->c;
+            u += deviceProperties->d;
+          }
+          deviceState->fire=fire;
+
+
+          deviceState->I=deviceProperties->Ir * grng(deviceState->rng);
+          deviceState->Icount=0;
+        ]]></OnHardwareIdle>
+        <OutputPin name="s_out" messageTypeId="spike">
+          <OnSend><![CDATA[
+          deviceState->fire=false;
+          ]]></OnSend>
+        </OutputPin>
+        <ReadyToSend><![CDATA[
+        *readyToSend=0;
+        if(deviceState->fire){
+            *readyToSend |= RTS_FLAG_s_out;
+        }
+        ]]></ReadyToSend>
+      </DeviceType>
+      <DeviceType id="repeater">
+        <State>
+          <Scalar name="curr_pending" type="uint32_t"/><!-- Equivalent to rts -->
+          <Scalar name="next_pending" type="uint32_t"/> 
+        </State>
+        <OnHardwareIdle><![CDATA[
+        deviceState->curr_pending=deviceState->next_pending;
+        deviceState->next_pending=0;
+        ]]></OnHardwareIdle>
+        <InputPin name="s_in" messageTypeId="spike">
+          <Properties>
+            <Scalar name="offset" type="uint8_t" />
+          </Properties>
+          <OnReceive><![CDATA[
+            deviceState->next_pending |= 1u<<edgeProperties->offset;
+          ]]></OnReceive>
+        </InputPin>
+        <OutputPin name="s_out_0" messageTypeId="spike">
+          <OnSend><![CDATA[
+          assert(deviceState->curr_pending & RTS_FLAG_s_out_0);
+          deviceState->curr_pending ^= RTS_FLAG_s_out_0;
+          ]]></OnSend>
+        </OutputPin>
+        <OutputPin name="s_out_1" messageTypeId="spike">
+          <OnSend><![CDATA[
+          assert(deviceState->curr_pending & RTS_FLAG_s_out_1);
+          deviceState->curr_pending ^= RTS_FLAG_s_out_1;
+          ]]></OnSend>
+        </OutputPin>
+        <OutputPin name="s_out_2" messageTypeId="spike">
+          <OnSend><![CDATA[
+          assert(deviceState->curr_pending & RTS_FLAG_s_out_2);
+          deviceState->curr_pending ^= RTS_FLAG_s_out_2;
+          ]]></OnSend>
+        </OutputPin>
+        <OutputPin name="s_out_3" messageTypeId="spike">
+          <OnSend><![CDATA[
+          assert(deviceState->curr_pending & RTS_FLAG_s_out_3);
+          deviceState->curr_pending ^= RTS_FLAG_s_out_3;
+          ]]></OnSend>
+        </OutputPin>
+        <OutputPin name="s_out_4" messageTypeId="spike">
+          <OnSend><![CDATA[
+          assert(deviceState->curr_pending & RTS_FLAG_s_out_4);
+          deviceState->curr_pending ^= RTS_FLAG_s_out_4;
+          ]]></OnSend>
+        </OutputPin>
+        <OutputPin name="s_out_5" messageTypeId="spike">
+          <OnSend><![CDATA[
+          assert(deviceState->curr_pending & RTS_FLAG_s_out_5);
+          deviceState->curr_pending ^= RTS_FLAG_s_out_5;
+          ]]></OnSend>
+        </OutputPin>
+        <OutputPin name="s_out_6" messageTypeId="spike">
+          <OnSend><![CDATA[
+          assert(deviceState->curr_pending & RTS_FLAG_s_out_6);
+          deviceState->curr_pending ^= RTS_FLAG_s_out_6;
+          ]]></OnSend>
+        </OutputPin>
+        <OutputPin name="s_out_7" messageTypeId="spike">
+          <OnSend><![CDATA[
+          assert(deviceState->curr_pending & RTS_FLAG_s_out_7);
+          deviceState->curr_pending ^= RTS_FLAG_s_out_7;
+          ]]></OnSend>
+        </OutputPin>
+        <ReadyToSend><![CDATA[
+        *readyToSend = deviceState->curr_pending;
+        ]]></ReadyToSend>
+      </DeviceType>
+    </DeviceTypes>
+  </GraphType>
+</Graphs>
