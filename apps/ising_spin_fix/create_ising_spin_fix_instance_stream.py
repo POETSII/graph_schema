@@ -5,7 +5,7 @@ from graph.expand_code import expand_graph_type_source
 from create_standard_probabilities import get_probs
 
 from graph.load_xml import load_graph_types_and_instances
-from graph.save_xml_stream import save_graph
+from graph.build_xml_stream import XmlV3StreamGraphBuilder
 import sys
 import os
 import math
@@ -91,30 +91,31 @@ properties={
     "probabilities":probs
     }
 
-res=GraphInstance(instName, graphType, properties)
+sink=XmlV3StreamGraphBuilder(sys.stdout)
+sink.begin_graph_instance(instName, graphType, properties=properties)
 
 nodes={}
 
 for x in range(0,n):
-    sys.stderr.write(" Devices : Row {} of {}\n".format(x, n))
     for y in range(0,n):
         devProps={"x":x, "y":y}
         if ref_outputs is not None:
             devProps["ref_final_spin"]=ref_outputs[(x,y)]
-        di=DeviceInstance(res,"n_{}_{}".format(x,y), devType, devProps)
+        di=sink.add_device_instance(f"n_{x}_{y}".format(x,y), devType, properties=devProps)
         nodes[(x,y)]=di
-        res.add_device_instance(di)
-        
+
+finished=sink.add_device_instance("f", finishedType, properties={"fanin":len(nodes)})
+
+sink.end_device_instances()    
+
 def add_channel(x,y,dx,dy,dir):
     edgeProps={"direction":dir}
     dst=nodes[ (x,y) ]
     src=nodes[ ( (x+dx+n)%n, (y+dy+n)%n ) ]
-    ei=EdgeInstance(res,dst,"in", src,"out", edgeProps)
-    res.add_edge_instance(ei)
-
+    sink.add_edge_instance(dst,"in", src,"out", properties=edgeProps)
+    
 
 for x in range(0,n):
-    sys.stderr.write(" Edges : Row {} of {}\n".format( x, n))
     for y in range(0,n):
         centre=nodes[(x,y)]
         add_channel(x,y, 0, -1, 1)
@@ -124,11 +125,7 @@ for x in range(0,n):
         if n>2:
             add_channel(x,y, -1, 0, 4)        
         
-finished=DeviceInstance(res, "f", finishedType, {"fanin":len(nodes)})
-res.add_device_instance(finished)
-
 for (id,di) in nodes.items():
-    ei=EdgeInstance(res,finished,"finished",di,"finished")
-    res.add_edge_instance(ei)
+    sink.add_edge_instance(finished,"finished",di,"finished")
 
-save_graph(res,sys.stdout)        
+sink.end_graph_instance()
