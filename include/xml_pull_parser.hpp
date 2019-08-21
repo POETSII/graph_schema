@@ -74,15 +74,16 @@ void parseElement(TextReader *reader, ElementBindings *bindings)
     if(bindings->parseAsNode()){
         Element *elt=(Element *)reader->expand();
         bindings->onNode(elt);
+        delete elt;
         reader->next();
         return;
     }
 
-    bindings->onBegin(reader->get_name());
+    bindings->onBegin(reader->get_local_name());
 
     if(reader->has_attributes()){
         while(reader->move_to_next_attribute()){
-            bindings->onAttribute(reader->get_name(), reader->get_value());
+            bindings->onAttribute(reader->get_local_name(), reader->get_value());
         }
         reader->move_to_element();
     }
@@ -100,7 +101,7 @@ void parseElement(TextReader *reader, ElementBindings *bindings)
                 break;
             case TextReader::Element:
                 {
-                    auto child=bindings->onEnterChild(reader->get_name());
+                    auto child=bindings->onEnterChild(reader->get_local_name());
                     parseElement( reader, child );
                     bindings->onExitChild(child);
                 }
@@ -181,7 +182,7 @@ public:
 class ElementBindingsDeviceInstance
     : public ElementBindingsComposite
 {
-    typedef std::function<void (std::string &&id, std::string &&deviceType, std::string &&properties, std::string &&metadata )> sink_t;
+    typedef std::function<void (std::string &&id, std::string &&deviceType, std::string &&properties, std::string &&state, std::string &&metadata )> sink_t;
 
 private:
     sink_t m_sink;
@@ -190,6 +191,7 @@ private:
     std::string m_deviceType; 
 
     ElementBindingsText m_properties;
+    ElementBindingsText m_state;
     ElementBindingsText m_metadata;
 public:
     ElementBindingsDeviceInstance(sink_t sink)
@@ -203,6 +205,7 @@ public:
         m_id.clear();
         m_deviceType.clear();
         m_properties.text.clear();
+        m_state.text.clear();
         m_metadata.text.clear();
     }
 
@@ -221,26 +224,26 @@ public:
     {
         if(name=="P") return &m_properties;
         if(name=="M") return &m_metadata;
-        if(name=="S") throw std::runtime_error("State elements on device (v3) not supported by this parser yet.");
+        if(name=="S") return &m_state;
         throw std::runtime_error("Unexpected element");
     }
 
     void onExitChild(ElementBindings *) override
     {}
 
-  void onText(const Glib::ustring & ) override
+    void onText(const Glib::ustring & ) override
     { throw std::runtime_error("Text found within DevI or ExtI."); }
 
     virtual void onEnd() override
     {
-        m_sink( std::move(m_id), std::move(m_deviceType), std::move(m_properties.text), std::move(m_metadata.text) );
+        m_sink( std::move(m_id), std::move(m_deviceType), std::move(m_properties.text), std::move(m_state.text), std::move(m_metadata.text) );
     }
 };
 
 class ElementBindingsEdgeInstance
     : public ElementBindingsComposite
 {
-typedef std::function<void (std::string &&path, int sendIndex, std::string &&properties, std::string &&metadata) > sink_t;
+    typedef std::function<void (std::string &&path, int sendIndex, std::string &&properties, std::string &&state, std::string &&metadata) > sink_t;
 
 private:
     sink_t m_sink;
@@ -249,6 +252,7 @@ private:
     int m_sendIndex;
 
     ElementBindingsText m_properties;
+    ElementBindingsText m_state;
     ElementBindingsText m_metadata;
 public:
     ElementBindingsEdgeInstance(sink_t sink)
@@ -279,6 +283,7 @@ public:
     ElementBindings *onEnterChild(const Glib::ustring &name) override
     {
         if(name=="P") return &m_properties;
+        if(name=="S") return &m_state;
         if(name=="M") return &m_metadata;
         throw std::runtime_error("Unexpected element");
     }
@@ -291,7 +296,7 @@ public:
 
     virtual void onEnd() override
     {
-        m_sink( std::move(m_path), m_sendIndex, std::move(m_properties.text), std::move(m_metadata.text) );
+        m_sink( std::move(m_path), m_sendIndex, std::move(m_properties.text), std::move(m_state.text), std::move(m_metadata.text) );
     }
 };
 
@@ -336,7 +341,7 @@ class ElementBindingsGraphInstance
 {
 private:
     ElementBindingsText m_ebGraphProperties;
-      ElementBindingsText m_ebGraphMetadata;
+    ElementBindingsText m_ebGraphMetadata;
 
     ElementBindingsDeviceInstance m_ebDeviceInstance;
     ElementBindingsEdgeInstance m_ebEdgeInstance;
@@ -347,7 +352,8 @@ private:
 
   GraphLoadEvents *m_events;
   Registry *m_registry;
-      bool m_parseMetaData;
+  std::unordered_map<std::string,GraphTypePtr> &m_localGraphTypes;
+    bool m_parseMetaData;
 
     GraphTypePtr m_graphType;
   TypedDataPtr m_graphProperties;
@@ -360,7 +366,7 @@ private:
     std::unordered_map<std::string,DeviceTypePtr> m_deviceTypes;
     std::unordered_map<std::string, std::pair<uint64_t,DeviceTypePtr> > m_deviceInstances;
 
-    void onDeviceInstance(std::string &&id, std::string &&deviceType, std::string &&properties, std::string &&metadata)
+    void onDeviceInstance(std::string &&id, std::string &&deviceType, std::string &&properties, std::string &&state, std::string &&metadata)
     {
         auto dt=m_deviceTypes.at(deviceType);
         TypedDataPtr deviceProperties;
@@ -375,13 +381,20 @@ private:
         if(m_parseMetaData && !metadata.empty()){
             deviceMetadata=parseMetadataFromText(metadata);
         }
-        TypedDataPtr deviceState; // TODO : Not supported yet.
+        
+        TypedDataPtr deviceState;
+        if(state.empty()){
+            deviceState=dt->getStateSpec()->create();
+        }else{
+            deviceState=parseTypedDataFromText(dt->getStateSpec(), state);
+        }
+        
         dId=m_events->onDeviceInstance(m_gId, dt, id, deviceProperties, deviceState, std::move(deviceMetadata));
 
         m_deviceInstances.insert(std::make_pair( id, std::make_pair(dId, dt)));
     }
 
-    void onEdgeInstance(std::string &&path, int sendIndex, std::string &&properties, std::string &&metadata)
+    void onEdgeInstance(std::string &&path, int sendIndex, std::string &&properties, std::string &&state, std::string &&metadata)
     {
         std::string srcDeviceId, srcPinName, dstDeviceId, dstPinName;
         split_path(path, dstDeviceId, dstPinName, srcDeviceId, srcPinName);
@@ -393,29 +406,37 @@ private:
         auto dstPin=dstDevice.second->getInput(dstPinName);
     
         if(!srcPin){
-        throw std::runtime_error("No source pin called '"+srcPinName+"' on device '"+srcDeviceId);
+            throw std::runtime_error("No source pin called '"+srcPinName+"' on device '"+srcDeviceId);
         }
         if(!dstPin){
-        throw std::runtime_error("No sink pin called '"+dstPinName+"' on device '"+dstDeviceId);
+            throw std::runtime_error("No sink pin called '"+dstPinName+"' on device '"+dstDeviceId);
         }
     
         if(srcPin->getMessageType()!=dstPin->getMessageType())
             throw std::runtime_error("Edge type mismatch on pins.");
 
-        auto et=dstPin->getPropertiesSpec();
+        auto ep=dstPin->getPropertiesSpec();
+        auto es=dstPin->getStateSpec();
 
         TypedDataPtr edgeProperties;
         if(properties.empty()){
-            edgeProperties=et->create();
+            edgeProperties=ep->create();
         }else{
-            edgeProperties=parseTypedDataFromText(et, properties);
+            edgeProperties=parseTypedDataFromText(ep, properties);
         }
 
         rapidjson::Document edgeMetadata;
         if(m_parseMetaData && !metadata.empty()){
             edgeMetadata=parseMetadataFromText(metadata);
         }
-        TypedDataPtr edgeState; // Not supported yet.
+
+        TypedDataPtr edgeState;
+        if(state.empty()){
+            edgeState=es->create();
+        }else{
+            edgeState=parseTypedDataFromText(es, state);
+        }
+        
         uint64_t dstDeviceUnq=dstDevice.first;
         uint64_t srcDeviceUnq=srcDevice.first;
         m_events->onEdgeInstance(m_gId,
@@ -423,6 +444,7 @@ private:
                     srcDeviceUnq, srcDevice.second, srcPin,
                     sendIndex,
                     edgeProperties,
+                    edgeState,
                     std::move(edgeMetadata)
         );
     }
@@ -431,14 +453,16 @@ public:
 
     ElementBindingsGraphInstance(
 				 GraphLoadEvents *events,
-				 Registry *registry
+				 Registry *registry,
+                 std::unordered_map<std::string,GraphTypePtr> &localGraphTypes
     )
-        : m_ebDeviceInstance( std::bind(&ElementBindingsGraphInstance::onDeviceInstance, this, _1, _2, _3, _4) )
-        , m_ebEdgeInstance( std::bind(&ElementBindingsGraphInstance::onEdgeInstance, this, _1, _2, _3, _4) )
+        : m_ebDeviceInstance( std::bind(&ElementBindingsGraphInstance::onDeviceInstance, this, _1, _2, _3, _4, _5) )
+        , m_ebEdgeInstance( std::bind(&ElementBindingsGraphInstance::onEdgeInstance, this, _1, _2, _3, _4, _5) )
         , m_ebDeviceInstances{ "DeviceInstances", {{"DevI", &m_ebDeviceInstance}, {"ExtI", &m_ebDeviceInstance}}  }
         , m_ebEdgeInstances{ "EdgeInstances", {{"EdgeI", &m_ebEdgeInstance}} }
       , m_events(events)
 	, m_registry(registry)
+    , m_localGraphTypes(localGraphTypes)
 	, m_parseMetaData(events->parseMetaData())
     {}
 
@@ -471,7 +495,11 @@ public:
             throw std::runtime_error("Missing graphTypeId on GraphInstance");
         }
 
-        m_graphType=m_registry->lookupGraphType(m_graphTypeId);
+        if(m_registry){
+            m_graphType=m_registry->lookupGraphType(m_graphTypeId);
+        }else{
+            m_graphType=m_localGraphTypes.at(m_graphTypeId);
+        }
         for(auto et : m_graphType->getMessageTypes()){
             m_events->onMessageType(et);
         }
@@ -537,11 +565,13 @@ private:
     std::string m_srcPath;
     GraphLoadEvents *m_events;
     Registry *m_registry;
+    std::unordered_map<std::string,GraphTypePtr> &m_localGraphTypes;
 public:
-    ElementBindingsGraphType(std::string srcPath, GraphLoadEvents *events, Registry *registry)
+    ElementBindingsGraphType(std::string srcPath, GraphLoadEvents *events, Registry *registry, std::unordered_map<std::string,GraphTypePtr> &localGraphTypes)
         : m_srcPath(srcPath)
         , m_events(events)
         , m_registry(registry)
+        , m_localGraphTypes(localGraphTypes)
     {}
 
   void onBegin(const Glib::ustring &)
@@ -560,7 +590,8 @@ public:
     {
         assert(eGraphType->get_name()=="GraphType");
 
-        loadGraphTypeElement(m_srcPath, eGraphType, m_events);
+        auto gt=loadGraphTypeElement(m_srcPath, eGraphType, m_events);
+        m_localGraphTypes[gt->getId()]=gt;
     }
 
   ElementBindings *onEnterChild(const Glib::ustring &) override
@@ -576,7 +607,8 @@ class ElementBindingsGraphs
 private:
     GraphLoadEvents *m_events;
     Registry *m_registry;
-    
+    std::unordered_map<std::string,GraphTypePtr> m_localGraphTypes;
+
     ElementBindingsGraphType m_ebGraphType;
     ElementBindingsGraphInstance m_ebGraphInstance;
 
@@ -585,8 +617,8 @@ public:
     ElementBindingsGraphs(std::string srcPath, GraphLoadEvents *events, Registry *registry)
         : m_events(events)
         , m_registry(registry)
-        , m_ebGraphType(srcPath, events, registry)
-        , m_ebGraphInstance(m_events, registry) 
+        , m_ebGraphType(srcPath, events, registry, m_localGraphTypes)
+        , m_ebGraphInstance(m_events, registry, m_localGraphTypes) 
     {}
 
     void onBegin(const Glib::ustring &name) override
@@ -614,7 +646,7 @@ public:
         }else if(name=="GraphTypeReference"){
             throw std::runtime_error("Not implemented yet.");
         }else{
-            throw std::runtime_error("Unexpected element type.");
+            throw std::runtime_error("Unexpected element type." + name);
         }
     }
 

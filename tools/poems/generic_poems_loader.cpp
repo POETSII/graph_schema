@@ -2,6 +2,8 @@
 
 #include "graph_persist_dom_reader.hpp"
 
+#include "xml_pull_parser.hpp"
+
 FILE *g_stats_file;
 std::string g_stats_prefix;
 
@@ -31,6 +33,7 @@ int main(int argc, char *argv[])
     int cluster_size=1024;
     int use_metis=1;
     int log_level=1;
+    int use_pull_parser=0;
     int max_contiguous_idle_steps=10;
 
     int ai=1;
@@ -71,6 +74,7 @@ usage : %s [--threads n] [--cluster-size n] [--use-metis 0|1] <source.xml>
 --threads : How many threads to use for simulation (default is std::thread::hardware_concurrency)
 --cluster-size : Target number of devices per cluster (default is 1024)
 --use-metis : Whether to cluster using metis (default is 1)
+--use-pull-parser 0|1 : Use the pull (streaming) parser rather than AST (default is 0).
 --max-contiguous-idle-steps : How many no-message idle steps before aborting (default is 10)
 --stats-file file : A file to log execution information to.
 )", argv[0]);
@@ -85,6 +89,7 @@ usage : %s [--threads n] [--cluster-size n] [--use-metis 0|1] <source.xml>
         else if(parse_int_opt("--use-metis", use_metis)) {}
         else if(parse_path_opt("--stats-file", stats_file_path)) {}
         else if(parse_int_opt("--log-level", log_level)) {}
+        else if(parse_int_opt("--use-pull-parser", use_pull_parser)) {}
         else if(parse_int_opt("--max-contiguous-idle-steps", max_contiguous_idle_steps)) {}
         else{
             if(source_path.native()!=""){
@@ -146,10 +151,15 @@ usage : %s [--threads n] [--cluster-size n] [--use-metis 0|1] <source.xml>
         srcDir=source_path.parent_path();
     }
 
-    xmlpp::DomParser parser;
-    parser.parse_file(source_path.c_str());
 
-    loadGraph(nullptr, srcDir, parser.get_document()->get_root_node(), &builder);
+    if(!use_pull_parser){
+        xmlpp::DomParser parser;
+        parser.parse_file(source_path.c_str());
+
+        loadGraph(nullptr, srcDir, parser.get_document()->get_root_node(), &builder);
+    }else{
+        loadGraphPull(nullptr, source_path, &builder);
+    }
 
     fprintf(stderr, "Running, setup=%f.\n", clock()/(double)CLOCKS_PER_SEC);
 
