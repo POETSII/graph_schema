@@ -134,7 +134,7 @@ def load_device_type(graph,dtNode,sourceFile):
         
         (handler,sourceLine)=get_child_text(p,"p:OnReceive",ns)
         dt.add_input(name,message_type,is_application,properties,state,pinMetadata, handler,sourceFile,sourceLine,documentation)
-        sys.stderr.write("      Added input {}\n".format(name))
+        #sys.stderr.write("      Added input {}\n".format(name))
 
     for p in dtNode.findall("p:OutputPin",ns):
         name=get_attrib(p,"name")
@@ -148,7 +148,7 @@ def load_device_type(graph,dtNode,sourceFile):
         (handler,sourceLine)=get_child_text(p,"p:OnSend",ns)
         documentation = None
         dt.add_output(name,message_type,is_application,pinMetadata,handler,sourceFile,sourceLine,documentation,is_indexed)
-        sys.stderr.write("      Added input {}\n".format(name))
+        #sys.stderr.write("      Added input {}\n".format(name))
 
     (handler,sourceLine)=get_child_text(dtNode,"p:ReadyToSend",ns)
     dt.ready_to_send_handler=handler
@@ -198,11 +198,11 @@ def load_graph_type(graphNode, sourcePath):
         if dtNode.tag == deviceTypeTag:
             dt=load_device_type(graphType, dtNode, sourcePath)
             graphType.add_device_type(dt)
-            sys.stderr.write("    Added device type {}\n".format(dt.id))
+            #sys.stderr.write("    Added device type {}\n".format(dt.id))
         elif dtNode.tag == externalTypeTag:
             et=load_external_type(graphType,dtNode,sourcePath)
             graphType.add_device_type(et)
-            sys.stderr.write("    Added external device type {}\n".format(et.id))
+            #sys.stderr.write("    Added external device type {}\n".format(et.id))
         else:
             raise RuntimeError(f"Unknown or unsupported element in DeviceTypes: {dtNode.tag}")
 

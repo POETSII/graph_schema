@@ -443,6 +443,7 @@ def render_graph_type_handlers_as_sprovider(gt:GraphType, options:RenderOptions)
             }}else{{
                 unsigned _pin_index=__builtin_ctz(_readyToSend);
                 *_action_taken=_pin_index;
+                int *sendIndex=_send_index;
                 switch(_pin_index){{        
                     default:  SPROVIDER_UNREACHABLE;
             """)

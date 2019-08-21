@@ -208,13 +208,13 @@ def save_device_type(parent,dt):
         pn.attrib["name"]=p.name
         pn.attrib["messageTypeId"]=p.message_type.id
         if p.is_indexed is not None:
-            pn.attrib["indexed"]="false"
+            pn.attrib["indexed"]= "true" if p.is_indexed  else "false"
         if p.is_application: # TODO: Remove applications pins in all forms
             pn.attrib["application"]="true"
         if p.documentation is not None:
             doc = etree.SubElement(pn, toNS("p:Documentation"))
             doc.text = p.documentation
-        save_metadata(pn, "p:MetaData", p.metadata)
+        save_metadata(pn, toNS("p:MetaData"), p.metadata)
 
         h=etree.Element(toNS("p:OnSend"))
         h.text = etree.CDATA(p.send_handler)

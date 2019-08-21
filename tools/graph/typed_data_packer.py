@@ -6,7 +6,6 @@ import functools
 
 class DataPacker:
     def __init__(self):
-        self.spec=spec
         self.size=None
 
     def unpack(self, buffer : Union[bytes,bytearray]):
@@ -126,7 +125,7 @@ def make_typed_data_packer(spec : TypedDataSpec) -> TypedDataPacker :
         raise NotImplementedError("Type not supported for data packing. I bet this is a union... "+spec)
 
 class UnicastMessagePacker(DataPacker):
-    def __init__(self, payload:TypedData):
+    def __init__(self, payload:TypedDataSpec):
         super().__init__()
         # TODO : This needs to match the PIP
         self.header=struct.Struct("<IIHH")
@@ -135,17 +134,16 @@ class UnicastMessagePacker(DataPacker):
     
     def pack_into(self, buffer:bytearray, offset:int, value:any ):
         header=(
-            int(value["dstDevA"],
-            int(value["srcDevA"],
-            int(value["dstPortI"],
-            int(value["srcPortI"],
+            int(value["dstDevA"]),
+            int(value["srcDevA"]),
+            int(value["dstPortI"]),
+            int(value["srcPortI"])
         )
         self.header.pack_into(buffer, offset, header)
         self.payload.pack_into(buffer, offset+self.header.size, value["payload"])
     
     def unpack_from(self, buffer, offset):
         value={}
-        { value["dstDevA"], value["srcDevA"], value["dstPortI"], value["srcPortI"] } ... 
-            = self.header.unpack_from(offset)
+        ( value["dstDevA"], value["srcDevA"], value["dstPortI"], value["srcPortI"] ) = self.header.unpack_from(offset)
         value["payload"]=self.payload.unpack_from(buffer, offset+self.header.size)
         return value

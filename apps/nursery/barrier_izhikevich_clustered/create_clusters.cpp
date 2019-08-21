@@ -9,6 +9,10 @@
 #include "graph_persist_dom_reader.hpp"
 #include "graph_persist_sax_writer.hpp"
 
+const int FRAC_BITS=12;
+const float FRAC_SCALE=1<<FRAC_BITS;
+const float FRAC_INV_SCALE=1/FRAC_SCALE;
+
 #pragma pack(push,1)
 struct neuron_props_t
 {
@@ -37,7 +41,7 @@ struct repeater_s_in_edge_props_t
 
 struct neuron_s_in_edge_props_t
 {
-    float weight;
+    int16_t weight;
 };
 #pragma pack(pop)
 
@@ -45,7 +49,7 @@ struct Neuron
 {
     unsigned index;
     neuron_props_t properties;
-    std::vector<std::pair<unsigned,float> > synapses;
+    std::vector<std::pair<uint32_t,float> > synapses;
 };  
 
 struct NeuralNetwork
@@ -112,6 +116,7 @@ NeuralNetwork create_random_network(std::mt19937 &rng, unsigned n, unsigned m, i
         }
         used.assign(n, false);
         auto &dest=res.neurons[i].synapses;
+        dest.reserve(m);
         while(dest.size()<m){
             unsigned cand=ndist(rng);
             if(!used[cand]){
@@ -257,7 +262,7 @@ void write_graph_to_sink(
     // Generate local fanout
     for(unsigned dst=0; dst<n; dst++){
         if( (dst%1000)==0 ){
-            fprintf(stderr, "      neuron %u of %u\n", dst, n);
+            fprintf(stderr, "      neuron %u of %u, edges so far=%u\n", dst, n, numEdges);
         }
         unsigned dst_cluster=dst/s;
         for(const auto &e : network.neurons[dst].synapses){
@@ -268,7 +273,7 @@ void write_graph_to_sink(
             uint64_t src_r_id=r_ids[src_cluster][src/k]; //  <- "c{cluster}_r{floor(src/k)}:s_out{src%k}"
             TypedDataPtr ep=defaultNeuronEdgeProps.clone();
             TypedDataPtr es;
-            ((neuron_s_in_edge_props_t*)ep.payloadPtr())->weight=w;
+            ((neuron_s_in_edge_props_t*)ep.payloadPtr())->weight=int(w*FRAC_SCALE);
             sink.onEdgeInstance(g_id,
                 dst_n_id, neuronType, neuronInPin,
                 src_r_id, repeaterType, repeaterOutPins.at(src%k),
@@ -297,6 +302,13 @@ int main(int argc, char *argv[])
         m=std::min(n, atoi(argv[2]));
     }
 
+    std::string id="wibble";
+    int max_time=1000;
+    int k=16;
+    int c=25;
+
+    fprintf(stderr, "n=%u, m=%u, k=%u, c=%u\n", n, m, k, c);
+
     fprintf(stderr, "Building network\n");
     NeuralNetwork network=create_random_network(rng, n, m, n*0.8);
 
@@ -308,11 +320,6 @@ int main(int argc, char *argv[])
     // Sanity checks add O(n m) memory and time cost 
     options.sanity= n*m<10000;
     auto pSink=createSAXWriterOnFile(path, options);
-
-    std::string id="wibble";
-    int max_time=1000;
-    int k=8;
-    int c=25;
 
     fprintf(stderr, "Writing network\n");
     GraphTypePtr graphType=loadGraphType(filepath("barrier_izhikevich_clustered_graph_type.xml"), "barrier_izhikevich_clustered");

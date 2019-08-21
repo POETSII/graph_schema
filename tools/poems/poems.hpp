@@ -88,7 +88,10 @@ struct POEMS
             unsigned properties_then_state_offset; // Used during building of data structure
             void *properties_then_state;  // Used after data structure is built on receiving side.
         };
-        uint32_t dest_device_offset_in_cluster;
+        union{
+            int32_t send_index; // Used during loading
+            uint32_t dest_device_offset_in_cluster; // Used after loading
+        };
         uint16_t is_local;       // Both devices are within the same local cluster (i.e. the same thread)
         uint16_t pin_index;  // combines device type and pin index
     };
@@ -929,15 +932,11 @@ void onEdgeInstance
     rapidjson::Document &&metadata=rapidjson::Document()
   ) override
   {
-    if(sendIndex!=-1){
-        // Could be supported, but need a shadow data structure to store the indices while building
-        throw std::runtime_error("Explicit pin indices not yet supported (implicit ok).");
-    }
-
     edge e;
     e.dest_device=m_target.m_devices.at(dstDevInst);
     e.pin_index=dstPin->getIndex();
     e.is_local=false; // No local stuff to start with.
+    e.send_index=sendIndex; // Could be -1 or a real send_index
     auto &output=m_target.m_devices.at(srcDevInst)->output_ports.at(srcPin->getIndex());
     unsigned output_edge_offset=output.edges.size();
     unsigned output_p_s_offset=output.data.size();
@@ -1051,6 +1050,41 @@ void assign_clusters_metis(std::vector<device*> &devices, std::vector<device_clu
   void onEndGraphInstance(uint64_t /*graphToken*/) override
   {
       std::mt19937 urng;
+
+        /////////////////////////////////////////////////////////////////////
+        // Task one: sort out any explicit send indices
+
+        for(device *d : m_target.m_devices){
+            const auto &dinfo=SPROVIDER_DEVICE_TYPE_INFO[d->device_type_index];
+            for(unsigned i=0; i<dinfo.output_count; i++){
+                std::vector<edge> &edges=d->output_ports[i].edges;
+                if(edges.empty()){
+                    continue;
+                }
+
+                if(edges.front().send_index==-1){
+                    // At least one implicit, so all must be implicit
+                    for(auto &e : edges){
+                        if(e.send_index!=-1){
+                            throw std::runtime_error("Mix of explicit and implicit send indices.");
+                        }
+                    }
+                }else{
+                    std::sort(edges.begin(), edges.end(), [](const edge &a, const edge &b){ return a.send_index < b.send_index;  });
+                    for(unsigned i=0; i<edges.size(); i++){
+                        if(edges[i].send_index!=i){
+                            throw std::runtime_error("Send indices are either not contiguous, or there is a mix of explicit and implicit.");
+                        }
+                    }
+                }
+            }
+        }
+
+
+        // At this point send_index data has all been used, and will be destroyed.
+
+        ///////////////////////////////////////////////////////////////////////
+        // Task two: cluster assignment
 
       std::vector<device*> devices(m_target.m_devices);
 

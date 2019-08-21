@@ -62,8 +62,10 @@ bool get_attribute_optional_bool(xmlpp::Element *eParent, const char *name)
 {
   auto a=get_attribute_optional(eParent, name);
   if(a.empty()){
+    fprintf(stderr, " Empty\n");
     return false;
   }
+  fprintf(stderr, "a = '%s'\n", a.c_str());
   if(a=="true" || a=="1"){
     return true;
   }

@@ -8,7 +8,7 @@ import warnings
 from graph.load_xml_v4 import v4_namespace_uri, v4_load_graph_types_and_instances
 from graph.load_xml_v3 import v3_namespace_uri, v3_load_graph_types_and_instances
 
-def load_graph(src : Union[str, io.TextIOBase, lxml.etree.Element], src_path : Optional[str] ) -> (GraphType, Optional[GraphInstance]):
+def load_graph(src : Union[str, io.TextIOBase, lxml.etree.Element], src_path : Optional[str] = None ) -> (GraphType, Optional[GraphInstance]):
     """
     src is a string, stream, or XML Element to load from.
     If it is an Element, it should be the root Graphs element.
@@ -18,12 +18,10 @@ def load_graph(src : Union[str, io.TextIOBase, lxml.etree.Element], src_path : O
     files, and may be used for looking for implied meta-data and pre-compiled files. However, it
     should still work even without a path.
     """
-
     if isinstance(src,(str,io.TextIOBase)):
-        src_path=src
         tree=lxml.etree.parse(src)
         graph=tree.getroot() # type: lxml.etree.Element
-    elif isinstance(src,(lxml.etree.Element)):
+    elif isinstance(src,lxml.etree.ElementBase):
         graph=src # type: lxml.etree.Element
     else:
         raise RuntimeError(f"Didn't know how to load from src of type {type(src)}")

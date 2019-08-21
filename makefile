@@ -2,6 +2,17 @@
 
 export PYTHONPATH = tools
 
+POETS_EXTERNAL_INTERFACE_SPEC ?= $(wildcard ../external_interface_spec)
+POETS_EXTERNAL_INTERFACE_SPEC ?= $(wildcard /POETS/external_interface_spec)
+
+ifeq ($(POETS_EXTERNAL_INTERFACE_SPEC),)
+	HAVE_POETS_EXTERNAL_INTERFACE_SPEC=0
+	CPPFLAGS += -I include/include_cache
+else
+	HAVE_POETS_EXTERNAL_INTERFACE_SPEC=1
+	CPPFLAGS+= -I $(POETS_EXTERNAL_INTERFACE_SPEC)/include
+endif
+
 SHELL=/bin/bash
 
 LIBXML_PKG_CONFIG_CPPFLAGS := $(shell pkg-config --cflags libxml++-2.6)
@@ -226,6 +237,9 @@ include apps/firefly_sync/makefile.inc
 
 include apps/gals_heat_float/makefile.inc
 include apps/gals_heat_protocol_only/makefile.inc
+
+include apps/tests/externals/tests_externals.inc
+
 
 # Non-default
 include apps/nursery/airfoil/airfoil.inc

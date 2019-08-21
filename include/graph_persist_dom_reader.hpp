@@ -303,7 +303,7 @@ DeviceTypePtr loadDeviceTypeElement(
 
     std::string name=get_attribute_required(e, "name");
     std::string messageTypeId=get_attribute_required(e, "messageTypeId");
-
+    
     if(messageTypes.find(messageTypeId)==messageTypes.end()){
       throw std::runtime_error("Unknown messageTypeId '"+messageTypeId+"'");
     }
@@ -354,6 +354,8 @@ DeviceTypePtr loadDeviceTypeElement(
     std::string name=get_attribute_required(e, "name");
     std::string messageTypeId=get_attribute_required(e, "messageTypeId");
     bool isIndexedSend=get_attribute_optional_bool(e, "indexed");
+
+    fprintf(stderr, "  %s, %u\n", name.c_str(), isIndexedSend);
 
     if(messageTypes.find(messageTypeId)==messageTypes.end()){
       throw std::runtime_error("Unknown messageTypeId '"+messageTypeId+"'");

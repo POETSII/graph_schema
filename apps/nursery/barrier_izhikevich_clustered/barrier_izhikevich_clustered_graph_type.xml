@@ -26,6 +26,9 @@
             _do_handler_exit(code); \
         }
 
+    const int FRAC_BITS=12;
+    const float FRAC_SCALE=1<<FRAC_BITS;
+    const float FRAC_INV_SCALE=1 / FRAC_SCALE;
 
     uint32_t urng(uint32_t &state)
     {
@@ -68,7 +71,7 @@
           <Scalar name="rng" type="uint32_t"/>
           <Scalar name="u" type="float"/>
           <Scalar name="v" type="float"/>
-          <Scalar name="I" type="float"/>
+          <Scalar name="I" type="int32_t"/><!-- Accumulate in fixed-precision -->
           <Scalar name="Icount" type="uint32_t"/>
           <Scalar name="t" type="uint32_t" />
           <Scalar name="fire" type="int8_t"/>
@@ -79,12 +82,12 @@
           deviceState->v=-65;
           deviceState->u=deviceProperties->b * deviceState->v;
 
-          deviceState->I=deviceProperties->Ir * grng(deviceState->rng);
+          deviceState->I=int(deviceProperties->Ir * grng(deviceState->rng) * FRAC_SCALE);
           deviceState->Icount=0;
           ]]></OnInit>
         <InputPin name="s_in" messageTypeId="spike">
           <Properties>
-            <Scalar name="w" type="float"/>
+            <Scalar name="w" type="int16_t"/><!-- Making these fixed-point makes the files shorter and more compressible. -->
           </Properties>
           <OnReceive><![CDATA[
           assert(deviceState->Icount < deviceProperties->fanin);
@@ -100,7 +103,7 @@
 
           float &v=deviceState->v;
           float &u=deviceState->u;
-          float &I=deviceState->I;
+          float I=deviceState->I * FRAC_INV_SCALE;
 
           handler_log(4, "v=%f, u=%f, I=%f\n", v, u, I);
 
@@ -120,7 +123,7 @@
           deviceState->fire=fire;
 
 
-          deviceState->I=deviceProperties->Ir * grng(deviceState->rng);
+          deviceState->I=int(deviceProperties->Ir * grng(deviceState->rng) * FRAC_SCALE);
           deviceState->Icount=0;
         ]]></OnHardwareIdle>
         <OutputPin name="s_out" messageTypeId="spike">
@@ -198,6 +201,55 @@
           <OnSend><![CDATA[
           assert(deviceState->curr_pending & RTS_FLAG_s_out_7);
           deviceState->curr_pending ^= RTS_FLAG_s_out_7;
+          ]]></OnSend>
+        </OutputPin>
+        
+        <OutputPin name="s_out_8" messageTypeId="spike">
+          <OnSend><![CDATA[
+          assert(deviceState->curr_pending & RTS_FLAG_s_out_8);
+          deviceState->curr_pending ^= RTS_FLAG_s_out_8;
+          ]]></OnSend>
+        </OutputPin>
+        <OutputPin name="s_out_9" messageTypeId="spike">
+          <OnSend><![CDATA[
+          assert(deviceState->curr_pending & RTS_FLAG_s_out_9);
+          deviceState->curr_pending ^= RTS_FLAG_s_out_9;
+          ]]></OnSend>
+        </OutputPin>
+        <OutputPin name="s_out_10" messageTypeId="spike">
+          <OnSend><![CDATA[
+          assert(deviceState->curr_pending & RTS_FLAG_s_out_10);
+          deviceState->curr_pending ^= RTS_FLAG_s_out_10;
+          ]]></OnSend>
+        </OutputPin>
+        <OutputPin name="s_out_11" messageTypeId="spike">
+          <OnSend><![CDATA[
+          assert(deviceState->curr_pending & RTS_FLAG_s_out_11);
+          deviceState->curr_pending ^= RTS_FLAG_s_out_11;
+          ]]></OnSend>
+        </OutputPin>
+        <OutputPin name="s_out_12" messageTypeId="spike">
+          <OnSend><![CDATA[
+          assert(deviceState->curr_pending & RTS_FLAG_s_out_12);
+          deviceState->curr_pending ^= RTS_FLAG_s_out_12;
+          ]]></OnSend>
+        </OutputPin>
+        <OutputPin name="s_out_13" messageTypeId="spike">
+          <OnSend><![CDATA[
+          assert(deviceState->curr_pending & RTS_FLAG_s_out_13);
+          deviceState->curr_pending ^= RTS_FLAG_s_out_13;
+          ]]></OnSend>
+        </OutputPin>
+        <OutputPin name="s_out_14" messageTypeId="spike">
+          <OnSend><![CDATA[
+          assert(deviceState->curr_pending & RTS_FLAG_s_out_14);
+          deviceState->curr_pending ^= RTS_FLAG_s_out_14;
+          ]]></OnSend>
+        </OutputPin>
+        <OutputPin name="s_out_15" messageTypeId="spike">
+          <OnSend><![CDATA[
+          assert(deviceState->curr_pending & RTS_FLAG_s_out_15);
+          deviceState->curr_pending ^= RTS_FLAG_s_out_15;
           ]]></OnSend>
         </OutputPin>
         <ReadyToSend><![CDATA[

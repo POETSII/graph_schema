@@ -549,6 +549,7 @@ class InputPin(Pin):
         self.properties=properties
         self.state=state
         self.receive_handler=receive_handler
+        
 
 class OutputPin(Pin):
     def __init__(self,parent,name,message_type,is_application,metadata,send_handler,source_file,source_line,documentation=None,is_indexed=False):
@@ -665,15 +666,17 @@ class GraphType(object):
         self.typedefs[typedef.id]=typedef
 
 
-    def add_message_type(self,message_type):
+    def add_message_type(self,message_type) -> MessageType:
         if message_type.id in self.message_types:
             raise GraphDescriptionError("message type already exists.")
         self.message_types[message_type.id]=message_type
+        return message_type
 
-    def add_device_type(self,device_type):
+    def add_device_type(self,device_type) -> DeviceType:
         if device_type.id in self.device_types:
             raise GraphDescriptionError("Device type '{}' already exists.".format(device_type.id))
         self.device_types[device_type.id]=device_type
+        return device_type
 
 class GraphTypeReference(object):
     def __init__(self,id,src=None):
@@ -701,8 +704,9 @@ class GraphTypeReference(object):
 
 class DeviceInstance(object):
     def __init__(self,parent,id,device_type,properties=None,state=None,metadata=None):
-        if __debug__ and (properties is not None and not is_refinement_compatible(device_type.properties,properties)):
-            raise GraphDescriptionError("Properties not compatible with device type properties: proto={}, value={}".format(device_type.properties, properties))
+        if __debug__:
+            if(properties is not None and not is_refinement_compatible(device_type.properties,properties)):
+                raise GraphDescriptionError("Properties not compatible with device type properties: proto={}, value={}".format(device_type.properties, properties))
 
         self.parent=parent
         self.id=id
@@ -715,8 +719,9 @@ class DeviceInstance(object):
         if self.properties==None:
             self.properties={}
         self.properties[name]=value
-        if __debug__ and not is_refinement_compatible(self.device_type.properties,self.properties):
-            raise GraphDescriptionError("Setting property {} on {} results in properties incompatible with device type properties: proto={}, value={}".format(name, self.id, self.device_type.properties, self.properties))
+        if __debug__:
+            if  not is_refinement_compatible(self.device_type.properties,self.properties):
+                raise GraphDescriptionError("Setting property {} on {} results in properties incompatible with device type properties: proto={}, value={}".format(name, self.id, self.device_type.properties, self.properties))
 
 
 
@@ -729,15 +734,17 @@ class EdgeInstance(object):
         self.parent=parent
 
         if isinstance(dst_pin,str):
-            if __debug__ and (dst_pin not in dst_device.device_type.inputs):
-                raise GraphDescriptionError("Pin '{}' does not exist on dest device type '{}'. Candidates are {}".format(dst_pin,dst_device.device_type.id,",".join(dst_device.device_type.inputs)))
+            if __debug__:
+                if (dst_pin not in dst_device.device_type.inputs):
+                    raise GraphDescriptionError("Pin '{}' does not exist on dest device type '{}'. Candidates are {}".format(dst_pin,dst_device.device_type.id,",".join(dst_device.device_type.inputs)))
             dst_pin=dst_device.device_type.inputs[dst_pin]
         else:
             assert dst_device.device_type.inputs[dst_pin.name]==dst_pin
 
         if isinstance(src_pin,str):
-            if __debug__ and (src_pin not in src_device.device_type.outputs):
-                raise GraphDescriptionError("Pin '{}' does not exist on src device type '{}'. Candidates are {}".format(src_pin,src_device.device_type.id,",".join(dst_device.device_type.outputs)))
+            if __debug__:
+                if (src_pin not in src_device.device_type.outputs):
+                    raise GraphDescriptionError("Pin '{}' does not exist on src device type '{}'. Candidates are {}".format(src_pin,src_device.device_type.id,",".join(dst_device.device_type.outputs)))
             src_pin=src_device.device_type.outputs[src_pin]
         else:
             assert src_device.device_type.outputs[src_pin.name]==src_pin
@@ -811,7 +818,7 @@ class GraphInstance:
         indexed_port_types={ (id,ports) for (id,ports) in indexed_port_types if len(ports)>0 }
 
         # Set of { (di.id, port.name) } pairs
-        indexed_port_instances=set()
+        indexed_port_instances={}
         for di in self.device_instances.values():
             ports=indexed_port_types.get(di.device_type.id)
             if ports:
@@ -845,12 +852,14 @@ class GraphInstance:
         if self.properties==None:
             self.properties={}
         self.properties[name]=value
-        if __debug__ and not is_refinement_compatible(self.graph_type.properties,self.properties):
-            raise GraphDescriptionError("Setting property {} on {} results in properties incompatible with device type properties: proto={}, value={}".format(name, self.id, self.graph_type.properties, self.properties))
+        if __debug__:
+            if is_refinement_compatible(self.graph_type.properties,self.properties):
+                raise GraphDescriptionError("Setting property {} on {} results in properties incompatible with device type properties: proto={}, value={}".format(name, self.id, self.graph_type.properties, self.properties))
 
     def add_device_instance(self,di,validate=False):
-        if __debug__ and (di.id in self.device_instances):
-            raise GraphDescriptionError("Duplicate deviceInstance id {}".format(id))
+        if __debug__:
+            if (di.id in self.device_instances):
+                raise GraphDescriptionError("Duplicate deviceInstance id {}".format(id))
 
         if __debug__ or validate:
             self._validate_device_instance(di)
@@ -873,8 +882,9 @@ class GraphInstance:
 
 
     def add_edge_instance(self,ei,validate=False):
-        if __debug__ and (ei.id in self.edge_instances):
-            raise GraphDescriptionError("Duplicate edgeInstance id {}".format(ei.id))
+        if __debug__:
+            if (ei.id in self.edge_instances):
+                raise GraphDescriptionError("Duplicate edgeInstance id {}".format(ei.id))
 
         if __debug__ or validate:
             self._validate_edge_instance(ei)
@@ -885,8 +895,8 @@ class GraphInstance:
 
         return ei
 
-    def create_edge_instance(self,dst_device,dst_pin_name,src_device,src_pin_name,properties=None,metadata=None):
-        ei=EdgeInstance(self,dst_device,dst_pin_name,src_device,src_pin_name,properties,metadata)
+    def create_edge_instance(self,dst_device,dst_pin_name,src_device,src_pin_name,properties=None,metadata=None, *, send_index=None, state=None):
+        ei=EdgeInstance(self,dst_device,dst_pin_name,src_device,src_pin_name,properties,metadata, state=state, send_index=send_index)
         return self.add_edge_instance(ei)
 
 

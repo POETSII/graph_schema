@@ -5,11 +5,11 @@ import sys
 import os
 
 if len(sys.argv)>1:
-    src=sys.argv[1]
-    basePath=os.path.dirname(src)
+    src=os.path.abspath(sys.argv[1])
+    basePath=src
 else:
     src=sys.stdin
-    basePath=os.getcwd()
+    basePath=os.path.join(os.getcwd(),"__xml_source_name_not_known__")
 
 graph=load_graph_instance(src,basePath)
 print("graph '{}'".format(graph.id))

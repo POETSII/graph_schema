@@ -397,7 +397,7 @@ def load_device_type(graph,dtNode,sourceFile,namespace=None,loadDocumentation=Fa
 
         (handler,sourceLine)=get_child_text(p,"p:OnReceive",namespace)
         dt.add_input(name,message_type,is_application,properties,state,pinMetadata, handler,sourceFile,sourceLine,documentation)
-        sys.stderr.write("      Added input {}\n".format(name))
+        #sys.stderr.write("      Added input {}\n".format(name))
 
     for p in dtNode.findall("p:OutputPin",namespace):
         name=get_attrib(p,"name")
@@ -450,12 +450,12 @@ def load_graph_type(graphNode, sourcePath, namespace=None, loadDocumentation=Fal
     externalTypeTag = "{{{}}}ExternalType".format(namespace["p"])
 
     id=get_attrib(graphNode,"id")
-    sys.stderr.write("  Loading graph type {}\n".format(id))
+    #sys.stderr.write("  Loading graph type {}\n".format(id))
 
     namedTypes={}
     namedTypesByIndex=[]
     for etNode in graphNode.findall("p:Types/p:TypeDef",namespace):
-        sys.stderr.write("  Loading type defs, current={}\n".format(namedTypes))
+        #sys.stderr.write("  Loading type defs, current={}\n".format(namedTypes))
         td=load_type_def(graphNode, etNode, namedTypes, namespace, loadDocumentation)
         namedTypes[td.id]=td
         namedTypesByIndex.append(td)
@@ -491,11 +491,11 @@ def load_graph_type(graphNode, sourcePath, namespace=None, loadDocumentation=Fal
         if dtNode.tag == deviceTypeTag:
             dt=load_device_type(graphType, dtNode, sourcePath, namespace, loadDocumentation)
             graphType.add_device_type(dt)
-            sys.stderr.write("    Added device type {}\n".format(dt.id))
+            #sys.stderr.write("    Added device type {}\n".format(dt.id))
         elif dtNode.tag == externalTypeTag:
             et=load_external_type(graphType,dtNode,sourcePath, namespace)
             graphType.add_device_type(et)
-            sys.stderr.write("    Added external device type {}\n".format(et.id))
+            #sys.stderr.write("    Added external device type {}\n".format(et.id))
         elif dtNode.tag == ("{{{}}}SupervisorType".format(namespace["p"])):
             raise RuntimeError("Supervisor Types have not been implemented")
 
@@ -508,7 +508,8 @@ def load_graph_type_reference(graphNode,basePath,namespace=None):
 
     src=get_attrib_optional(graphNode, "src")
     if src:
-        fullSrc=os.path.join(basePath, src)
+        baseDir=os.path.dirname(basePath)
+        fullSrc=os.path.join(baseDir, src)
         print("  basePath = {}, src = {}, fullPath = {}".format(basePath,src,fullSrc))
 
         tree = etree.parse(fullSrc)
@@ -556,8 +557,8 @@ def load_device_instance(graph,diNode,namespace=None):
     id=get_attrib(diNode,"id")
     device_type_id=get_attrib(diNode,"type")
     if device_type_id not in graph.graph_type.device_types:
-        raise XMLSyntaxError("Unknown device type id {}, known devices = [{}]".format(device_type_id,
-                        [d.id for d in graph.graph_type.device_types.keys()]
+        raise XMLSyntaxError("Unknown device type id {}, known device types = {}".format(device_type_id,
+                        [id for d in graph.graph_type.device_types.keys()]
                     ),
                     diNode
                 )
@@ -715,17 +716,17 @@ def load_graph_types_and_instances(src,basePath,namespace=None,loadDocumentation
 
     try:
         for gtNode in graphsNode.findall("p:GraphType",namespace):
-            sys.stderr.write("Loading graph type\n")
+            #sys.stderr.write("Loading graph type\n")
             gt=load_graph_type(gtNode, basePath, namespace, loadDocumentation)
             graphTypes[gt.id]=gt
 
         for gtRefNode in graphsNode.findall("p:GraphTypeReference",namespace):
-            sys.stderr.write("Loading graph reference\n")
+            #sys.stderr.write("Loading graph reference\n")
             gt=load_graph_type_reference(gtRefNode, basePath, namespace)
             graphTypes[gt.id]=gt
 
         for giNode in graphsNode.findall("p:GraphInstance",namespace):
-            sys.stderr.write("Loading graph\n")
+            #sys.stderr.write("Loading graph\n")
             g=load_graph_instance(graphTypes, giNode, namespace, loadDocumentation)
             graphs[g.id]=g
 

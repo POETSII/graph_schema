@@ -8,6 +8,7 @@ CPPFLAGS += -I include -W -Wall -Wno-unused-parameter -Wno-unused-variable
 CPPFLAGS += $(LIBXML_PKG_CONFIG_CPPFLAGS)
 CPPFLAGS += -Wno-unused-local-typedefs
 CPPFLAGS += -g
+CPPFLAGS += -O3 -DNDEBUG=1
 
 LDLIBS += $(LIBXML_PKG_CONFIG_LDLIBS)
 LDFLAGS += $(LIBXML_PKG_CONFIG_LDFLAGS)
