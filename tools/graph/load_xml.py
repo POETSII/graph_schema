@@ -18,8 +18,11 @@ def load_graph(src : Union[str, io.TextIOBase, lxml.etree.Element], src_path : O
     files, and may be used for looking for implied meta-data and pre-compiled files. However, it
     should still work even without a path.
     """
-    if isinstance(src,(str,io.TextIOBase)):
+    if isinstance(src,io.TextIOBase):
         tree=lxml.etree.parse(src)
+        graph=tree.getroot() # type: lxml.etree.Element
+    elif isinstance(src,str):
+        tree=lxml.etree.parse(io.StringIO(src))
         graph=tree.getroot() # type: lxml.etree.Element
     elif isinstance(src,lxml.etree.ElementBase):
         graph=src # type: lxml.etree.Element

@@ -11,7 +11,8 @@ struct shared_pool
 private:
     static const int ALLOC_SIZE=256;
     static const int SHED_SIZE=4096;
-    static const int MAX_LOCAL_POOL_SIZE=65536; // Is this too small for graphs with very high fanout?
+    static const int MAX_LOCAL_POOL_SIZE=1<<16; // Is this too small for graphs with very high fanout?
+    static const int MAX_GLOBAL_POOL_SIZE=1<<24; // Again, is this too small for graphs with very high fanout?
 
     unsigned m_alloc_size;
     std::mutex m_mutex;
@@ -45,22 +46,21 @@ private:
 
     void free_block(unsigned n, T **begin)
     {
-        std::lock_guard<std::mutex> lk(m_mutex);
-        auto curr_size=m_global_pool.size();
-        try{
-            #ifndef NDEBUG
-            for(unsigned i=0; i<m_global_pool.size(); i++){
-                assert(m_global_pool[i]);
-            }
-            #endif
+        {
+            std::lock_guard<std::mutex> lk(m_mutex);
+            auto curr_size=m_global_pool.size();
             assert(m_global_pool.size()+n < m_allocedMessages.load()); // Bit imprecise
-            m_global_pool.insert(m_global_pool.end(), begin, begin+n);
-        }catch(...){
-            fprintf(stderr, "Exception in free_block, total_alloced=%f MB, global_pool size=%llu, global_pool implied total = %f MB, n=%u\n",
-                get_alloced_bytes()/(1024.0*1024), (unsigned long long)curr_size, double(curr_size)*m_alloc_size/(1024.0*1024.0), n
-            );
-            throw;
+            if(m_global_pool.size()<MAX_GLOBAL_POOL_SIZE){
+                m_global_pool.insert(m_global_pool.end(), begin, begin+n);
+                begin+=n;
+                n=0;
+            }
         }
+
+        for(unsigned i=0; i<n; i++){
+            free(begin[i]);
+        }
+        m_allocedMessages.fetch_sub(n, std::memory_order_relaxed);
     }
 
 public:

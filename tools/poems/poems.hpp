@@ -347,6 +347,7 @@ struct POEMS
         shared_pool<message>::local_pool &pool,
         const void *gp,
         device_cluster &cluster,
+        bool throttleSend,
         unsigned &nonLocalMessagesSent,
         unsigned &nonLocalMessagesReceived
     ){
@@ -392,7 +393,7 @@ struct POEMS
         bool anyActiveFromReceive=try_recv(pool, &cluster, gp, head, nonLocalMessagesReceivedDelta);
 
         bool anyActive=false;
-        if(cluster.active || anyActiveFromReceive)
+        if(!throttleSend && (cluster.active || anyActiveFromReceive))
         {
             for(unsigned i_base=0; i_base<cluster.devices_active_mask.size(); i_base++){
                 uint64_t m=cluster.devices_active_mask[i_base];
@@ -425,7 +426,7 @@ struct POEMS
         cluster.sanity(gp);
 #endif
 
-        cluster.active=anyActive;
+        cluster.active=anyActive || throttleSend;
 
         nonLocalMessagesSent=nonLocalMessagesSentDelta;
         nonLocalMessagesReceived=nonLocalMessagesReceivedDelta;
@@ -662,6 +663,8 @@ struct POEMS
         std::condition_variable quitCond;
         std::mutex quitMutex;
 
+        const int IN_FLIGHT_THROTTLE=1<<20;
+
         m_globalNonLocalReceives=0;
         m_globalNonLocalSends=0;
         m_globalInactiveClusters=0;
@@ -699,7 +702,8 @@ struct POEMS
                     throw std::runtime_error("Attempt to pop failed.");
                 }
                 unsigned sent=0, received=0;
-                step_cluster(lpool, m_gp, *cluster, sent, received);
+                bool throttleSend = IN_FLIGHT_THROTTLE < ((int64_t)m_globalNonLocalSends.load(std::memory_order_relaxed)-m_globalNonLocalReceives.load(std::memory_order_relaxed));
+                step_cluster(lpool, m_gp, *cluster, throttleSend, sent, received);
                 bool active=cluster->active;
                 m_cluster_queue.push(cluster);
                 check_for_idle(nThreads, active, sent, received);
@@ -711,7 +715,8 @@ struct POEMS
 
                     while(!quit.load(std::memory_order_relaxed)){
                         unsigned sent=0, received=0;
-                        step_cluster(lpool, m_gp, *m_clusters[i], sent, received);
+                        bool throttleSend = IN_FLIGHT_THROTTLE < ((int64_t)m_globalNonLocalSends.load(std::memory_order_relaxed)-m_globalNonLocalReceives.load(std::memory_order_relaxed));
+                        step_cluster(lpool, m_gp, *m_clusters[i], throttleSend, sent, received);
                         check_for_idle(nThreads, m_clusters[i]->active, sent, received);
                     }
                 }));
@@ -729,7 +734,8 @@ struct POEMS
                         }
                         std::atomic_thread_fence(std::memory_order_seq_cst);
                         unsigned sent=0, received=0;
-                        step_cluster(lpool, m_gp, *cluster, sent, received);
+                        bool throttleSend = IN_FLIGHT_THROTTLE < ((int64_t)m_globalNonLocalSends.load(std::memory_order_relaxed)-m_globalNonLocalReceives.load(std::memory_order_relaxed));
+                        step_cluster(lpool, m_gp, *cluster, throttleSend, sent, received);
                         std::atomic_thread_fence(std::memory_order_seq_cst);
                         bool active=cluster->active;
                         m_cluster_queue.push(cluster);
