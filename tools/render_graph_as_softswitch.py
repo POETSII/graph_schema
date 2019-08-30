@@ -2,6 +2,7 @@
 
 from graph.load_xml import load_graph_types_and_instances
 from graph.write_cpp import render_graph_as_cpp
+from graph.auto_timers import add_auto_timers
 
 from graph.make_properties import *
 from graph.calc_c_globals import *
@@ -32,6 +33,7 @@ parser.add_argument('--measure', help="Destination for measured properties", def
 parser.add_argument('--message-types', help="a file that prints the message types and their enumerated values. This is used to decode messages at the executive", default="messages.csv")
 parser.add_argument('--app-pins-addr-map', help="a file that gives the address map of the input pins, used by the executive to send messages to devices", default="appPinInMap.csv")
 parser.add_argument('--externals', help="if set true we are using the externals UserI/O other wise we are using application pins for I/O", type=bool, default=False)
+parser.add_argument('--timers', help="If true, timers will be added to provide accurate timing", type=bool, default=False)
 
 args = parser.parse_args()
 
@@ -1261,6 +1263,13 @@ if(len(instances)>0):
     for g in instances.values():
         inst=g
         break
+
+    if args.timers:
+        add_auto_timers(inst)
+    print()
+    print("COMPLETE")
+    print()
+    sys.exit()
 
     assert(inst.graph_type.id==graph.id)
 
