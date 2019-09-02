@@ -41,6 +41,34 @@ sys.path.append(args.graph_schema_dir + "/tools/")
 # Import config.py from tinsel (this has had to be automtically converted to python3)
 from config import p
 
+if args.source=="-":
+    source=sys.stdin
+    sourcePath="[graph-type-file]"
+else:
+    sys.stderr.write("Reading graph type from '{}'\n".format(args.source))
+    source=open(args.source,"rt")
+    sourcePath=os.path.abspath(args.source)
+    sys.stderr.write("Using absolute path '{}' for pre-processor directives\n".format(sourcePath))
+
+(types,instances)=load_graph_types_and_instances(source, sourcePath)
+
+if len(types)!=1:
+    raise RuntimeError("File did not contain exactly one graph type.")
+
+BoardMeshX = 3*p["BoxMeshXLen"]
+BoardMeshY = 2*p["BoxMeshYLen"]
+
+if(len(instances)>0):
+    inst=None
+    for g in instances.values():
+        inst=g
+        break
+
+    timers = []
+    if args.timers:
+        numBoards = BoardMeshX*BoardMeshY
+        timers = add_auto_timers(inst, numBoards)
+
 def print_statistics(dst, baseName, unit, data):
     print("{}Count, -, {}, {}\n".format(baseName, len(data), unit), file=measure_file)
     print("{}Min, -, {}, {}\n".format(baseName, min(data), unit), file=measure_file)
@@ -74,8 +102,6 @@ sort_edges_by_distance=0
 # Force these to 1 for now. Testing more than one box at the minute could be a massive headache
 p["BoxMeshXLen"] = 1
 p["BoxMeshYLen"] = 1
-BoardMeshX = 3*p["BoxMeshXLen"]
-BoardMeshY = 2*p["BoxMeshYLen"]
 
 ThreadsPerMailbox=p["ThreadsPerCore"]*p["CoresPerMailbox"]
 
@@ -1203,21 +1229,6 @@ else:
 
 measure_file=open(args.measure, "wt")
 
-if args.source=="-":
-    source=sys.stdin
-    sourcePath="[graph-type-file]"
-else:
-    sys.stderr.write("Reading graph type from '{}'\n".format(args.source))
-    source=open(args.source,"rt")
-    sourcePath=os.path.abspath(args.source)
-    sys.stderr.write("Using absolute path '{}' for pre-processor directives\n".format(sourcePath))
-
-
-(types,instances)=load_graph_types_and_instances(source, sourcePath)
-
-if len(types)!=1:
-    raise RuntimeError("File did not contain exactly one graph type.")
-
 graph=None
 for g in types.values():
     graph=g
@@ -1264,13 +1275,6 @@ if(len(instances)>0):
         inst=g
         break
 
-    if args.timers:
-        add_auto_timers(inst)
-    print()
-    print("COMPLETE")
-    print()
-    sys.exit()
-
     assert(inst.graph_type.id==graph.id)
 
     print("graphDeviceInstCount, -, {}, devices".format(len(inst.device_instances)), file=measure_file)
@@ -1306,6 +1310,10 @@ if(len(instances)>0):
             assert False, "Unknown contraction method '{}'".format(args.contraction)
 
         device_to_thread = { id:logicalToPhysical[thread] for (id,thread) in device_to_thread.items() }
+
+    if args.timers:
+        for i in range(0, len(timers)):
+            device_to_thread[timers[i].id] = i*1024
 
     destInstPath=os.path.abspath("{}/{}_{}_inst.cpp".format(destPrefix,graph.id,inst.id))
     destInst=open(destInstPath,"wt")
