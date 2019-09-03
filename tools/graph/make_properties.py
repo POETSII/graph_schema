@@ -15,10 +15,11 @@ def make_graph_type_properties(gt):
     }
 
 def make_device_type_properties(dt):
+    # TODO: This was removed to smooth the auto-timer development, and needs fixing
     # if dt.ready_to_send_source_line and dt.ready_to_send_source_file:
     #     rtsPreProc = '#line {} "{}"\n'.format(dt.ready_to_send_source_line-1,dt.ready_to_send_source_file)
     # else:
-        rtsPreProc = "// No line/file information for handler"
+    rtsPreProc = "// No line/file information for handler"
     if dt.init_source_line and dt.init_source_file:
         initPreProc = '#line {} "{}"\n'.format(dt.init_source_line-1,dt.init_source_file)
     else:
