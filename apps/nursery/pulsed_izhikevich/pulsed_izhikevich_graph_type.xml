@@ -1,0 +1,244 @@
+<?xml version='1.0' encoding='ASCII'?>
+<Graphs xmlns="https://poets-project.org/schemas/virtual-graph-schema-v3">
+  <GraphType id="pulsed_izhikevich">
+    <Documentation>
+
+      This variant uses a global clock to keep broad time
+      synchronisation, but does not send messages between neurons unless
+      there is a spike. So it is non-deterministic, but:
+      - there is likely to be a bounded time between when a spike is sent and when it is received
+      - no neuron can race off ahead of other neurons
+
+    </Documentation>
+
+    <Types/>
+    <Properties>
+      <Scalar name="max_t" type="uint32_t" />
+    </Properties>
+    <SharedCode><![CDATA[
+        #include <algorithm>
+
+        #ifdef POETS_LEGACY_HAS_HANDLER_EXIT
+        #define _do_handler_exit(code) handler_exit(code)
+        #else
+        #define _do_handler_exit(code) ((void)0)
+        #endif
+
+        #define fake_handler_exit(code) \
+        { \
+            if((code)==0){ \
+                handler_log(0, "_HANDLER_EXIT_SUCCESS_9be65737_"); \
+            }else{ \
+                handler_log(0, "_HANDLER_EXIT_FAIL_9be65737_"); \
+            } \
+            _do_handler_exit(code); \
+        }
+
+
+    uint32_t urng(uint32_t &state)
+    {
+      state = state*1664525+1013904223;
+      return state;
+    }
+
+    // Worlds crappiest gaussian
+    float grng(uint32_t &state)
+    {
+      uint32_t u=urng(state);
+      int32_t acc=0;
+      for(unsigned i=0;i<8;i++){
+        acc += u&0xf;
+        u=u>>4;
+      }
+      // a four-bit uniform has mean 7.5 and variance ((15-0+1)^2-1)/12 = 85/4
+      // sum of four uniforms has mean 8*7.5=60 and variance of 8*85/4=170
+      const float scale=0.07669649888473704; // == 1/sqrt(170)
+      return (acc-60.0f) * scale;
+    }
+
+    ]]></SharedCode>
+    <MessageTypes>
+      <MessageType id="spike">
+        <Message>
+          <Scalar name="t" type="uint32_t"/>
+        </Message>
+      </MessageType>
+      <MessageType id="tick">
+        <!-- We give the tick a high weight, rather than giving the spikes zero weight. Good idea? -->
+        <MetaData>
+          "dt10.partition.weight" : 1000
+        </MetaData>
+        <Message>
+          <Scalar name="t" type="uint32_t"/>
+        </Message>
+      </MessageType>
+    </MessageTypes>
+    <DeviceTypes>
+      <DeviceType id="neuron">
+        <Properties>
+          <Scalar name="a" type="float" default="0.0"/>
+          <Scalar name="b" type="float" default="0.0"/>
+          <Scalar name="c" type="float" default="0.0"/>
+          <Scalar name="d" type="float" default="0.0"/>
+          <Scalar name="Ir" type="float"/>
+        </Properties>
+        <State>
+          <Scalar name="rng" type="uint32_t"/>
+          <Scalar name="u" type="float"/>
+          <Scalar name="v" type="float"/>
+          <Scalar name="Ifix" type="int32_t"/>
+          <Scalar name="t" type="uint32_t"/>
+          <Scalar name="spikes_sent" type="uint32_t"/><!-- Total spikes we have sent -->
+          <Scalar name="spikes_seen" type="uint32_t"/><!-- Total spikes we have seen -->
+          <Scalar name="spikes_seen_delta_t_max" type="int32_t"/><!-- Max difference between send and receive time. -->
+          <Scalar name="spikes_seen_delta_t_min" type="int32_t"/><!-- Min difference between send and receive time. -->
+          <Scalar name="spikes_seen_delta_t_sum" type="int64_t"/><!-- Sum of difference between send and receive time. -->
+          <Scalar name="spikes_seen_delta_t_sum_sqr" type="uint64_t"/><!-- Squared difference between send and receive time. -->
+          <Scalar name="spikeReady" type="int8_t"/>
+          <Scalar name="cs" type="int8_t"/>
+          <Scalar name="ns" type="int8_t"/>
+        </State>
+        <OnInit><![CDATA[
+          deviceState->v=-65;
+          deviceState->u=deviceProperties->b * deviceState->v;
+
+          deviceState->spikeReady=false; // We don't fire in the first round
+
+          deviceState->Ifix=int32_t(256 * deviceProperties->Ir * grng(deviceState->rng) );
+          deviceState->cs=1;
+                    
+          ]]></OnInit>
+        <InputPin name="tick" messageTypeId="tick">
+          <OnReceive><![CDATA[
+          if(message->t==deviceState->t){
+            assert(deviceState->cs==0);
+            deviceState->cs=1;
+          }else{
+            assert(deviceState->ns==0);
+            deviceState->ns=1;
+          }
+          ]]></OnReceive>
+        </InputPin>
+        <InputPin name="in" messageTypeId="spike">
+          <Properties>
+            <Scalar name="w" type="int16_t"/>
+          </Properties>
+          <OnReceive><![CDATA[
+          deviceState->spikes_seen++;
+          int32_t delta_t = (int32_t)deviceState->t - message->t;
+          deviceState->spikes_seen_delta_t_min = std::min(deviceState->spikes_seen_delta_t_min, delta_t);
+          deviceState->spikes_seen_delta_t_max = std::max(deviceState->spikes_seen_delta_t_max, delta_t);
+          deviceState->spikes_seen_delta_t_sum += delta_t;
+          deviceState->spikes_seen_delta_t_sum_sqr += delta_t*delta_t; // Assume we can do the square in 32-bit...
+          deviceState->Ifix += edgeProperties->w;
+          ]]></OnReceive>
+        </InputPin>
+        <OutputPin name="tock" messageTypeId="tick">
+          <OnSend><![CDATA[
+          assert(deviceState->cs==1 && !deviceState->spikeReady);
+
+          float v=deviceState->v;
+          float u=deviceState->u;
+          float I=deviceState->Ifix * float(1.0f/256);
+
+          v=v+0.5*(0.04*v*v+5*v+140-u+I); // step 0.5 ms
+          v=v+0.5*(0.04*v*v+5*v+140-u+I); // for numerical
+          u=u+deviceProperties->a*(deviceProperties->b*v-u);                 // stability
+
+          deviceState->spikeReady = v >= 30;
+          if(deviceState->spikeReady){
+            handler_log(3, "FIRE!");
+
+            v=deviceProperties->c;
+            u += deviceProperties->d;
+          }
+
+          deviceState->t++;
+          deviceState->Ifix=(int32_t)(256 * deviceProperties->Ir * grng(deviceState->rng) );
+          deviceState->v=v;
+          deviceState->u=u;
+          deviceState->cs=deviceState->ns;
+          deviceState->ns=0;
+
+          message->t=deviceState->t;
+
+          if(deviceState->t==graphProperties->max_t-10){
+            handler_log(1, "t=%d, spikes/step=%f, meanDelta=%f, minDelta=%d, maxDelta=%d",
+              deviceState->t,
+              float(deviceState->spikes_sent) / deviceState->t,
+              float(deviceState->spikes_seen_delta_t_sum)/deviceState->spikes_seen,
+              deviceState->spikes_seen_delta_t_min,
+              deviceState->spikes_seen_delta_t_max
+            );
+          }
+          ]]></OnSend>
+        </OutputPin>
+        <OutputPin name="fire" messageTypeId="spike">
+          <OnSend><![CDATA[
+          assert(deviceState->spikeReady);
+          deviceState->spikeReady=false;
+          deviceState->spikes_sent++;
+
+          message->t = deviceState->t;
+          ]]></OnSend>
+        </OutputPin>
+        <ReadyToSend><![CDATA[
+        *readyToSend=0;
+        if(deviceState->spikeReady){
+          *readyToSend = RTS_FLAG_fire;
+        }else if(deviceState->cs==1){
+            *readyToSend = RTS_FLAG_tock;
+        }else{
+          assert(deviceState->cs==0);
+        }
+        ]]></ReadyToSend>
+      </DeviceType>
+
+      <DeviceType id="sync_node">
+        <Documentation>
+        The sync node is a general purpose gals-style synchroniser. These can
+        be built into trees or meshes.
+        </Documentation>
+        <Properties>
+          <Scalar name="degree" type="uint32_t"/>
+          <Scalar name="is_root" type="uint32_t"/>
+        </Properties>
+        <State>
+          <Scalar name="t" type="uint32_t"/>
+          <Scalar name="cs" type="uint32_t"/>
+          <Scalar name="ns" type="uint32_t"/>
+        </State>
+        <OnInit><![CDATA[
+          deviceState->cs=deviceProperties->degree;
+          ]]></OnInit>
+        <InputPin name="tick" messageTypeId="tick">
+          <OnReceive><![CDATA[
+          if(message->t==deviceState->t){
+            deviceState->cs++;
+          }else{
+            deviceState->ns++;
+          }
+          assert( std::max(deviceState->cs,deviceState->ns) <= deviceProperties->degree );
+          ]]></OnReceive>
+        </InputPin>
+        <OutputPin name="tock" messageTypeId="tick">
+          <OnSend><![CDATA[
+          assert(deviceState->cs==deviceProperties->degree);
+          deviceState->t++;
+          deviceState->cs=deviceState->ns;
+          deviceState->ns=0;
+          if(deviceState->t > graphProperties->max_t && deviceProperties->is_root){
+            *doSend=false;
+            fake_handler_exit(0);
+          }
+
+          message->t=deviceState->t;
+          ]]></OnSend>
+        </OutputPin>
+        <ReadyToSend><![CDATA[
+        *readyToSend = deviceState->cs==deviceProperties->degree ? RTS_FLAG_tock : 0;
+        ]]></ReadyToSend>
+      </DeviceType>
+    </DeviceTypes>
+  </GraphType>
+</Graphs>

@@ -302,7 +302,7 @@ class XmlV3StreamGraphBuilder:
         assert self._graph_type is None
 
         ns="https://poets-project.org/schemas/virtual-graph-schema-v3"
-        nsmap = { None : ns, "p":ns }
+        nsmap = { None : ns }
         root=etree.Element(toNS("p:Graphs"), nsmap=nsmap)
         graphTypeNode=save_graph_type(root,type)
         graphTypeText=etree.tostring(graphTypeNode,pretty_print=True).decode("utf8")
@@ -521,28 +521,32 @@ class TestXMLV3StreamGraphBuilder(unittest.TestCase):
         dst=io.StringIO()
         builder=XmlV3StreamGraphBuilder(dst)
         _build_test_graph_v1(builder)
-        (gt,gi)=load_graph(dst.getvalue(), "")
+        dst.seek(0)
+        (gt,gi)=load_graph(dst, "")
         _check_test_graph_v1(self, gi)
 
     def test_generate_v2(self):
         dst=io.StringIO()
         builder=XmlV3StreamGraphBuilder(dst)
         _build_test_graph_v2(builder)
-        (gt,gi)=load_graph(dst.getvalue(), "")
+        dst.seek(0)
+        (gt,gi)=load_graph(dst, "")
         _check_test_graph_v2(self, gi)
 
     def test_generate_v3(self):
         dst=io.StringIO()
         builder=XmlV3StreamGraphBuilder(dst)
         _build_test_graph_v3(builder)
-        (gt,gi)=load_graph(dst.getvalue(), "")
+        dst.seek(0)
+        (gt,gi)=load_graph(dst, "")
         _check_test_graph_v3(self, gi)
 
     def test_generate_v3_OoO(self):
         dst=io.StringIO()
         builder=XmlV3StreamGraphBuilder(dst)
         _build_test_graph_v3_OoO(builder)
-        (gt,gi)=load_graph(dst.getvalue(), "")
+        dst.seek(0)
+        (gt,gi)=load_graph(dst, "")
         _check_test_graph_v3(self, gi)
 
 
@@ -550,14 +554,16 @@ class TestXMLV3StreamGraphBuilder(unittest.TestCase):
         dst=io.StringIO()
         builder=XmlV3StreamGraphBuilder(dst)
         _build_test_graph_v4(builder)
-        (gt,gi)=load_graph(dst.getvalue(), "")
+        dst.seek(0)
+        (gt,gi)=load_graph(dst, "")
         _check_test_graph_v4(self, gi)
 
     def test_generate_v4_OoO(self):
         dst=io.StringIO()
         builder=XmlV3StreamGraphBuilder(dst)
         _build_test_graph_v4_OoO(builder)
-        (gt,gi)=load_graph(dst.getvalue(), "")
+        dst.seek(0)
+        (gt,gi)=load_graph(dst, "")
         _check_test_graph_v4(self, gi)
 
 

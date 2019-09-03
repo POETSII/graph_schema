@@ -756,12 +756,16 @@ void usage()
 }
 
 std::shared_ptr<LogWriter> g_pLog; // for flushing purposes on exit
+std::unique_ptr<SnapshotWriter> snapshotWriter;
 
 void close_resources()
 {
   if(g_pLog){
     g_pLog->close();
     g_pLog=0;
+  }
+  if(snapshotWriter){
+    snapshotWriter.reset();
   }
 }
 
@@ -978,7 +982,6 @@ int main(int argc, char *argv[])
       fprintf(stderr, "Loaded\n");
     }
 
-    std::unique_ptr<SnapshotWriter> snapshotWriter;
     if(snapshotDelta!=0){
       snapshotWriter.reset(new SnapshotWriterToFile(snapshotSinkName.c_str()));
     }

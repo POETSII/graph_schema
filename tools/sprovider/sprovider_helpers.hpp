@@ -3,7 +3,9 @@
 
 #include "sprovider_types.h"
 
+#ifdef POEMS_ENABLE_VALGRIND_MEMCHECK
 #include "valgrind/memcheck.h"
+#endif
 
 ////////////////////////////////////////////////////////////
 // Needed for providers

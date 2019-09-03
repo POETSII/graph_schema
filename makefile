@@ -246,6 +246,7 @@ include apps/nursery/airfoil/airfoil.inc
 include apps/nursery/nested_arrays/makefile.inc
 include apps/nursery/apsp_vec_barrier/apsp_vec_barrier.inc
 include apps/nursery/barrier_izhikevich_clustered/barrier_izhikevich_clustered.inc
+include apps/nursery/pulsed_izhikevich/pulsed_izhikevich.inc
 
 #TODO : Defunct?
 include tools/partitioner.inc

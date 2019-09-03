@@ -44,11 +44,13 @@ void sprovider_handler_log(int level, const char *msg, ...)
         fputc('\n', stderr);
     }
 
-    if(!strcmp(msg,"_HANDLER_EXIT_SUCCESS_9be65737_")){
-        exit(0);
-    }
-    if(!strcmp(msg,"_HANDLER_EXIT_FAIL_9be65737_")){
-        exit(1);
+    if(level==0){
+        if(!strcmp(msg,"_HANDLER_EXIT_SUCCESS_9be65737_")){
+            exit(0);
+        }
+        if(!strcmp(msg,"_HANDLER_EXIT_FAIL_9be65737_")){
+            exit(1);
+        }
     }
 }
 

@@ -38,8 +38,28 @@ public:
         }
     }
 
+    void add(uint16_t x)
+    {
+        for(int i=0;i<2;i++){
+            add(x&0xFF);
+            x=x>>8;
+        }
+    }
+
+
     void add(int32_t x)
-    { add( *(uint32_t*)&x ); }
+    { add( (uint32_t)x ); }
+
+
+    void add(int64_t x)
+    { add( (uint64_t)x ); }
+
+    void add(int16_t x)
+    { add( (uint16_t)x ); }
+
+    void add(int8_t x)
+    { add( (uint8_t)x ); }
+
     
     void add(float x)
     {

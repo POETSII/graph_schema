@@ -11,6 +11,7 @@ from graph.load_xml_v3 import v3_namespace_uri, v3_load_graph_types_and_instance
 def load_graph(src : Union[str, io.TextIOBase, lxml.etree.Element], src_path : Optional[str] = None ) -> (GraphType, Optional[GraphInstance]):
     """
     src is a string, stream, or XML Element to load from.
+    If it is a string, that string is a path, _not_ direct XML.
     If it is an Element, it should be the root Graphs element.
 
     src_path optionally gives the file-name (including extension) of the place where the source file
@@ -18,11 +19,8 @@ def load_graph(src : Union[str, io.TextIOBase, lxml.etree.Element], src_path : O
     files, and may be used for looking for implied meta-data and pre-compiled files. However, it
     should still work even without a path.
     """
-    if isinstance(src,io.TextIOBase):
+    if isinstance(src,(str,io.TextIOBase)):
         tree=lxml.etree.parse(src)
-        graph=tree.getroot() # type: lxml.etree.Element
-    elif isinstance(src,str):
-        tree=lxml.etree.parse(io.StringIO(src))
         graph=tree.getroot() # type: lxml.etree.Element
     elif isinstance(src,lxml.etree.ElementBase):
         graph=src # type: lxml.etree.Element

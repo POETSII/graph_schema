@@ -521,6 +521,10 @@ public:
                 throw std::runtime_error("DeviceInstances appeared twice.");
             }
 
+            if(!m_graphProperties){
+                m_graphProperties=m_graphType->getPropertiesSpec()->create();
+            }
+
             m_gId=m_events->onBeginGraphInstance(m_graphType, m_graphId, m_graphProperties, std::move(m_graphMetadata) );
             m_events->onBeginDeviceInstances(m_gId);
 

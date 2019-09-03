@@ -5,6 +5,8 @@
 
 #include "libxml/xmlwriter.h"
 
+#include <algorithm>
+
 class SnapshotWriter
 {
 public:
@@ -50,26 +52,40 @@ private:
   { return std::shared_ptr<xmlChar>(xmlCharStrdup(v), free); }
 
   xmlTextWriterPtr m_dst;
+  bool m_snapshotOpen=false;
+
 public:
+    SnapshotWriterToFile(const SnapshotWriterToFile &)=delete;
+    SnapshotWriterToFile &operator=(const SnapshotWriterToFile &)=delete;
+
     SnapshotWriterToFile(const char *dst)
       : m_dst(0)
   {
-    m_dst=xmlNewTextWriterFilename(dst, 0);
+      m_dst=xmlNewTextWriterFilename(dst, 0);
       xmlTextWriterSetIndent(m_dst, 1);
       xmlTextWriterStartDocument(m_dst, NULL, NULL, NULL);
       xmlTextWriterStartElementNS(m_dst, NULL, (const xmlChar*)"Graph", m_ns);
   }
 
+  void close()
+  {
+    if(m_dst){
+      if(m_snapshotOpen){
+        endSnapshot();
+      }
+
+	    xmlTextWriterEndElement(m_dst);
+      xmlTextWriterEndDocument(m_dst);
+      xmlFreeTextWriter(m_dst);
+      m_dst=0;
+    }
+  }
+
 
   virtual ~SnapshotWriterToFile()
-    {
-        if(m_dst){
-	  xmlTextWriterEndElement(m_dst);
-	          xmlTextWriterEndDocument(m_dst);
-            xmlFreeTextWriter(m_dst);
-            m_dst=0;
-        }
-    }
+  {
+    close();    
+  }
 
     virtual void startSnapshot(
         const GraphTypePtr &graph,
@@ -78,6 +94,10 @@ public:
         unsigned sequence
     ) override
     {
+      if(m_snapshotOpen){
+        throw std::runtime_error("Snapshot already open.");
+      }
+      m_snapshotOpen=true;
 
         xmlTextWriterStartElement(m_dst, (const xmlChar*)"GraphSnapshot");
         xmlTextWriterWriteAttribute(m_dst, (const xmlChar *)"graphInstId", (const xmlChar *)id);
@@ -96,6 +116,11 @@ public:
 
     virtual void endSnapshot() override
     {
+      if(!m_snapshotOpen){
+        throw std::runtime_error("Snapshot not open.");
+      }
+      m_snapshotOpen=false;
+
         xmlTextWriterEndElement(m_dst);
         xmlTextWriterFlush(m_dst);
     }

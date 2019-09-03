@@ -2,18 +2,21 @@
 
 sudo apt-get update
 
-sudo apt-get install -y libxml2-dev gdb g++ git make libxml++2.6-dev libboost-dev libboost-filesystem-dev zip python3 zip default-jre-headless python3-lxml curl mpich rapidjson-dev npm
+sudo apt-get install -y libxml2-dev gdb g++ git make libxml++2.6-dev valgrind libboost-dev libboost-filesystem-dev zip python3 zip default-jre-headless python3-lxml curl mpich rapidjson-dev npm
 
 # RISC-V toolchain (not sure exactly how much is needed)
 # TODO: which parts are needed?
 #sudo apt-get install -y autoconf automake autotools-dev curl libmpc-dev libmpfr-dev libgmp-dev gawk build-essential bison flex texinfo gperf libtool patchutils bc zlib1g-dev
+
+# Needed for POEMS
+sudo apt-get install -y libmetis-dev libtbb-dev
 
 # Testing.
 # npm has the most recent version of bats, because life is like that
 npm install -g bats
 
 # Graph partitioning
-sudo apt-get install -y metis
+sudo apt-get install -y metis 
 
 # Visualisation
 sudo apt-get install -y graphviz imagemagick ffmpeg
