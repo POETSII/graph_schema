@@ -5,7 +5,7 @@ from graph.expand_code import expand_graph_type_source
 from create_standard_probabilities import get_probs
 
 from graph.load_xml import load_graph_types_and_instances
-from graph.build_xml_stream import XmlV3StreamGraphBuilder
+from graph.build_xml_stream import make_xml_stream_builder
 import sys
 import os
 import math
@@ -91,7 +91,7 @@ properties={
     "probabilities":probs
     }
 
-sink=XmlV3StreamGraphBuilder(sys.stdout)
+sink=make_xml_stream_builder(sys.stdout,require_interleave=True)
 sink.begin_graph_instance(instName, graphType, properties=properties)
 
 nodes={}

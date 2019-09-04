@@ -44,6 +44,7 @@ struct ising_spin_model
             y=_y;
 
             cell_init(_x, _y, spin, nextTime, rng);
+            tag=calc_tag(x,y);
         }
     };
 
