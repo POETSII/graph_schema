@@ -2,7 +2,7 @@
 
 sudo apt-get update
 
-sudo apt-get install -y libxml2-dev gdb g++ git make libxml++2.6-dev valgrind libboost-dev libboost-filesystem-dev zip python3 zip default-jre-headless python3-lxml curl mpich rapidjson-dev npm
+sudo apt-get install -y libxml2-dev gdb g++ git make libxml++2.6-dev valgrind libboost-dev libboost-filesystem-dev zip python3 zip default-jre-headless python3-lxml curl mpich rapidjson-dev npm libhdf5-dev
 
 # RISC-V toolchain (not sure exactly how much is needed)
 # TODO: which parts are needed?
@@ -29,6 +29,7 @@ sudo apt-get install -y emacs-nox screen
 sudo apt-get install -y python3-pip python3-numpy python3-scipy python3-ujson
 sudo pip3 install pyamg
 sudo pip3 install svgwrite
+sudo pip3 install h5py
 
 # Creating meshes
 sudo apt-get install -y octave octave-msh octave-geometry hdf5-tools

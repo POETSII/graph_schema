@@ -3,7 +3,7 @@
 from graph.core import *
 
 from graph.load_xml import load_graph_types_and_instances
-from graph.build_xml_stream import XmlV3StreamGraphBuilder
+from graph.build_xml_stream import make_xml_stream_builder
 
 import sys
 import os
@@ -42,7 +42,7 @@ graphType=graphTypes["pulsed_izhikevich"]
 neuronType=graphType.device_types["neuron"]
 syncType=graphType.device_types["sync_node"]
 
-sink=XmlV3StreamGraphBuilder(sys.stdout)
+sink=make_xml_stream_builder(sys.stdout, require_interleave=True)
 assert sink.can_interleave
 
 instName="sparse_{}_{}_{}".format(Ne,Ni,K)

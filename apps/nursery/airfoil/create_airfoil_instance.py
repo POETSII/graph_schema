@@ -3,7 +3,8 @@
 from graph.core import *
 
 from graph.load_xml import load_graph_types_and_instances
-from graph.save_xml_stream import save_graph
+#from graph.save_xml_stream import save_graph
+from graph.save_xml import save_graph
 
 from graph.metadata import create_device_instance_key
 
@@ -158,7 +159,9 @@ if __name__=="__main__":
     parser.add_argument('-o', dest='output', default="-", help='Where to save the file (- for stdout)')
     args = parser.parse_args()
     
-    src=h5py.File(args.source)
+    sys.stderr.write(f"src = {args.source}")
+    sys.stderr.write(f"exists = {os.path.exists(args.source)}")
+    src=h5py.File(args.source,"r")
     model=mock.load(src)
     
     #model=mock.create_square(3)

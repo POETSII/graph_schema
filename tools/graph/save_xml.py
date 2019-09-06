@@ -442,8 +442,22 @@ def save_graph_instance_metadata_patch(parent, id,graphMeta,deviceMeta,edgeMeta)
 
     return gn
 
+import graph.save_xml_v4 as _save_xml_v4
 
 def save_graph(graph:Union[GraphType,GraphInstance],dst):
+    version=None
+    if "GRAPH_SCHEMA_DEFAULT_XML_OUTPUT_VERSION" in os.environ:
+        version=int(os.environ["GRAPH_SCHEMA_DEFAULT_XML_OUTPUT_VERSION"])
+    if version is None:
+        version=3
+
+    sys.stderr.write(f"version={version}\n")
+    
+    if version==4:
+        _save_xml_v4.save_graph(graph,dst)
+        return
+    assert version==3
+
     nsmap = { None : "https://poets-project.org/schemas/virtual-graph-schema-v3" }
     root=etree.Element(toNS("p:Graphs"), nsmap=nsmap)
 

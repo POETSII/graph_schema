@@ -2,6 +2,8 @@ from graph.core import *
 from graph.save_xml import save_graph_type,toNS
 from graph.load_xml import load_graph
 
+import graph.save_xml_v4
+
 from lxml import etree
 
 import os
@@ -108,8 +110,10 @@ class InterleavedGraphBuilderWrapper(GraphBuilder):
     support interleaving."""
 
     class _EdgeForward(NamedTuple):
-        id : str
-        type : DeviceType
+        dst_dev_inst : str
+        dst_dev_pin : str
+        src_dev_inst : str
+        src_dev_pin : str
         properties : Value
         state : Value
         metadata : Value
@@ -123,20 +127,24 @@ class InterleavedGraphBuilderWrapper(GraphBuilder):
     def can_interleave(self):
         return True
 
+    def begin_graph_instance(self, id:str, type:GraphType, *, properties:Value=None, metadata:Value=None):
+        self._sink.begin_graph_instance(id,type,properties=properties,metadata=metadata)
+
     def add_device_instance(self, id:str, type:DeviceType, *, properties : Value = None, state : Value = None, metadata : Value = None):
-        self._sink.add_device_instance(id, type, properties=properties, state=state, metadata=metadata)
+        return self._sink.add_device_instance(id, type, properties=properties, state=state, metadata=metadata)
 
     def end_device_instances(self):
         assert self._edge_queue is not None
+        self._sink.end_device_instances()
         for e in self._edge_queue:
             self._sink.add_edge_instance(
                 e.dst_dev_inst,e.dst_dev_pin, e.src_dev_inst,e.src_dev_pin,
                 properties=e.properties, state=e.state, metadata=e.metadata, send_index=e.send_index
             )
         self._edge_queue=None
-        self._sink.end_device_instances()
         
     def add_edge_instance(self, dst_dev_inst:str, dst_dev_pin:str, src_dev_inst:str, src_dev_pin:str, *, properties : Value = None, state : Value = None, metadata : Value = None, send_index:int=None):
+        assert dst_dev_inst is not None
         if self._edge_queue is not None:
             self._edge_queue.append(InterleavedGraphBuilderWrapper._EdgeForward(dst_dev_inst, dst_dev_pin, src_dev_inst, src_dev_pin, properties, state, metadata, send_index))
         else:
@@ -249,7 +257,6 @@ class XmlV3StreamGraphBuilder:
         # will be used for spooling if nesc., and later may switch to pointing at self._dst
         self._edge_dst=tempfile.SpooledTemporaryFile(max_size=self._edge_spool_size, mode='w+t')
         self._devices_complete=False
-        self._edge_queue=[] # type: List[Tuple]
 
         self._progress_check=0
         self._progress_start_time=time.time()
@@ -378,6 +385,177 @@ class XmlV3StreamGraphBuilder:
         self._dst.flush()
         self._dst=None
 
+
+_convert_json_init_to_c_init=graph.save_xml_v4.convert_json_init_to_c_init
+_save_graph_type_v4=graph.save_xml_v4.save_graph_type
+
+class XmlV4StreamGraphBuilder:
+    """This provides a reasonably fast streaming XML writer that should have O(nDevices) memory
+        use.
+
+        It does no real checking of the data, even if __debug__!=1
+    
+        It allows interleaving of devices and edges with constant memory overhead,
+        though it will need to perfom O(edges) extra disk IO to support this. It
+        is much more efficient in disk IO to generate non-interleaved and/or call
+        end_device_instances as soon as possible.
+    """
+
+    def __init__(self, dst):
+        self._graph_type=None
+        # The main output file
+        self._dst=dst
+        self._devices_complete=False
+        
+        self._device_instances={}
+
+        self._progress_check=0
+        self._progress_start_time=time.time()
+        self._progress_last_time=self._progress_start_time
+        self._progress_time_step=1
+        self._progress_last_devices=0
+        self._progress_last_edges=0
+
+        self._total_devices=0
+        self._total_edges=0
+        self._hint_total_devices=None
+        self._hint_total_edges=None
+
+    def _do_progress(self):
+        now=time.time()
+        if self._progress_last_time+self._progress_time_step < now:
+            global_delta=now - self._progress_start_time
+            local_delta=now-self._progress_last_time
+
+            device_progress=""
+            if self._hint_total_devices is not None:
+                device_progress=f" out of {self._hint_total_devices} expected ({self._total_devices/self._hint_total_devices*100:.1f}%)"
+            if self._progress_last_devices!=self._total_devices:
+                device_progress+=f" {(self._total_devices - self._progress_last_devices)/local_delta/1000:.1f} KDevice/sec"
+                self._progress_last_devices=self._total_devices
+
+            edge_progress=""
+            if self._hint_total_edges is not None:
+                edge_progress=f" out of {self._hint_total_edges} expected ({self._total_edges/self._hint_total_edges*100:.1f}%)"
+            if self._progress_last_edges!=self._total_edges:
+                edge_progress+=f" {(self._total_edges - self._progress_last_edges)/local_delta/1000:.1f} KEdge/sec"
+                self._progress_last_edges=self._total_edges
+            
+            sys.stderr.write(f"Gen time = {global_delta:.2f} seconds, {self._total_devices} devices{device_progress}, {self._total_edges} edges{edge_progress}\n")
+            self._progress_time_step=min(60, self._progress_time_step*1.5)
+            self._progress_last_time=now
+
+    def hint_total_devices(self, n:int):
+        self._hint_total_devices=n
+
+    def hint_total_edges(self, n:int):
+        self._hint_total_edges=n
+
+    def begin_graph_instance(self, id:str, type:GraphType, *, properties:Value = None, metadata:Value = None):
+        assert self._graph_type is None
+
+        ns="https://poets-project.org/schemas/virtual-graph-schema-v4"
+        nsmap = { None : ns }
+        root=etree.Element(toNS("p:Graphs"), nsmap=nsmap)
+        graphTypeNode=_save_graph_type_v4(root,type)
+        graphTypeText=etree.tostring(graphTypeNode,pretty_print=True).decode("utf8")
+
+        self._dst.write("<?xml version='1.0'?>\n")
+        self._dst.write(f'<Graphs xmlns="{ns}" formatMinorVersion="0">\n')
+
+        self._dst.write(graphTypeText)
+
+        self._dst.write(f' <GraphInstance id="{id}" graphTypeId="{type.id}"')
+        if properties is not None:
+            self._dst.write(f' P="{_convert_json_init_to_c_init(type.properties, properties)}"')
+        self._dst.write(f'>\n')
+
+        self._dst.write('  <DeviceInstances>\n')
+        self._graph_type=type
+
+
+    def add_device_instance(self, id:str, type:DeviceType, *, properties : Value = None, state : Value = None, metadata : Value = None):
+        assert not self._devices_complete
+        if properties or state:
+            self._dst.write(f'  <DevI id="{id}" type="{type.id}"')
+            if properties:
+                self._dst.write(f' P="{_convert_json_init_to_c_init(type.properties,properties)}"')
+            if state:
+                self._dst.write(f' S="{_convert_json_init_to_c_init(type.state, state)}"')
+            self._dst.write("/>\n")
+        else:
+            self._dst.write(f'  <DevI id="{id}" type="{type.id}" />\n')
+
+        self._device_instances[id]=type
+
+        self._total_devices+=1
+        if 0 == (self._total_devices & 0xFFF):
+            self._do_progress()
+
+        return id
+
+
+    def end_device_instances(self):
+        """Signal that there are no more device instances to come."""
+        assert not self._devices_complete
+        self._dst.write("""
+  </DeviceInstances>
+  <EdgeInstances>
+""")
+        self._devices_complete=True
+
+    def add_edge_instance(self, dst_dev_inst:str, dst_dev_pin:str, src_dev_inst:str, src_dev_pin:str, *, properties : Value = None, state : Value = None, metadata : Value = None, send_index:int=None):
+        assert self._devices_complete, "V4 writer does not natively interleave"
+        if properties or state:
+            dst_dev_type=self._device_instances[dst_dev_inst] # type: DeviceType
+            dst_pin_type=dst_dev_type.inputs[dst_dev_pin]
+            if send_index is not None:
+                self._dst.write(f' <EdgeI path="{dst_dev_inst}:{dst_dev_pin}-{src_dev_inst}:{src_dev_pin}" sendIndex="{send_index}"')
+            else:
+                self._dst.write(f' <EdgeI path="{dst_dev_inst}:{dst_dev_pin}-{src_dev_inst}:{src_dev_pin}"')
+            if properties:
+                self._dst.write(f' P="{_convert_json_init_to_c_init(dst_pin_type.properties, properties)}"')
+            if state:
+                self._dst.write(f' S="{_convert_json_init_to_c_init(dst_pin_type.state, state)}"')
+            self._dst.write("/>\n")
+        else:
+            if send_index is not None:
+                self._dst.write(f' <EdgeI path="{dst_dev_inst}:{dst_dev_pin}-{src_dev_inst}:{src_dev_pin}" sendIndex="{send_index}" />\n')
+            else:
+                self._dst.write(f' <EdgeI path="{dst_dev_inst}:{dst_dev_pin}-{src_dev_inst}:{src_dev_pin}" />\n')
+
+        self._total_edges+=1
+        if 0 == (self._total_edges & 0xFFF):
+            self._do_progress()
+    
+    def end_graph_instance(self):
+        assert self._dst
+        assert self._devices_complete, "User should still call end_devices_complete before end_graph_instance"
+        self._dst.write("</EdgeInstances>\n</GraphInstance></Graphs>\n")
+        self._dst.flush()
+        self._dst=None
+
+def make_xml_stream_builder(dst, require_interleave=False, xml_version:Optional[int]=None):
+    """Create an xml stream builder with the required version and interleave capability.
+
+    The default xml version can be controlled using the GRAPH_SCHEMA_DEFAULT_XML_OUTPUT_VERSION environment variable.
+    """
+    if xml_version==None:
+        key="GRAPH_SCHEMA_DEFAULT_XML_OUTPUT_VERSION"
+        if key in os.environ:
+            xml_version=int(os.environ.get(key))
+        else:
+            xml_version=3
+
+    if xml_version==3:
+        return XmlV3StreamGraphBuilder(dst)
+    elif xml_version==4:
+        res=XmlV4StreamGraphBuilder(dst)
+        if require_interleave:
+            res=InterleavedGraphBuilderWrapper(res)
+        return res
+    else:
+        raise RuntimeError(f"Don't know xml version '{xml_version}'.")
 
 
 ##################################################################################
@@ -565,6 +743,41 @@ class TestXMLV3StreamGraphBuilder(unittest.TestCase):
         dst.seek(0)
         (gt,gi)=load_graph(dst, "")
         _check_test_graph_v4(self, gi)
+
+class TestXMLV4StreamGraphBuilder(unittest.TestCase):
+    def test_generate_v1(self):
+        dst=io.StringIO()
+        builder=XmlV4StreamGraphBuilder(dst)
+        _build_test_graph_v1(builder)
+        dst.seek(0)
+        (gt,gi)=load_graph(dst, "")
+        _check_test_graph_v1(self, gi)
+
+    def test_generate_v2(self):
+        dst=io.StringIO()
+        builder=XmlV4StreamGraphBuilder(dst)
+        _build_test_graph_v2(builder)
+        dst.seek(0)
+        (gt,gi)=load_graph(dst, "")
+        _check_test_graph_v2(self, gi)
+
+    def test_generate_v3(self):
+        dst=io.StringIO()
+        builder=XmlV4StreamGraphBuilder(dst)
+        _build_test_graph_v3(builder)
+        dst.seek(0)
+        (gt,gi)=load_graph(dst, "")
+        _check_test_graph_v3(self, gi)
+
+
+    def test_generate_v4(self):
+        dst=io.StringIO()
+        builder=XmlV4StreamGraphBuilder(dst)
+        _build_test_graph_v4(builder)
+        dst.seek(0)
+        (gt,gi)=load_graph(dst, "")
+        _check_test_graph_v4(self, gi)
+
 
 
 if __name__ == '__main__':

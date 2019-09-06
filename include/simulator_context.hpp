@@ -1387,7 +1387,7 @@ protected:
     void add_messages(const edge_index_range_t &range, const TypedDataPtr &payload, uint64_t sendEventId) override
     {
         //fprintf(stderr, "  numInt=%u, numExt=%u\n", range.beginExternals-range.begin, range.end-range.beginExternals);
-        assert(range.begin<range.beginExternals);
+        assert(range.begin<=range.beginExternals);
         for(auto ei=range.begin; ei<range.beginExternals; ei++){
             m_messageQueue.push(message_t{ei, payload,sendEventId});
         }

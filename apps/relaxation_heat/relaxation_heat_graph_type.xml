@@ -71,6 +71,24 @@
 
   <SharedCode>
   <![CDATA[
+    #ifdef POETS_LEGACY_HAS_HANDLER_EXIT
+    #define _do_handler_exit(code) handler_exit(code)
+    #else
+    #define _do_handler_exit(code) ((void)0)
+    #endif
+
+    #define fake_handler_exit(code) \
+    { \
+        if((code)==0){ \
+            handler_log(0, "_HANDLER_EXIT_SUCCESS_9be65737_"); \
+        }else{ \
+            handler_log(0, "_HANDLER_EXIT_FAIL_9be65737_"); \
+        } \
+        _do_handler_exit(code); \
+    }
+
+
+
   int32_t abs_diff(int32_t a, int32_t b)
   {
     return (a>b) ? a-b : b-a;
@@ -522,7 +540,7 @@
             uint32_t(message->totalSent>>32), uint32_t(message->totalSent&0xFFFFFFFFul)
         );
         if(deviceState->steps >= deviceProperties->max_steps){
-          handler_exit(0);
+          fake_handler_exit(0);
         }else{
           deviceState->rts=RTS_FLAG_modification_out;
         }

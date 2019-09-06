@@ -182,12 +182,6 @@ public:
   )
     : DeviceTypeImpl(id, properties, state, inputs, outputs, isExternal, readyToSendCode, onInitCode, sharedCode, onHardwareIdleCode, onDeviceIdleCode)
   {
-    for(auto i : inputs){
-      std::cerr<<"  input : "<<i->getName()<<"\n";
-    }
-    for(auto o : outputs){
-      std::cerr<<"  output : "<<o->getName()<<"\n";
-    }
   }
 
   virtual void init(OrchestratorServices*, const typed_data_t*, const typed_data_t*, typed_data_t*) const override
@@ -243,9 +237,6 @@ DeviceTypePtr loadDeviceTypeElement(
 
   std::string id=get_attribute_required(eDeviceType, "id");
   rapidjson::Document metadata=parse_meta_data(eDeviceType, "./g:MetaData", ns);
-
-  std::cerr<<"Loading "<<id<<"\n";
-
   
   std::string readyToSendCode, onInitCode, onHardwareIdleCode, onDeviceIdleCode;
   auto *eReadyToSendCode=find_single(eDeviceType, "./g:ReadyToSend", ns);
@@ -461,8 +452,6 @@ GraphTypePtr loadGraphTypeElement(const filepath &srcPath, xmlpp::Element *eGrap
   auto *eDeviceTypes=find_single(eGraphType, "./g:DeviceTypes", ns);
   for(auto *nDeviceType : eDeviceTypes->find("./g:DeviceType", ns)){
     auto dt=loadDeviceTypeElement(messageTypesById, (xmlpp::Element*)nDeviceType);
-
-    std::cerr<<"device type = "<<dt->getId()<<"\n";
     deviceTypes.push_back( dt );
     if(events){
       events->onDeviceType(dt);

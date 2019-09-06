@@ -204,10 +204,6 @@
     ]]></SharedCode>
 
     <MessageTypes>
-      <MessageType id="__init__">
-				<!-- This doesn't have any properties -->
-      </MessageType>
-
       <MessageType id="__print__">
 				<!-- This doesn't have any properties -->
       </MessageType>
@@ -367,13 +363,11 @@
 				}
 				]]></ReadyToSend>
 
-				<InputPin name="__init__" messageTypeId="__init__">
-					<OnReceive><![CDATA[
+				<OnInit><![CDATA[
 					for(unsigned i=0;i<4;i++){
 						deviceState->q[i]=deviceProperties->qinit[i];
 					}
-					]]></OnReceive>
-				</InputPin>
+					]]></OnInit>
 
 				<InputPin name="pos_in" messageTypeId="node_pos">
 					<Properties>
@@ -814,11 +808,9 @@
 				*readyToSend=deviceState->rms_pending==0 ? RTS_FLAG_rms_ack : 0;
 				]]></ReadyToSend>
 
-				<InputPin name="__init__" messageTypeId="__init__">
-					<OnReceive><![CDATA[
+				<OnInit><![CDATA[
 					deviceState->rms_pending=deviceProperties->fanin;
-					]]></OnReceive>
-				</InputPin>
+				]]></OnInit>
 
 				<InputPin name="rms_inc" messageTypeId="rms_inc">
 					<OnReceive><![CDATA[

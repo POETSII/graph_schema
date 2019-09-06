@@ -114,9 +114,9 @@ def apsp_ref(conn):
     
     return (sumMaxDist,sumSumDist,first_round_distances,second_round_distances)
 
-if len(connections)<=4096:
+if n <= 2048 and n*d<=65536:
     sys.stderr.write("Calculating ref dists...\n")
-    if len(connections)>=1000:
+    if n*d >= 16384:
         sys.stderr.write("   (warning: this will be slow)\n")
     (refSumMaxDist,refSumSumDist,first_round_distances,second_round_distances)=apsp_ref(connections)
     sys.stderr.write("   done\n")
@@ -148,8 +148,9 @@ for i in range(0,n):
     res.add_device_instance(nodes[i])
     progress.append(nodes[i])
 
-dot_debug=open(f"{instName}.dot", "wt")
-dot_debug.write(f"digraph {instName} {{\n")
+dot_debug=None # open(f"{instName}.dot", "wt")
+if dot_debug:
+    dot_debug.write(f"digraph {instName} {{\n")
     
 for i in range(0,n):
     if n<1000:
@@ -164,10 +165,12 @@ for i in range(0,n):
         ei=EdgeInstance(res,dstN,"share_in",srcN,"share_out",props)
         res.add_edge_instance(ei)
 
-        dot_debug.write(f'  n{i} -> n{dst} [ label="{w}" ];\n ')
+        if dot_debug:
+            dot_debug.write(f'  n{i} -> n{dst} [ label="{w}" ];\n ')
         
     res.add_edge_instance(EdgeInstance(res,collector,"stats_in",srcN,"stats_out"))
 
-dot_debug.write("}\n")
+if dot_debug:
+    dot_debug.write("}\n")
     
 save_graph(res,sys.stdout)        

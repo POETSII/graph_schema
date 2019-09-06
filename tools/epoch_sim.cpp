@@ -745,6 +745,7 @@ void usage()
   fprintf(stderr, "\n");
   fprintf(stderr, "  --log-level n\n");
   fprintf(stderr, "  --max-steps n\n");
+  fprintf(stderr, "  --stats-delta n : How often to print statistics about steps\n");
   fprintf(stderr, "  --max-contiguous-idle-steps n : Maximum number of steps without any messages before aborting.\n");
   fprintf(stderr, "  --snapshots interval destFile\n");
   fprintf(stderr, "  --log-events destFile\n");

@@ -46,6 +46,13 @@ public:
     virtual bool parseAsNode() const
     { return false; }
 
+    /* Used to explicitly request a namespace check. Most of the time we don't bother to improve speed. */
+    virtual bool doCheckElementNamespace() const
+    { return false; }
+
+    virtual void checkElementNamespace(const Glib::ustring &nsURI) const
+    {}
+
     virtual void onNode(xmlpp::Element *node)
     { throw std::runtime_error("is you want parseAsNode, you need to implement onNode"); }
 
@@ -70,6 +77,10 @@ public:
 void parseElement(TextReader *reader, ElementBindings *bindings)
 {
     assert(reader->get_node_type()==TextReader::Element);
+
+    if(bindings->doCheckElementNamespace()){
+        bindings->checkElementNamespace(reader->get_namespace_uri());
+    }
 
     if(bindings->parseAsNode()){
         Element *elt=(Element *)reader->expand();
@@ -496,9 +507,18 @@ public:
         }
 
         if(m_registry){
-            m_graphType=m_registry->lookupGraphType(m_graphTypeId);
-        }else{
-            m_graphType=m_localGraphTypes.at(m_graphTypeId);
+            try{
+                m_graphType=m_registry->lookupGraphType(m_graphTypeId);
+            }catch(unknown_graph_type_error &){
+                // pass
+            }
+        }
+        if(!m_graphType){
+            auto it=m_localGraphTypes.find(m_graphTypeId);
+            if(it==m_localGraphTypes.end()){
+                throw unknown_graph_type_error(m_graphTypeId);
+            }
+            m_graphType=it->second;
         }
         for(auto et : m_graphType->getMessageTypes()){
             m_events->onMessageType(et);
@@ -624,6 +644,22 @@ public:
         , m_ebGraphType(srcPath, events, registry, m_localGraphTypes)
         , m_ebGraphInstance(m_events, registry, m_localGraphTypes) 
     {}
+
+    bool doCheckElementNamespace() const override
+    { return true; }
+
+    void checkElementNamespace(const Glib::ustring &nsURI) const override
+    {
+        std::cerr<<"Check\n";
+        const char *ns_v4="https://poets-project.org/schemas/virtual-graph-schema-v4";
+        const char *ns_v3="https://poets-project.org/schemas/virtual-graph-schema-v3";
+        if(nsURI==ns_v4){
+            throw std::runtime_error("This parser cannot yet deal with v4 xml.");
+        }
+        if(nsURI!=ns_v3){
+            throw std::runtime_error("Element came from the wrong namespace.");
+        }
+    }
 
     void onBegin(const Glib::ustring &name) override
     {

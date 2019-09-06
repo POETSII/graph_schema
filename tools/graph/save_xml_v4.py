@@ -67,7 +67,7 @@ def convert_json_init_to_c_init(t,v):
     elif isinstance(v,dict):
         assert isinstance(t,TupleTypedDataSpec)
 
-        return "{"+ ",".join([convert_json_init_to_c_init(e, v[e.name]) for e in t.elements_by_index ]) +"}"
+        return "{"+ ",".join([convert_json_init_to_c_init(e, v.get(e.name, e.default)) for e in t.elements_by_index ]) +"}"
     elif isinstance(v,list):
         assert isinstance(t,ArrayTypedDataSpec)
         return "{"+ ",".join([convert_json_init_to_c_init(t.type, e) for e in v ]) +"}"
@@ -302,7 +302,7 @@ def save_graph(graph:Union[GraphType,GraphInstance], dst):
         gt=graph.graph_type
         gi=graph
     else:
-        assert isinstance(graph,GraphType)
+        assert isinstance(graph,GraphType), f"type = { type(graph)}"
         gt=graph
         gi=None
 

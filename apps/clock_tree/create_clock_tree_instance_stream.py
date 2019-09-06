@@ -7,7 +7,7 @@ from graph.save_xml_stream import save_graph
 import sys
 import os
 import math
-from graph.build_xml_stream import XmlV3StreamGraphBuilder
+from graph.build_xml_stream import make_xml_stream_builder
 
 
 import os
@@ -36,7 +36,7 @@ instName="clock_{}_{}".format(d,b)
 
 properties={"max_ticks":maxTicks}
 
-sink=XmlV3StreamGraphBuilder(sys.stdout)
+sink=make_xml_stream_builder(sys.stdout,require_interleave=True)
 assert sink.can_interleave
 
 nodes={}

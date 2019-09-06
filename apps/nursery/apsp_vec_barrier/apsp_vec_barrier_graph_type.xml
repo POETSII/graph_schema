@@ -217,13 +217,13 @@
 
 				<OutputPin name="reduce_out" messageTypeId="stats">
 					<OnSend><![CDATA[
-					static_assert(sizeof(*message)==sizeof(*deviceState), "Layout doesn't match.");
-					static_assert(offsetof(MESSAGE_T, vertex_count) == offsetof(DEVICE_STATE_T, vertex_count), "Layout doesn't match.");
-					static_assert(offsetof(MESSAGE_T, sum_sum_distance) == offsetof(DEVICE_STATE_T, sum_sum_distance), "Layout doesn't match.");
-					
-					static_assert(sizeof(*message)==44);
-					memcpy(message, deviceState, sizeof(*message));
-					memset(deviceState, 0, sizeof(*deviceState));
+					static_assert(sizeof(message->max_distances)==sizeof(deviceState->max_distances));
+					message->sum_sum_distance=0;
+					message->vertex_count=0;
+					memcpy(message->max_distances, deviceState->max_distances, sizeof(deviceState->max_distances));
+					deviceState->sum_sum_distance=0;
+					deviceState->vertex_count=0;
+					memset(deviceState->max_distances, 0, sizeof(deviceState->max_distances));
 					]]></OnSend>
 				</OutputPin>
 
@@ -278,11 +278,6 @@
 				]]></OnInit>
 
 				<OnHardwareIdle><![CDATA[
-				static int idle=0;
-				if(++idle==10){
-					exit(1);
-				}
-
 				handler_log(0, "Here, round_base=%u, vertex_count=%u", deviceState->round_base, deviceState->vertex_count);
 
 				if(deviceState->vertex_count==0){

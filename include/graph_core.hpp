@@ -381,11 +381,28 @@ public:
     return hash.getHash();
   }
 
-
   virtual uint64_t getTypeHash() const
   {
     // TODO
     throw std::runtime_error("getTypeHash - Not implemented.");
+  }
+
+  //! Convert to an XML V4 C-style initialiser
+  /*!
+    minorFormatVersion : The level of support in the XML, with later versions possibly allowing more complex specs.
+  */
+  virtual std::string toXmlV4ValueSpec(const TypedDataPtr &data, int minorFormatVersion=0) const
+  {
+    throw std::runtime_error("toXmlV4ValueSpec - Not implemented.");
+  }
+
+  //! Convert an XML V4 C-style initialiser to a binary value
+  /*!
+    minorFormatVersion : The level of support in the XML, with later versions possibly allowing more complex specs.
+  */
+  virtual TypedDataPtr loadXmlV4ValueSpec(const std::string &value, int minorFormatVersion=0) const
+  {
+    throw std::runtime_error("loadXmlV4ValueSpec - Not implemented.");
   }
 };
 

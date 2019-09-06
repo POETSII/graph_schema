@@ -67,9 +67,22 @@ def write_device_instance(dst,di):
     else:
         dst.write('   <DevI id="{}" type="{}" />\n'.format(di.id,di.device_type.id))
 
-
+import graph.save_xml_stream_v4 as _save_xml_v4
 
 def save_graph(graph,dst):
+    version=None
+    if "GRAPH_SCHEMA_DEFAULT_XML_OUTPUT_VERSION" in os.environ:
+        version=int(os.environ["GRAPH_SCHEMA_DEFAULT_XML_OUTPUT_VERSION"])
+    if version is None:
+        version=3
+
+    sys.stderr.write(f"version={version}\n")
+    
+    if version==4:
+        _save_xml_v4.save_graph(graph,dst)
+        return
+    assert version==3
+
     if isinstance(dst, str):
         if dst.endswith(".gz"):
             import gzip

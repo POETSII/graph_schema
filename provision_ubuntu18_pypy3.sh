@@ -27,5 +27,6 @@ if [[ ! -d pypy-virtualenv ]] ; then
     pip3 install numpy
     pip3 install scipy
     pip3 install pyamg
+    pip3 install h5py
 
 fi

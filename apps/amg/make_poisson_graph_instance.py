@@ -91,20 +91,47 @@ def make_poisson_graph_instance(instName,n,m):
         
     
     def add_branches(level, L):
+
         branchType=amgGraphType.device_types["branch"]
         fineNodes=[]
         
         coarse_counts_in=calc_counts_in(L.P)
         peer_counts_in=calc_counts_in(L.A) - 1 # Have to subtract one off to remove diagonal as we don't send to self
         fine_counts_in=calc_counts_in(mg.levels[level-1].R) # Inputs come from R for level below
+
+        # HACK: pyamg sometimes creates entries where a given fine node is not connected upwards.
+        # I guess this works due to jacobi, but it wrecks our protocol.
+        # If we find such a fine node, we hack it into the system by adding a
+        # tiny weight to the matrix. This means the link is established, but
+        # it has no effect on the solution.
+        #There are probably decisions related to clustering that should be made here, but at the 
+        # moment it just chooses a coarse node at random
+        for i in range(L.n):
+            coarse_count=int(coarse_counts_in[i])
+            if coarse_count==0:
+                up=random.randint(0, L.P.shape[1]-1)
+                L.P[i,up]=1e-50
+                coarse_counts_in=calc_counts_in(L.P)
+                coarse_count=int(coarse_counts_in[i])
+                assert coarse_count==1
+
+
+        # Create the next coarser level
+        coarseNodes=add_level(level+1)
+
         
         # Create all the nodes at this level
         for i in range(L.n):
+            coarse_count=int(coarse_counts_in[i])
+            assert(coarse_count>0)
+            assert(peer_counts_in[i]>0)
+            assert(fine_counts_in[i]>0)
+
             diName="branch_{}_{}".format(level,i)
             props={
                 "fineCount": int(fine_counts_in[i]),
                 "peerCount": int(peer_counts_in[i]),
-                "coarseCount" : int(coarse_counts_in[i]),
+                "coarseCount" : int(coarse_count),
                 "Ad" : L.A[i,i],
                 "AdInvOmega":L.AdiagInvOmega[i],
                 "omega":L.omega
@@ -114,8 +141,7 @@ def make_poisson_graph_instance(instName,n,m):
             fineNodes.append(di)
             res.add_device_instance(di)
         
-        # Create the next coarser level
-        coarseNodes=add_level(level+1)
+
         sys.stderr.write("Wiring up level {}\n".format(level))
         
         # Add the fine to coarse

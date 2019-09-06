@@ -271,6 +271,7 @@
           <OnReceive><![CDATA[
             assert(deviceState->state == State_Coarse);
             assert(deviceState->coarseSeen < deviceProperties->coarseCount);
+            assert(message->max_r >= 0);
 
             if(!(deviceState->max_r == -1 || deviceState->max_r==message->max_r)){
               handler_log(0, "coarse_down/receive: deviceState->max_r=%g, message->max_r=%g", deviceState->max_r, message->max_r);
@@ -318,6 +319,7 @@
                 handler_log(2, "PreSmooth->PreResidual");
             }else if(deviceState->state==State_Coarse){
                 assert(deviceState->coarseSeen == deviceProperties->coarseCount);
+                assert(deviceState->max_r >= 0);
 
                 deviceState->x += deviceState->coarseAcc;
                 deviceState->coarseSeen=0;
@@ -347,7 +349,6 @@
             deviceState->preResidualSeen=0;
             deviceState->preResidualAcc=0;
 
-            deviceState->max_r = -1;
             deviceState->state=State_Coarse;
 
             handler_log(2, "PreResidual->Coarse");
@@ -357,6 +358,7 @@
           <OnSend><![CDATA[
             assert(deviceState->state==State_PostSmooth);
             assert(deviceState->postSmoothSeen==deviceProperties->peerCount);
+            assert(deviceState->max_r>=0);
 
             float dx =(deviceState->b - deviceState->postSmoothAcc) * deviceProperties->AdInvOmega
                 - deviceProperties->omega * deviceState->x;
@@ -369,7 +371,8 @@
 
             message->x = deviceState->x;
             message->max_r = deviceState->max_r;
-            assert(message->max_r>=0);
+
+            deviceState->max_r = -1;
             ]]></OnSend>
         </OutputPin>
         <ReadyToSend><![CDATA[
@@ -405,6 +408,12 @@
                 break;
             }
         ]]></ReadyToSend>
+        <OnInit><![CDATA[
+        assert(deviceProperties->coarseCount>0);
+        assert(deviceProperties->peerCount>0);
+
+        deviceState->max_r = -1;
+        ]]></OnInit>
       </DeviceType>
       <DeviceType id="leaf">
         <Documentation>This is the finest level linear solver, with one device per element in
