@@ -1,0 +1,61 @@
+<?xml version='1.0' encoding='ASCII'?>
+<Graphs xmlns="https://poets-project.org/schemas/virtual-graph-schema-v3">
+  <GraphType id="test_external_ping_pong">
+    <SharedCode><![CDATA[
+        #ifdef POETS_LEGACY_HAS_HANDLER_EXIT
+        #define _do_handler_exit(code) handler_exit(code)
+        #else
+        #define _do_handler_exit(code) ((void)0)
+        #endif
+
+        #define fake_handler_exit(code) \
+        { \
+            if((code)==0){ \
+                handler_log(0, "_HANDLER_EXIT_SUCCESS_9be65737_"); \
+            }else{ \
+                handler_log(0, "_HANDLER_EXIT_FAIL_9be65737_"); \
+            } \
+            _do_handler_exit(code); \
+        }
+]]></SharedCode>
+
+    <MessageTypes>
+      <MessageType id="msg">
+        <Message>
+          <Scalar name="payload1" type="uint32_t"/>
+          <Scalar name="payload2" type="float"/>
+        </Message>
+      </MessageType>
+    </MessageTypes>
+    <DeviceTypes>
+      <DeviceType id="reflector">
+        <State>
+          <Scalar name="payload1" type="uint32_t"/>
+          <Scalar name="payload2" type="float"/>
+		  <Scalar name="valid" type="int8_t"/>
+        </State>
+        <InputPin name="in" messageTypeId="msg">
+          <OnReceive><![CDATA[
+		  assert(!deviceState->valid);
+		  deviceState->payload1=message->payload1;
+		  deviceState->payload2=message->payload2;
+		  ]]></OnReceive>
+        </InputPin>
+        <OutputPin name="out" messageTypeId="msg">
+          <OnSend><![CDATA[
+		  assert(deviceState->valid);
+		  message->payload1=deviceState->payload1;
+		 message->payload2=deviceState->payload2;
+		]]></OnSend>
+        </OutputPin>
+        <ReadyToSend><![CDATA[
+			*readyToSend = deviceState->valid ? RTS_FLAG_out : 0;
+		]]></ReadyToSend>
+      </DeviceType>
+		<ExternalType id="outsider">
+        	<InputPin name="in" messageTypeId="msg" />
+        	<OutputPin name="out" messageTypeId="msg" />
+    	</ExternalType>
+    </DeviceTypes>
+  </GraphType>
+</Graphs>

@@ -1,0 +1,14 @@
+<?xml version='1.0' encoding='ASCII'?>
+<Graphs xmlns="https://poets-project.org/schemas/virtual-graph-schema-v3">
+  <GraphTypeReference id="test_external_ping_pong" src="test_external_ping_pong_graph_type.xml"/>
+  <GraphInstance id="test_external_ping_pong_inst_1" graphTypeId="test_external_ping_pong">
+    <DeviceInstances>
+      <ExtI id="outsider_0" type="outsider" />
+      <DevI id="insider_0" type="reflector" />
+    </DeviceInstances>
+    <EdgeInstances>
+      <EdgeI path="outsider_0:in-insider_0:out" />
+      <EdgeI path="insider_0:in-outsider_0:out" />
+    </EdgeInstances>
+  </GraphInstance>
+</Graphs>
