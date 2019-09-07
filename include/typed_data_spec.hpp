@@ -104,7 +104,7 @@ public:
 
   virtual rapidjson::Value binaryToJSON(const char *pBinary, unsigned cbBinary, rapidjson::Document::AllocatorType& alloc) const=0;
 
-    virtual void JSONToBinary(const rapidjson::Value &value, char *pBinary, unsigned cbBinary, bool alreadyDefaulted=false) const=0;
+  virtual void JSONToBinary(const rapidjson::Value &value, char *pBinary, unsigned cbBinary, bool alreadyDefaulted=false) const=0;
 
   virtual bool isTuple() const
   { return false; }
@@ -117,6 +117,11 @@ public:
 
   virtual bool isUnion() const
   { return false; }
+
+  virtual void binaryToXmlV4Value(const char *pBinary, unsigned cbBinary, std::ostream &dst, int minorFormatVersion) const=0;
+
+  virtual void xmlV4ValueToBinary(std::istream &src, char *pBinary, unsigned cbBinary, bool alreadyDefaulted, int minorFormatVersion) const=0;
+
 };
 typedef std::shared_ptr<TypedDataSpecElement> TypedDataSpecElementPtr;
 
@@ -221,6 +226,29 @@ private:
         *((int64_t*)pBinary) = v;
     }
 
+
+    template<class T>
+    void binaryToXmlV4ValueImpl(const char *pBinary, unsigned cbBinary, std::ostream &dst) const
+    {
+        assert(cbBinary == scalarTypeWidthBytes(m_type));
+        assert(cbBinary == sizeof(T));
+        T val;
+        memcpy(&val, pBinary, sizeof(T));
+        dst<<val;
+    }
+
+    template<class T>
+    void xmlV4ValueToBinaryImpl(std::istream &src, char *pBinary, unsigned cbBinary) const
+    {
+        assert(cbBinary == scalarTypeWidthBytes(m_type));
+        assert(cbBinary == sizeof(T));
+        T val;
+        if( ! (src>>val) ){
+            throw std::runtime_error("Couldn't parse scalar while extracting xmlV4Value.");
+        }
+        memcpy(pBinary, &val, sizeof(T));
+    }
+
 public:
     TypedDataSpecElementScalar(const std::string &name, const std::string &typeName, std::string defaultValue=std::string())
         : TypedDataSpecElement(name)
@@ -286,22 +314,86 @@ public:
         case ScalarType_uint8_t:  JSONToBinaryImpl<uint8_t>(value, pBinary, cbBinary); break;
         case ScalarType_uint16_t:  JSONToBinaryImpl<uint16_t>(value, pBinary, cbBinary); break;
         case ScalarType_uint32_t:  JSONToBinaryImpl<uint32_t>(value, pBinary, cbBinary); break;
-        case ScalarType_uint64_t:  JSONToBinaryImplU64(value, pBinary, cbBinary); break;
+        case ScalarType_uint64_t:  JSONToBinaryImpl<uint64_t>(value, pBinary, cbBinary); break;
 
         case ScalarType_int8_t:  JSONToBinaryImpl<int8_t>(value, pBinary, cbBinary); break;
         case ScalarType_int16_t:  JSONToBinaryImpl<int16_t>(value, pBinary, cbBinary); break;
         case ScalarType_int32_t:  JSONToBinaryImpl<int32_t>(value, pBinary, cbBinary); break;
-        case ScalarType_int64_t:  JSONToBinaryImplI64(value, pBinary, cbBinary); break;
+        case ScalarType_int64_t:  JSONToBinaryImpl<int64_t>(value, pBinary, cbBinary); break;
 
         case ScalarType_half:  throw std::runtime_error("JSONtoBinary - half not implemented yet."); break;
         case ScalarType_float:  JSONToBinaryImpl<float>(value, pBinary, cbBinary); break;
         case ScalarType_double:  JSONToBinaryImpl<double>(value, pBinary, cbBinary); break;
 
-        case ScalarType_char:  JSONToBinaryImpl<char>(value, pBinary, cbBinary); break;
+        default: throw std::runtime_error("JSONToBinary - Unknown/unsupported scalar type.");
+        }
+    }
+
+    virtual void binaryToXmlV4Value(const char *pBinary, unsigned cbBinary, std::ostream &dst, int minorFormatVersion) const
+    {
+        if(minorFormatVersion!=0){
+            throw std::runtime_error("binaryToXmlV4Value - Only minorFormatVersion==0 supported by this program.");
+        }
+        if(cbBinary!=scalarTypeWidthBytes(m_type)){
+            throw std::runtime_error("binaryToXmlV4Value - Wrong binary size for element.");
+        }
+
+        switch(m_type){
+        case ScalarType_uint8_t: binaryToXmlV4ValueImpl<uint8_t>(pBinary, cbBinary, dst); return;
+        case ScalarType_uint16_t:binaryToXmlV4ValueImpl<uint16_t>(pBinary, cbBinary, dst); return;
+        case ScalarType_uint32_t:binaryToXmlV4ValueImpl<uint32_t>(pBinary, cbBinary, dst); return;
+        case ScalarType_uint64_t:binaryToXmlV4ValueImpl<uint64_t>(pBinary, cbBinary, dst); return;
+
+        case ScalarType_int8_t:binaryToXmlV4ValueImpl<int8_t>(pBinary, cbBinary, dst); return;
+        case ScalarType_int16_t:binaryToXmlV4ValueImpl<int16_t>(pBinary, cbBinary, dst); return;
+        case ScalarType_int32_t:binaryToXmlV4ValueImpl<int32_t>(pBinary, cbBinary, dst); return;
+        case ScalarType_int64_t:binaryToXmlV4ValueImpl<int64_t>(pBinary, cbBinary, dst); return;
+
+        case ScalarType_half: throw std::runtime_error("Half not implemented yet.");
+        case ScalarType_float:binaryToXmlV4ValueImpl<float>(pBinary, cbBinary, dst); return;
+        case ScalarType_double:binaryToXmlV4ValueImpl<double>(pBinary, cbBinary, dst); return;
+
+        case ScalarType_char: throw std::runtime_error("TODO: Is char actually a legal type for v4?");
+
+        default: throw std::runtime_error("Unknown or not implemented type.");
+        }        
+    }
+
+    virtual void xmlV4ValueToBinary(std::istream &src, char *pBinary, unsigned cbBinary, bool alreadyDefaulted, int minorFormatVersion) const
+    {
+        if(minorFormatVersion!=0){
+            throw std::runtime_error("xmlV4ValueToBinary - Only minorFormatVersion==0 supported by this program.");
+        }
+        if(cbBinary!=scalarTypeWidthBytes(m_type)){
+            throw std::runtime_error("xmlV4ValueToBinary - Wrong binary size for element.");
+        }
+
+        if(!alreadyDefaulted){
+            createBinaryDefault(pBinary, cbBinary);
+        }
+
+        switch(m_type){
+        case ScalarType_uint8_t:  xmlV4ValueToBinaryImpl<uint8_t>(src,pBinary, cbBinary); break;
+        case ScalarType_uint16_t:  xmlV4ValueToBinaryImpl<uint16_t>(src,pBinary, cbBinary); break;
+        case ScalarType_uint32_t:  xmlV4ValueToBinaryImpl<uint32_t>(src,pBinary, cbBinary); break;
+        case ScalarType_uint64_t:  xmlV4ValueToBinaryImpl<uint64_t>(src, pBinary, cbBinary); break;
+
+        case ScalarType_int8_t:  xmlV4ValueToBinaryImpl<int8_t>(src,pBinary, cbBinary); break;
+        case ScalarType_int16_t:  xmlV4ValueToBinaryImpl<int16_t>(src,pBinary, cbBinary); break;
+        case ScalarType_int32_t:  xmlV4ValueToBinaryImpl<int32_t>(src,pBinary, cbBinary); break;
+        case ScalarType_int64_t:  xmlV4ValueToBinaryImpl<int64_t>(src, pBinary, cbBinary); break;
+
+        case ScalarType_half:  throw std::runtime_error("JSONtoBinary - half not implemented yet."); break;
+        case ScalarType_float:  xmlV4ValueToBinaryImpl<float>(src,pBinary, cbBinary); break;
+        case ScalarType_double:  xmlV4ValueToBinaryImpl<double>(src,pBinary, cbBinary); break;
+
+        case ScalarType_char:  xmlV4ValueToBinaryImpl<char>(src,pBinary, cbBinary); break;
 
         default: throw std::runtime_error("JSONToBinary - Unknown scalar type.");
         }
+
     }
+
 
     const std::string &getTypeName() const
     { return m_typeString; }
@@ -407,6 +499,63 @@ public:
 
     const_iterator end() const
     { return m_elementsByIndex.end(); }
+
+    virtual void binaryToXmlV4Value(const char *pBinary, unsigned cbBinary, std::ostream &dst, int minorFormatVersion) const
+    {
+        if(minorFormatVersion!=0){
+            throw std::runtime_error("minorFormatVersion!=0");
+        }
+
+        dst<<'{';
+
+        unsigned off=0;
+        for(const auto &e : m_elementsByIndex)
+        {
+            if(off!=0){
+                dst<<',';
+            }
+
+            e->binaryToXmlV4Value(pBinary+off, e->getPayloadSize(), dst, minorFormatVersion);
+            off += e->getPayloadSize();
+        }
+
+        dst<<'}';
+    }
+
+    virtual void xmlV4ValueToBinary(std::istream &src, char *pBinary, unsigned cbBinary, bool alreadyDefaulted, int minorFormatVersion) const
+    {
+        if(minorFormatVersion!=0){
+            throw std::runtime_error("minorFormatVersion!=0");
+        }
+
+        auto expect=[&](char value)
+        {
+            char got;
+            if(!(src>>got)){
+                throw std::runtime_error("xmlV4ValueToBinary - Couldn't read char while parsing tuple value.");
+            }
+            if(got!=value){
+                std::stringstream tmp;
+                tmp<<"xmlV4ValueToBinary - Got unexpected char while parsing tuple value. Got '"<<got<<"', but expected '"<<value<<"'";
+                throw std::runtime_error(tmp.str().c_str());
+            }
+        };
+
+        expect('{');
+
+        unsigned off=0;
+        for(const auto &e : m_elementsByIndex){
+            if(off!=0){
+                expect(',');
+            }
+
+            e->xmlV4ValueToBinary(src, pBinary+off, e->getPayloadSize(), alreadyDefaulted, minorFormatVersion);
+            off += e->getPayloadSize();
+        }
+
+        expect('}');
+    }
+
 };
 typedef std::shared_ptr<TypedDataSpecElementTuple> TypedDataSpecElementTuplePtr;
 
@@ -483,6 +632,68 @@ public:
 
     TypedDataSpecElementPtr getElementType() const
     { return m_eltType; }
+
+    
+    virtual void binaryToXmlV4Value(const char *pBinary, unsigned cbBinary, std::ostream &dst, int minorFormatVersion) const
+    {
+        if(cbBinary != getPayloadSize() ){
+            throw std::runtime_error("binaryToXmlV4Value - Invalid binary size.");
+        }
+        if(minorFormatVersion!=0){
+            throw std::runtime_error("minorFormatVersion!=0");
+        }
+
+        dst<<'{';
+
+        unsigned off=0;
+        unsigned cb=m_eltType->getPayloadSize();
+        for(unsigned i=0; i<m_eltCount; i++)
+        {
+            if(off!=0){
+                dst<<',';
+            }
+            m_eltType->binaryToXmlV4Value(pBinary+off, cb, dst, minorFormatVersion);
+            off += cb;
+        }
+
+        dst<<'}';
+    }
+
+    virtual void xmlV4ValueToBinary(std::istream &src, char *pBinary, unsigned cbBinary, bool alreadyDefaulted, int minorFormatVersion) const
+    {
+        if(cbBinary != getPayloadSize() ){
+            throw std::runtime_error("binaryToXmlV4Value - Invalid binary size.");
+        }
+        if(minorFormatVersion!=0){
+            throw std::runtime_error("minorFormatVersion!=0");
+        }
+
+        auto expect=[&](char value)
+        {
+            char got;
+            if(!(src>>got)){
+                throw std::runtime_error("xmlV4ValueToBinary - Couldn't read char while parsing tuple value.");
+            }
+            if(got!=value){
+                throw std::runtime_error("xmlV4ValueToBinary - Got unexpected char while parsing tuple value");
+            }
+        };
+
+        expect('{');
+
+        unsigned off=0;
+        unsigned cb=m_eltType->getPayloadSize();
+        for(unsigned i=0; i<m_eltCount; i++){
+            if(off!=0){
+                expect(',');
+            }
+
+            m_eltType->xmlV4ValueToBinary(src, pBinary+off, m_eltType->getPayloadSize(), alreadyDefaulted, minorFormatVersion);
+            off += cb;
+        }
+
+        expect('}');
+    }
 };
 typedef std::shared_ptr<TypedDataSpecElementArray> TypedDataSpecElementArrayPtr;
 

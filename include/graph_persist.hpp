@@ -180,6 +180,6 @@ public:
   }
 };
 
-extern "C" void loadGraph(Registry *registry, const filepath &srcPath, xmlpp::Element *elt, GraphLoadEvents *events);
+void loadGraph(Registry *registry, const filepath &srcPath, xmlpp::Element *elt, GraphLoadEvents *events);
 
 #endif

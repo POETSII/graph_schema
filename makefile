@@ -43,11 +43,15 @@ LDLIBS += -ldl -fPIC
 endif
 endif
 
-CPPFLAGS += -std=c++11 -g
-CPPFLAGS += -O0
+# Default is optimised with asserts
+# dwarf-4 sometimes produces better debug info (?)
+CPPFLAGS += -std=c++11 -O0 -gdwarf-4
 
-#CPPFLAGS+=-DNDEBUG=1
-CPPFLAGS += -O2 -fno-omit-frame-pointer -ggdb 
+# Last optimisation flag overrides
+CPPFLAGS_DEBUG = $(CPPFLAGS) -O0 -fno-omit-frame-pointer 
+
+# Release is max optimised with no asserts
+CPPFLAGS_RELEASE = $(CPPFLAGS) -O3 -DNDEBUG=1
 
 
 
@@ -149,17 +153,6 @@ bin/print_graph_properties : tools/print_graph_properties.cpp
 	mkdir -p bin
 	$(CXX) $(CPPFLAGS) $< -o $@ $(LDFLAGS) $(LDLIBS)
 
-bin/epoch_sim : tools/epoch_sim.cpp
-	mkdir -p bin
-	$(CXX) $(CPPFLAGS) $< -o $@ $(LDFLAGS) $(LDLIBS)
-
-bin/epoch_sim.s : tools/epoch_sim.cpp
-	mkdir -p bin
-	$(CXX) -S $(CPPFLAGS) $< -o $@ $(LDFLAGS) $(LDLIBS)
-
-bin/queue_sim : tools/queue_sim.cpp
-	mkdir -p bin
-	$(CXX) $(CPPFLAGS) $< -o $@ $(LDFLAGS) $(LDLIBS)
 
 bin/create_gals_heat_instance : apps/gals_heat/create_gals_heat_instance.cpp
 	mkdir -p bin
@@ -169,6 +162,13 @@ bin/% : tools/%.cpp
 	mkdir -p bin
 	$(CXX) $(CPPFLAGS) $< -o $@ $(LDFLAGS) $(LDLIBS)
 
+bin/%.debug : tools/%.cpp
+	mkdir -p bin
+	$(CXX) $(CPPFLAGS_DEBUG) $< -o $@ $(LDFLAGS) $(LDLIBS)
+
+bin/%.release : tools/%.cpp
+	mkdir -p bin
+	$(CXX) $(CPPFLAGS_RELEASE) $< -o $@ $(LDFLAGS) $(LDLIBS)
 
 define provider_rules_template
 # $1 : name

@@ -270,8 +270,8 @@
     <DeviceTypes>
       <DeviceType id="node">
         <Properties>
-          <Scalar name="degree" type="uint32_t"/>
           <Scalar name="node_id" type="uint32_t"/>
+          <Scalar name="degree" type="uint32_t"/>
           <Scalar name="seed" type="uint32_t"/>
         </Properties>
         <State>
