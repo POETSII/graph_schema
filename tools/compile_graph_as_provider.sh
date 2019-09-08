@@ -28,6 +28,7 @@ LDFLAGS+=" -pthread"
 LDLIBS+=" -ldl -fPIC"
 
 #name=$(basename ${input_file} .xml)
+# TODO: This has to parse the entire graph, so is inefficient when dealing with large graphs
 name=$(${graph_schema_dir}/tools/print_graph_type_id.py ${input_file}) || exit 1
 
 java -jar ${JING} -c ${graph_schema_dir}/master/virtual-graph-schema-v3.rnc ${input_file} || exit 1

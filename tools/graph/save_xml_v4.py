@@ -139,7 +139,6 @@ def save_device_type(parent:etree.Element, dt):
         pn.attrib["name"]=p.name
         pn.attrib["messageTypeId"]=p.message_type.id
         if p.is_indexed is not None:
-            sys.stderr.write(f"indexed = {p.is_indexed}\n")
             pn.attrib["indexed"]="true" if p.is_indexed else "false"
         assert not p.is_application
         add_documentation_comment(pn, p.documentation)
@@ -232,7 +231,6 @@ def save_graph_type(parent, graph):
     shared_code=""
     if graph.shared_code is not None:
         for code in graph.shared_code:
-            sys.stderr.write(f"SC = '{code}'")
             shared_code += code+"\n";
     add_code_element(gn, "p:SharedCode", shared_code)
 

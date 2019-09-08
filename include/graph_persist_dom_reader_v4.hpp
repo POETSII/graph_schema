@@ -2,6 +2,7 @@
 #define graph_persist_dom_reader_v4_hpp
 
 #include "graph_persist_dom_reader_v3.hpp"
+#include "graph_compare.hpp"
 
 #include <regex>
 
@@ -53,24 +54,34 @@ TypedDataSpecElementPtr loadTypedDataSpecElementFromV4Decl(const std::vector<std
 
   //fprintf(stderr, "Begin parse level\n");
 
-  assert(pos < tokens.size());
+  assert(pos < (int)tokens.size());
 
   static const std::set<std::string> type_names{
     "uint8_t", "uint16_t", "uint32_t", "uint64_t",
     "int8_t", "int16_t", "int32_t", "int64_t",
     "half", "float", "double"
   };
+  static const std::set<std::string> keyword_names{
+    "struct"
+  };
   static const std::regex reId("^[a-zA-Z_][a-zA-Z_0-9]*$");
 
   auto check_is_identifier=[&](const std::string &x){
     if(!std::regex_match(x, reId)){
-      throw std::runtime_error("Expected id, but got "+x);
+      throw std::runtime_error("Expected an id, but got "+x);
     }
+    if(type_names.find(x)!=type_names.end()){
+      throw std::runtime_error("Expected an id, but got type name "+x);
+    }
+    if(keyword_names.find(x)!=keyword_names.end()){
+      throw std::runtime_error("Expected an id, but got keyword "+x);
+    }
+
   };
 
   auto next_token=[&]() -> std::string
   {
-    if(pos>=tokens.size()){
+    if(pos>=(int)tokens.size()){
       throw std::runtime_error("Moved off the end of tokens wile parsing type decl.");
     }
     return tokens[pos++];
@@ -78,7 +89,7 @@ TypedDataSpecElementPtr loadTypedDataSpecElementFromV4Decl(const std::vector<std
 
   auto peek_token=[&]() -> std::string
   {
-    if(pos>=tokens.size()){
+    if(pos>=(int)tokens.size()){
       throw std::runtime_error("Moved off the end of tokens wile parsing type decl.");
     }
     return tokens[pos];
@@ -94,9 +105,7 @@ TypedDataSpecElementPtr loadTypedDataSpecElementFromV4Decl(const std::vector<std
     std::string type_name=curr;
     
     eltName=next_token();
-    if(!std::regex_match(eltName, reId)){
-      throw std::runtime_error("Expected identifier but got "+eltName);
-    }
+    check_is_identifier(eltName);
 
     curr=next_token();
     res=makeScalar(curr==";" ? eltName : "_", type_name);
@@ -121,9 +130,10 @@ TypedDataSpecElementPtr loadTypedDataSpecElementFromV4Decl(const std::vector<std
     curr=next_token(); // Consume the closing curly brace
 
     eltName=next_token();
+    check_is_identifier(eltName);
 
     curr=next_token();
-    res=makeTuple(curr==";" ? "_" : eltName, elts.begin(), elts.end());
+    res=makeTuple(curr==";" ? eltName : "_", elts.begin(), elts.end());
   }
   while(curr=="["){
     auto size=next_token();
@@ -186,7 +196,7 @@ TypedDataSpecPtr loadTypedDataSpec(xmlpp::Element *eParent, const std::string &n
     std::vector<TypedDataSpecElementPtr> members;
 
     try{
-      while(pos < tokens.size()){
+      while(pos < (int)tokens.size()){
         members.push_back(loadTypedDataSpecElementFromV4Decl(tokens, pos));
       }
     }catch(...){
@@ -194,7 +204,7 @@ TypedDataSpecPtr loadTypedDataSpec(xmlpp::Element *eParent, const std::string &n
       fprintf(stderr, "tokens:");
       for(unsigned i=0; i<tokens.size();i++){
         fprintf(stderr, "%u : %s",i,tokens[i].c_str());
-        if(pos==i){
+        if(pos==(int)i){
           fprintf(stderr, " <<---");
         }
         fprintf(stderr, "\n");
@@ -458,6 +468,14 @@ void loadGraph(Registry *registry, const filepath &srcPath, xmlpp::Element *pare
       graphTypeReg=registry->lookupGraphType(graphTypeId);
     }catch(const unknown_graph_type_error &){
       // pass, try to load dyamically
+    }
+  }
+
+  if(graphTypeReg){
+    try{
+      check_graph_types_structurally_similar(graphTypeEmb, graphTypeReg, true);
+    }catch(std::exception &e){
+      throw std::runtime_error("Error while comparing graph type in file and compiled graph type in provider : "+std::string(e.what()));
     }
   }
 

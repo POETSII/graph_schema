@@ -22,6 +22,5 @@ destPath="[XML-file]"
 
 # LOAD XML
 (gt,gi)=load_graph(source, sourcePath)
-assert gi, "Need a graph instance"
 
-save_graph(gi, dest)
+save_graph(gi if gi else gt, dest)

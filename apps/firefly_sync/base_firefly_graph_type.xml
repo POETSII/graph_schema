@@ -1,5 +1,5 @@
 <?xml version="1.0"?>
-<Graphs xmlns="https://poets-project.org/schemas/virtual-graph-schema-v2">
+<Graphs xmlns="https://poets-project.org/schemas/virtual-graph-schema-v3">
 	<GraphType id="firefly_sync">
 		
 		<SharedCode><![CDATA[
@@ -132,3 +132,4 @@
 
 	</DeviceTypes>
 </GraphType>
+</Graphs>

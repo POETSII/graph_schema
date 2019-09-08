@@ -176,7 +176,7 @@ def render_graph_type_structs_as_sprovider(gt:GraphType, options:RenderOptions):
 def render_graph_type_handlers_as_sprovider(gt:GraphType, options:RenderOptions):
     dst=options.dst
     iprefix="sprovider_impl"
-    adapt_handler=lambda x: x
+    adapt_handler=lambda x: x if x is not None else ""
 
 
     ##############################################################
@@ -553,7 +553,7 @@ def render_graph_type_as_sprovider(gt:GraphType, options:RenderOptions):
 def render_graph_type_info_as_sprovider(gt:GraphType, options:RenderOptions):
     dst=options.dst
     iprefix="sprovider_impl"
-    adapt_handler=lambda x: x
+    adapt_handler=lambda x: x if x is not None else ""
 
     non_trivial_handler = lambda x: x is not None and x.strip()!=""
 

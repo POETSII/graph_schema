@@ -254,7 +254,7 @@ include tools/partitioner.inc
 demos : $(ALL_DEMOS)
 
 
-all_tools : bin/print_graph_properties bin/epoch_sim bin/graph_sim bin/hash_sim2
+all_tools : bin/print_graph_properties bin/epoch_sim bin/graph_sim bin/hash_sim2 bin/structurally_compare_graph_types
 
 #############################
 # Most testing of graphs is done with epoch_sim. Give graph_sim some exercise here

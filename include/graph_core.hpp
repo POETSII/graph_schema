@@ -351,8 +351,7 @@ public:
   //! Gets the detailed type of the data spec
   /*! For very lightweight implementations this may not be available
   */
-  virtual std::shared_ptr<TypedDataSpecElementTuple> getTupleElement()
-  { throw std::runtime_error("Not implemented."); }
+  virtual std::shared_ptr<TypedDataSpecElementTuple> getTupleElement() const =0;
 
   //! Size of the actual content, not including typed_data_t header
   virtual size_t payloadSize() const=0;
@@ -403,6 +402,13 @@ public:
   virtual TypedDataPtr loadXmlV4ValueSpec(const std::string &value, int minorFormatVersion=0) const
   {
     throw std::runtime_error("loadXmlV4ValueSpec - Not implemented.");
+  }
+
+  void dumpStructure(std::ostream &dst, const std::string &indent=std::string(""))
+  {
+    dst<<"<TypedDataSpec>\n";
+    getTupleElement()->dumpStructure(dst, indent);
+    dst<<"</TypedDataSpec>\n";
   }
 };
 

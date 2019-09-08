@@ -11,8 +11,20 @@
 #include <set>
 #include <sstream>
 #include <iostream>
+#include <string>
 
 #include "rapidjson/document.h"
+
+class graph_type_mismatch_error
+  : public std::runtime_error
+{
+private:
+  std::string m_graphId;
+public:
+  graph_type_mismatch_error(const std::string &msg)
+    : std::runtime_error(msg)
+  {}
+};
 
 class TypedDataSpecElement
 {
@@ -122,6 +134,9 @@ public:
 
   virtual void xmlV4ValueToBinary(std::istream &src, char *pBinary, unsigned cbBinary, bool alreadyDefaulted, int minorFormatVersion) const=0;
 
+    virtual bool check_is_equivalent(TypedDataSpecElement *other, bool throw_on_error, const std::string &error_prefix) const =0;
+
+    virtual void dumpStructure(std::ostream &dst, const std::string &indent) const=0;
 };
 typedef std::shared_ptr<TypedDataSpecElement> TypedDataSpecElementPtr;
 
@@ -394,9 +409,33 @@ public:
 
     }
 
-
     const std::string &getTypeName() const
     { return m_typeString; }
+
+    bool check_is_equivalent(TypedDataSpecElement *other, bool throw_on_error, const std::string &error_prefix) const
+    {
+        auto tother = dynamic_cast<TypedDataSpecElementScalar*>(other);
+        if(!tother){
+            if(throw_on_error){
+                throw graph_type_mismatch_error(error_prefix + "Other element is not a scalar.");
+            }
+            return false;
+        }
+
+        if(getTypeName() != tother->getTypeName()){
+            if(throw_on_error){
+                throw graph_type_mismatch_error(error_prefix + "Expected scalar type "+getTypeName()+" but got "+tother->getTypeName());
+            }
+            return false;
+        }
+        return true;
+    }
+
+    virtual void dumpStructure(std::ostream &dst, const std::string &indent) const
+    {
+        dst<<indent<<"<Scalar name='"<<getName()<<"' type='"<<getTypeName()<<"' />\n";
+    }
+
 };
 typedef std::shared_ptr<TypedDataSpecElementScalar> TypedDataSpecElementScalarPtr;
 
@@ -500,6 +539,11 @@ public:
     const_iterator end() const
     { return m_elementsByIndex.end(); }
 
+    TypedDataSpecElementPtr at(unsigned i) const
+    {
+        return m_elementsByIndex.at(i);
+    }
+
     virtual void binaryToXmlV4Value(const char *pBinary, unsigned cbBinary, std::ostream &dst, int minorFormatVersion) const
     {
         if(minorFormatVersion!=0){
@@ -554,6 +598,51 @@ public:
         }
 
         expect('}');
+    }
+
+    bool check_is_equivalent(TypedDataSpecElement *other, bool throw_on_error, const std::string &error_prefix) const
+    {
+        auto tother = dynamic_cast<TypedDataSpecElementTuple*>(other);
+        if(!tother){
+            if(throw_on_error){
+                throw graph_type_mismatch_error(error_prefix + "Other element is not a tuple.");
+            }
+            return false;
+        }
+
+        if(size()!=tother->size()){
+            if(throw_on_error){
+                throw graph_type_mismatch_error(error_prefix + "Expected "+std::to_string(size())+" members, but got "+std::to_string(tother->size()));
+            }
+            return false;
+        }
+
+        for(unsigned i=0; i<size(); i++){
+            TypedDataSpecElementPtr left=m_elementsByIndex.at(i);
+            TypedDataSpecElementPtr right=tother->at(i);
+
+            if(left->getName() != right->getName()){
+                if(throw_on_error){
+                    throw graph_type_mismatch_error(error_prefix + "Expected "+std::to_string(i)+"'th element to be called "+left->getName()+", but it was called "+right->getName());
+                }
+                return false;
+            }
+
+            if(!left->check_is_equivalent(right.get(), true, error_prefix+"::"+left->getName())){
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    virtual void dumpStructure(std::ostream &dst, const std::string &indent) const
+    {
+        dst<<indent<<"<Tuple name='"<<getName()<<"'>\n";
+        for(auto e : m_elementsByIndex){
+            e->dumpStructure(dst, indent+"  ");
+        }
+        dst<<indent<<"</Tuple>\n";
     }
 
 };
@@ -694,6 +783,38 @@ public:
 
         expect('}');
     }
+
+    bool check_is_equivalent(TypedDataSpecElement *other, bool throw_on_error, const std::string &error_prefix) const
+    {
+        auto tother = dynamic_cast<TypedDataSpecElementArray*>(other);
+        if(!tother){
+            if(throw_on_error){
+                throw graph_type_mismatch_error(error_prefix + "Other element is not an array.");
+            }
+            return false;
+        }
+
+        if(getElementCount()!=tother->getElementCount()){
+            if(throw_on_error){
+                throw std::runtime_error(error_prefix + "Expected length of "+std::to_string(getElementCount())+", but got "+std::to_string(tother->getElementCount()));
+            }
+            return false;
+        }
+
+        if(!getElementType()->check_is_equivalent(tother->getElementType().get(), true, error_prefix+"::[...]")){
+            return false;
+        }
+        
+        return true;
+    }
+
+    virtual void dumpStructure(std::ostream &dst, const std::string &indent) const
+    {
+        dst<<indent<<"<Array name='"<<getName()<<"' length='"<<getElementCount()<<"' >\n";
+        getElementType()->dumpStructure(dst,indent+"  ");
+        dst<<indent<<"</Array>\n";
+    }
+
 };
 typedef std::shared_ptr<TypedDataSpecElementArray> TypedDataSpecElementArrayPtr;
 

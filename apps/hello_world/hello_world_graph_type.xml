@@ -1,6 +1,6 @@
 <?xml version='1.0'?>
-<Graphs xmlns="https://poets-project.org/schemas/virtual-graph-schema-v2">
-<GraphType xmlns="https://poets-project.org/schemas/virtual-graph-schema-v2" id="hello_world">
+<Graphs xmlns="https://poets-project.org/schemas/virtual-graph-schema-v3">
+<GraphType xmlns="https://poets-project.org/schemas/virtual-graph-schema-v3" id="hello_world">
   <SharedCode><![CDATA[
 #ifdef POETS_LEGACY_HAS_HANDLER_EXIT
 #define _do_handler_exit(code) handler_exit(code)
@@ -19,7 +19,6 @@
 }
 ]]></SharedCode>
   <MessageTypes>
-    <MessageType id="__init__"/>
     <MessageType id="exchange">
       <Message>
         <Scalar name="credit" type="uint32_t"/>

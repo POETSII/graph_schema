@@ -500,7 +500,7 @@ def render_typed_data_as_spec(proto,name,elt_name,dst,asHeader=False):
     dst.write("    m_tupleElt->createBinaryDefault(&m_default[0], m_default.size());\n");
     dst.write("    ")
     dst.write("  }\n")
-    dst.write("  std::shared_ptr<TypedDataSpecElementTuple> getTupleElement() override { return m_tupleElt; }\n")
+    dst.write("  std::shared_ptr<TypedDataSpecElementTuple> getTupleElement() const override { return m_tupleElt; }\n")
     dst.write("  size_t payloadSize() const override {{ return sizeof({})-sizeof(typed_data_t); }}\n".format(name))
     dst.write("  size_t totalSize() const override {{ return sizeof({}); }}\n".format(name))
     dst.write("  TypedDataPtr create() const override {\n")

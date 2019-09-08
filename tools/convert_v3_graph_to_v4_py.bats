@@ -58,3 +58,12 @@ load bats_helpers
     bin/epoch_sim $WD/graph.v3.xml --log-level 2
 }
 
+
+@test "Round-tripping just a graph type from v3 to v4 then back to v3 and the compiling as provider" {
+    find_PIP0020_DIR
+    [ -x tools/convert_v4_graph_to_v3.py ]
+    WD=$(make_test_wd)
+    tools/convert_v3_graph_to_v4.py apps/ising_spin/ising_spin_graph_type.xml $WD/ising_spin_graph_type.v4.xml
+    tools/convert_v4_graph_to_v3.py $WD/ising_spin_graph_type.v4.xml > $WD/ising_spin_graph_type.v3.xml
+    (cd $WD && ../../tools/compile_graph_as_provider.sh ising_spin_graph_type.v3.xml) 
+}

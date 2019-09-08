@@ -128,9 +128,7 @@ public:
   }
 
   //! Gets the detailed type of the data spec
-  /*! For very lightweight implementations this may not be available
-  */
-  virtual TypedDataSpecElementTuplePtr getTupleElement()
+  TypedDataSpecElementTuplePtr getTupleElement() const override
   {
     return m_type;
   }

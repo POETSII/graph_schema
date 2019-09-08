@@ -298,7 +298,7 @@ struct EpochSim
 
           if(anyIndexed){
             std::sort(ov.begin(), ov.end(), [](const output &a, const output &b){ return a.sendIndex < b.sendIndex; });
-            for(unsigned i=0; i<ov.size(); i++){
+            for(int i=0; i<(int)ov.size(); i++){
               if(i!=ov[i].sendIndex){
                 throw std::runtime_error("Explicit send indices are not contiguous and/or don't start at zero.");
               }
@@ -1027,7 +1027,7 @@ int main(int argc, char *argv[])
       if(running){
         contiguous_hardware_idle_steps=0;
       }else{
-        if(contiguous_hardware_idle_steps<max_contiguous_idle_steps){
+        if((int)contiguous_hardware_idle_steps<max_contiguous_idle_steps){
           graph.do_hardware_idle(); 
           contiguous_hardware_idle_steps++;
         }else if(graph.m_pExternalConnection->isReadOpen() ){

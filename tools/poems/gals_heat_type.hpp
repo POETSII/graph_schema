@@ -6,6 +6,12 @@
 
 #include "graph_persist_dom_reader.hpp"
 
+using xml_v3::makeTypedDataSpec;
+using xml_v3::DeviceTypeDynamic;
+using xml_v3::InputPinDynamic;
+using xml_v3::OutputPinDynamic;
+using xml_v3::GraphTypeDynamic;
+
 #pragma pack(push,1)
 struct gals_heat_properties_t
 {

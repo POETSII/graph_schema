@@ -3,6 +3,7 @@
 
 #include "graph_persist.hpp"
 #include "graph_provider_helpers.hpp"
+#include "graph_compare.hpp"
 
 //#include <boost/filesystem.hpp>
 #include <libxml++/parsers/domparser.h>
@@ -591,25 +592,39 @@ void loadGraph(Registry *registry, const filepath &srcPath, xmlpp::Element *pare
   std::string graphId=get_attribute_required(eGraph, "id");
   std::string graphTypeId=get_attribute_required(eGraph, "graphTypeId");
 
-  GraphTypePtr graphType;
+  auto graphTypeEmb=loadGraphType(srcPath, parent, events, graphTypeId);
+  if(!graphTypeEmb){
+    throw std::runtime_error("Couldn't find embedded graph or graph reference to graph type "+graphTypeId);
+  }
+
+  GraphTypePtr graphTypeReg;
   if(registry){
     try{
-      graphType=registry->lookupGraphType(graphTypeId);
+      graphTypeReg=registry->lookupGraphType(graphTypeId);
 
-      for(auto et : graphType->getMessageTypes()){
-        events->onMessageType(et);
-      }
-      for(auto dt : graphType->getDeviceTypes()){
-        events->onDeviceType(dt);
-      }
-      events->onGraphType(graphType);
+      
     }catch(const unknown_graph_type_error &){
       // pass, try to load dyamically
     }
   }
-  if(!graphType){
-    graphType=loadGraphType(srcPath, parent, events, graphTypeId);
+
+  if(graphTypeReg){
+    try{
+      check_graph_types_structurally_similar(graphTypeEmb, graphTypeReg, true);
+    }catch(std::exception &e){
+      throw std::runtime_error("Error while comparing reference graph type in file and compiled graph type in provider : "+std::string(e.what()));
+    }
   }
+
+  GraphTypePtr graphType = graphTypeReg ? graphTypeReg : graphTypeEmb; 
+
+  for(auto et : graphType->getMessageTypes()){
+    events->onMessageType(et);
+  }
+  for(auto dt : graphType->getDeviceTypes()){
+    events->onDeviceType(dt);
+  }
+  events->onGraphType(graphType);
 
   TypedDataPtr graphProperties;
   auto *eProperties=find_single(eGraph, "./g:Properties", ns);
