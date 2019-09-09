@@ -2,7 +2,8 @@ from graph.core import *
 from graph.save_xml import save_graph_type,toNS
 from graph.load_xml import load_graph
 
-import graph.save_xml_v4
+from graph.save_xml_v4 import convert_json_init_to_c_init as _convert_json_init_to_c_init
+from graph.save_xml_v4 import save_graph_type as _save_graph_type_v4
 
 from lxml import etree
 
@@ -386,8 +387,6 @@ class XmlV3StreamGraphBuilder:
         self._dst=None
 
 
-_convert_json_init_to_c_init=graph.save_xml_v4.convert_json_init_to_c_init
-_save_graph_type_v4=graph.save_xml_v4.save_graph_type
 
 class XmlV4StreamGraphBuilder:
     """This provides a reasonably fast streaming XML writer that should have O(nDevices) memory

@@ -43,9 +43,9 @@ LDLIBS += -ldl -fPIC
 endif
 endif
 
-# Default is optimised with asserts
+# Default is moderately optimised with asserts
 # dwarf-4 sometimes produces better debug info (?)
-CPPFLAGS += -std=c++11 -O0 -gdwarf-4
+CPPFLAGS += -std=c++11 -O2 -gdwarf-4
 
 # Last optimisation flag overrides
 CPPFLAGS_DEBUG = $(CPPFLAGS) -O0 -fno-omit-frame-pointer 
