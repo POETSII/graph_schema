@@ -225,6 +225,7 @@ struct POEMS
         void push(message * &msg)
         {
             assert(msg);
+            assert(msg->p_edge);
 
             message *working=msg;
             msg=0;
@@ -320,6 +321,7 @@ struct POEMS
         bool anyActive=false;
         while(head){
             const auto *pedge=head->p_edge;
+            assert(pedge);
             auto *dev=pedge->dest_device;
             assert(pedge->dest_cluster==dev->cluster);
             assert(pedge->dest_cluster==cluster);

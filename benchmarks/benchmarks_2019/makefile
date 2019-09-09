@@ -23,6 +23,7 @@ DISTRIB_DIR ?= distrib
 EPOCH_SIM_TIMEOUT ?= 240
 GRAPH_SIM_TIMEOUT ?= 240
 PIP0020_SIM_TIMEOUT ?= 240
+POEMS_SIM_TIMEOUT ?= 240
 
 #################################################
 
@@ -182,6 +183,7 @@ $(OUTPUT_DIR)/$1/$1_s$2.v4.epoch_sim.status : $(OUTPUT_DIR)/$1/$1_s$2.v4.xml.gz 
 			echo "unknown" > $$@ ; \
 		fi \
 	fi
+	@>&2 echo "Epoch sim v4 $1_$2 status : $$$$(cat $$@)"
 
 
 $(eval ifeq ($($1_ALL_SCALES),)
@@ -192,16 +194,16 @@ endif
 )
 
 $(OUTPUT_DIR)/$1/$1_s$2.v4.graph_sim.status : $(OUTPUT_DIR)/$1/$1_s$2.v4.xml.gz $(_PREV_SCALE_GRAPH_SIM_V4_STATUS_$1_$2)
-	@if [[ "$(_PREV_SCALE_GRAPH_SIM_V4_STATUS_$1_$2)" != "" ]] && grep "timeout" "$(_PREV_SCALE_GRAPH_SIM_V4_STATUS_$1_$2)" ; then \
+	@if [[ "$(_PREV_SCALE_GRAPH_SIM_V4_STATUS_$1_$2)" != "" ]] && grep "timeout" "$(_PREV_SCALE_GRAPH_SIM_V4_STATUS_$1_$2)" &> /dev/null ; then \
 		echo "timeout(transitive)" > $$@ ; \
 	else \
 		/usr/bin/timeout --foreground $(GRAPH_SIM_TIMEOUT) $(GS_ROOT)/bin/graph_sim --stats-delta 100 --log-level 1 $$< 2> $(OUTPUT_DIR)/$1/$1_s$2.v4.graph_sim.stderr > $(OUTPUT_DIR)/$1/$1_s$2.v4.graph_sim.stdout ; \
 		RES=$$$$? ; \
 		if [[ $$$$RES -eq 124 ]] ; then \
 			echo "timeout" > $$@ ; \
-		elif grep _HANDLER_EXIT_FAIL_9be65737_ $(OUTPUT_DIR)/$1/$1_s$2.v4.graph_sim.stderr ; then \
+		elif grep _HANDLER_EXIT_FAIL_9be65737_ $(OUTPUT_DIR)/$1/$1_s$2.v4.graph_sim.stderr &> /dev/null ; then \
 			echo "fail" > $$@ ; \
-		elif grep _HANDLER_EXIT_SUCCESS_9be65737_ $(OUTPUT_DIR)/$1/$1_s$2.v4.graph_sim.stderr ; then \
+		elif grep _HANDLER_EXIT_SUCCESS_9be65737_ $(OUTPUT_DIR)/$1/$1_s$2.v4.graph_sim.stderr &> /dev/null ; then \
 			echo "success" > $$@ ; \
 		elif [[ $$$$RES -ne 0 ]] ; then \
 			echo "error" > $$@ ; \
@@ -209,6 +211,34 @@ $(OUTPUT_DIR)/$1/$1_s$2.v4.graph_sim.status : $(OUTPUT_DIR)/$1/$1_s$2.v4.xml.gz 
 			echo "unknown" > $$@ ; \
 		fi \
 	fi
+
+
+$(eval ifeq ($($1_ALL_SCALES),)
+_PREV_SCALE_POEMS_SIM_V4_STATUS_$1_$2:=
+else
+_PREV_SCALE_POEMS_SIM_V4_STATUS_$1_$2:=$(OUTPUT_DIR)/$1/$1_s$(lastword $($1_ALL_SCALES)).v4.poems_sim.status
+endif
+)
+
+$(OUTPUT_DIR)/$1/$1_s$2.v4.poems_sim.status : $(OUTPUT_DIR)/$1/$1_s$2.v4.xml.gz $(OUTPUT_DIR)/$1/$1.v4.poems.engine $(_PREV_SCALE_POEMS_SIM_V4_STATUS_$1_$2)
+	@if [[ "$(_PREV_SCALE_POEMS_SIM_V4_STATUS_$1_$2)" != "" ]] && grep "timeout" "$(_PREV_SCALE_POEMS_SIM_V4_STATUS_$1_$2)" &> /dev/null ; then \
+		echo "timeout(transitive)" > $$@ ; \
+	else \
+		/usr/bin/timeout --foreground $(POEMS_SIM_TIMEOUT) $(OUTPUT_DIR)/$1/$1.v4.poems.engine --threads 1 $$< 2> $(OUTPUT_DIR)/$1/$1_s$2.v4.poems_sim.stderr > $(OUTPUT_DIR)/$1/$1_s$2.v4.poems_sim.stdout ; \
+		RES=$$$$? ; \
+		if [[ $$$$RES -eq 124 ]] ; then \
+			echo "timeout" > $$@ ; \
+		elif grep _HANDLER_EXIT_FAIL_9be65737_ $(OUTPUT_DIR)/$1/$1_s$2.v4.poems_sim.stderr &> /dev/null ; then \
+			echo "fail" > $$@ ; \
+		elif grep _HANDLER_EXIT_SUCCESS_9be65737_ $(OUTPUT_DIR)/$1/$1_s$2.v4.poems_sim.stderr &> /dev/null ; then \
+			echo "success" > $$@ ; \
+		elif [[ $$$$RES -ne 0 ]] ; then \
+			echo "error" > $$@ ; \
+		else \
+			echo "unknown" > $$@ ; \
+		fi \
+	fi
+	@>&2 echo "POEMS sim v4 $1_$2 status : $$$$(cat $$@)"
 
 
 
@@ -221,6 +251,7 @@ $1_ALL_V3_GRAPH_SIM += $(OUTPUT_DIR)/$1/$1_s$2.v3.graph_sim.status
 $1_ALL_V4_PIP0020_SIM += $(OUTPUT_DIR)/$1/$1_s$2.v4.pip0020_sim.status
 $1_ALL_V4_EPOCH_SIM += $(OUTPUT_DIR)/$1/$1_s$2.v4.epoch_sim.status
 $1_ALL_V4_GRAPH_SIM += $(OUTPUT_DIR)/$1/$1_s$2.v4.graph_sim.status
+$1_ALL_V4_POEMS_SIM += $(OUTPUT_DIR)/$1/$1_s$2.v4.poems_sim.status
 
 $1_ALL_V3_DISTRIB += $(DISTRIB_DIR)/$1/$1_s$2.v3.static_properties.json $(DISTRIB_DIR)/$1/$1_s$2.v3.xml.gz $(DISTRIB_DIR)/$1/$1_s$2.v3.epoch_sim.status $(DISTRIB_DIR)/$1/$1_s$2.v3.graph_sim.status
 $1_ALL_V4_DISTRIB += $(DISTRIB_DIR)/$1/$1_s$2.v4.static_properties.json $(DISTRIB_DIR)/$1/$1_s$2.v4.xml.gz $(DISTRIB_DIR)/$1/$1_s$2.v4.pip0020_sim.status $(DISTRIB_DIR)/$1/$1_s$2.v4.epoch_sim.status $(DISTRIB_DIR)/$1/$1_s$2.v4.graph_sim.status
@@ -230,14 +261,33 @@ $(eval $1_ALL_SCALES := $($1_ALL_SCALES) $2)
 
 endef
 
+########################################################################################
+
 define class_template
 # $1 : Name of the class
 # $2 : One line description of the class and how it varies with scale
-# It is assumed that all instances are already defined
+# It is assumed that all instances are already defined, i.e. this should be called last
 
 $1_TITLE = $2
 
 README_TITLE_LIST += - [$1]($1) : $2\n
+
+#############################
+## Compile poems simulator
+
+$(eval $1_SMALLEST_SCALE := $(firstword $($1_ALL_SCALES)))
+
+$(OUTPUT_DIR)/$1/$1.v3.poems.engine : $(OUTPUT_DIR)/$1/$1_s$($1_SMALLEST_SCALE).v3.xml.gz
+	$(GS_ROOT)/tools/poems/compile_poems_sim.sh	 -o $$@ $$<
+
+$(OUTPUT_DIR)/$1/$1.v4.poems.engine : $(OUTPUT_DIR)/$1/$1_s$($1_SMALLEST_SCALE).v4.xml.gz
+	$(GS_ROOT)/tools/poems/compile_poems_sim.sh	 -o $$@ $$<
+
+all_v3_poems_engines : $(OUTPUT_DIR)/$1/$1.v3.poems.engine
+all_v4_poems_engines : $(OUTPUT_DIR)/$1/$1.v4.poems.engine
+
+##############################
+## general targets
 
 $1_all_v3_xml_gz : $($1_ALL_V3_XML_GZ)
 $1_all_v4_xml_gz : $($1_ALL_V4_XML_GZ)
@@ -248,6 +298,7 @@ $1_all_v3_epoch_sim : $($1_ALL_V3_EPOCH_SIM)
 $1_all_v4_graph_sim : $($1_ALL_V4_GRAPH_SIM)
 $1_all_v4_epoch_sim : $($1_ALL_V4_EPOCH_SIM)
 $1_all_v4_pip0020_sim : $($1_ALL_V4_PIP0020_SIM)
+$1_all_v4_poems_sim : $($1_ALL_V4_POEMS_SIM)
 
 ALL_CLASSES += $1
 
@@ -260,14 +311,20 @@ all_v3_graph_sim : $1_all_v3_graph_sim
 all_v4_epoch_sim : $1_all_v4_epoch_sim
 all_v4_graph_sim : $1_all_v4_graph_sim
 all_v4_pip0020_sim : $1_all_v4_pip0020_sim
+all_v4_poems_sim : $1_all_v4_poems_sim
 
 all_v3_distrib : $($1_ALL_V3_DISTRIB)
 all_v4_distrib : $($1_ALL_V4_DISTRIB)
 
 endef
 
+# End of infrastructure setup
+##################################################################################
+##################################################################################
 
-###########################################
+##################################################################################
+##################################################################################
+# Begin actual classes
 
 CLASS=clock_tree_deep
 SCALES=2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19

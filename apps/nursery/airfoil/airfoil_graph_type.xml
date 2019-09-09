@@ -38,20 +38,24 @@
             _do_handler_exit(code); \
         }
 
+		/*
+
 		FILE *dump=0;
 
 		template<class TDP,class TDS>
 		void dump_cell(int round, const TDP *dp, const TDS *ds)
 		{
-			/*if(dump==0){
+			if(dump==0){
 				dump=fopen("graph-log-array.csv","wt");
 			}
 			fprintf(dump,"%u, \"c%u\", %12.8f",round, dp->id, ds->adt);
 			fprintf(dump,", %12.8f,%12.8f,%12.8f,%12.8f",ds->q[0],ds->q[1],ds->q[2],ds->q[3]);
 			fprintf(dump,", %12.8f,%12.8f,%12.8f,%12.8f",ds->qold[0],ds->qold[1],ds->qold[2],ds->qold[3]);
 			fprintf(dump,", %12.8f,%12.8f,%12.8f,%12.8f",ds->res[0],ds->res[1],ds->res[2],ds->res[3]);
-			fprintf(dump,"\n");*/
+			fprintf(dump,"\n");
 		}
+
+		*/
 
 		void check_not_nan(double x)
 		{
@@ -483,7 +487,7 @@
 							check_not_nan(deviceState->q[i]);
 					}
 
-					dump_cell(deviceState->round*2, deviceProperties, deviceState);
+					//dump_cell(deviceState->round*2, deviceProperties, deviceState);
 					handler_checkpoint(true, 0, "pre-update-%u", deviceState->round);
 
 					double rms=0;
@@ -499,7 +503,7 @@
 							check_not_nan(deviceState->q[i]);
 					}
 
-					dump_cell(deviceState->round*2+1, deviceProperties, deviceState);
+					//dump_cell(deviceState->round*2+1, deviceProperties, deviceState);
 					handler_checkpoint(false, 0, "post-update-%u", deviceState->round);
 
 					deviceState->phase=Phase_AdtCalc;

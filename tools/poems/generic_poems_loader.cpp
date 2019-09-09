@@ -70,11 +70,12 @@ int main(int argc, char *argv[])
     auto usage=[&]()
     {
         fprintf(stderr, R"(
-usage : %s [--threads n] [--cluster-size n] [--use-metis 0|1] <source.xml>
+usage : %s [--threads n] [--cluster-size n] [--use-metis 0|1] [--log-level n] <source.xml>
 --threads : How many threads to use for simulation (default is std::thread::hardware_concurrency)
 --cluster-size : Target number of devices per cluster (default is 1024)
 --use-metis : Whether to cluster using metis (default is 1)
 --use-pull-parser 0|1 : Use the pull (streaming) parser rather than AST (default is 1).
+--log-level n : Set the maximum printed application log level
 --max-contiguous-idle-steps : How many no-message idle steps before aborting (default is 10)
 --stats-file file : A file to log execution information to.
 )", argv[0]);

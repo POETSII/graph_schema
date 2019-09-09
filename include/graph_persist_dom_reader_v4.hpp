@@ -265,8 +265,8 @@ TypedDataPtr loadTypedDataValue(const TypedDataSpecPtr &spec, xmlpp::Element *e,
       std::cerr<<"Error while loading '"<<value<<"'\n";
       throw;
     }
-    std::cerr<<"Loaded "<<name<<" : value="<<value<<"\n";
-    std::cerr<<"got = "<<spec->toJSON(res)<<"\n";
+    //std::cerr<<"Loaded "<<name<<" : value="<<value<<"\n";
+    //std::cerr<<"got = "<<spec->toJSON(res)<<"\n";
     return res;
   }
 }
