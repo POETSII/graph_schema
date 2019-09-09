@@ -35,7 +35,7 @@ Current BUG list
 
 - None known
 
-Version 4.1 features
+Version 4.2 features
 --------------------
 
 * Python tools can save in v3 (default) or v4 format. Set the environment variable
