@@ -39,6 +39,9 @@ $(DISTRIB_DIR)/% : $(OUTPUT_DIR)/%
 	cp $< $@
 
 #########################################################
+##########################################################
+
+
 
 define instance_template
 # $1 : class name
@@ -58,17 +61,20 @@ $(OUTPUT_DIR)/$1/$1_s$2.v4.xml.gz : $4
 	mkdir -p $1
 	GRAPH_SCHEMA_DEFAULT_XML_OUTPUT_VERSION=4 $(subst __S__,$2,$3) | gzip - > $$@
 
+#################################################
+## V3 simulation
+
 # This monstrosity is to create a dependency from smallest to largest scales. It
 # allows for fast timeout.
 $(eval ifeq ($($1_ALL_SCALES),)
-_PREV_SCALE_EPOCH_STATUS_$1_$2:=
+_PREV_SCALE_EPOCH_V3_STATUS_$1_$2:=
 else
-_PREV_SCALE_EPOCH_STATUS_$1_$2:=$(OUTPUT_DIR)/$1/$1_s$(lastword $($1_ALL_SCALES)).v3.epoch_sim.status
+_PREV_SCALE_EPOCH_V3_STATUS_$1_$2:=$(OUTPUT_DIR)/$1/$1_s$(lastword $($1_ALL_SCALES)).v3.epoch_sim.status
 endif
 )
 
-$(OUTPUT_DIR)/$1/$1_s$2.v3.epoch_sim.status : $(OUTPUT_DIR)/$1/$1_s$2.v3.xml.gz $(_PREV_SCALE_EPOCH_STATUS_$1_$2)
-	@if [[ "$(_PREV_SCALE_EPOCH_STATUS_$1_$2)" != "" ]] && grep "timeout" "$(_PREV_SCALE_EPOCH_STATUS_$1_$2)" ; then \
+$(OUTPUT_DIR)/$1/$1_s$2.v3.epoch_sim.status : $(OUTPUT_DIR)/$1/$1_s$2.v3.xml.gz $(_PREV_SCALE_EPOCH_V3_STATUS_$1_$2)
+	@if [[ "$(_PREV_SCALE_EPOCH_V3_STATUS_$1_$2)" != "" ]] && grep "timeout" "$(_PREV_SCALE_EPOCH_V3_STATUS_$1_$2)" ; then \
 		echo "timeout(transitive)" > $$@ ; \
 	else \
 		/usr/bin/timeout --foreground $(EPOCH_SIM_TIMEOUT) $(GS_ROOT)/bin/epoch_sim --stats-delta 100 --log-level 1 $$< 2> $(OUTPUT_DIR)/$1/$1_s$2.v3.epoch_sim.stderr > $(OUTPUT_DIR)/$1/$1_s$2.v3.epoch_sim.stdout ; \
@@ -87,14 +93,14 @@ $(OUTPUT_DIR)/$1/$1_s$2.v3.epoch_sim.status : $(OUTPUT_DIR)/$1/$1_s$2.v3.xml.gz 
 	fi
 
 $(eval ifeq ($($1_ALL_SCALES),)
-_PREV_SCALE_GRAPH_SIM_STATUS_$1_$2:=
+_PREV_SCALE_GRAPH_SIM_V3_STATUS_$1_$2:=
 else
-_PREV_SCALE_GRAPH_SIM_STATUS_$1_$2:=$(OUTPUT_DIR)/$1/$1_s$(lastword $($1_ALL_SCALES)).v3.graph_sim.status
+_PREV_SCALE_GRAPH_SIM_V3_STATUS_$1_$2:=$(OUTPUT_DIR)/$1/$1_s$(lastword $($1_ALL_SCALES)).v3.graph_sim.status
 endif
 )
 
-$(OUTPUT_DIR)/$1/$1_s$2.v3.graph_sim.status : $(OUTPUT_DIR)/$1/$1_s$2.v3.xml.gz $(_PREV_SCALE_GRAPH_SIM_STATUS_$1_$2)
-	@if [[ "$(_PREV_SCALE_GRAPH_SIM_STATUS_$1_$2)" != "" ]] && grep "timeout" "$(_PREV_SCALE_GRAPH_SIM_STATUS_$1_$2)" ; then \
+$(OUTPUT_DIR)/$1/$1_s$2.v3.graph_sim.status : $(OUTPUT_DIR)/$1/$1_s$2.v3.xml.gz $(_PREV_SCALE_GRAPH_SIM_V3_STATUS_$1_$2)
+	@if [[ "$(_PREV_SCALE_GRAPH_SIM_V3_STATUS_$1_$2)" != "" ]] && grep "timeout" "$(_PREV_SCALE_GRAPH_SIM_V3_STATUS_$1_$2)" ; then \
 		echo "timeout(transitive)" > $$@ ; \
 	else \
 		/usr/bin/timeout --foreground $(GRAPH_SIM_TIMEOUT) $(GS_ROOT)/bin/graph_sim --stats-delta 100 --log-level 1 $$< 2> $(OUTPUT_DIR)/$1/$1_s$2.v3.graph_sim.stderr > $(OUTPUT_DIR)/$1/$1_s$2.v3.graph_sim.stdout ; \
@@ -111,6 +117,11 @@ $(OUTPUT_DIR)/$1/$1_s$2.v3.graph_sim.status : $(OUTPUT_DIR)/$1/$1_s$2.v3.xml.gz 
 			echo "unknown" > $$@ ; \
 		fi \
 	fi
+
+
+##############################################
+## V4 simulation
+
 
 $(eval ifeq ($($1_ALL_SCALES),)
 _PREV_SCALE_PIP0020_SIM_STATUS_$1_$2:=
@@ -146,6 +157,60 @@ $(OUTPUT_DIR)/$1/$1_s$2.v4.pip0020_sim.status : $(OUTPUT_DIR)/$1/$1_s$2.v4.xml.g
 
 endif
 
+$(eval ifeq ($($1_ALL_SCALES),)
+_PREV_SCALE_EPOCH_V4_STATUS_$1_$2:=
+else
+_PREV_SCALE_EPOCH_V4_STATUS_$1_$2:=$(OUTPUT_DIR)/$1/$1_s$(lastword $($1_ALL_SCALES)).v4.epoch_sim.status
+endif
+)
+
+$(OUTPUT_DIR)/$1/$1_s$2.v4.epoch_sim.status : $(OUTPUT_DIR)/$1/$1_s$2.v4.xml.gz $(_PREV_SCALE_EPOCH_V4_STATUS_$1_$2)
+	@if [[ "$(_PREV_SCALE_EPOCH_V4_STATUS_$1_$2)" != "" ]] && grep "timeout" "$(_PREV_SCALE_EPOCH_V4_STATUS_$1_$2)" ; then \
+		echo "timeout(transitive)" > $$@ ; \
+	else \
+		/usr/bin/timeout --foreground $(EPOCH_SIM_TIMEOUT) $(GS_ROOT)/bin/epoch_sim --stats-delta 100 --log-level 1 $$< 2> $(OUTPUT_DIR)/$1/$1_s$2.v4.epoch_sim.stderr > $(OUTPUT_DIR)/$1/$1_s$2.v4.epoch_sim.stdout ; \
+		RES=$$$$? ; \
+		if [[ $$$$RES -eq 124 ]] ; then \
+			echo "timeout" > $$@ ; \
+		elif grep _HANDLER_EXIT_FAIL_9be65737_ $(OUTPUT_DIR)/$1/$1_s$2.v4.epoch_sim.stderr ; then \
+			echo "fail" > $$@ ; \
+		elif grep _HANDLER_EXIT_SUCCESS_9be65737_ $(OUTPUT_DIR)/$1/$1_s$2.v4.epoch_sim.stderr ; then \
+			echo "success" > $$@ ; \
+		elif [[ $$$$RES -ne 0 ]] ; then \
+			echo "error" > $$@ ; \
+		else \
+			echo "unknown" > $$@ ; \
+		fi \
+	fi
+
+
+$(eval ifeq ($($1_ALL_SCALES),)
+_PREV_SCALE_GRAPH_SIM_V4_STATUS_$1_$2:=
+else
+_PREV_SCALE_GRAPH_SIM_V4_STATUS_$1_$2:=$(OUTPUT_DIR)/$1/$1_s$(lastword $($1_ALL_SCALES)).v4.graph_sim.status
+endif
+)
+
+$(OUTPUT_DIR)/$1/$1_s$2.v4.graph_sim.status : $(OUTPUT_DIR)/$1/$1_s$2.v4.xml.gz $(_PREV_SCALE_GRAPH_SIM_V4_STATUS_$1_$2)
+	@if [[ "$(_PREV_SCALE_GRAPH_SIM_V4_STATUS_$1_$2)" != "" ]] && grep "timeout" "$(_PREV_SCALE_GRAPH_SIM_V4_STATUS_$1_$2)" ; then \
+		echo "timeout(transitive)" > $$@ ; \
+	else \
+		/usr/bin/timeout --foreground $(GRAPH_SIM_TIMEOUT) $(GS_ROOT)/bin/graph_sim --stats-delta 100 --log-level 1 $$< 2> $(OUTPUT_DIR)/$1/$1_s$2.v4.graph_sim.stderr > $(OUTPUT_DIR)/$1/$1_s$2.v4.graph_sim.stdout ; \
+		RES=$$$$? ; \
+		if [[ $$$$RES -eq 124 ]] ; then \
+			echo "timeout" > $$@ ; \
+		elif grep _HANDLER_EXIT_FAIL_9be65737_ $(OUTPUT_DIR)/$1/$1_s$2.v4.graph_sim.stderr ; then \
+			echo "fail" > $$@ ; \
+		elif grep _HANDLER_EXIT_SUCCESS_9be65737_ $(OUTPUT_DIR)/$1/$1_s$2.v4.graph_sim.stderr ; then \
+			echo "success" > $$@ ; \
+		elif [[ $$$$RES -ne 0 ]] ; then \
+			echo "error" > $$@ ; \
+		else \
+			echo "unknown" > $$@ ; \
+		fi \
+	fi
+
+
 
 $1_ALL_V3_XML_GZ += $(OUTPUT_DIR)/$1/$1_s$2.v3.xml.gz
 $1_ALL_V4_XML_GZ += $(OUTPUT_DIR)/$1/$1_s$2.v4.xml.gz
@@ -154,9 +219,11 @@ $1_ALL_V3_STATIC_PROPERTIES += $(OUTPUT_DIR)/$1/$1_s$2.v3.static_properties.json
 $1_ALL_V3_EPOCH_SIM += $(OUTPUT_DIR)/$1/$1_s$2.v3.epoch_sim.status
 $1_ALL_V3_GRAPH_SIM += $(OUTPUT_DIR)/$1/$1_s$2.v3.graph_sim.status
 $1_ALL_V4_PIP0020_SIM += $(OUTPUT_DIR)/$1/$1_s$2.v4.pip0020_sim.status
+$1_ALL_V4_EPOCH_SIM += $(OUTPUT_DIR)/$1/$1_s$2.v4.epoch_sim.status
+$1_ALL_V4_GRAPH_SIM += $(OUTPUT_DIR)/$1/$1_s$2.v4.graph_sim.status
 
 $1_ALL_V3_DISTRIB += $(DISTRIB_DIR)/$1/$1_s$2.v3.static_properties.json $(DISTRIB_DIR)/$1/$1_s$2.v3.xml.gz $(DISTRIB_DIR)/$1/$1_s$2.v3.epoch_sim.status $(DISTRIB_DIR)/$1/$1_s$2.v3.graph_sim.status
-$1_ALL_V4_DISTRIB += $(DISTRIB_DIR)/$1/$1_s$2.v3.static_properties.json $(DISTRIB_DIR)/$1/$1_s$2.v4.xml.gz $(DISTRIB_DIR)/$1/$1_s$2.v4.pip0020_sim.status $(DISTRIB_DIR)/$1/$1_s$2.v3.epoch_sim.status $(DISTRIB_DIR)/$1/$1_s$2.v3.graph_sim.status
+$1_ALL_V4_DISTRIB += $(DISTRIB_DIR)/$1/$1_s$2.v4.static_properties.json $(DISTRIB_DIR)/$1/$1_s$2.v4.xml.gz $(DISTRIB_DIR)/$1/$1_s$2.v4.pip0020_sim.status $(DISTRIB_DIR)/$1/$1_s$2.v4.epoch_sim.status $(DISTRIB_DIR)/$1/$1_s$2.v4.graph_sim.status
 
 # TODO: Does this need to be eval'd? Can't remember why it is like this now.
 $(eval $1_ALL_SCALES := $($1_ALL_SCALES) $2)
@@ -178,6 +245,8 @@ $1_all_v4_xml_gz : $($1_ALL_V4_XML_GZ)
 $1_all_v3_static_properties : $($1_ALL_V3_STATIC_PROPERTIES)
 $1_all_v3_graph_sim : $($1_ALL_V3_GRAPH_SIM)
 $1_all_v3_epoch_sim : $($1_ALL_V3_EPOCH_SIM)
+$1_all_v4_graph_sim : $($1_ALL_V4_GRAPH_SIM)
+$1_all_v4_epoch_sim : $($1_ALL_V4_EPOCH_SIM)
 $1_all_v4_pip0020_sim : $($1_ALL_V4_PIP0020_SIM)
 
 ALL_CLASSES += $1
@@ -188,6 +257,8 @@ all_v4_xml_gz : $1_all_v4_xml_gz
 all_v3_static_properties : $1_all_v3_static_properties
 all_v3_epoch_sim : $1_all_v3_epoch_sim
 all_v3_graph_sim : $1_all_v3_graph_sim
+all_v4_epoch_sim : $1_all_v4_epoch_sim
+all_v4_graph_sim : $1_all_v4_graph_sim
 all_v4_pip0020_sim : $1_all_v4_pip0020_sim
 
 all_v3_distrib : $($1_ALL_V3_DISTRIB)
