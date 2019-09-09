@@ -33,15 +33,22 @@ Current TODO list
 Current BUG list
 ----------------
 
-- Algrebraic multi-grid has a protocol error that only turns up with large-scale problems
-  and out-of-order execution. Suspicion is that it is a race-ahead problem.
+- None known
+
+Version 4.1 features
+--------------------
+
+* Python tools can save in v3 (default) or v4 format. Set the environment variable
+  `GRAPH_SCHEMA_DEFAULT_XML_OUTPUT_VERSION` to `3` or `4` to explicitly choose.
+* C++ tools can load v4 and will automatically switch between v3 and v4.
 
 Version 4 features
 ------------------
 
-* The XML v4 format is supported, which has been simplified to make parsing easier. See PIP0020.
+* The XML v4 format is supported via v3 to v4 and v4 to v3 tools. XML v4 is an alternative to V3 which has been
+  simplified to make parsing easier. See PIP0020.
 * Python tools can ingest v3 or v4, and auto-magically switch between them.
-* Graphs can be saved in v3 (default) or v4 format.
+
 
 Version 3 features
 ------------------
@@ -100,30 +107,55 @@ cd /vagrant   # Get into the repository
 make test     # Run the built-in self tests
 ````
 
+pypy
+----
+
+The python tools should all work under [pypy](https://pypy.org/), which is a JIT compiling
+version of python. Many of the graph_schema tools get a decent speed boost of around 2-3x,
+and nothing seems to run any slower. pypy is particularly useful when generating larger
+graphs using python, as you usually get about twice the generation rate. There is a provisioning
+script in `provision_ubuntu18.sh` which _should_ setup a pypy3 [virtualenv](https://virtualenv.pypa.io/en/latest/),
+though it is a bit fragile and may require some hand-holding.
+
+To setup to the pypy virtualenv, from the root of the graph_schema repo:
+```
+./provision_ubuntu18_pypy.sh
+```
+Look at the messages going past, as it is possible something goes slightly wrong.
+
+Assuming it is setup, then do:
+```
+source pypy3-virtualenv/bin/activate
+```
+to enter the virtual environment. If this succeeds, then you should find
+that your command prompt is prefixed by `(pypy3-virtualenv)`. From this
+point on the `python3` command is redirected to `pypy3`, which you can
+check with `python3 -V`. To leave the virtualenv, use `deactivate`.
+
+For example, on my current machine I get this:
+```
+dt10@LAPTOP-0DEHDEQ0:/mnt/c/UserData/dt10/external/POETS/graph_schema
+$ source pypy3-virtualenv/bin/activate
+
+(pypy3-virtualenv) dt10@LAPTOP-0DEHDEQ0:/mnt/c/UserData/dt10/external/POETS/graph_schema
+$ python3 -V
+Python 3.6.1 (7.1.1+dfsg-1~ppa1~ubuntu18.04, Aug 09 2019, 16:05:55)
+[PyPy 7.1.1 with GCC 7.4.0]
+
+(pypy3-virtualenv) dt10@LAPTOP-0DEHDEQ0:/mnt/c/UserData/dt10/external/POETS/graph_schema
+$ deactivate
+
+dt10@LAPTOP-0DEHDEQ0:/mnt/c/UserData/dt10/external/POETS/graph_schema
+$
+```
+
+It's not a big deal if it doesn't work, as everything still works in standard python (i.e. cpython).
+
 Manual installation
 -------------------
 
-A non-complete list of packages needed is:
-- `libxml2-dev`
-- `g++` (with c++11 support)
-- `libboost-dev` and `libboost-dev`
-- python3.4 (or higher)
-- `zip`
-- A java environment (e.g. `default-jre-headless`)
-- `python3-lxml`
-- `curl`
-- `mpich`
-- `rapidjson-dev`
-- `libboost-filesystem-dev`
-- `metis`
-- `graphviz`
-- `imagemagick`
-- `ffmpeg`
-- `python3-pip`
-- `python3-numpy`
-- `python3-scipy`
-- pyamg (`pip3 install pyamg`)
-- `octave` (and `octave-msh` `octave-geometry`)
+The packages needed for ubuntu 18.04 are given in the provisioning
+script `provision_ubuntu18.sh`.
 
 Not officially tested on non Ubuntu 16 platforms, but it has worked
 in the past in both Cygwin and Linux.
@@ -485,6 +517,64 @@ Parameters:
 
 - `--output OUTPUT` : Choose the output name, or if snapshots are specified the output prefix.
 
+### bin/calculate_graph_static_properties
+
+Takes a graph instance and calculates a set of basic static properties
+about the graph, including:
+
+- Device/edge instance count
+- Degree distribution
+- Counts of edges between different device/port pairs.
+
+Usage
+-----
+
+```
+bin/calculate_graph_static_properties path-to-xml [metadata.json]
+```
+The path-to-xml must always be supplied.
+
+If a metadata.json is supplied, then the data calculated by this
+program will be inserted into the given document (i.e. it will
+inherit those properties).
+
+
+Example usage:
+````
+$ bin/calculate_graph_static_properties apps/ising_spin/ising_spin_8x8.xml > wibble.json
+$ less wibble.json
+{
+    "graph_instance_id": "heat_8_8",
+    "graph_type_id": "ising_spin",
+    "total_devices": 64,
+    "total_edges": 256,
+    "device_instance_counts_by_device_type": {
+        "cell": 64
+    },
+    "edge_instance_counts_by_message_type": {
+        "update": 256,
+        "__print__": 0
+    },
+    "edge_instance_counts_by_endpoint_pair": {
+        "<cell>:in-<cell>:out": 256
+    },
+    "incoming_degree": {
+        "min": 0.0,
+        "max": 4.0,
+        "mean": 2.0,
+        "median": 1.3333333333333333,
+        "stddev": 2.0
+    },
+    "outgoing_degree": {
+        "min": 4.0,
+        "max": 4.0,
+        "mean": 4.0,
+        "median": 4.0,
+        "stddev": 0.0
+    }
+}
+````
+
 ### tools/render_event_log_as_dot.py
 
 Takes an event log (e.g. generated by `bin/epoch_sim`) and renders it as a graph.
@@ -610,6 +700,140 @@ The pragma is allowed in an place where source code appears in the graph type.
 Note that this feature is not currently recursive, so if there is a `#include`
 in the file being embedded it won't get expanded.
 
+
+### tools/poems
+
+POEMS is a tool which is supposed to exectute a graph instance as fast
+as possible across multiple cores. POEMS is a more advanced simulator
+than the others, and is really more of a full-on execution environment
+rather than a simulator.In some ways it is the successor to `bin/queue_sim`,
+but it shares no code with it.
+
+Unlike epoch_sim and friends, POEMS compilers a single standalone executable
+for each graph type. The executable can load any instance for that graph
+type, but cannot adapt to other graph types. There are two stages to executing
+a graph in POEMS:
+
+1 - Compile the graph into an executable using `tools/poems/compile_poems_sim.sh`,
+    usually producing an executable called `./poems_sim`.
+
+2 - Execute the resulting executable on a graph instance by running the simulator
+    and passing the name of the graph.
+
+For example, to build and execute `apps/ising_spin/ising_spin_8x8.xml`:
+```
+tools/poems/compile_poems_sim.sh apps/ising_spin/ising_spin_8x8.xml
+./poems_sim apps/ising_spin/ising_spin_8x8.xml
+```
+
+#### Simulation approach
+
+POEMS is designed to scale across multiple threads of execution, and should have reasonably
+good weak scaling up to 64 or so cores - certainly on 8 cores you'll see a big benefit as
+long as there are 10K+ devices. The general approach is to decompose the graph into
+clusters of devices, where the amount of intra-cluster edges is hopefully quite large.
+Messages between devices in the same cluster are _local_ messages, while messages between
+devices in different clusters are _non-local_. Each cluster maintains a lock-free bag
+(technically I think it is wait-free) of incoming non-local messages, and any thread can
+post a non-local message to any cluster. The incoming bag of messages is completely un-ordered,
+and in order to make it lock-free and O(1) it is pretty much guaranteed that messages will
+always arrive out of order, and are actually quite likely to be eventually processed
+in LIFO order.
+
+Each cluster is processed in a round-robin fashion be a pool of threads. The overall
+cluster step process is:
+
+1 - If we have just completed an idle barrier, then execute the idle handler on all
+    local devices.
+
+2 - Grab the current bag of incoming non-local messages in O(1) time by atomically
+    swapping with an empty bag. Other threads can still post to this cluster while this happens.
+
+3 - For each incoming message in the non-local bag, deliver it to the local device,
+    destroying the bag as you go. Other threads will be posting into a different bag
+    by this point.
+
+4 - For each device in the cluster, try to execute one send handler, or (lower priority)
+    execute the device idle handler. If a device sends a message, then deliver any
+    local edges by directly calling the send handler. Any non-local edges are handled
+    by posting a copy of the message into the input bag of the target cluster.
+
+The stepping process is optimised to try to skip over inactive devices and clusters
+in a reasonably efficient way (though it would probably be better to have more
+than one level of clusters).
+
+Idle detection is somewhat complicated due to the need to atomically commit on
+things amongst multiple threads. The approach used here has two levels:
+
+1 - an initial heuristic level, which tries to guess when all clusters have gone
+    idle.
+
+2 - a precise verifical level, where all the threads start blocking until there
+    is only one left which can verify that the system is completely idle.
+
+There are probably still some threading bugs left in that process, though it is
+usually quite reliable.
+
+There are a quite a lot of optimisations in the system to try to reduce
+overheads, so this is less of a simulator and more a genuine execution
+platform. Optimisations include:
+
+- Each graph type is compiled directly into a simulator, with no virtual dispatch.
+  Wherever possible the compiler is given enough information to allow it to
+  eliminate branches. For example, if a device type only has one input handler,
+  then that handler will be called for any incoming message without any branches.
+
+- Non-local messages are handled using a distributed pool, so there will be no
+  malloc of frees happening once the graph reaches a steady state.
+
+- Properties and state are packed together to increase locality, and to reduce
+  number of arguments when calling handlers.
+
+- Clusters are formed using edge information in order to maximise the number of
+  local edges.
+
+- Bit-masks are used to reduce the cost of skipping over in-active devices, and counters
+  are used to skip in-active clusters. This speeds things up when approaching the
+  global idle point, and also makes things faster in graphs with very sparse
+  activity.
+
+
+#### Compiler options
+
+When compiling the poems simulator you can pass a number of options to control output
+and optimisation level:
+
+- `-o <file_name>` : Sets the name of the simulation execution. Default is ./poems_sim
+- `--working-dir <dir>` : Where to place temporary files from compilation. Default comes from mktemp.
+- You can choose one optimisation level:
+  - `--release` : Attempt to create fastest possible executable with no safety (default).
+  - `--release-with-asserts` : Attempt to create fastest possible executable, but keep run-time checks.
+  - `--debug` : Debuggable executable with all run-time checks.
+
+#### Run-time options
+
+When you invoke the simulate you get a number of options to control how it executes:
+
+- `--threads n` : How many threads to use for simulation. The default comes from `std::thread::hardware_concurrency`,
+   and will usually equal the number of virtual cores available. The execution engine varies slightly depending
+   on the relationship between number of clusters and number of threads; if you see crashes it may be worth running
+   with just one thread.
+
+- `--cluster-size n` : Target number of devices per cluster (default is 1024). Performance depends on a complicated relationship
+  between topology, application logic, number of threads, and cluster size. Sometimes a smaller cluster works
+  better, down to around 32, while sometimes a larger cluster is better. The default of 1024 is on the larger
+  end, and works ok for most applications.
+
+- `--use-metis 0|1` : Whether to cluster using metis (default is 1). It is almost always worth clustering the graph,
+  even if it is quite irregular, as it tends to increase cache locality. For regular graphs it can greatly increase
+  the number of local (intra-thread) deliveries, which makes multi-threaded execution much faster.
+
+- `--max-contiguous-idle-steps n` : How many no-message idle steps before aborting (default is 10). In most applications
+  a sequence of idle steps where nothing happens usally means the application has dead-locked or other-wise expired.
+  However, some wierd applications may be doing a lot of compute in the idle handler which means there are long gaps,
+  so for those applications you'll need to increase this number.
+
+###
 
 ## Suggestions on how to write and debug an application/graph
 
