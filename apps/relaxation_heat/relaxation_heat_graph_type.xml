@@ -346,6 +346,8 @@
       // Accept all defaults
 
       // Check the degree property doesn't exceed the array size
+      handler_log(4, "deviceProperties->degree=%u, array size=%u", deviceProperties->degree , sizeof(deviceState->count)/sizeof(deviceState->count[0]));
+      
       assert( deviceProperties->degree <= sizeof(deviceState->count)/sizeof(deviceState->count[0]) );
     ]]>
     </OnInit>

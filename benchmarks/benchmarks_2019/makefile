@@ -35,6 +35,9 @@ $(GS_ROOT)/bin/calculate_graph_static_properties :
 %.v3.static_properties.json : %.v3.xml.gz $(GS_ROOT)/bin/calculate_graph_static_properties %.benchmark_properties.json
 	$(GS_ROOT)/bin/calculate_graph_static_properties $< $*.benchmark_properties.json > $@ 
 
+%.v4.static_properties.json : %.v4.xml.gz $(GS_ROOT)/bin/calculate_graph_static_properties %.benchmark_properties.json
+	$(GS_ROOT)/bin/calculate_graph_static_properties $< $*.benchmark_properties.json > $@ 
+
 $(DISTRIB_DIR)/% : $(OUTPUT_DIR)/%
 	mkdir -p $(dir $@)
 	cp $< $@
@@ -54,11 +57,11 @@ $(OUTPUT_DIR)/$1/$1_s$2.benchmark_properties.json :
 	mkdir -p $(OUTPUT_DIR)/$1
 	> $$@ echo '{ "benchmark_group":"$1", "benchmark_instance_id":"$1_s$2", "benchmark_instance_scale":$2 }'
 
-$(OUTPUT_DIR)/$1/$1_s$2.v3.xml.gz : $4
+$(OUTPUT_DIR)/$1/$1_s$2.v3.xml.gz :
 	mkdir -p $(OUTPUT_DIR)/$1
 	GRAPH_SCHEMA_DEFAULT_XML_OUTPUT_VERSION=3 $(subst __S__,$2,$3) | gzip - > $$@
 
-$(OUTPUT_DIR)/$1/$1_s$2.v4.xml.gz : $4
+$(OUTPUT_DIR)/$1/$1_s$2.v4.xml.gz :
 	mkdir -p $1
 	GRAPH_SCHEMA_DEFAULT_XML_OUTPUT_VERSION=4 $(subst __S__,$2,$3) | gzip - > $$@
 
@@ -75,16 +78,16 @@ endif
 )
 
 $(OUTPUT_DIR)/$1/$1_s$2.v3.epoch_sim.status : $(OUTPUT_DIR)/$1/$1_s$2.v3.xml.gz $(_PREV_SCALE_EPOCH_V3_STATUS_$1_$2)
-	@if [[ "$(_PREV_SCALE_EPOCH_V3_STATUS_$1_$2)" != "" ]] && grep "timeout" "$(_PREV_SCALE_EPOCH_V3_STATUS_$1_$2)" ; then \
+	@if [[ "$(_PREV_SCALE_EPOCH_V3_STATUS_$1_$2)" != "" ]] && grep "timeout" "$(_PREV_SCALE_EPOCH_V3_STATUS_$1_$2)" &> /dev/null ; then \
 		echo "timeout(transitive)" > $$@ ; \
 	else \
 		/usr/bin/timeout --foreground $(EPOCH_SIM_TIMEOUT) $(GS_ROOT)/bin/epoch_sim --stats-delta 100 --log-level 1 $$< 2> $(OUTPUT_DIR)/$1/$1_s$2.v3.epoch_sim.stderr > $(OUTPUT_DIR)/$1/$1_s$2.v3.epoch_sim.stdout ; \
 		RES=$$$$? ; \
 		if [[ $$$$RES -eq 124 ]] ; then \
 			echo "timeout" > $$@ ; \
-		elif grep _HANDLER_EXIT_FAIL_9be65737_ $(OUTPUT_DIR)/$1/$1_s$2.v3.epoch_sim.stderr ; then \
+		elif grep _HANDLER_EXIT_FAIL_9be65737_ $(OUTPUT_DIR)/$1/$1_s$2.v3.epoch_sim.stderr &> /dev/null ; then \
 			echo "fail" > $$@ ; \
-		elif grep _HANDLER_EXIT_SUCCESS_9be65737_ $(OUTPUT_DIR)/$1/$1_s$2.v3.epoch_sim.stderr ; then \
+		elif grep _HANDLER_EXIT_SUCCESS_9be65737_ $(OUTPUT_DIR)/$1/$1_s$2.v3.epoch_sim.stderr &> /dev/null ; then \
 			echo "success" > $$@ ; \
 		elif [[ $$$$RES -ne 0 ]] ; then \
 			echo "error" > $$@ ; \
@@ -92,6 +95,7 @@ $(OUTPUT_DIR)/$1/$1_s$2.v3.epoch_sim.status : $(OUTPUT_DIR)/$1/$1_s$2.v3.xml.gz 
 			echo "unknown" > $$@ ; \
 		fi \
 	fi
+	@>&2 echo "Epoch sim v3 $1_$2 status : $$$$(cat $$@)"
 
 $(eval ifeq ($($1_ALL_SCALES),)
 _PREV_SCALE_GRAPH_SIM_V3_STATUS_$1_$2:=
@@ -101,16 +105,16 @@ endif
 )
 
 $(OUTPUT_DIR)/$1/$1_s$2.v3.graph_sim.status : $(OUTPUT_DIR)/$1/$1_s$2.v3.xml.gz $(_PREV_SCALE_GRAPH_SIM_V3_STATUS_$1_$2)
-	@if [[ "$(_PREV_SCALE_GRAPH_SIM_V3_STATUS_$1_$2)" != "" ]] && grep "timeout" "$(_PREV_SCALE_GRAPH_SIM_V3_STATUS_$1_$2)" ; then \
+	@if [[ "$(_PREV_SCALE_GRAPH_SIM_V3_STATUS_$1_$2)" != "" ]] && grep "timeout" "$(_PREV_SCALE_GRAPH_SIM_V3_STATUS_$1_$2)" &> /dev/null ; then \
 		echo "timeout(transitive)" > $$@ ; \
 	else \
 		/usr/bin/timeout --foreground $(GRAPH_SIM_TIMEOUT) $(GS_ROOT)/bin/graph_sim --stats-delta 100 --log-level 1 $$< 2> $(OUTPUT_DIR)/$1/$1_s$2.v3.graph_sim.stderr > $(OUTPUT_DIR)/$1/$1_s$2.v3.graph_sim.stdout ; \
 		RES=$$$$? ; \
 		if [[ $$$$RES -eq 124 ]] ; then \
 			echo "timeout" > $$@ ; \
-		elif grep _HANDLER_EXIT_FAIL_9be65737_ $(OUTPUT_DIR)/$1/$1_s$2.v3.graph_sim.stderr ; then \
+		elif grep _HANDLER_EXIT_FAIL_9be65737_ $(OUTPUT_DIR)/$1/$1_s$2.v3.graph_sim.stderr &> /dev/null ; then \
 			echo "fail" > $$@ ; \
-		elif grep _HANDLER_EXIT_SUCCESS_9be65737_ $(OUTPUT_DIR)/$1/$1_s$2.v3.graph_sim.stderr ; then \
+		elif grep _HANDLER_EXIT_SUCCESS_9be65737_ $(OUTPUT_DIR)/$1/$1_s$2.v3.graph_sim.stderr &> /dev/null ; then \
 			echo "success" > $$@ ; \
 		elif [[ $$$$RES -ne 0 ]] ; then \
 			echo "error" > $$@ ; \
@@ -118,6 +122,7 @@ $(OUTPUT_DIR)/$1/$1_s$2.v3.graph_sim.status : $(OUTPUT_DIR)/$1/$1_s$2.v3.xml.gz 
 			echo "unknown" > $$@ ; \
 		fi \
 	fi
+	@>&2 echo "Graph sim v3 $1_$2 status : $$$$(cat $$@)"
 
 
 ##############################################
@@ -134,18 +139,18 @@ endif
 ifneq ($(HAVE_PIP0020),)
 
 $(OUTPUT_DIR)/$1/$1_s$2.v4.pip0020_sim.status : $(OUTPUT_DIR)/$1/$1_s$2.v4.xml.gz $(_PREV_SCALE_PIP0020_SIM_STATUS_$1_$2)
-	@if [[ "$(_PREV_SCALE_PIP0020_SIM_STATUS_$1_$2)" != "" ]] && grep "timeout" "$(_PREV_SCALE_PIP0020_SIM_STATUS_$1_$2)" ; then \
+	@if [[ "$(_PREV_SCALE_PIP0020_SIM_STATUS_$1_$2)" != "" ]] && grep "timeout" "$(_PREV_SCALE_PIP0020_SIM_STATUS_$1_$2)" &> /dev/null ; then \
 		>&2 echo "pip0020_sim : Skipping $1_$2 (transitive timeout)" \
 		echo "timeout(transitive)" > $$@ ; \
 	else \
 		>&2 echo "pip0020_sim : Simulating $1_s$2" ; \
 		gunzip -c $$< | /usr/bin/timeout $(PIP0020_SIM_TIMEOUT) $(PIP0020_PATH)/tools/pyparser/simulate.sh /dev/stdin --app-log-level 1 2> $(OUTPUT_DIR)/$1/$1_s$2.v4.pip0020_sim.stderr > $(OUTPUT_DIR)/$1/$1_s$2.v4.pip0020_sim.stdout ; \
 		RES=$$$$? ; \
-		if grep _HANDLER_EXIT_SUCCESS_9be65737_ $(OUTPUT_DIR)/$1/$1_s$2.v4.pip0020_sim.stdout ; then \
+		if grep _HANDLER_EXIT_SUCCESS_9be65737_ $(OUTPUT_DIR)/$1/$1_s$2.v4.pip0020_sim.stdout &> /dev/null ; then \
 			STATUS="success"; \
 		elif [[ $$$$RES -eq 124 ]] ; then \
 			STATUS="timeout"; \
-		elif grep _HANDLER_EXIT_FAIL_9be65737_ $(OUTPUT_DIR)/$1/$1_s$2.v4.pip0020_sim.stdout ; then \
+		elif grep _HANDLER_EXIT_FAIL_9be65737_ $(OUTPUT_DIR)/$1/$1_s$2.v4.pip0020_sim.stdout &> /dev/null ; then \
 			STATUS="fail"; \
 		elif [[ $$$$RES -ne 0 ]] ; then \
 			STATUS="error"; \
@@ -155,6 +160,7 @@ $(OUTPUT_DIR)/$1/$1_s$2.v4.pip0020_sim.status : $(OUTPUT_DIR)/$1/$1_s$2.v4.xml.g
 		>&2 echo "pip0020_sim : Finished $1_$2 - $$$$STATUS" ; \
 		echo $$$$STATUS > $$@ ; \
 	fi
+	@>&2 echo "PIP0020 sim v4 $1_$2 status : $$$$(cat $$@)"
 
 endif
 
@@ -166,16 +172,16 @@ endif
 )
 
 $(OUTPUT_DIR)/$1/$1_s$2.v4.epoch_sim.status : $(OUTPUT_DIR)/$1/$1_s$2.v4.xml.gz $(_PREV_SCALE_EPOCH_V4_STATUS_$1_$2)
-	@if [[ "$(_PREV_SCALE_EPOCH_V4_STATUS_$1_$2)" != "" ]] && grep "timeout" "$(_PREV_SCALE_EPOCH_V4_STATUS_$1_$2)" ; then \
+	@if [[ "$(_PREV_SCALE_EPOCH_V4_STATUS_$1_$2)" != "" ]] && grep "timeout" "$(_PREV_SCALE_EPOCH_V4_STATUS_$1_$2)" &> /dev/null ; then \
 		echo "timeout(transitive)" > $$@ ; \
 	else \
 		/usr/bin/timeout --foreground $(EPOCH_SIM_TIMEOUT) $(GS_ROOT)/bin/epoch_sim --stats-delta 100 --log-level 1 $$< 2> $(OUTPUT_DIR)/$1/$1_s$2.v4.epoch_sim.stderr > $(OUTPUT_DIR)/$1/$1_s$2.v4.epoch_sim.stdout ; \
 		RES=$$$$? ; \
 		if [[ $$$$RES -eq 124 ]] ; then \
 			echo "timeout" > $$@ ; \
-		elif grep _HANDLER_EXIT_FAIL_9be65737_ $(OUTPUT_DIR)/$1/$1_s$2.v4.epoch_sim.stderr ; then \
+		elif grep _HANDLER_EXIT_FAIL_9be65737_ $(OUTPUT_DIR)/$1/$1_s$2.v4.epoch_sim.stderr &> /dev/null ; then \
 			echo "fail" > $$@ ; \
-		elif grep _HANDLER_EXIT_SUCCESS_9be65737_ $(OUTPUT_DIR)/$1/$1_s$2.v4.epoch_sim.stderr ; then \
+		elif grep _HANDLER_EXIT_SUCCESS_9be65737_ $(OUTPUT_DIR)/$1/$1_s$2.v4.epoch_sim.stderr &> /dev/null ; then \
 			echo "success" > $$@ ; \
 		elif [[ $$$$RES -ne 0 ]] ; then \
 			echo "error" > $$@ ; \
@@ -211,6 +217,7 @@ $(OUTPUT_DIR)/$1/$1_s$2.v4.graph_sim.status : $(OUTPUT_DIR)/$1/$1_s$2.v4.xml.gz 
 			echo "unknown" > $$@ ; \
 		fi \
 	fi
+	@>&2 echo "Graph sim v4 $1_$2 status : $$$$(cat $$@)"
 
 
 $(eval ifeq ($($1_ALL_SCALES),)
@@ -453,7 +460,7 @@ $(eval $(call class_template,$(CLASS),$(TITLE)))
 ###########################################
 
 CLASS=apsp_vec_barrier_dense
-SCALES= 16 23 32 45 64 91 128 181 256 362 512 724 1024 1448 2048 2896 4096 # 5793 8192 11585 16384 23170 32768
+SCALES= 16 23 32 45 64 91 128 181 256 362 512 724 1024 1448 2048 2896 4096 5793 8192 # 11585 16384 23170 32768
 COMMAND=$(GS_ROOT)/apps/nursery/apsp_vec_barrier/create_apsp_instance.py __S__ $$$$((__S__ / 4))
 TITLE=All-pairs Shortest-Path using vectorisation and hardware idle detection over a dense graph with S nodes of degree S/4 (so O(S^2) edges)
 

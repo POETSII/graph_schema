@@ -150,7 +150,8 @@ public:
 
   void onAttribute(const Glib::ustring &, const Glib::ustring &) override
   {
-    throw std::runtime_error("Unexpected attribute on element.");
+      // There are some legacy things that come through here. We'll be permissive on pull parser...
+    //throw std::runtime_error("Unexpected attribute on element.");
   }
 
     ElementBindings *onEnterChild(const Glib::ustring &name) override
