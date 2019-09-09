@@ -242,14 +242,15 @@ private:
     }
 
 
-    template<class T>
+    template<class T,class O=T>
     void binaryToXmlV4ValueImpl(const char *pBinary, unsigned cbBinary, std::ostream &dst) const
     {
         assert(cbBinary == scalarTypeWidthBytes(m_type));
         assert(cbBinary == sizeof(T));
         T val;
         memcpy(&val, pBinary, sizeof(T));
-        dst<<val;
+        O tmp=val;
+        dst<<tmp;
     }
 
     template<class T>
@@ -262,6 +263,22 @@ private:
             throw std::runtime_error("Couldn't parse scalar while extracting xmlV4Value.");
         }
         memcpy(pBinary, &val, sizeof(T));
+    }
+
+    template<class T>
+    void xmlV4ValueToBinaryImplInt(std::istream &src, char *pBinary, unsigned cbBinary) const
+    {
+        assert(cbBinary == scalarTypeWidthBytes(m_type));
+        assert(cbBinary == sizeof(T));
+        int64_t val;
+        if( ! (src>>val) ){
+            throw std::runtime_error("Couldn't parse scalar while extracting xmlV4Value.");
+        }
+        if(val < std::numeric_limits<T>::min() || std::numeric_limits<T>::max() < val){
+            throw std::runtime_error("Value out of range.");
+        }
+        T tval=(T)val;
+        memcpy(pBinary, &tval, sizeof(T));
     }
 
 public:
@@ -354,13 +371,13 @@ public:
         }
 
         switch(m_type){
-        case ScalarType_uint8_t: binaryToXmlV4ValueImpl<uint8_t>(pBinary, cbBinary, dst); return;
-        case ScalarType_uint16_t:binaryToXmlV4ValueImpl<uint16_t>(pBinary, cbBinary, dst); return;
+        case ScalarType_uint8_t: binaryToXmlV4ValueImpl<uint8_t,unsigned>(pBinary, cbBinary, dst); return;
+        case ScalarType_uint16_t:binaryToXmlV4ValueImpl<uint16_t,unsigned>(pBinary, cbBinary, dst); return;
         case ScalarType_uint32_t:binaryToXmlV4ValueImpl<uint32_t>(pBinary, cbBinary, dst); return;
         case ScalarType_uint64_t:binaryToXmlV4ValueImpl<uint64_t>(pBinary, cbBinary, dst); return;
 
-        case ScalarType_int8_t:binaryToXmlV4ValueImpl<int8_t>(pBinary, cbBinary, dst); return;
-        case ScalarType_int16_t:binaryToXmlV4ValueImpl<int16_t>(pBinary, cbBinary, dst); return;
+        case ScalarType_int8_t:binaryToXmlV4ValueImpl<int8_t,int>(pBinary, cbBinary, dst); return;
+        case ScalarType_int16_t:binaryToXmlV4ValueImpl<int16_t,int>(pBinary, cbBinary, dst); return;
         case ScalarType_int32_t:binaryToXmlV4ValueImpl<int32_t>(pBinary, cbBinary, dst); return;
         case ScalarType_int64_t:binaryToXmlV4ValueImpl<int64_t>(pBinary, cbBinary, dst); return;
 
@@ -388,13 +405,13 @@ public:
         }
 
         switch(m_type){
-        case ScalarType_uint8_t:  xmlV4ValueToBinaryImpl<uint8_t>(src,pBinary, cbBinary); break;
-        case ScalarType_uint16_t:  xmlV4ValueToBinaryImpl<uint16_t>(src,pBinary, cbBinary); break;
+        case ScalarType_uint8_t:  xmlV4ValueToBinaryImplInt<uint8_t>(src,pBinary, cbBinary); break;
+        case ScalarType_uint16_t:  xmlV4ValueToBinaryImplInt<uint16_t>(src,pBinary, cbBinary); break;
         case ScalarType_uint32_t:  xmlV4ValueToBinaryImpl<uint32_t>(src,pBinary, cbBinary); break;
         case ScalarType_uint64_t:  xmlV4ValueToBinaryImpl<uint64_t>(src, pBinary, cbBinary); break;
 
-        case ScalarType_int8_t:  xmlV4ValueToBinaryImpl<int8_t>(src,pBinary, cbBinary); break;
-        case ScalarType_int16_t:  xmlV4ValueToBinaryImpl<int16_t>(src,pBinary, cbBinary); break;
+        case ScalarType_int8_t:  xmlV4ValueToBinaryImplInt<int8_t>(src,pBinary, cbBinary); break;
+        case ScalarType_int16_t:  xmlV4ValueToBinaryImplInt<int16_t>(src,pBinary, cbBinary); break;
         case ScalarType_int32_t:  xmlV4ValueToBinaryImpl<int32_t>(src,pBinary, cbBinary); break;
         case ScalarType_int64_t:  xmlV4ValueToBinaryImpl<int64_t>(src, pBinary, cbBinary); break;
 
@@ -685,6 +702,9 @@ public:
         if(!value.IsArray()){
             throw std::runtime_error("JSONToBinary - initialiser for array should be array.");
         }
+        if(value.Size()>m_eltCount){
+            throw std::runtime_error("JSONToBinary - expected array with at most "+std::to_string(m_eltCount)+" entries, but value had "+std::to_string(value.Size())+" .");
+        }
 
         if(!alreadyDefaulted){
             createBinaryDefault(pBinary, cbBinary);
@@ -692,7 +712,8 @@ public:
 
         unsigned off=0;
         unsigned cb=m_eltType->getPayloadSize();
-        for(unsigned i=0; i<m_eltCount; i++){
+        // If there are less then m_eltCount values then we rely on the default
+        for(unsigned i=0; i<value.Size(); i++){
             m_eltType->JSONToBinary(value[i], pBinary+off, cb, true);
             off+=cb;
         }
