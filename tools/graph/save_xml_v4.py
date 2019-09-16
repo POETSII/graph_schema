@@ -49,10 +49,10 @@ def save_typed_struct_spec_contents(node,tuple) -> str:
 
 def save_typed_struct_spec(node,childTagNameWithNS,tuple):
     r=etree.Element(childTagNameWithNS)
-    
+
     if tuple is not None:
         assert isinstance(tuple,TupleTypedDataSpec), "Expected tuple, got {}".format(tuple)
-        
+
         save_typed_struct_spec_contents(r, tuple)
     node.append(r)
     return r
@@ -147,7 +147,7 @@ def save_device_type(parent:etree.Element, dt):
     add_code_element(n, "ReadyToSend", dt.ready_to_send_handler)
     add_code_element(n, "OnInit", dt.init_handler)
     add_code_element(n, "OnHardwareIdle", dt.on_hardware_idle_handler)
-    add_code_element(n, "OnDeviceIdle", None)   
+    add_code_element(n, "OnDeviceIdle", None)
 
     return n
 
@@ -180,16 +180,17 @@ def save_device_instance(parent, di):
     if di.device_type.isExternal:
         n = etree.SubElement(parent, _external_instance_tag_type, {"id":di.id,"type":di.device_type.id} )
 
-        properties = di.device_type.properties.expand(di.properties) 
+        properties = di.device_type.properties.expand(di.properties)
         save_typed_struct_instance_attrib(n, "P", di.device_type.properties, properties)
 
     else:
         n = etree.SubElement(parent, _device_instance_tag_type, {"id":di.id,"type":di.device_type.id} )
 
-        properties = di.device_type.properties.expand(di.properties) 
-        save_typed_struct_instance_attrib(n, "P", di.device_type.properties, properties)
+        if (di.device_type.properties != None):
+            properties = di.device_type.properties.expand(di.properties)
+            save_typed_struct_instance_attrib(n, "P", di.device_type.properties, properties)
 
-        state = di.device_type.state.expand(di.state) 
+        state = di.device_type.state.expand(di.state)
         save_typed_struct_instance_attrib(n, "S", di.device_type.state, state)
 
     return n
@@ -213,7 +214,7 @@ def save_edge_instance(parent, ei):
     if hasattr(ei, "state") and ei.state is not None:
         state=ei.dst_pin.state.expand(state)
     save_typed_struct_instance_attrib(n, "S", ei.dst_pin.state, state)
-    
+
 
     return n
 
@@ -250,7 +251,7 @@ def save_graph_type(parent, graph):
     return gn
 
 def save_graph_instance(parent, graph):
-    
+
     gn = etree.SubElement(parent, toNS("p:GraphInstance"));
     gn.attrib["id"]=graph.id
     gn.attrib["graphTypeId"]=graph.graph_type.id

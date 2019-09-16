@@ -70,8 +70,8 @@ _use_indirect_BLOB=False and _use_BLOB
 sort_edges_by_distance=0
 
 # Force these to 1 for now. Testing more than one box at the minute could be a massive headache
-p["BoxMeshXLen"] = 1
-p["BoxMeshYLen"] = 1
+# p["BoxMeshXLen"] = 1
+# p["BoxMeshYLen"] = 1
 BoardMeshX = 3*p["BoxMeshXLen"]
 BoardMeshY = 2*p["BoxMeshYLen"]
 
@@ -573,7 +573,9 @@ def render_init_handler_as_softswitch(dev,dst,devProps):
       // Begin initialisation code
       {DEVICE_TYPE_INIT_HANDLER_SOURCE_LOCATION}
     """.format(**devProps))
-    if devProps["DEVICE_TYPE_INIT_HANDLER"] != "":
+    if devProps["DEVICE_TYPE_INIT_HANDLER"] == None:
+        dst.write("return;")
+    elif devProps["DEVICE_TYPE_INIT_HANDLER"] != "":
         dst.write("{DEVICE_TYPE_INIT_HANDLER}".format(**devProps))
     else:
         dst.write("return;")
@@ -654,7 +656,7 @@ def render_device_type_as_softswitch_defs(dt,dst,dtProps):
                 {ACTUAL_PROPERTIES_SIZE}, //sizeof({INPUT_PORT_PROPERTIES_T}),
                 {ACTUAL_STATE_SIZE}, //sizeof({INPUT_PORT_STATE_T}),
                 "{INPUT_PORT_NAME}",
-                {IS_APPLICATION}
+                false
             }}
             """.format(ACTUAL_PROPERTIES_SIZE=propertiesSize, ACTUAL_STATE_SIZE=stateSize, **make_input_pin_properties(ip)))
     dst.write("};\n");
@@ -670,7 +672,7 @@ def render_device_type_as_softswitch_defs(dt,dst,dtProps):
                 (send_handler_t){OUTPUT_PORT_FULL_ID}_send_handler,
                 sizeof(packet_t)+sizeof({OUTPUT_PORT_MESSAGE_T}),
                 "{OUTPUT_PORT_NAME}",
-                {IS_APPLICATION},
+                false,
                 {MESSAGETYPE_NUMID}
             }}
             """.format(**make_output_pin_properties(op)))
@@ -682,6 +684,8 @@ def render_graph_type_as_softswitch_defs(gt,dst):
     dst.write("""#include "{}.hpp"\n""".format(gt.id))
 
     dst.write(calc_graph_type_c_globals(gt))
+
+    dst.write("#define POETS_LEGACY_HAS_HANDLER_EXIT")
 
     if gt.shared_code:
         for c in gt.shared_code:
