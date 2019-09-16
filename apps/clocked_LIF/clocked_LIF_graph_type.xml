@@ -1,6 +1,6 @@
 <?xml version='1.0' encoding='ASCII'?>
 <Graphs xmlns="https://poets-project.org/schemas/virtual-graph-schema-v3">
-  <GraphType id="clocked_izhikevich_fix">
+  <GraphType id="clocked_LIF_fix">
     <Types/>
     <Properties>
       <Scalar name="maxTicks" type="uint32_t" default="10"/>
@@ -40,8 +40,7 @@
 			xy = xy>>16;
 			assert( -2147483648 <= xy && xy <= 2147483647 );
 			return (int32_t)(xy);
-		}cd ..
-
+		}
 
     int32_t fix_mul(int32_t a, int32_t b, int32_t c)
     { return fix_mul(fix_mul(a,b),c); }
@@ -230,10 +229,10 @@
         </Documentation>
         <Properties>
           <Scalar name="seed" type="uint32_t"/>
-          <Scalar name="a" type="int32_t"/>
-          <Scalar name="b" type="int32_t"/>
-          <Scalar name="c" type="int32_t"/>
-          <Scalar name="d" type="int32_t"/>
+          <Scalar name="r_tau_m" type="int32_t"/>
+          <Scalar name="R" type="int32_t"/>
+          <Scalar name="U_rest" type="int32_t"/>
+          
           <Scalar name="Ir" type="int32_t"/>
           <Scalar name="fanin" type="uint32_t"/>
         </Properties>
@@ -251,7 +250,7 @@
           deviceState->rng = deviceProperties->seed;
 
           deviceState->v=fix_from_int(-65);
-          deviceState->u=fix_mul( deviceProperties->b , deviceState->v );
+          deviceState->u=fix_mul( deviceProperties->r_tau_m , deviceState->v );
 
           deviceState->fireValue=false; // We don't fire in the first round
 
@@ -282,7 +281,7 @@
 
           deviceState->Icount++;
           if(message->fired){
-            deviceState->I = fix_add(deviceState->I , edgeProperties->weight);
+            deviceState->I = fix_add(deviceState->I , edgeProperties->weight); 
           }
 
           handler_log(3, "sentSpike=%d, waitTick=%d, Icount = %d, fanin=%d", deviceState->sentSpike, deviceState->waitTick, deviceState->Icount, deviceProperties->fanin);
@@ -297,39 +296,20 @@
           int32_t &u=deviceState->u;
           int32_t &I=deviceState->I;
 
-          const int32_t c_half=fix_from_real(0.5);
-          const int32_t c_004=fix_from_real(0.04);
-          const int32_t c_5=fix_from_int(5);
-          const int32_t c_140=fix_from_int(140);
+          //const int32_t c_half=fix_from_real(0.5);
+          //const int32_t c_004=fix_from_real(0.04);
+          //const int32_t c_5=fix_from_int(5);
+          //const int32_t c_140=fix_from_int(140);
 
           handler_log(4, " v=%d, u=%d, I=%d", v, u, I);
 
-          for(int i=0; i<2; i++){
-            //v=v+0.5*(0.04*v*v+5*v+140-u+I); // step 0.5 ms
-            v=fix_add(
-                v,
-                fix_mul(
-                  c_half,
-                  fix_add(
-                    fix_mul(c_004,v,v),
-                    fix_mul(c_5,v),
-                    c_140,
-                    -u,
-                    I
-                  )
-                )
-              );
-              handler_log(4, " v=%d, u=%d, I=%d", v, u, I);
-          };
-
-          u=fix_add(u, fix_mul(deviceProperties->a, fix_sub( fix_mul(deviceProperties->b , v) , u) ));
+          
+          u=fix_add(fix_mul(deviceProperties->r_tau_m,fix_sub(deviceProperties->U_rest,u)), fix_mul(deviceProperties->r_tau_m , I, deviceProperties->R));
 
           deviceState->fireValue = fix_gte(v , 30);
           if(deviceState->fireValue){
             handler_log(1, "FIRE!");
-
-            v=deviceProperties->c;
-            u =fix_add(u, deviceProperties->d);
+            
           }
 
           // For accumulation by root

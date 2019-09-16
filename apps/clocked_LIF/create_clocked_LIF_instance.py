@@ -106,19 +106,23 @@ def create_fanin(graph,dstDevInst,dstPortName,dstFixup,reducerFactory,srcDevInst
 import os
 appBase=os.path.dirname(os.path.realpath(__file__))
 
-src=appBase+"/clocked_izhikevich_fix_graph_type.xml"
+src=appBase+"/clocked_LIF_fix_graph_type.xml"
 (graphTypes,graphInstances)=load_graph_types_and_instances(src,src)
 
-Ne=80
-Ni=20
+#parameter for LIF
+Ne=10
+Ni=5
 K=20
+
 maxTicks=10
 maxFanIn=8
 maxFanOut=4
 
 if len(sys.argv)>2:
     Ne=int(sys.argv[2])
-    #print (Ne)
+   #print ("The value of Ne")
+   #print(Ne)
+#sys.exit()
 if len(sys.argv)>3:
     Ni=int(sys.argv[3])
 if len(sys.argv)>4:
@@ -133,7 +137,7 @@ if len(sys.argv)>7:
 N=Ne+Ni
 K=min(N,K)
 
-graphType=graphTypes["clocked_izhikevich_fix"]
+graphType=graphTypes["clocked_LIF_fix"]
 neuronType=graphType.device_types["neuron"]
 clockType=graphType.device_types["clock"]
 clockReducerType=graphType.device_types["tick_fanin"]
@@ -148,24 +152,36 @@ res=GraphInstance(instName, graphType, properties)
 clock=DeviceInstance(res, "clock", clockType, {"neuronCount":N,"fanin":0})
 res.add_device_instance(clock)
 
+
+
+R = 1 # resistance (kOhm)
+Cm = 10 # capacitance (uF)
+tau_m = R*Cm # time constant (msec)
 nodes=[None]*N
 for i in range(N):
     if i<Ne:
         re=urand()
-        a=0.02
-        b=0.2
-        c=-65+15*re*re
-        d=8-6*re*re
-        Ir=5
+        Ir=5*re
+        r_tau_m=1/tau_m
+        U_rest= -65
+        #a=0.02 
+        #b=0.2
+        #c=-65+15*re*re
+        #d=8-6*re*re
+        # Ir=5
+    	
     else:
         ri=urand()
-        a=0.02+0.08*ri
-        b=0.25-0.05*ri
-        c=-65
-        d=2
-        Ir=2
+        Ir=2*ri
+        r_tau_m=1/tau_m
+        U_rest= -65
+        #a=0.02+0.08*ri
+        #b=0.25-0.05*ri
+        #c=-65
+        #d=2
+        #Ir=2
     props={
-        "a":to_fix(a), "b":to_fix(b), "c":to_fix(c), "d":to_fix(d), "Ir":to_fix(Ir), "fanin":K, "seed":int(urand()*2**32)
+        "r_tau_m":to_fix(tau_m), "R":to_fix(R), "U_rest":to_fix(U_rest), "Ir":to_fix(Ir), "fanin":K, "seed":int(urand()*2**32)
     }
     nodes[i]=DeviceInstance(res, "n_{}".format(i), neuronType, props)
     res.add_device_instance(nodes[i])

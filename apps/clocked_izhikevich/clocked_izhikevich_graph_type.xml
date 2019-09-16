@@ -1,7 +1,6 @@
 <?xml version='1.0' encoding='ASCII'?>
 <Graphs xmlns="https://poets-project.org/schemas/virtual-graph-schema-v3">
   <GraphType id="clocked_izhikevich">
-    <Types/>
     <Properties>
       <Scalar name="max_t" type="uint32_t" />
     </Properties>
