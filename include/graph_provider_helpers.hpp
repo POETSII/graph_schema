@@ -804,9 +804,9 @@ public:
     m_onCheckpoint(m_device, preEvent, level, buffer);
   }
 
-  virtual void export_key_value(uint32_t key, uint32_t value) override
+  [[deprecated]] virtual void export_key_value(uint32_t key, uint32_t value) override
   {
-    m_onExportKeyValue(m_device, key, value);
+    throw std::runtime_error("export_key_value is no longer allowed - please remove all uses.");
   }
 
   virtual void application_exit(int code)

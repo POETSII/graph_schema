@@ -9,14 +9,178 @@
 #include <memory>
 #include <random>
 #include <unordered_set>
+#include <queue>
 #include <algorithm>
+#include <condition_variable>
+#include <mutex>
 #include <signal.h>
+#include <regex>
+#include <thread>
+
+#include "poets_protocol/InProcessBinaryUpstreamConnection.hpp"
 
 #include <cstring>
 #include <cstdlib>
+#include <cstdarg>
 
 static unsigned logLevel=2;
 static unsigned messageInit;
+
+
+struct InProcMessageBuffer
+  : public InProcessBinaryUpstreamConnection
+{
+  const unsigned MAX_EXT2INT_IN_FLIGHT = 65536;
+
+  struct message
+  {
+    poets_endpoint_address_t address;
+    std::shared_ptr<std::vector<uint8_t>> payload;
+    unsigned sendIndex;
+  };
+
+  std::function<void(const std::string &graph_type,const std::string &graph_instance,const std::vector<std::pair<std::string,std::string>> &owned)> m_connect;
+  std::function<poets_device_address_t(const std::string &s)> m_idToAddress;
+  std::function<std::string(poets_device_address_t)> m_addressToId;
+  std::function<void(poets_endpoint_address_t,std::vector<poets_endpoint_address_t>&)> m_endpointToFanout;
+
+  std::mutex m_mutex;
+  std::condition_variable m_cond;
+  std::queue<message> m_ext2int;
+  std::queue<message> m_int2ext;
+
+  std::shared_ptr<halt_message_type> m_halt;
+
+  void post_message(poets_endpoint_address_t address, std::shared_ptr<std::vector<uint8_t>> &payload, unsigned sendIndex)
+  {
+    std::unique_lock<std::mutex> lk(m_mutex);
+    m_int2ext.push(message{address,payload,sendIndex});
+    m_cond.notify_one();
+  }
+
+  ////////////////////////////////////
+  // Client interface
+
+    virtual void connect(
+        const std::string &graph_type,      //! Regex for matching graph type, or empty
+        const std::string &graph_instance,  //! Regex for matching graph instance, or empty
+        const std::vector<std::pair<std::string,std::string>> &owned    //! Vector of (device_id,device_type) pairs
+    ) {
+      std::unique_lock<std::mutex> lk;
+      if(!m_connect){
+        throw std::runtime_error("connect was called twice.");
+      }
+      m_connect(graph_type, graph_instance, owned);
+      m_connect=nullptr;
+    }
+
+    poets_device_address_t get_device_address(const std::string &id) override
+    { return m_idToAddress(id); }
+
+    std::string get_device_id(poets_device_address_t address) override
+    { return m_addressToId(address); }
+
+    void get_endpoint_destinations(poets_endpoint_address_t source, std::vector<poets_endpoint_address_t> &destinations) override
+    { m_endpointToFanout(source, destinations); }
+
+
+    bool can_send() override
+    {
+      std::unique_lock<std::mutex> lk(m_mutex);
+      return m_ext2int.size() < MAX_EXT2INT_IN_FLIGHT;
+    }
+
+    bool send(
+        poets_endpoint_address_t source,
+        const std::shared_ptr<std::vector<uint8_t>> &payload,
+        unsigned sendIndex
+    ) override {
+      message m{source, payload, sendIndex};
+
+      std::unique_lock<std::mutex> lk(m_mutex);
+      if(m_ext2int.size() >= MAX_EXT2INT_IN_FLIGHT){
+        return false;
+      }
+
+      m_ext2int.push(std::move(m));
+      m_cond.notify_one();
+
+      return true;
+    }
+
+    void flush() override
+    {
+      // This is a no-op for us
+    }
+
+    bool can_recv() override
+    {
+      std::unique_lock<std::mutex> lk(m_mutex);
+      return m_int2ext.empty();
+    }
+
+    bool recv(
+        poets_endpoint_address_t &source,
+        std::shared_ptr<std::vector<uint8_t>> &payload,
+        unsigned &sendIndex
+    ) override {
+      std::unique_lock<std::mutex> lk(m_mutex);
+      if(m_int2ext.empty()){
+        return false;
+      }
+
+      const auto &m=m_int2ext.front();
+      source=m.address;
+      payload=m.payload;
+      sendIndex=m.sendIndex;
+      
+      m_int2ext.pop();
+      m_cond.notify_one();
+      return true;
+    }
+
+    virtual bool is_terminate_pending()
+    {
+      std::unique_lock<std::mutex> lk(m_mutex);
+      return !!m_halt;
+    }
+
+    virtual const halt_message_type *get_terminate_message()
+    {
+      std::unique_lock<std::mutex> lk(m_mutex);
+      assert(m_halt);
+      return m_halt.get();
+    }
+
+    virtual void wait_until(
+        bool can_send
+    ){
+      std::unique_lock<std::mutex> lk(m_mutex);
+      m_cond.wait(lk, [&](){
+        if(can_send && m_ext2int.size() < MAX_EXT2INT_IN_FLIGHT){
+          return true;
+        }
+        if(!m_int2ext.empty()){
+          return true;
+        }
+        if(m_halt){
+          return true;
+        }
+        return false;
+      });
+    }
+
+    virtual void external_log(
+        int level,
+        const char *msg,
+        ...
+    ){
+      va_list va;
+      va_start(va, msg);
+      vfprintf(stderr, msg, va);
+      va_end(va);
+    }
+};
 
 
 struct EpochSim
@@ -55,10 +219,10 @@ struct EpochSim
     unsigned index;
     std::string id;
     const char *name; // interned id
+    bool isExternal;
     DeviceTypePtr type;
     TypedDataPtr properties;
     TypedDataPtr state;
-    unsigned keyValueSeq; // Sequence number for key value
 
     unsigned outputCount;
     uint32_t readyToSend;
@@ -68,7 +232,28 @@ struct EpochSim
     std::vector<std::vector<output> > outputs;
     std::vector<std::vector<input> > inputs;
 
-    std::pair<MessageTypePtr, TypedDataPtr> prev_message;
+    std::queue<std::tuple<unsigned,TypedDataPtr,int>> ext2int; // (port,message,sendIndex)
+
+    void post_message(unsigned port, TypedDataPtr payload, int sendIndex)
+    {
+      ext2int.push(std::make_tuple(port, payload, sendIndex));
+      if(ext2int.size()==1){
+        readyToSend = 1u<<port;
+      }
+    }
+
+    std::tuple<unsigned,TypedDataPtr,int> pop_message()
+    {
+      assert(ext2int.empty());
+      auto res=ext2int.front();
+      ext2int.pop();
+      if(ext2int.empty()){
+        readyToSend=0;
+      }else{
+        readyToSend=1u<<std::get<0>(ext2int.front());
+      }
+      return res;
+    }
 
     bool anyReady() const
     {
@@ -84,6 +269,7 @@ struct EpochSim
 
   std::unordered_map<const char *,unsigned> m_deviceIdToIndex;
   std::vector<std::tuple<const char*,unsigned,uint32_t,uint32_t> > m_keyValueEvents;
+  std::unordered_set<unsigned> m_externalIndices;
 
   std::function<void (const char*,uint32_t,uint32_t)> m_onExportKeyValue;
 
@@ -95,6 +281,8 @@ struct EpochSim
   bool m_deviceExitCalled=false;
   bool m_deviceExitCode=0;
   std::function<void (const char*,int)> m_onDeviceExit;
+
+  std::shared_ptr<InProcMessageBuffer> m_pExternalBuffer;
 
   uint64_t m_unq;
 
@@ -113,20 +301,21 @@ struct EpochSim
 
   virtual uint64_t onDeviceInstance(uint64_t gId, const DeviceTypePtr &dt, const std::string &id, const TypedDataPtr &deviceProperties, const TypedDataPtr &deviceState, rapidjson::Document &&) override
   {
-    // TypedDataPtr state=dt->getStateSpec()->create();
+    if(dt->isExternal()){
+      if(!m_pExternalBuffer){
+        throw std::runtime_error("Graph contains an external instance, but no external connection has been specified.");
+      }
+    }
+
     device d;
     d.index=m_devices.size();
     d.id=id;
     d.name=intern(id);
-    if(dt->isExternal()){
-      throw std::runtime_error("TODO");
-    }else{
-      d.type=dt;
-    }
+    d.type=dt;
+    d.isExternal=dt->isExternal();
 
     d.properties=deviceProperties;
     d.state=deviceState;
-    d.keyValueSeq=0;
     d.readyToSend=0;
     d.outputCount=dt->getOutputCount();
     d.outputs.resize(dt->getOutputCount());
@@ -137,15 +326,15 @@ struct EpochSim
     m_devices.push_back(d);
     m_deviceIdToIndex[d.name]=d.index;
 
+    if(d.isExternal){
+      m_externalIndices.insert(d.index);
+    }
+
     return d.index;
   }
 
   void onEdgeInstance(uint64_t gId, uint64_t dstDevIndex, const DeviceTypePtr &dstDevType, const InputPinPtr &dstInput, uint64_t srcDevIndex, const DeviceTypePtr &srcDevType, const OutputPinPtr &srcOutput, int sendIndex, const TypedDataPtr &properties, const TypedDataPtr &state, rapidjson::Document &&) override
   {
-    if(dstDevType->isExternal() || srcDevType->isExternal()){
-      throw std::runtime_error("TODO");
-    }
-
     input i;
     i.properties=properties;
     i.state=state;
@@ -239,15 +428,7 @@ struct EpochSim
   {
     m_onExportKeyValue=[&](const char *id, uint32_t key, uint32_t value) -> void
     {
-      auto it=m_deviceIdToIndex.find(id);
-      if(it==m_deviceIdToIndex.end()){
-        fprintf(stderr, "ERROR : Attempt export key value on non-existent (or non interned) id '%s'\n", id);
-        exit(1);
-      }
-      unsigned index=it->second;
-      unsigned seq=m_devices[index].keyValueSeq++;
-
-      m_keyValueEvents.emplace_back(id, seq, key, value);
+      throw std::runtime_error("Export key value is no longer supported.");
     };
 
     m_onDeviceExit=[&](const char *id, int code) ->void
@@ -271,17 +452,10 @@ struct EpochSim
 
     for(auto &dev : m_devices){
       ReceiveOrchestratorServicesImpl receiveServices{logLevel, stderr, dev.name, "Init handler", m_onExportKeyValue, m_onDeviceExit, m_onCheckpoint  };
-      dev.type->init(&receiveServices, m_graphProperties.get(), dev.properties.get(), dev.state.get());
-      // TODO: Allow for "__init__" backwards compatability
-      // auto init=dev.type->getInput("__init__");
-      // if(init){
-      //   if(logLevel>2){
-      //     fprintf(stderr, "  init device %d = %s\n", dev.index, dev.id.c_str());
-      //   }
-
-      //   init->onReceive(&receiveServices, m_graphProperties.get(), dev.properties.get(), dev.state.get(), 0, 0, 0);
-      // }
-      dev.readyToSend = dev.type->calcReadyToSend(&receiveServices, m_graphProperties.get(), dev.properties.get(), dev.state.get());
+      if(!dev.isExternal){
+        dev.type->init(&receiveServices, m_graphProperties.get(), dev.properties.get(), dev.state.get());
+        dev.readyToSend = dev.type->calcReadyToSend(&receiveServices, m_graphProperties.get(), dev.properties.get(), dev.state.get());
+      }
 
       if(m_log){
         // Try to avoid allocation, while gauranteeing m_checkpointKeys is left in empty() state
@@ -346,7 +520,7 @@ struct EpochSim
 
     fprintf(stderr, "onHardwareIdle\n");
     for(auto &d : m_devices){
-      if(!d.type->isExternal()){
+      if(!d.isExternal){
         ReceiveOrchestratorServicesImpl services{logLevel, stderr, d.name, "Idle handler", m_onExportKeyValue, m_onDeviceExit, m_onCheckpoint  };
         d.type->onHardwareIdle(&services, m_graphProperties.get(), d.properties.get(), d.state.get()  );
         d.readyToSend = d.type->calcReadyToSend(&services, m_graphProperties.get(), d.properties.get(), d.state.get());
@@ -394,6 +568,48 @@ struct EpochSim
       tmp<<"Epoch "<<m_epoch<<", Send: ";
       sendServices.setPrefix(tmp.str().c_str());
     }
+
+    /// Drain any incoming external messages first;
+    if(m_pExternalBuffer){
+        std::queue<InProcMessageBuffer::message> pending;
+        {
+          std::unique_lock<std::mutex> lk(m_pExternalBuffer->m_mutex);
+          std::swap(pending, m_pExternalBuffer->m_ext2int);
+          if(!pending.empty()){
+            m_pExternalBuffer->m_cond.notify_one();
+          }
+        }
+        while(!pending.empty()){
+          const auto &m=pending.front();
+          unsigned devIndex=getEndpointDevice(m.address).value;
+          unsigned portIndex=getEndpointPin(m.address).value;
+          if(devIndex>=m_devices.size()){
+            throw std::runtime_error("External connection sent message from non-existent external address.");
+          }
+          auto &dev=m_devices.at(devIndex);
+          if(!dev.isExternal){
+            throw std::runtime_error("External connection sent message from an address that is not an external.");
+          }
+          if(portIndex >= dev.outputCount){
+            throw std::runtime_error("External connection sent message from an invalid output port address.");
+          }
+          auto port=dev.type->getOutput(portIndex);
+          int sendIndex=m.sendIndex==UINT_MAX ? -1 : m.sendIndex;
+          if( (sendIndex!=-1) != port->isIndexedSend() ){
+            throw std::runtime_error("External connection sent message where sendIndex did not match indexed type of port.");
+          }
+          auto spec=port->getMessageType()->getMessageSpec();
+          if(spec->payloadSize() != m.payload->size()){
+            throw std::runtime_error("External connection sent message where payload size did not match type's payload size.");
+          }
+          TypedDataPtr p=spec->create();
+          memcpy(p.payloadPtr(), &m.payload->at(0), p.payloadSize());
+          dev.post_message(portIndex, p, sendIndex);
+          
+          pending.pop();
+        }
+    }
+
 
     std::vector<int> sendSel(m_devices.size());
 
@@ -462,39 +678,59 @@ struct EpochSim
       unsigned *sendIndex=0;
       {
         #ifndef NDEBUG
-        uint32_t check=src.type->calcReadyToSend(&sendServices, m_graphProperties.get(), src.properties.get(), src.state.get());
-        assert(check);
-        assert( (check>>sel) & 1);
+        if(src.isExternal){
+          assert(!src.ext2int.empty());
+          assert(std::get<0>(src.ext2int.front())==sel);
+        }else{
+          uint32_t check=src.type->calcReadyToSend(&sendServices, m_graphProperties.get(), src.properties.get(), src.state.get());
+          assert(check);
+          assert( (check>>sel) & 1);
+        }
         #endif
 
         if(output->isIndexedSend()){
           sendIndex=&sendIndexStg;
         }
 
-        if(capturePreEventState){
-          prevState=src.state.clone();
-        }
-        sendServices.setDevice(src.name, src.outputNames[sel]);
-        try{
-          // Do the actual send handler
-          output->onSend(&sendServices, m_graphProperties.get(), src.properties.get(), src.state.get(), message.get(), &doSend, sendIndex);
-        }catch(provider_assertion_error &e){
-          fprintf(stderr, "Caught handler exception during send. devId=%s, devType=%s, outPin=%s.", src.name, src.type->getId().c_str(), output->getName().c_str());
-          fprintf(stderr, "  %s\n", e.what());
-
+        if(!src.isExternal){
           if(capturePreEventState){
-            fprintf(stderr, "  preSendState = %s\n", src.type->getStateSpec()->toJSON(prevState).c_str());
+            prevState=src.state.clone();
           }
-          fprintf(stderr, "     currState = %s\n", src.type->getStateSpec()->toJSON(src.state).c_str());
-          throw;
-        }
+          sendServices.setDevice(src.name, src.outputNames[sel]);
+          try{
+            // Do the actual send handler
+            output->onSend(&sendServices, m_graphProperties.get(), src.properties.get(), src.state.get(), message.get(), &doSend, sendIndex);
+          }catch(provider_assertion_error &e){
+            fprintf(stderr, "Caught handler exception during send. devId=%s, devType=%s, outPin=%s.", src.name, src.type->getId().c_str(), output->getName().c_str());
+            fprintf(stderr, "  %s\n", e.what());
 
-        if(sendIndex && sendIndexStg >= src.outputs[sel].size()){
-          fprintf(stderr, "Application tried to specify sendIndex of %u, but out degree is %u\n", sendIndexStg, (unsigned)src.outputs.size());
-          exit(1);
-        }
+            if(capturePreEventState){
+              fprintf(stderr, "  preSendState = %s\n", src.type->getStateSpec()->toJSON(prevState).c_str());
+            }
+            fprintf(stderr, "     currState = %s\n", src.type->getStateSpec()->toJSON(src.state).c_str());
+            throw;
+          }
 
-        src.readyToSend = src.type->calcReadyToSend(&sendServices, m_graphProperties.get(), src.properties.get(), src.state.get());
+          if(sendIndex && sendIndexStg >= src.outputs[sel].size()){
+            fprintf(stderr, "Application tried to specify sendIndex of %u, but out degree is %u\n", sendIndexStg, (unsigned)src.outputs.size());
+            exit(1);
+          }
+
+          src.readyToSend = src.type->calcReadyToSend(&sendServices, m_graphProperties.get(), src.properties.get(), src.state.get());
+        }else{
+          assert(m_pExternalBuffer);
+          auto m=src.pop_message();
+
+          // Should have all been full validated when unpacking/importing message
+          assert(std::get<0>(m)==sel);
+          assert( std::get<1>(m).payloadSize()==message.payloadSize() );
+          assert( (std::get<2>(m)!=-1) == (sendIndex!=0) );
+
+          message=std::get<1>(m);
+          if(sendIndex){
+            *sendIndex=std::get<2>(m);
+          }
+        }
 
         if(m_log){
           // Try to avoid allocation, while gauranteeing m_checkpointKeys is left in empty() state
@@ -544,6 +780,7 @@ struct EpochSim
         pOutputVec = &indexedOutputBuffer;
       }
       
+      bool sendToExternalConnection=false;
       for(auto &out : *pOutputVec){
         
         auto &dst=m_devices[out.dstDevice];
@@ -558,25 +795,29 @@ struct EpochSim
 
         const auto &pin=dst.type->getInput(out.dstPinIndex);
 
-        if(capturePreEventState){
-          prevState=dst.state.clone();
-        }
-        receiveServices.setDevice(out.dstDeviceId, out.dstInputName);
-        try{
-          pin->onReceive(&receiveServices, m_graphProperties.get(), dst.properties.get(), dst.state.get(), slot.properties.get(), slot.state.get(), message.get());
-        }catch(provider_assertion_error &e){
-          fprintf(stderr, "Caught handler exception during Receive. devId=%s, dstDevType=%s, dstPin=%s.\n", dst.name, dst.type->getId().c_str(), pin->getName().c_str());
-          fprintf(stderr, "  %s\n", e.what());
-
-          fprintf(stderr, "     message = %s\n", pin->getMessageType()->getMessageSpec()->toJSON(message).c_str());
+        if(!dst.isExternal){
           if(capturePreEventState){
-            fprintf(stderr, "  preRecvState = %s\n", dst.type->getStateSpec()->toJSON(prevState).c_str());
+            prevState=dst.state.clone();
           }
-          fprintf(stderr, "     currState = %s\n", dst.type->getStateSpec()->toJSON(dst.state).c_str());
+          receiveServices.setDevice(out.dstDeviceId, out.dstInputName);
+          try{
+            pin->onReceive(&receiveServices, m_graphProperties.get(), dst.properties.get(), dst.state.get(), slot.properties.get(), slot.state.get(), message.get());
+          }catch(provider_assertion_error &e){
+            fprintf(stderr, "Caught handler exception during Receive. devId=%s, dstDevType=%s, dstPin=%s.\n", dst.name, dst.type->getId().c_str(), pin->getName().c_str());
+            fprintf(stderr, "  %s\n", e.what());
 
-          throw;
+            fprintf(stderr, "     message = %s\n", pin->getMessageType()->getMessageSpec()->toJSON(message).c_str());
+            if(capturePreEventState){
+              fprintf(stderr, "  preRecvState = %s\n", dst.type->getStateSpec()->toJSON(prevState).c_str());
+            }
+            fprintf(stderr, "     currState = %s\n", dst.type->getStateSpec()->toJSON(dst.state).c_str());
+
+            throw;
+          }
+          dst.readyToSend = dst.type->calcReadyToSend(&receiveServices, m_graphProperties.get(), dst.properties.get(), dst.state.get());
+        }else{
+          sendToExternalConnection=true;
         }
-        dst.readyToSend = dst.type->calcReadyToSend(&receiveServices, m_graphProperties.get(), dst.properties.get(), dst.state.get());
 
         if(m_log){
           std::vector<std::pair<bool,std::string> > tags;
@@ -603,6 +844,13 @@ struct EpochSim
 
         anyReady = anyReady || dst.anyReady();
       }
+
+      if(sendToExternalConnection){
+        assert(m_pExternalBuffer);
+        // At least one external device needs to receive this message
+        auto payload=std::make_shared<std::vector<uint8_t>>( message.payloadPtr(), message.payloadPtr()+message.payloadSize() );
+        m_pExternalBuffer->post_message(makeEndpoint(poets_device_address_t{index}, poets_pin_index_t{sel}), payload, sendIndex ? *sendIndex : UINT_MAX);
+      }
     }
     ++m_epoch;
     return sent || anyReady;
@@ -623,9 +871,12 @@ void usage()
   fprintf(stderr, "  --snapshots interval destFile\n");
   fprintf(stderr, "  --log-events destFile\n");
   fprintf(stderr, "  --prob-send probability\n");
-  fprintf(stderr, "  --key-value destFile\n");
   fprintf(stderr, "  --accurate-assertions : Capture device state before send/recv in case of assertions.\n");
   fprintf(stderr, "  --message-init n: 0 (default) - Zero initialise all messages, 1 - All messages are randomly inisitalised, 2 - Randomly zero or random inisitalise\n");
+  fprintf(stderr, "  --external spec\n");
+  fprintf(stderr, "\n");
+  fprintf(stderr, "External spec could be:\n");
+  fprintf(stderr, "  INPROC:<PATH> - Load the shared object and instantiate InProcessBinaryUpstreamConnection.\n");
   exit(1);
 }
 
@@ -680,7 +931,7 @@ int main(int argc, char *argv[])
 
     bool enableAccurateAssertions=false;
 
-    std::string keyValueName;
+    std::string externalSpec;
 
     int ia=1;
     while(ia < argc){
@@ -736,13 +987,6 @@ int main(int argc, char *argv[])
         }
         logSinkName=argv[ia+1];
         ia+=2;
-      }else if(!strcmp("--key-value",argv[ia])){
-        if(ia+1 >= argc){
-          fprintf(stderr, "Missing argument to --key-value\n");
-          usage();
-        }
-        keyValueName=argv[ia+1];
-        ia+=2;
       }else if(!strcmp("--accurate-assertions",argv[ia])){
         enableAccurateAssertions=true;
         ia+=1;
@@ -756,6 +1000,13 @@ int main(int argc, char *argv[])
         if (messageInit > 2) {
           fprintf(stderr, "Argument for --message-init is too large. Defaulting to 0\n");
         }
+      }else if(!strcmp("--external",argv[ia])){
+        if(ia+1 >= argc){
+          fprintf(stderr, "Missing arguments to --external spec \n");
+          usage();
+        }
+        externalSpec=argv[ia+1];
+        ia+=2;
       }else{
         srcFilePath=argv[ia];
         ia++;
@@ -792,18 +1043,13 @@ int main(int argc, char *argv[])
 
     EpochSim graph;
 
+    if(!externalSpec.empty()){
+      graph.m_pExternalBuffer=std::make_shared<InProcMessageBuffer>();
+    }
+
     if(!logSinkName.empty()){
       graph.m_log.reset(new LogWriterToFile(logSinkName.c_str()));
       g_pLog=graph.m_log;
-    }
-
-    FILE *keyValueDst=0;
-    if(!keyValueName.empty()){
-        keyValueDst=fopen(keyValueName.c_str(), "wt");
-        if(keyValueDst==0){
-            fprintf(stderr, "Couldn't open key value dest '%s'\n", keyValueName.c_str());
-            exit(1);
-        }
     }
 
     loadGraph(&registry, srcPath, parser.get_document()->get_root_node(), &graph);
@@ -814,6 +1060,132 @@ int main(int argc, char *argv[])
     if(snapshotDelta!=0){
       snapshotWriter.reset(new SnapshotWriterToFile(snapshotSinkName.c_str()));
     }
+
+    if(graph.m_pExternalBuffer){
+      graph.m_pExternalBuffer->m_idToAddress=[&](const std::string &id) -> poets_device_address_t 
+      {
+        auto iid=graph.intern(id);
+        auto it=graph.m_deviceIdToIndex.find(iid);
+        if(it==graph.m_deviceIdToIndex.end()){
+          throw std::runtime_error("Unknown device/external instance id "+id);
+        }
+        return poets_device_address_t{it->second};
+      };
+      graph.m_pExternalBuffer->m_addressToId=[&](poets_device_address_t address) -> std::string
+      {
+        if(address.value>=graph.m_devices.size()){
+          throw std::runtime_error("Device address is invalid.");
+        }
+        return graph.m_devices.at(address.value).id;
+      };
+      graph.m_pExternalBuffer->m_endpointToFanout =[&](poets_endpoint_address_t address, std::vector<poets_endpoint_address_t> &fanout) -> void
+      {
+        fanout.resize(0);
+        if(getEndpointDevice(address).value>=graph.m_devices.size()){
+          throw std::runtime_error("Device address is invalid.");
+        }
+        auto &dev=graph.m_devices.at(getEndpointDevice(address).value);
+        if(getEndpointPin(address).value >= dev.outputCount){
+          throw std::runtime_error("Device pin index is invalid.");
+        }
+        auto &f = dev.outputs[getEndpointPin(address).value];
+        
+        if(dev.type->getOutput(getEndpointPin(address).value)->isIndexedSend()){
+          fanout.resize(f.size());
+          for(unsigned i=0; i<f.size(); i++){
+            if(graph.m_devices[i].isExternal){
+              auto d=f[i];
+              fanout[i]=makeEndpoint(poets_device_address_t{d.dstDevice}, poets_pin_index_t{d.dstPinIndex});
+            }else{
+              fanout[i]=poets_endpoint_address_t();
+            }
+          }
+        }else{
+          fanout.resize(0);
+          fanout.reserve(f.size());
+          for(unsigned i=0; i<f.size(); i++){
+            if(graph.m_devices[i].isExternal){
+              auto d=f[i];
+              fanout.push_back(makeEndpoint(poets_device_address_t{d.dstDevice}, poets_pin_index_t{d.dstPinIndex}));
+            }
+          }
+        }
+      };
+
+    }
+
+    std::thread inProcExternalThread;
+
+    if(!externalSpec.empty()){
+      if(externalSpec.substr(0, 7)=="INPROC:"){
+        std::string so_path=externalSpec.substr(7);
+        fprintf(stderr, "Loading inproc external from %s\n", so_path.c_str());
+        void *hExternalObj=dlopen(so_path.c_str(), RTLD_NOW);
+        if(!hExternalObj){
+          throw std::runtime_error("Couldn't open shared object file "+so_path);
+        }
+
+        in_proc_external_main_t pProc=(in_proc_external_main_t)dlsym(hExternalObj, "in_proc_external_main");
+        if(!pProc){
+          throw std::runtime_error("Couldn't find symbol 'in_proc_external_main' in shared object.");
+        }
+
+        bool connected=false;
+
+        graph.m_pExternalBuffer->m_connect = [&](const std::string &graphType, const std::string &graphInst, const std::vector<std::pair<std::string,std::string> > &owned)
+        {
+          fprintf(stderr, "Recevied call to connect from inproc external.\n");
+          if(!std::regex_match(graph.m_graphType->getId(), std::regex(graphType))){
+            throw std::runtime_error("Graph type of "+graph.m_graphType->getId()+" does not match externals type of "+graphType);
+          }
+          if(!std::regex_match(graph.m_id, std::regex(graphInst))){
+            throw std::runtime_error("Graph instance of "+graph.m_graphType->getId()+" does not match externals type of "+graphType);
+          }
+
+          fprintf(stderr, "Checking owned externals and types from inproc external connection against graph instance.");
+          std::unordered_set<unsigned> foundIndices;
+          for(auto i_v : owned){
+            auto ii=graph.intern(i_v.first);
+            auto it=graph.m_deviceIdToIndex.find(ii);
+            if(it==graph.m_deviceIdToIndex.end()){
+              throw std::runtime_error("Attempt to bind to unknown external instance "+i_v.first);
+            }
+            auto &d = graph.m_devices.at(it->second);
+            if(!d.isExternal){
+              throw std::runtime_error("Attempt to bind to non-external device "+i_v.first);
+            }
+            if(!i_v.second.empty()){
+              if(!std::regex_match( d.id, std::regex(i_v.second))){
+                throw std::runtime_error("Attempt to bind instance "+i_v.first+" to wrong type of device.");
+              }
+            }
+            foundIndices.insert(d.index);
+          }
+          if(foundIndices != graph.m_externalIndices){
+            // TODO: is this really an error?
+            throw std::runtime_error("Inproc external did not bind to the complete set of externals.");
+          }
+
+          connected=true;
+        };
+
+        inProcExternalThread=std::thread([&](){
+          const char *fargv[]={argv[0]};
+          pProc(*graph.m_pExternalBuffer, 1, fargv);
+        });
+
+        fprintf(stderr, "Waiting for inproc external to call 'connect'\n");
+        {
+          std::unique_lock<std::mutex> lk(graph.m_pExternalBuffer->m_mutex);
+          graph.m_pExternalBuffer->m_cond.wait(lk, [&]{ return connected; });
+        }
+        fprintf(stderr, "Inproc external is connected.\n");
+
+      }else{
+        throw std::runtime_error("Didn't understand external spec: "+externalSpec);
+      }
+    }
+
 
     std::mt19937 rng;
 
@@ -864,17 +1236,6 @@ int main(int argc, char *argv[])
 
     if(logLevel>1){
       fprintf(stderr, "Done\n");
-    }
-
-    if(keyValueDst){
-        if(logLevel>2){
-            fprintf(stderr, "Writing key value file\n");
-        }
-        std::sort(graph.m_keyValueEvents.begin(), graph.m_keyValueEvents.end());
-        for(auto t : graph.m_keyValueEvents){
-            fprintf(keyValueDst, "%s, %u, %u, %u\n", std::get<0>(t), std::get<1>(t), std::get<2>(t), std::get<3>(t));
-        }
-        fflush(keyValueDst);
     }
 
     close_resources();

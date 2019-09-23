@@ -481,7 +481,8 @@ public:
   // available in some way as (deviceInstId,sequence,key,value)
   // where sequence is a sequence number for that device instance
   // running from zero upwards
-  virtual void export_key_value(uint32_t key, uint32_t value) =0;
+  // WARNING: This method is no longer supported, and is only here for compilation transition. Eventually it will be removed.
+  [[deprecated]] virtual void export_key_value(uint32_t key, uint32_t value) =0;
 
   /*! Log the state of the currently sending/receiving device the
     current event, and associate with the given string tag. The id should
