@@ -7,6 +7,7 @@ working_dir=$(mktemp -d)
 
 input_file=$1
 
+
 # Unfortunately this is replicated from the makefile, so the same
 # info is now in two places
 # TODO : Have a single source somehow?
@@ -27,15 +28,39 @@ SO_CPPFLAGS+=" -shared -fPIC"
 LDFLAGS+=" -pthread"
 LDLIBS+=" -ldl -fPIC"
 
+if [[ "${POETS_EXTERNAL_INTERFACE_SPEC}" == "" ]] ; then
+    if [[ -d "${graph_schema_dir}/../external_interface_spec" ]] ; then
+        POETS_EXTERNAL_INTERFACE_SPEC="${graph_schema_dir}/../external_interface_spec"
+    fi
+fi
+if [[ "${POETS_EXTERNAL_INTERFACE_SPEC}" == "" ]] ; then
+	HAVE_POETS_EXTERNAL_INTERFACE_SPEC=0
+	CPPFLAGS+=" -I ${graph_schema_dir}/include/include_cache"
+else
+	HAVE_POETS_EXTERNAL_INTERFACE_SPEC=1
+	CPPFLAGS+=" -I ${POETS_EXTERNAL_INTERFACE_SPEC}/include"
+fi
+
 #name=$(basename ${input_file} .xml)
 # TODO: This has to parse the entire graph, so is inefficient when dealing with large graphs
 name=$(${graph_schema_dir}/tools/print_graph_type_id.py ${input_file}) || exit 1
 
-java -jar ${JING} -c ${graph_schema_dir}/master/virtual-graph-schema-v3.rnc ${input_file} || exit 1
+if grep "https://poets-project.org/schemas/virtual-graph-schema-v3" $input_file ; then
+    java -jar ${JING} -c ${graph_schema_dir}/master/virtual-graph-schema-v3.rnc ${input_file} || exit 1
+fi
 
 python3 ${graph_schema_dir}/tools/render_graph_as_cpp.py ${input_file} ${working_dir}/${name}.graph.cpp || exit 1
 
 python3 ${graph_schema_dir}/tools/render_graph_as_cpp.py --header < ${input_file} > ${working_dir}/${name}.graph.hpp || exit 1
+
+
+input_file_base=${input_file%.gz}
+input_file_base=${input_file_base%.xml}
+if [[ -f "${input_file_base}.external.cpp" ]] ; then
+    inproc_external_path="${input_file_base}.external.cpp"
+    >&2 echo "Found what looks like an in-proc external at ${inproc_external_path}, will compile it in"
+    CPPFLAGS+="${CPPFLAGS} -DPOETS_HAVE_IN_PROC_EXTERNAL_MAIN=1 ${inproc_external_path}"
+fi
 
 g++ ${CPPFLAGS} -Wno-unused-but-set-variable ${SO_CPPFLAGS} ${working_dir}/${name}.graph.cpp -o ${working_dir}/${name}.graph.so ${LDFLAGS} ${LDLIBS}
 

@@ -673,11 +673,15 @@ def render_input_pin_as_cpp(ip,dst):
         "pinIndex"                     : index,
         "pinPropertiesStructName"       : "{}_{}_properties_t".format(dt.id,ip.name),
         "pinStateStructName"            : "{}_{}_state_t".format(dt.id,ip.name),
-        "handlerCode"                   : ip.receive_handler,
+        "handlerCode"                   : ip.receive_handler or "",
         "inputCount"                    : len(dt.inputs),
         "outputCount"                   : len(dt.outputs),
         "indent"                        : "  "
     }
+
+    if dt.is_external:
+        subs["handlerCode"]='throw std::runtime_error("This device type is an external, so onReceive should not be called.");'
+
 
     subs["pinLocalConstants"]=emit_input_pin_local_constants(dt,subs, "    ")
 
@@ -727,13 +731,6 @@ public:
     auto message=cast_typed_properties<{messageStructName}>(gMessage);
     HandlerLogImpl handler_log(orchestrator);
     auto handler_exit=[&](int code) -> void {{ orchestrator->application_exit(code); }};
-    auto handler_export_key_value=[&](uint32_t key, uint32_t value) -> void {{ orchestrator->export_key_value(key, value); }};
-    auto handler_checkpoint=[&](bool preEvent, int level, const char *fmt, ...) -> void {{
-        va_list a;
-        va_start(a,fmt);
-        orchestrator->vcheckpoint(preEvent,level,fmt,a);
-        va_end(a);
-    }};
 
     // Begin custom handler
     {preProcLinePragma}
@@ -782,6 +779,8 @@ def render_output_pin_as_cpp(op,dst):
 
     subs["pinLocalConstants"]=emit_output_pin_local_constants(dt,subs, "    ")
 
+    if dt.is_external:
+        subs["handlerCode"]='throw std::runtime_error("This device is an external, so onSend can''t be called.");'
 
     if op.source_line and op.source_file:
         subs["preProcLinePragma"]= '#line {} "{}"\n'.format(op.source_line-1,op.source_file)
@@ -819,21 +818,13 @@ def render_output_pin_as_cpp(op,dst):
     dst.write('    auto message=cast_typed_data<{}_message_t>(gMessage);\n'.format(op.message_type.id))
     dst.write('    HandlerLogImpl handler_log(orchestrator);\n')
     dst.write('    auto handler_exit=[&](int code) -> void { orchestrator->application_exit(code); };\n')
-    dst.write('    auto handler_export_key_value=[&](uint32_t key, uint32_t value) -> void { orchestrator->export_key_value(key, value); };\n')
-    dst.write("""
-    auto handler_checkpoint=[&](bool preEvent, int level, const char *fmt, ...) -> void {
-        va_list a;
-        va_start(a,fmt);
-        orchestrator->vcheckpoint(preEvent,level,fmt,a);
-        va_end(a);
-    };
-""")
 
     dst.write('    // Begin custom handler\n')
     if op.source_line and op.source_file:
         dst.write('#line {} "{}"\n'.format(op.source_line,op.source_file))
-    for line in op.send_handler.splitlines():
-        dst.write('    {}\n'.format(line))
+    if op.send_handler:
+        for line in op.send_handler.splitlines():
+            dst.write('    {}\n'.format(line))
     dst.write("__POETS_REVERT_PREPROC_DETOUR__")
     dst.write('    // End custom handler\n')
 
@@ -875,11 +866,12 @@ def render_device_type_as_cpp(dt,dst):
         "deviceTypeId"                  : dt.id,
         "devicePropertiesStructName"    : "{}_properties_t".format(dt.id),
         "deviceStateStructName"         : "{}_state_t".format(dt.id),
-        "handlerCode"                   : dt.ready_to_send_handler,
+        "handlerCode"                   : dt.ready_to_send_handler or "",
         "initCode"                      : dt.init_handler,
         "inputCount"                    : len(dt.inputs),
         "outputCount"                   : len(dt.outputs),
         "onHardwareIdleCode"            : dt.on_hardware_idle_handler,
+        "isExternal"                    : int(dt.is_external)
     }
     if dt.init_source_line and dt.init_source_file:
         subs["preInitProcLinePragma"]= '#line {} "{}"\n'.format(dt.init_source_line-1,dt.init_source_file)
@@ -932,7 +924,7 @@ def render_device_type_as_cpp(dt,dst):
         else:
             dst.write(',')
         dst.write('{}_{}_Spec_get()'.format(dt.id,o.name))
-    dst.write('}), false)\n') # This is not an external
+    dst.write(f'}}), {int(dt.is_external)})\n')
     dst.write("  {}\n")
 
     dst.write(
@@ -943,6 +935,10 @@ def render_device_type_as_cpp(dt,dst):
     const typed_data_t *gDeviceProperties,
     const typed_data_t *gDeviceState
   ) const override {{
+      if({isExternal}){{
+          throw std::runtime_error("Attempt to call calcReadyToSend on external type {deviceTypeId}");
+      }}
+
     auto graphProperties=cast_typed_properties<{graphPropertiesStructName}>(gGraphProperties);
     auto deviceProperties=cast_typed_properties<{devicePropertiesStructName}>(gDeviceProperties);
     auto deviceState=cast_typed_properties<{deviceStateStructName}>(gDeviceState);
@@ -971,6 +967,11 @@ def render_device_type_as_cpp(dt,dst):
         const typed_data_t *gDeviceProperties,
         typed_data_t *gDeviceState
       ) const override {{
+        if({isExternal}){{
+          throw std::runtime_error("Attempt to call init on external type {deviceTypeId}");
+        }}
+
+
         auto graphProperties=cast_typed_properties<{graphPropertiesStructName}>(gGraphProperties);
         auto deviceProperties=cast_typed_properties<{devicePropertiesStructName}>(gDeviceProperties);
         auto deviceState=cast_typed_data<{deviceStateStructName}>(gDeviceState);
@@ -1000,6 +1001,10 @@ def render_device_type_as_cpp(dt,dst):
         const typed_data_t *gDeviceProperties,
         typed_data_t *gDeviceState
       ) const override {{
+        if({isExternal}){{
+          throw std::runtime_error("Attempt to call init on external type {deviceTypeId}");
+        }}
+
         auto graphProperties=cast_typed_properties<{graphPropertiesStructName}>(gGraphProperties);
         auto deviceProperties=cast_typed_properties<{devicePropertiesStructName}>(gDeviceProperties);
         auto deviceState=cast_typed_data<{deviceStateStructName}>(gDeviceState);
@@ -1026,6 +1031,11 @@ def render_device_type_as_cpp(dt,dst):
         const typed_data_t *gDeviceProperties,
         typed_data_t *gDeviceState
       ) const override {{
+        if({isExternal}){{
+          throw std::runtime_error("Attempt to call onHardwareIdle on external type {deviceTypeId}");
+        }}
+
+
         auto graphProperties=cast_typed_properties<{graphPropertiesStructName}>(gGraphProperties);
         auto deviceProperties=cast_typed_properties<{devicePropertiesStructName}>(gDeviceProperties);
         auto deviceState=cast_typed_data<{deviceStateStructName}>(gDeviceState);
@@ -1047,16 +1057,20 @@ def render_device_type_as_cpp(dt,dst):
       }}
     """.format(**subs))
     else:
-        dst.write(f"""
+        dst.write("""
       virtual void onHardwareIdle(
         OrchestratorServices *orchestrator,
         const typed_data_t *gGraphProperties,
         const typed_data_t *gDeviceProperties,
         typed_data_t *gDeviceState
       ) const override {{
+        if({isExternal}){{
+          throw std::runtime_error("Attempt to call onHardwareIdle on external type {deviceTypeId}");
+        }}
+
           // No hardware idle handler
       }}
-    """)
+    """.format(**subs))
 
     dst.write("};\n")
     dst.write("DeviceTypePtr {}_Spec_get(){{\n".format(dt.id))
@@ -1156,6 +1170,13 @@ def render_graph_as_cpp(graph,dst, destPath, asHeader=False):
                 dst.write(code)
 
     dst.write("/////////////////////////////////\n")
+
+    dst.write("""
+    #ifdef POETS_HAVE_IN_PROC_EXTERNAL_MAIN
+    void poets_in_proc_external_main(InProcessBinaryUpstreamConnection &conn, int argc, const char **argv);
+    #endif
+    """)
+
     dst.write("// DEF\n")
     for et in gt.message_types.values():
         render_message_type_as_cpp(et,dst)
@@ -1169,6 +1190,12 @@ def render_graph_as_cpp(graph,dst, destPath, asHeader=False):
         dst.write('    addMessageType({}_Spec_get());\n'.format(et.id))
     for dt in gt.device_types.values():
         dst.write('    addDeviceType(ns_{}::{}_Spec_get());\n'.format(dt.id,dt.id))
+    dst.write("""
+    // This define will be specified when compiling the provider
+    #ifdef POETS_HAVE_IN_PROC_EXTERNAL_MAIN
+    addInProcExternalMain(poets_in_proc_external_main);
+    #endif
+    """)
     dst.write("  };\n")
     dst.write("};\n");
     dst.write("GraphTypePtr {}_Spec_get(){{\n".format(gt.id))

@@ -656,12 +656,19 @@ private:
   std::string m_sharedCode;
 
   rapidjson::Document m_metadata;
+
+  in_proc_external_main_t m_in_proc_external_main;
 protected:
   GraphTypeImpl(std::string id, TypedDataSpecPtr propertiesSpec)
     : m_id(id)
     , m_propertiesSpec(propertiesSpec)
   {
     m_metadata.SetObject();
+  }
+
+  void addInProcExternalMain(  in_proc_external_main_t in_proc_external_main)
+  {
+    m_in_proc_external_main=in_proc_external_main;
   }
 
   void addSharedCode(const std::string &code)
@@ -730,6 +737,12 @@ public:
 
   virtual rapidjson::Document &getMetadata() override
   { return m_metadata; }
+
+  virtual in_proc_external_main_t getDefaultInProcExternalProcedure() override
+  {
+    return m_in_proc_external_main;
+  }
+
 
 };
 

@@ -86,7 +86,7 @@ def expand_source_code(src:str, base_path:Optional[str]) -> str:
     return "".join(res)
 
 def expand_graph_type_source(gt:GraphType, base_path:str) -> None:
-    expand = lambda x: expand_source_code(x, base_path)
+    expand = lambda x: expand_source_code(x, base_path) if x else None
     expand_array = lambda x: list(map(expand, x))
 
     gt.shared_code = expand_array(gt.shared_code) 

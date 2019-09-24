@@ -18,6 +18,8 @@
 
 #include "poets_hash.hpp"
 
+#include "poets_protocol/InProcessBinaryUpstreamConnection.hpp"
+
 /* What is the point of all this?
 
    - C/C++ doesn't support introspection, so there is no way of getting at data-structures
@@ -627,6 +629,9 @@ public:
   virtual const std::vector<MessageTypePtr> &getMessageTypes() const=0;
 
   virtual rapidjson::Document &getMetadata() =0;
+
+  // _if_ there is a default inproc external procedure then return it.
+  virtual in_proc_external_main_t getDefaultInProcExternalProcedure() =0;
 };
 
 /* These allow registration/discovery of different data types at run-time */

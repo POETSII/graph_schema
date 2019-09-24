@@ -233,7 +233,8 @@ MessageTypePtr loadMessageTypeElement(xmlpp::Element *eMessageType)
 
 using xml_v3::InputPinDynamic;
 using xml_v3::OutputPinDynamic;
-using xml_v3::DeviceTypeDynamic;
+using xml_v3::ExternalDeviceTypeDynamic;
+using xml_v3::InternalDeviceTypeDynamic;
 using xml_v3::GraphTypeDynamic;
 using xml_v3::readTextContent;
 
@@ -278,8 +279,12 @@ DeviceTypePtr loadDeviceTypeElement(
 {
   bool isExternal=false;
 
-  if(eDeviceType->get_name()!="DeviceType"){
-    throw std::runtime_error("Not supported: dynamic device type needs to be upgraded for externals.");
+  if(eDeviceType->get_name()=="DeviceType"){
+    isExternal=false;
+  }else if(eDeviceType->get_name()=="ExternalType"){
+    isExternal=true;
+  }else{
+    throw std::runtime_error("Unexpected element name "+eDeviceType->get_name());
   }
 
   // TODO : This is stupid. Weak pointer to get rid of cycle of references.
@@ -292,15 +297,28 @@ DeviceTypePtr loadDeviceTypeElement(
   ns["g"]="https://poets-project.org/schemas/virtual-graph-schema-v4";
 
   std::string id=get_attribute_required(eDeviceType, "id");
-  
-  std::string readyToSendCode=load_code_fragment(eDeviceType, "./g:ReadyToSend");
-  std::string onInitCode=load_code_fragment(eDeviceType, "./g:OnInit");
-  std::string onHardwareIdleCode=load_code_fragment(eDeviceType, "./g:OnHardwareIdle");
-  std::string onDeviceIdleCode=load_code_fragment(eDeviceType, "./g:OnDeviceIdle");
-  std::string sharedCode=load_code_fragment(eDeviceType, "./g:SharedCode");
 
-  TypedDataSpecPtr properties=loadTypedDataSpec(eDeviceType, "./g:Properties");
-  TypedDataSpecPtr state=loadTypedDataSpec(eDeviceType, "./g:State");
+  std::cerr<<"  "<<eDeviceType->get_name()<<" "<<id<<" isExternal="<<isExternal<<"\n";
+
+
+  TypedDataSpecPtr properties;
+  TypedDataSpecPtr state;
+  std::string readyToSendCode, onInitCode, onHardwareIdleCode, onDeviceIdleCode, sharedCode;
+  
+  if(!isExternal){
+    readyToSendCode=load_code_fragment(eDeviceType, "./g:ReadyToSend");
+    onInitCode=load_code_fragment(eDeviceType, "./g:OnInit");
+    onHardwareIdleCode=load_code_fragment(eDeviceType, "./g:OnHardwareIdle");
+    onDeviceIdleCode=load_code_fragment(eDeviceType, "./g:OnDeviceIdle");
+    sharedCode=load_code_fragment(eDeviceType, "./g:SharedCode");
+  }
+
+  properties=loadTypedDataSpec(eDeviceType, "./g:Properties");
+  if(!isExternal){
+    state=loadTypedDataSpec(eDeviceType, "./g:State");
+  }else{
+    state=std::make_shared<TypedDataSpecImpl>();
+  }
   
   std::vector<InputPinPtr> inputs;
 
@@ -315,10 +333,19 @@ DeviceTypePtr loadDeviceTypeElement(
     }
     auto messageType=messageTypes.at(messageTypeId);
 
-    TypedDataSpecPtr inputProperties=loadTypedDataSpec(e, "./g:Properties");
-    TypedDataSpecPtr inputState=loadTypedDataSpec(e, "./g:State");
+    TypedDataSpecPtr inputState, inputProperties;
+    if(!isExternal){
+      inputProperties=loadTypedDataSpec(e, "./g:Properties");
+      inputState=loadTypedDataSpec(e, "./g:State");
+    }else{
+      inputProperties=std::make_shared<TypedDataSpecImpl>();
+      inputState=std::make_shared<TypedDataSpecImpl>();
+    }
 
-    std::string onReceive=load_code_fragment(e, "./g:OnReceive");
+    std::string onReceive;
+    if(!isExternal){
+      onReceive=load_code_fragment(e, "./g:OnReceive");
+    }
 
     inputs.push_back(std::make_shared<InputPinDynamic>(
       delayedSrc,
@@ -345,7 +372,10 @@ DeviceTypePtr loadDeviceTypeElement(
     }
     auto messageType=messageTypes.at(messageTypeId);
 
-    auto onSend=load_code_fragment(e, "./g:OnSend");
+    std::string onSend;
+    if(!isExternal){
+      onSend=load_code_fragment(e, "./g:OnSend");
+    }
 
     outputs.push_back(std::make_shared<OutputPinDynamic>(
       delayedSrc,
@@ -357,9 +387,16 @@ DeviceTypePtr loadDeviceTypeElement(
     ));
   }
 
-  auto res=std::make_shared<DeviceTypeDynamic>(
-    id, properties, state, inputs, outputs, isExternal, readyToSendCode, onInitCode, sharedCode, onHardwareIdleCode, onDeviceIdleCode
-  );
+  DeviceTypePtr res;
+  if(!isExternal){
+    res=std::make_shared<InternalDeviceTypeDynamic>(
+      id, properties, state, inputs, outputs, readyToSendCode, onInitCode, sharedCode, onHardwareIdleCode, onDeviceIdleCode
+    );
+  }else{
+    res=std::make_shared<ExternalDeviceTypeDynamic>(
+      id, properties, inputs, outputs
+    );
+  }
 
   // Lazily fill in the thing that delayedSrc points to
   *futureSrc=res;
@@ -395,7 +432,7 @@ GraphTypePtr loadGraphTypeElement(const filepath &srcPath, xmlpp::Element *eGrap
   }
 
   auto *eDeviceTypes=find_single(eGraphType, "./g:DeviceTypes", ns);
-  for(auto *nDeviceType : eDeviceTypes->find("./g:DeviceType", ns)){
+  for(auto *nDeviceType : eDeviceTypes->find("./g:DeviceType|./g:ExternalType", ns)){
     auto dt=loadDeviceTypeElement(messageTypesById, (xmlpp::Element*)nDeviceType);
     deviceTypes.push_back( dt );
     if(events){
@@ -523,7 +560,13 @@ void loadGraph(Registry *registry, const filepath &srcPath, xmlpp::Element *pare
     auto dt=graphType->getDeviceType(deviceTypeId);
 
     if( isExternal != (dt->isExternal()) ){
-        throw std::runtime_error("Attempt to instantiate external as device, or vice-versa.");
+      std::stringstream acc;
+      if(dt->isExternal()){
+        acc<<"Attempt to instantiate external type '"<<deviceTypeId<<"' as DevI instance '"<<id<<"'";
+      }else{
+        acc<<"Attempt to instantiate non-external type '"<<deviceTypeId<<"' as ExtI instance '"<<id<<"'";
+      }
+      throw std::runtime_error(acc.str());
     }
 
     TypedDataPtr deviceProperties=loadTypedDataValue(dt->getPropertiesSpec(), eDevice, "P");

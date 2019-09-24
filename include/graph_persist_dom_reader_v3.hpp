@@ -8,6 +8,8 @@
 //#include <boost/filesystem.hpp>
 #include <libxml++/parsers/domparser.h>
 
+#include <string>
+
 namespace xml_v3
 {
 
@@ -175,16 +177,16 @@ public:
   }
 };
 
-class DeviceTypeDynamic
+class InternalDeviceTypeDynamic
   : public DeviceTypeImpl
 {
 public:
-  DeviceTypeDynamic(const std::string &id,
+  InternalDeviceTypeDynamic(const std::string &id,
     TypedDataSpecPtr properties, TypedDataSpecPtr state,
-    const std::vector<InputPinPtr> &inputs, const std::vector<OutputPinPtr> &outputs, bool isExternal,
+    const std::vector<InputPinPtr> &inputs, const std::vector<OutputPinPtr> &outputs,
     std::string readyToSendCode, std::string onInitCode, std::string sharedCode, std::string onHardwareIdleCode, std::string onDeviceIdleCode
   )
-    : DeviceTypeImpl(id, properties, state, inputs, outputs, isExternal, readyToSendCode, onInitCode, sharedCode, onHardwareIdleCode, onDeviceIdleCode)
+    : DeviceTypeImpl(id, properties, state, inputs, outputs, false, readyToSendCode, onInitCode, sharedCode, onHardwareIdleCode, onDeviceIdleCode)
   {
   }
 
@@ -201,6 +203,34 @@ public:
   virtual void onHardwareIdle(OrchestratorServices*, const typed_data_t*, const typed_data_t*, typed_data_t*) const override
   {
     throw std::runtime_error("onHardwareIdle - input pin not loaded from provider, so functionality not available.");
+  }
+};
+
+class ExternalDeviceTypeDynamic
+  : public DeviceTypeImpl
+{
+public:
+  ExternalDeviceTypeDynamic(const std::string &id,
+    TypedDataSpecPtr properties,
+    const std::vector<InputPinPtr> &inputs, const std::vector<OutputPinPtr> &outputs
+  )
+    : DeviceTypeImpl(id, properties, TypedDataSpecPtr(), inputs, outputs, true, "", "", "", "", "")
+  {
+  }
+
+  virtual void init(OrchestratorServices*, const typed_data_t*, const typed_data_t*, typed_data_t*) const override
+  {
+    throw std::runtime_error("init - this is an external device, so init should not be called.");
+  }
+
+  virtual uint32_t calcReadyToSend(OrchestratorServices*, const typed_data_t*, const typed_data_t*, const typed_data_t*) const override
+  {
+    throw std::runtime_error("calcReadyToSend - this is an external device, so calcReadyToSend shoud not be called.");
+  }
+
+  virtual void onHardwareIdle(OrchestratorServices*, const typed_data_t*, const typed_data_t*, typed_data_t*) const override
+  {
+    throw std::runtime_error("onHardwareIdle - this is an external device, so does not take part in hardware idle.");
   }
 };
 
@@ -226,8 +256,12 @@ DeviceTypePtr loadDeviceTypeElement(
 {
   bool isExternal=false;
 
-  if(eDeviceType->get_name()!="DeviceType"){
-    throw std::runtime_error("Not supported: dynamic device type needs to be upgraded for externals.");
+  if(eDeviceType->get_name()=="DeviceType"){
+    isExternal=false;
+  }else if(eDeviceType->get_name()=="ExternalType"){
+    isExternal=true;
+  }else{
+    throw std::runtime_error("Unexpected element name "+eDeviceType->get_name());
   }
 
   // TODO : This is stupid. Weak pointer to get rid of cycle of references.
@@ -242,53 +276,52 @@ DeviceTypePtr loadDeviceTypeElement(
   std::string id=get_attribute_required(eDeviceType, "id");
   rapidjson::Document metadata=parse_meta_data(eDeviceType, "./g:MetaData", ns);
   
-  std::string readyToSendCode, onInitCode, onHardwareIdleCode, onDeviceIdleCode;
-  auto *eReadyToSendCode=find_single(eDeviceType, "./g:ReadyToSend", ns);
-  if(eReadyToSendCode){
-    auto ch=xmlNodeGetContent(eReadyToSendCode->cobj());
-    readyToSendCode=(char*)ch;
-    xmlFree(ch);
-  }
-  auto *eOnInitCode=find_single(eDeviceType, "./g:OnInit", ns);
-  if(eOnInitCode){
-    auto ch=xmlNodeGetContent(eOnInitCode->cobj());
-    onInitCode=(char*)ch;
-    xmlFree(ch);
-  }
-  auto *eOnHardwareIdleCode=find_single(eDeviceType, "./g:OnHardwareIdle", ns);
-  if(eOnHardwareIdleCode){
-    auto ch=xmlNodeGetContent(eOnHardwareIdleCode->cobj());
-    onHardwareIdleCode=(char*)ch;
-    xmlFree(ch);
-  }
-  auto *eOnDeviceIdleCode=find_single(eDeviceType, "./g:OnDeviceIdle", ns);
-  if(eOnDeviceIdleCode){
-    auto ch=xmlNodeGetContent(eOnDeviceIdleCode->cobj());
-    onDeviceIdleCode=(char*)ch;
-    xmlFree(ch);
+  std::string readyToSendCode, onInitCode, onHardwareIdleCode, onDeviceIdleCode, sharedCode;
+  if(!isExternal){
+    auto *eReadyToSendCode=find_single(eDeviceType, "./g:ReadyToSend", ns);
+    if(eReadyToSendCode){
+      auto ch=xmlNodeGetContent(eReadyToSendCode->cobj());
+      readyToSendCode=(char*)ch;
+      xmlFree(ch);
+    }
+    auto *eOnInitCode=find_single(eDeviceType, "./g:OnInit", ns);
+    if(eOnInitCode){
+      auto ch=xmlNodeGetContent(eOnInitCode->cobj());
+      onInitCode=(char*)ch;
+      xmlFree(ch);
+    }
+    auto *eOnHardwareIdleCode=find_single(eDeviceType, "./g:OnHardwareIdle", ns);
+    if(eOnHardwareIdleCode){
+      auto ch=xmlNodeGetContent(eOnHardwareIdleCode->cobj());
+      onHardwareIdleCode=(char*)ch;
+      xmlFree(ch);
+    }
+    auto *eOnDeviceIdleCode=find_single(eDeviceType, "./g:OnDeviceIdle", ns);
+    if(eOnDeviceIdleCode){
+      auto ch=xmlNodeGetContent(eOnDeviceIdleCode->cobj());
+      onDeviceIdleCode=(char*)ch;
+      xmlFree(ch);
+    }
+
+    for(auto *n : eDeviceType->find("./g:SharedCode", ns)){
+      auto ch=xmlNodeGetContent(n->cobj());
+      sharedCode += *ch + "\n";
+      xmlFree(ch);
+    }
   }
 
-  std::string sharedCode;
-  for(auto *n : eDeviceType->find("./g:SharedCode", ns)){
-    auto ch=xmlNodeGetContent(n->cobj());
-    sharedCode += *ch + "\n";
-    xmlFree(ch);
-  }
-
-  TypedDataSpecPtr properties;
+  TypedDataSpecPtr properties=std::make_shared<TypedDataSpecImpl>();
   auto *eProperties=find_single(eDeviceType, "./g:Properties", ns);
   if(eProperties){
     properties=loadTypedDataSpec(eProperties);
-  }else{
-    properties=std::make_shared<TypedDataSpecImpl>();
   }
 
-  TypedDataSpecPtr state;
-  auto *eState=find_single(eDeviceType, "./g:State", ns);
-  if(eState){
-    state=loadTypedDataSpec(eState);
-  }else{
-    state=std::make_shared<TypedDataSpecImpl>();
+  TypedDataSpecPtr state=std::make_shared<TypedDataSpecImpl>();
+  if(!isExternal){
+    auto *eState=find_single(eDeviceType, "./g:State", ns);
+    if(eState){
+      state=loadTypedDataSpec(eState);
+    }
   }
 
   std::vector<InputPinPtr> inputs;
@@ -306,28 +339,30 @@ DeviceTypePtr loadDeviceTypeElement(
 
     rapidjson::Document inputMetadata=parse_meta_data(e, "./g:MetaData", ns);
 
-    TypedDataSpecPtr inputProperties;
-    auto *eInputProperties=find_single(e, "./g:Properties", ns);
-    if(eInputProperties){
-      inputProperties=loadTypedDataSpec(eInputProperties);
-    }else{
-      inputProperties=std::make_shared<TypedDataSpecImpl>();
+    TypedDataSpecPtr inputProperties=std::make_shared<TypedDataSpecImpl>();
+    if(!isExternal){
+      auto *eInputProperties=find_single(e, "./g:Properties", ns);
+      if(eInputProperties){
+        inputProperties=loadTypedDataSpec(eInputProperties);
+      }
     }
 
-    TypedDataSpecPtr inputState;
-    auto *eInputState=find_single(e, "./g:State", ns);
-    if(eInputState){
-      inputState=loadTypedDataSpec(eInputState);
-    }else{
-      inputState=std::make_shared<TypedDataSpecImpl>();
+    TypedDataSpecPtr inputState=std::make_shared<TypedDataSpecImpl>();
+    if(!isExternal){
+      auto *eInputState=find_single(e, "./g:State", ns);
+      if(eInputState){
+        inputState=loadTypedDataSpec(eInputState);
+      }
     }
 
-    auto *eHandler=find_single(e, "./g:OnReceive", ns);
-    if(eHandler==NULL){
-      throw std::runtime_error("Missing OnReceive handler.");
+    std::string onReceive;
+    if(!isExternal){
+      auto *eHandler=find_single(e, "./g:OnReceive", ns);
+      if(eHandler==NULL){
+        throw std::runtime_error("Missing OnReceive handler.");
+      }
+      onReceive=readTextContent(eHandler);
     }
-    std::string onReceive=readTextContent(eHandler);
-
 
     inputs.push_back(std::make_shared<InputPinDynamic>(
       delayedSrc,
@@ -357,11 +392,14 @@ DeviceTypePtr loadDeviceTypeElement(
 
     rapidjson::Document outputMetadata=parse_meta_data(e, "./g:MetaData", ns);
 
-    auto *eHandler=find_single(e, "./g:OnSend", ns);
-    if(eHandler==NULL){
-      throw std::runtime_error("Missing OnSend handler.");
+    std::string onSend;
+    if(!isExternal){
+      auto *eHandler=find_single(e, "./g:OnSend", ns);
+      if(eHandler==NULL){
+        throw std::runtime_error("Missing OnSend handler.");
+      }
+      onSend=readTextContent(eHandler);
     }
-    std::string onSend=readTextContent(eHandler);
 
 
     outputs.push_back(std::make_shared<OutputPinDynamic>(
@@ -374,9 +412,16 @@ DeviceTypePtr loadDeviceTypeElement(
     ));
   }
 
-  auto res=std::make_shared<DeviceTypeDynamic>(
-    id, properties, state, inputs, outputs, isExternal, readyToSendCode, onInitCode, sharedCode, onHardwareIdleCode, onDeviceIdleCode
-  );
+  DeviceTypePtr res;
+  if(!isExternal){
+    res=std::make_shared<InternalDeviceTypeDynamic>(
+      id, properties, state, inputs, outputs, readyToSendCode, onInitCode, sharedCode, onHardwareIdleCode, onDeviceIdleCode
+    );
+  }else{
+    res=std::make_shared<ExternalDeviceTypeDynamic>(
+      id, properties, inputs, outputs
+    );
+  }
 
   // Lazily fill in the thing that delayedSrc points to
   *futureSrc=res;
@@ -452,8 +497,9 @@ GraphTypePtr loadGraphTypeElement(const filepath &srcPath, xmlpp::Element *eGrap
   }
 
   auto *eDeviceTypes=find_single(eGraphType, "./g:DeviceTypes", ns);
-  for(auto *nDeviceType : eDeviceTypes->find("./g:DeviceType", ns)){
-    auto dt=loadDeviceTypeElement(messageTypesById, (xmlpp::Element*)nDeviceType);
+  for(auto *nDeviceType : eDeviceTypes->find("./g:DeviceType|./g:ExternalType", ns)){
+    auto eDeviceType=(xmlpp::Element*)nDeviceType;
+    auto dt=loadDeviceTypeElement(messageTypesById, eDeviceType);
     deviceTypes.push_back( dt );
     if(events){
       events->onDeviceType(dt);

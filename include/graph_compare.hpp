@@ -77,13 +77,33 @@ bool check_graph_types_structurally_similar(
     }
 
     if(ref->getDeviceTypeCount() != got->getDeviceTypeCount()){
-        return mismatch("Expected "+std::to_string(ref->getDeviceTypeCount())+" device types, but got "+std::to_string(got->getDeviceTypeCount()));
+        std::stringstream acc;
+        acc<<"Expected "<<ref->getDeviceTypeCount()<<" device types, but got "<<got->getDeviceTypeCount()<<"\n";
+        acc<<"  ref device types=[";
+        for(auto p : ref->getDeviceTypes()){
+            acc<<p->getId()<<" ";
+        }
+        acc<<"]\n";
+        acc<<"  got device types=[";
+        for(auto p : got->getDeviceTypes()){
+            acc<<p->getId()<<" ";
+        }
+        acc<<"]\n";
+        return mismatch(acc.str());
     }
 
     for(auto rdt : ref->getDeviceTypes()){
         auto gdt=got->getDeviceType(rdt->getId());
         if(!gdt){
             mismatch("Expected device type '"+rdt->getId()+"' is not present in other graph.");
+        }
+
+        if(rdt->isExternal()!=gdt->isExternal()){
+            if(rdt->isExternal()){
+                mismatch("External device type '"+rdt->getId()+"' is not external (i.e. it is a normal device) in other graph.");
+            }else{
+                mismatch("Internal (normal) device type '"+rdt->getId()+"' is an external device type in other graph.");
+            }
         }
 
         if(!check_typed_data_specs_structurally_similar("Mismatch on device type '"+rdt->getId()+"' properties spec ",

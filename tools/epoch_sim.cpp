@@ -116,7 +116,7 @@ struct InProcMessageBuffer
     bool can_recv() override
     {
       std::unique_lock<std::mutex> lk(m_mutex);
-      return m_int2ext.empty();
+      return !m_int2ext.empty();
     }
 
     bool recv(
@@ -179,6 +179,7 @@ struct InProcMessageBuffer
       va_start(va, msg);
       vfprintf(stderr, msg, va);
       va_end(va);
+      fputs("\n", stderr);
     }
 };
 
@@ -244,7 +245,7 @@ struct EpochSim
 
     std::tuple<unsigned,TypedDataPtr,int> pop_message()
     {
-      assert(ext2int.empty());
+      assert(!ext2int.empty());
       auto res=ext2int.front();
       ext2int.pop();
       if(ext2int.empty()){
@@ -876,6 +877,7 @@ void usage()
   fprintf(stderr, "  --external spec\n");
   fprintf(stderr, "\n");
   fprintf(stderr, "External spec could be:\n");
+  fprintf(stderr, "  PROVIDER - Take the default in-proc external from the provider.\n");
   fprintf(stderr, "  INPROC:<PATH> - Load the shared object and instantiate InProcessBinaryUpstreamConnection.\n");
   exit(1);
 }
@@ -1117,6 +1119,8 @@ int main(int argc, char *argv[])
     std::thread inProcExternalThread;
 
     if(!externalSpec.empty()){
+      in_proc_external_main_t pProc=nullptr;
+
       if(externalSpec.substr(0, 7)=="INPROC:"){
         std::string so_path=externalSpec.substr(7);
         fprintf(stderr, "Loading inproc external from %s\n", so_path.c_str());
@@ -1129,61 +1133,67 @@ int main(int argc, char *argv[])
         if(!pProc){
           throw std::runtime_error("Couldn't find symbol 'in_proc_external_main' in shared object.");
         }
-
-        bool connected=false;
-
-        graph.m_pExternalBuffer->m_connect = [&](const std::string &graphType, const std::string &graphInst, const std::vector<std::pair<std::string,std::string> > &owned)
-        {
-          fprintf(stderr, "Recevied call to connect from inproc external.\n");
-          if(!std::regex_match(graph.m_graphType->getId(), std::regex(graphType))){
-            throw std::runtime_error("Graph type of "+graph.m_graphType->getId()+" does not match externals type of "+graphType);
-          }
-          if(!std::regex_match(graph.m_id, std::regex(graphInst))){
-            throw std::runtime_error("Graph instance of "+graph.m_graphType->getId()+" does not match externals type of "+graphType);
-          }
-
-          fprintf(stderr, "Checking owned externals and types from inproc external connection against graph instance.");
-          std::unordered_set<unsigned> foundIndices;
-          for(auto i_v : owned){
-            auto ii=graph.intern(i_v.first);
-            auto it=graph.m_deviceIdToIndex.find(ii);
-            if(it==graph.m_deviceIdToIndex.end()){
-              throw std::runtime_error("Attempt to bind to unknown external instance "+i_v.first);
-            }
-            auto &d = graph.m_devices.at(it->second);
-            if(!d.isExternal){
-              throw std::runtime_error("Attempt to bind to non-external device "+i_v.first);
-            }
-            if(!i_v.second.empty()){
-              if(!std::regex_match( d.id, std::regex(i_v.second))){
-                throw std::runtime_error("Attempt to bind instance "+i_v.first+" to wrong type of device.");
-              }
-            }
-            foundIndices.insert(d.index);
-          }
-          if(foundIndices != graph.m_externalIndices){
-            // TODO: is this really an error?
-            throw std::runtime_error("Inproc external did not bind to the complete set of externals.");
-          }
-
-          connected=true;
-        };
-
-        inProcExternalThread=std::thread([&](){
-          const char *fargv[]={argv[0]};
-          pProc(*graph.m_pExternalBuffer, 1, fargv);
-        });
-
-        fprintf(stderr, "Waiting for inproc external to call 'connect'\n");
-        {
-          std::unique_lock<std::mutex> lk(graph.m_pExternalBuffer->m_mutex);
-          graph.m_pExternalBuffer->m_cond.wait(lk, [&]{ return connected; });
+      }else if(externalSpec=="PROVIDER"){
+        fprintf(stderr, "Loading default inproc external from provider\n");
+        pProc=graph.m_graphType->getDefaultInProcExternalProcedure();
+        if(pProc==nullptr){
+          throw std::runtime_error("Provider did not contain an in-proc external (is it dynamic? You might need to compiler the provider.)");
         }
-        fprintf(stderr, "Inproc external is connected.\n");
-
       }else{
         throw std::runtime_error("Didn't understand external spec: "+externalSpec);
       }
+
+      bool connected=false;
+
+      graph.m_pExternalBuffer->m_connect = [&](const std::string &graphType, const std::string &graphInst, const std::vector<std::pair<std::string,std::string> > &owned)
+      {
+        fprintf(stderr, "Recevied call to connect from inproc external.\n");
+        if(!std::regex_match(graph.m_graphType->getId(), std::regex(graphType))){
+          throw std::runtime_error("Graph type of "+graph.m_graphType->getId()+" does not match externals type of "+graphType);
+        }
+        if(!std::regex_match(graph.m_id, std::regex(graphInst))){
+          throw std::runtime_error("Graph instance of "+graph.m_graphType->getId()+" does not match externals type of "+graphType);
+        }
+
+        fprintf(stderr, "Checking owned externals and types from inproc external connection against graph instance.\n");
+        std::unordered_set<unsigned> foundIndices;
+        for(auto i_v : owned){
+          auto ii=graph.intern(i_v.first);
+          auto it=graph.m_deviceIdToIndex.find(ii);
+          if(it==graph.m_deviceIdToIndex.end()){
+            throw std::runtime_error("Attempt to bind to unknown external instance "+i_v.first);
+          }
+          auto &d = graph.m_devices.at(it->second);
+          if(!d.isExternal){
+            throw std::runtime_error("Attempt to bind to non-external device "+i_v.first);
+          }
+          if(!i_v.second.empty()){
+            if(!std::regex_match( d.type->getId(), std::regex(i_v.second))){
+              throw std::runtime_error("Attempt to bind instance "+i_v.first+" to device matching '"+i_v.second+"' but real type is '+"+ d.type->getId() +"'.");
+            }
+          }
+          foundIndices.insert(d.index);
+        }
+        if(foundIndices != graph.m_externalIndices){
+          // TODO: is this really an error?
+          throw std::runtime_error("Inproc external did not bind to the complete set of externals.");
+        }
+
+        connected=true;
+        graph.m_pExternalBuffer->m_cond.notify_one(); // We are still under lock here
+      };
+
+      inProcExternalThread=std::thread([&](){
+        const char *fargv[]={argv[0]};
+        pProc(*graph.m_pExternalBuffer, 1, fargv);
+      });
+
+      fprintf(stderr, "Waiting for inproc external to call 'connect'\n");
+      {
+        std::unique_lock<std::mutex> lk(graph.m_pExternalBuffer->m_mutex);
+        graph.m_pExternalBuffer->m_cond.wait(lk, [&]{ return connected; });
+      }
+      fprintf(stderr, "Inproc external is connected.\n");
     }
 
 
