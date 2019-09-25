@@ -106,12 +106,12 @@ def create_fanin(graph,dstDevInst,dstPortName,dstFixup,reducerFactory,srcDevInst
 import os
 appBase=os.path.dirname(os.path.realpath(__file__))
 
-src=appBase+"/clocked_LIF_fix_graph_type.xml"
+src=appBase+"/clocked_LIF_graph_type.xml"
 (graphTypes,graphInstances)=load_graph_types_and_instances(src,src)
 
 #parameter for LIF
-Ne=10
-Ni=5
+Ne=40
+Ni=10
 K=20
 
 maxTicks=10
@@ -120,9 +120,9 @@ maxFanOut=4
 
 if len(sys.argv)>2:
     Ne=int(sys.argv[2])
-   #print ("The value of Ne")
-   #print(Ne)
-#sys.exit()
+   # print ("The value of Ne")
+   # print(Ne)
+   # sys.exit()
 if len(sys.argv)>3:
     Ni=int(sys.argv[3])
 if len(sys.argv)>4:
