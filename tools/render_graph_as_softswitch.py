@@ -72,8 +72,10 @@ sort_edges_by_distance=0
 # Force these to 1 for now. Testing more than one box at the minute could be a massive headache
 # p["BoxMeshXLen"] = 1
 # p["BoxMeshYLen"] = 1
-BoardMeshX = 3*p["BoxMeshXLen"]
-BoardMeshY = 2*p["BoxMeshYLen"]
+numBoxesX = 2
+numBoxesY = 4
+BoardMeshX = 3*numBoxesX
+BoardMeshY = 2*numBoxesY
 
 ThreadsPerMailbox=p["ThreadsPerCore"]*p["CoresPerMailbox"]
 
