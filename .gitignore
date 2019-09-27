@@ -47,3 +47,4 @@ perf.data.old
 /apps/ising_spin_fix/ising_spin_fix_ref
 /my-pypy3-env
 /pypy3-virtualenv
+*config.py

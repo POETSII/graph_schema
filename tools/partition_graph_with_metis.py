@@ -13,10 +13,10 @@ from collections import defaultdict
 
 def render_graph_as_metis(graph,dst):
     """ Output is:
-    
+
         idToIndex : mapping from device id to zero-based index in metis graph
     """
-    
+
     mtWeights={}
     hasWeights=False
     for mt in graph.graph_type.message_types.values():
@@ -30,7 +30,7 @@ def render_graph_as_metis(graph,dst):
         assert int(w)==w, "Weights must be integers for metis"
         assert w>=0, "Weights must be non-negative"
         mtWeights[mt.id]=w
-    
+
     idToIndex={}
     indexToId=[]
     idToEdges={  }
@@ -43,24 +43,24 @@ def render_graph_as_metis(graph,dst):
     for ei in graph.edge_instances.values():
         srcId=ei.src_device.id
         dstId=ei.dst_device.id
-        
+
         assert srcId in idToIndex
         assert dstId in idToIndex
 
         if srcId==dstId:
             continue  # TODO: metis doesn't deal with self-loops
-            
+
         w=mtWeights[ei.message_type.id]
         if w==0:
             continue # Remove edges that have zero weight
-        
+
         idToEdges[srcId].add(dstId)
         idToEdges[dstId].add(srcId)
-        
+
         (lo,hi)=(min(srcId,dstId),max(srcId,dstId))
-        
+
         edges[(lo,hi)]+=w
-        
+
     nSame=0
     for ((a,b),w) in edges.items():
         assert a==b or (b,a) not in edges
@@ -70,21 +70,21 @@ def render_graph_as_metis(graph,dst):
             idToEdges[a].discard(b)
             idToEdges[b].discard(a)
     assert nSame==0, "Metis can't deal with self-loops"
-            
+
     n=len(idToIndex)
     m=len(edges)
-    
-    dst.write("{} {} 00{}\n".format(n,m, (1 if hasWeights else 0) )) 
+
+    dst.write("{} {} 00{}\n".format(n,m, (1 if hasWeights else 0) ))
     eCount=0
     for id in indexToId:
         first=True
         for e in idToEdges[id]:
             assert id in idToEdges[e]
-            
+
             (lo,hi)=(min(id,e),max(id,e))
 
             assert (lo,hi) in edges
-            
+
             if not hasWeights:
                 dst.write(" {}".format(idToIndex[e]+1)) # one-based vertex indices
             else:
@@ -93,13 +93,13 @@ def render_graph_as_metis(graph,dst):
                 dst.write(" {} {}".format(idToIndex[e]+1,w)) # one-based vertex indices
             eCount=eCount+1
         dst.write("\n")
-        
+
     dst.flush()
 
     assert eCount==2*m-nSame, "m={},eCount={}, nSame={}".format(2*m,eCount,nSame)
-    
+
     return idToIndex
-    
+
 
 def read_metis_partition(graph,partitions,idToIndex,graphFileName):
     partitionFileName=graphFileName+".part.{}".format(partitions)
@@ -112,7 +112,7 @@ def read_metis_partition(graph,partitions,idToIndex,graphFileName):
             mapping.append(p)
     if len(mapping)!=len(idToIndex):
         raise RuntimeError("Invalid number of mappings from metis")
-        
+
     return { id:mapping[idToIndex[id]] for id in graph.device_instances }
 
 def create_metis_partition(graph,partitions,threads):
@@ -122,25 +122,25 @@ def create_metis_partition(graph,partitions,threads):
     then there are n threads in each partition. Typically we would want partitions==mbox_count
     or partitions==mbox_count*core_count."""
     import tempfile
-    
+
     assert partitions <= threads
-    
+
     if partitions==threads:
         threadToPartition=list(range(threads))
         partitionToThreads=[ [i] for i in range(partitions) ]
     else:
         threadToPartition=[i%partitions for i in range(threads)]
         partitionToThreads=[ [t for t in range(threads) if threadToPartition[t]==p] for p in range(partitions) ]
-    
+
     (metisHandle,metisName)=tempfile.mkstemp(suffix=".metis", prefix=None, dir=None, text=True)
     metisStream=open(metisHandle,mode="wt")
     idToIndex=render_graph_as_metis(graph,metisStream)
-    
+
     import subprocess
     subprocess.run( args=[ "gpmetis", metisName, str(partitions) ], check=True, stdout=sys.stderr )
-    
+
     idToPartition=read_metis_partition(graph,partitions,idToIndex,metisName)
-    
+
     # Allocate devices to threads in a round-robin fashion.
     partitionCounters=[0]*partitions
     def choose_thread(partition):
@@ -148,15 +148,15 @@ def create_metis_partition(graph,partitions,threads):
         partitionCounters[partition]+=1
         pmap=partitionToThreads[partition]
         return pmap[counter % len(pmap)]
-    
+
     idToThread={ id:choose_thread(p) for (id,p) in idToPartition.items() }
-    
+
     counts=[0]*threads
     for p in idToThread.values():
         counts[p]+=1
-    
+
     tagName="dt10.partitions.{}".format(threads)
-    
+
     (key,graphMeta)=create_device_instance_key(tagName, graph.metadata or {})
     graphMeta[tagName]= {
         "counts" : counts,
@@ -166,11 +166,11 @@ def create_metis_partition(graph,partitions,threads):
         id:{key:idToThread[id]} for id in idToThread
     }
     edgeMeta={}
-    
-   
+
+
     return (graphMeta,deviceMeta,edgeMeta)
-    
-    
+
+
 
 if __name__=="__main__":
 
@@ -181,23 +181,27 @@ if __name__=="__main__":
     parser.add_argument('--patch', default=False, action='store_const', const=True)
 
     args=parser.parse_args()
-    
+
     partitions=args.partitions
     threads=args.threads
 
     if args.graph=="-":
-        graph=load_graph(sys.stdin, "<stdin>")
+        (graph_type, graph_instance)=load_graph(sys.stdin, "<stdin>")
     else:
-        graph=load_graph(args.graph, args.graph)
+        (graph_type, graph_instance)=load_graph(args.graph, args.graph)
 
-    (graphMeta,deviceMeta,edgeMeta)=create_metis_partition(graph, partitions, threads)
-    
+    numDevices = len(graph_instance.device_instances)
+    if (numDevices < partitions):
+        partitions = numDevices
+
+    (graphMeta,deviceMeta,edgeMeta)=create_metis_partition(graph_instance, partitions, threads)
+
     dst=sys.stdout
-    
+
     if args.patch:
         save_metadata_patch(graph.id, graphMeta, deviceMeta, edgeMeta, dst)
     else:
         sys.stderr.write("Merging\n")
-        merge_metadata_into_graph(graph, graphMeta, deviceMeta, edgeMeta)
+        merge_metadata_into_graph(graph_instance, graphMeta, deviceMeta, edgeMeta)
         sys.stderr.write("Saving\n")
-        save_graph(graph,dst)
+        save_graph(graph_instance,dst)

@@ -21,6 +21,8 @@ import argparse
 parser = argparse.ArgumentParser(description='Render graph instance as softswitch.')
 parser.add_argument('source', type=str, help='source file (xml graph instance)')
 parser.add_argument('--dest', help="Directory to write the output to", default=".")
+parser.add_argument('--numBoxesX', help="Number of boxes in x dimension of the POETS box mesh being targeted", type=int, default=2)
+parser.add_argument('--numBoxesY', help="Number of boxes in y dimension of the POETS box mesh being targeted", type=int, default=2)
 parser.add_argument('--graph_schema_dir', type=str, help="Root of graph_schema directory")
 parser.add_argument('--threads', help='number of logical threads to use (active threads)', type=int, default=2)
 parser.add_argument('--hardware-threads', help='number of threads used in hardware (default=threads)', type=int, default=0)
@@ -72,8 +74,15 @@ sort_edges_by_distance=0
 # Force these to 1 for now. Testing more than one box at the minute could be a massive headache
 # p["BoxMeshXLen"] = 1
 # p["BoxMeshYLen"] = 1
-numBoxesX = 2
-numBoxesY = 4
+numBoxesX = args.numBoxesX
+numBoxesY = args.numBoxesY
+if (numBoxesX > p["BoxMeshXLen"]):
+    print("Number of boxes in x dimension is larger than those available: " + str(p["BoxMeshXLen"]))
+    exit(1)
+if (numBoxesY > p["BoxMeshYLen"]):
+    print("Number of boxes in y dimension is larger than those available: " + str(p["BoxMeshYLen"]))
+    exit(1)
+
 BoardMeshX = 3*numBoxesX
 BoardMeshY = 2*numBoxesY
 
@@ -1327,3 +1336,6 @@ if(len(instances)>0):
         output_device_instance_addresses(inst, device_to_thread, thread_to_devices, deviceAddrMap)
 
     render_graph_instance_as_softswitch(inst,destInst,hwThreads,new_device_to_thread)
+
+    boxMeshFile=open("boxMesh.csv", "w+")
+    boxMeshFile.write(str(numBoxesX) + ", " + str(numBoxesY))
