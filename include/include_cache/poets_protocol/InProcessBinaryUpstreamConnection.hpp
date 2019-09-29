@@ -46,7 +46,7 @@ public:
     /* NOTE: This should be bumped by at least 1 whenever the API
         changes in some way.
     */
-    const size_t INTERFACE_HASH_VAL_BASE=2;
+    const size_t INTERFACE_HASH_VAL_BASE=3;
 
     const size_t INTERFACE_HASH_VAL_0 = hash_combine(INTERFACE_HASH_VAL_BASE, __LINE__);
 
@@ -114,7 +114,7 @@ public:
     virtual bool send(
         poets_endpoint_address_t source,
         const std::shared_ptr<std::vector<uint8_t>> &payload,
-        unsigned sendIndex
+        unsigned sendIndex = UINT_MAX
     ) =0;
 
     const size_t INTERFACE_HASH_VAL_5=hash_combine(INTERFACE_HASH_VAL_4, __LINE__);
@@ -147,33 +147,44 @@ public:
 
     const size_t INTERFACE_HASH_VAL_8=hash_combine(INTERFACE_HASH_VAL_7, __LINE__);
 
-    //! Check if a termination notification has been received.
-    virtual bool is_terminate_pending()=0;
-
-    const size_t INTERFACE_HASH_VAL_9=hash_combine(INTERFACE_HASH_VAL_8, __LINE__);
-
     //! Grabs the termination information and finishes the connection
-    /*! Once the termination has been captured the connection is done,
-        and you shouldn't attempt to send or receive messages.
-    
-        \pre is_terminate_pending()==true
+    /*! \retval Either returns the terminate message or NULL if termination has
+       not happened yet. 
+       
+       Once the termination has been captured the connection is done,
+       and you shouldn't attempt to send or receive messages.
     */ 
     virtual const halt_message_type *get_terminate_message() =0;
 
-    const size_t INTERFACE_HASH_VAL_10=hash_combine(INTERFACE_HASH_VAL_9, __LINE__);
+    const size_t INTERFACE_HASH_VAL_10=hash_combine(INTERFACE_HASH_VAL_7, __LINE__);
 
-    //! Wait until you can either send, receive, or terminate (controlled by flags)
-    /*! Waiting indicates a flushing point, so as part of wait_until the system
-        will flush any buffered messages.
-        Termination and messages to receive will always cause return from this function; the ability
-        to send only interrupts the wait if requested through can_send.
+    enum Events{
+        CAN_RECV = 0x1,   // There is at least one incoming message to receive
+        CAN_SEND = 0x2,   // There is capacity to send at least one message
+        TERMINATED = 0x4, // The terminate event is ready
+        TIMEOUT  = 0x8    // A timeout was passed into wait_until, and it expired before any other event
+    };
 
-        It is implementation-defined what controls blocking, so application writers should
-        not assume this is hooked into any kind of hardware idle detection. For example, one
-        thing that might cause blocking on send would be credit control.
-     */
-    virtual void wait_until(
-        bool can_send
+    //! Wait until you can either send, receive, or until terminate or a timeout happens.
+    /*! 
+        \param eventSet A set of events that the client wants to wait until. Any combination of valid bits
+                        is valid, including the empty set (which will trivially just return without blocking).
+
+        \param timeoutMacroSeconds Specifies the maximum time to block in this call if no other event becomes ready.
+                The TIMEOUT event must be present in eventSet for this to take effect.
+                A timeout of 0 is an infinite timeout, and is a valid timeout even if TIMEOUT is present in the set.
+    
+        \retval A set of events that are currently ready. It will always be the case that (eventSet!=0) -> (eventSet&retVal!=0),
+            so as long as you're actually waiting for at least one event it will be guaranteed that at least one
+            is true on return. However, the implementation may choose to return a larger set of events, so it could include
+            events not present in eventSet.
+
+        A blocking wait will flush messages. However, if there is no need to wait
+        then flushing may or may not happen. 
+    */
+    virtual Events wait_until(
+        Events eventSet,
+        uint64_t timeoutMicroSeconds = 0
     )=0;
 
     const size_t INTERFACE_HASH_VAL_11=hash_combine(INTERFACE_HASH_VAL_10, __LINE__);

@@ -414,6 +414,11 @@ Parameters:
 - `--log-events destFile` : Log all events that happen into a complete history. This
   can be processed by other tools, such as `tools/render_event_log_as_dot.py'.
 
+- `--expect-idle-exit` : Usually the simulator will return a non-zero exit code if it
+    exists due to the simulation going idle (i.e. no-one wants to send). Use this
+    flag to indicate that this is the expected behaviour, and should not be treated
+    as an error.
+
 ### bin/graph_sim
 
 This is a much more general simulator than epoch_sim, and is useful

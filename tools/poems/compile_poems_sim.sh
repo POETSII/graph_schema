@@ -67,6 +67,7 @@ LIBXML_PKG_CONFIG_LDFLAGS="$(pkg-config --libs-only-L --libs-only-other libxml++
 
 CPPFLAGS=""
 CPPFLAGS+=" -I include -W -Wall -Wno-unused-parameter -Wno-unused-variable"
+CPPFLAGS+=" -I include/include_cache"
 CPPFLAGS+=" ${LIBXML_PKG_CONFIG_CPPFLAGS}"
 CPPFLAGS+=" -Wno-unused-local-typedefs"
 CPPFLAGS+=" -Wno-unused-function"
@@ -86,4 +87,5 @@ fi
 LDLIBS+="${LIBXML_PKG_CONFIG_LDLIBS} -ltbb -lmetis -ldl"
 LDFLAGS+="${LIBXML_PKG_CONFIG_LDFLAGS} -pthread"
 
-g++ ${working_dir}/poems_sim.cpp -DSPROVIDER_MAX_LOG_LEVEL=${max_log_level} -o ${output_file} ${CPPFLAGS} ${LDFLAGS} ${LDLIBS} || exit 1
+g++ -c ${working_dir}/poems_sim.cpp -DSPROVIDER_MAX_LOG_LEVEL=${max_log_level} -o ${working_dir}/poems_sim.o ${CPPFLAGS} || exit 1
+g++ ${working_dir}/poems_sim.o -o ${output_file} ${CPPFLAGS} ${LDFLAGS} ${LDLIBS} || exit 1

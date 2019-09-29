@@ -14,7 +14,7 @@ load bats_helpers
 
 @test "use tools/render_graph_as_dot.py on snaphots" {
     WD=$(make_test_wd)
-    ( cd $WD && ../../bin/epoch_sim ../../apps/ising_spin/ising_spin_8x8.xml --snapshots 1 graph.snap --max-steps 3 )
+    ( cd $WD && ../../bin/epoch_sim ../../apps/ising_spin/ising_spin_8x8.xml --snapshots 1 graph.snap --max-steps 3 --expect-idle-exit )
     ( cd $WD && ../../tools/render_graph_as_dot.py ../../apps/ising_spin/ising_spin_8x8.xml --snapshots graph.snap)
     [ -f $WD/graph.dot_000000.dot ]
     [ -f $WD/graph.dot_000003.dot ]

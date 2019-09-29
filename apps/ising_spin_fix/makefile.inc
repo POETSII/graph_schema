@@ -15,7 +15,7 @@ demos/ising_spin_fix/ising_spin_fix_$1.xml : apps/ising_spin_fix/create_ising_sp
 ALL_TEST_XML += demos/ising_spin_fix/ising_spin_fix_$1.xml
 
 demos/ising_spin_fix/ising_spin_fix_$1.snap : demos/ising_spin_fix/ising_spin_fix_$1.xml bin/epoch_sim providers/ising_spin_fix.graph.so demos/ising_spin_fix/ising_spin_fix_$1.checked
-	bin/epoch_sim --max-steps $2 --snapshots 1 $$@  demos/ising_spin_fix/ising_spin_fix_$1.xml
+	bin/epoch_sim --max-steps $2 --snapshots 1 $$@  --expect-idle-exit demos/ising_spin_fix/ising_spin_fix_$1.xml
 
 ALL_ising_spin_fix_TESTS += demos/ising_spin_fix/ising_spin_fix_$1.snap
 

@@ -59,12 +59,13 @@ class OutputWithPreProcLineNum:
         self.lineNum=1
 
     def write(self,msg):
-        for line in msg.splitlines():
-            if line.strip()=="__POETS_REVERT_PREPROC_DETOUR__":
-                dest.write('#line {} "{}"\n'.format(self.lineNum, self.destName))
-            else:
-                dest.write(line+"\n")
-            self.lineNum+=1
+        if msg is not None:
+            for line in msg.splitlines():
+                if line.strip()=="__POETS_REVERT_PREPROC_DETOUR__":
+                    dest.write('#line {} "{}"\n'.format(self.lineNum, self.destName))
+                else:
+                    dest.write(line+"\n")
+                self.lineNum+=1
 
 
 render_graph_as_cpp(graph, OutputWithPreProcLineNum(dest, destPath), destPath)

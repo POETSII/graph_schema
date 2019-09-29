@@ -15,7 +15,7 @@ demos/clock_tree/clock_tree_$1.xml : apps/clock_tree/create_clock_tree_instance.
 ALL_TEST_XML += demos/clock_tree/clock_tree_$1.xml
 
 demos/clock_tree/clock_tree_$1.snap : demos/clock_tree/clock_tree_$1.xml bin/epoch_sim providers/clock_tree.graph.so demos/clock_tree/clock_tree_$1.checked
-	bin/epoch_sim  --log-level 0 --max-steps $2 --snapshots 1 $$@  demos/clock_tree/clock_tree_$1.xml
+	bin/epoch_sim  --log-level 0 --max-steps $2 --snapshots 1  $$@ --expect-idle-exit demos/clock_tree/clock_tree_$1.xml
 
 ALL_CLOCK_TREE_TESTS += demos/clock_tree/clock_tree_$1.snap
 

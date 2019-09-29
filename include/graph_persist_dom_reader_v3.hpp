@@ -689,7 +689,8 @@ void loadGraph(Registry *registry, const filepath &srcPath, xmlpp::Element *pare
   }
   gId=events->onBeginGraphInstance(graphType, graphId, graphProperties, std::move(graphMetadata));
 
-  std::unordered_map<std::string, std::pair<uint64_t,DeviceTypePtr> > devices;
+  using devices_t = std::unordered_map<std::string, std::pair<uint64_t,DeviceTypePtr> >;
+  devices_t devices;
 
   auto *eDeviceInstances=find_single(eGraph, "./g:DeviceInstances", ns);
   if(!eDeviceInstances)
@@ -697,7 +698,7 @@ void loadGraph(Registry *registry, const filepath &srcPath, xmlpp::Element *pare
 
   events->onBeginDeviceInstances(gId);
 
-  for(auto *nDevice : eDeviceInstances->find("./g:DevI", ns)){
+  for(auto *nDevice : eDeviceInstances->find("./g:DevI|./g:ExtI", ns)){
     auto *eDevice=(xmlpp::Element *)nDevice;
 
     std::string id=get_attribute_required(eDevice, "id");
@@ -716,6 +717,9 @@ void loadGraph(Registry *registry, const filepath &srcPath, xmlpp::Element *pare
     TypedDataPtr deviceState;
     auto *eState=find_single(eDevice, "./g:S", ns);
     if(eState){
+      if(dt->isExternal()){
+        throw std::runtime_error("External instance "+id+" had a state struct.");
+      }  
       deviceState=dt->getStateSpec()->load(eState);
     }else{
       deviceState=dt->getStateSpec()->create();
@@ -749,17 +753,9 @@ void loadGraph(Registry *registry, const filepath &srcPath, xmlpp::Element *pare
       continue;
 
     std::string srcDeviceId, srcPinName, dstDeviceId, dstPinName;
-    std::string path=get_attribute_optional(eEdge, "path");
-    if(!path.empty()){
-      split_path(path, dstDeviceId, dstPinName, srcDeviceId, srcPinName);
-      //std::cerr<<srcDeviceId<<" "<<srcPinName<<" "<<dstDeviceId<<" "<<dstPinName<<"\n";
-    }else{
-      srcDeviceId=get_attribute_required(eEdge, "srcDeviceId");
-      srcPinName=get_attribute_required(eEdge, "srcPinName");
-      dstDeviceId=get_attribute_required(eEdge, "dstDeviceId");
-      dstPinName=get_attribute_required(eEdge, "dstPinName");
-    }
-
+    std::string path=get_attribute_required(eEdge, "path");
+    split_path(path, dstDeviceId, dstPinName, srcDeviceId, srcPinName);
+    
     int sendIndex=-1;
     std::string sendIndexStr=get_attribute_optional(eEdge, "sendIndex");
     if(!sendIndexStr.empty()){
@@ -769,9 +765,17 @@ void loadGraph(Registry *registry, const filepath &srcPath, xmlpp::Element *pare
       }
     }
 
+    auto at_devices_or_throw=[&](const std::string &device) -> devices_t::mapped_type &
+    {
+      auto it=devices.find(device);
+      if(it==devices.end()){
+        throw std::runtime_error("No device instance called "+device+" known, but it was used in path "+path);
+      }
+      return it->second;
+    };
 
-    auto &srcDevice=devices.at(srcDeviceId);
-    auto &dstDevice=devices.at(dstDeviceId);
+    auto &srcDevice=at_devices_or_throw(srcDeviceId);
+    auto &dstDevice=at_devices_or_throw(dstDeviceId);
 
     auto srcPin=srcDevice.second->getOutput(srcPinName);
     auto dstPin=dstDevice.second->getInput(dstPinName);

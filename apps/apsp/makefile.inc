@@ -24,8 +24,8 @@ $(eval $(call apsp_instance_template,2_2,100,10000))
 $(eval $(call apsp_instance_template,8_2,100,10000))
 $(eval $(call apsp_instance_template,7_7,100,10000))
 $(eval $(call apsp_instance_template,11_3,100,10000))
-$(eval $(call apsp_instance_template,100_10,100,10000))
-$(eval $(call apsp_instance_template,200_30,100,10000))
+$(eval $(call apsp_instance_template,100_10,100,20000))
+$(eval $(call apsp_instance_template,200_30,100,40000))
 
 apsp_tests : $(ALL_apsp_TESTS)
 

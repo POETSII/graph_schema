@@ -5,7 +5,7 @@ LIBXML_PKG_CONFIG_LDFLAGS := $(shell pkg-config --libs-only-L --libs-only-other 
 CPPFLAGS += -I include -W -Wall -Wno-unused-parameter -Wno-unused-variable
 CPPFLAGS += $(LIBXML_PKG_CONFIG_CPPFLAGS)
 CPPFLAGS += -Wno-unused-local-typedefs -Wno-unused-function
-CPPFLAGS += -I ../../include
+CPPFLAGS += -I ../../include -I ../../include/include_cache
 CPPFLAGS += -I ../sprovider
 CPPFLAGS += -DRAPIDJSON_HAS_STDSTRING=1
 CPPFLAGS += -g

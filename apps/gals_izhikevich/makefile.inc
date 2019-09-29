@@ -15,7 +15,7 @@ demos/gals_izhikevich/gals_izhikevich_$1.xml : apps/gals_izhikevich/create_spars
 ALL_TEST_XML += demos/gals_izhikevich/gals_izhikevich_$1.xml
 
 demos/gals_izhikevich/gals_izhikevich_$1.snap : demos/gals_izhikevich/gals_izhikevich_$1.xml bin/epoch_sim providers/gals_izhikevich.graph.so demos/gals_izhikevich/gals_izhikevich_$1.checked
-	bin/epoch_sim --stats-delta 1000 --log-level 0 --max-steps $3 --snapshots $2 $$@  demos/gals_izhikevich/gals_izhikevich_$1.xml
+	bin/epoch_sim --stats-delta 1000 --log-level 0 --max-steps $3 --snapshots $2 $$@  --expect-idle-exit demos/gals_izhikevich/gals_izhikevich_$1.xml
 
 ALL_GALS_IZHIKEVICH_TESTS += demos/gals_izhikevich/gals_izhikevich_$1.snap
 

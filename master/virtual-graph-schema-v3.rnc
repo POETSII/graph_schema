@@ -757,7 +757,7 @@ grammar {
            element MetaData {
              metaDataValue
            } ?
-        } ?
+        } *
 
         &
 
@@ -784,7 +784,7 @@ grammar {
            element MetaData {
              metaDataValue
            } ?
-        } ?
+        } *
 
         &
 

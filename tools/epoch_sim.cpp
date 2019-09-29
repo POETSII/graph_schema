@@ -16,6 +16,7 @@
 #include <signal.h>
 #include <regex>
 #include <thread>
+#include <chrono>
 
 #include "poets_protocol/InProcessBinaryUpstreamConnection.hpp"
 
@@ -31,6 +32,7 @@ struct InProcMessageBuffer
   : public InProcessBinaryUpstreamConnection
 {
   const unsigned MAX_EXT2INT_IN_FLIGHT = 65536;
+  const unsigned MAX_INT2EXT_IN_FLIGHT = 65536;
 
   struct message
   {
@@ -49,13 +51,55 @@ struct InProcMessageBuffer
   std::queue<message> m_ext2int;
   std::queue<message> m_int2ext;
 
+  int m_waiting=0;
+
   std::shared_ptr<halt_message_type> m_halt;
 
   void post_message(poets_endpoint_address_t address, std::shared_ptr<std::vector<uint8_t>> &payload, unsigned sendIndex)
   {
     std::unique_lock<std::mutex> lk(m_mutex);
     m_int2ext.push(message{address,payload,sendIndex});
-    m_cond.notify_one();
+    if(m_waiting>0){
+      m_cond.notify_all();
+    }
+  }
+
+  void wait_for_client_to_send()
+  {
+    std::unique_lock<std::mutex> lk(m_mutex);
+    m_waiting++;
+    m_cond.wait(lk, [&](){
+      return !m_ext2int.empty();
+    });
+    m_waiting--;
+  }
+
+  void wait_for_client_to_drain()
+  {
+    std::unique_lock<std::mutex> lk(m_mutex);
+    if(m_int2ext.size() < MAX_INT2EXT_IN_FLIGHT){
+      return;
+    }
+
+    fprintf(stderr, "Simulator is waiting for external to drain messages.\n");
+    m_waiting++;
+    m_cond.wait(lk, [&](){
+      return m_int2ext.size() < MAX_INT2EXT_IN_FLIGHT;
+    });
+    m_waiting--;
+  }
+
+  void set_halt_message(TypedDataPtr message)
+  {
+    if(message.payloadSize()!=sizeof(halt_message_type)){
+      throw std::runtime_error("Received a halt message of the wrong size (internal error?)");
+    }
+
+    std::unique_lock<std::mutex> lk(m_mutex);
+    assert(!m_halt);
+    m_halt.reset(new halt_message_type());
+    memcpy(m_halt.get(), message.payloadPtr(), sizeof(halt_message_type));
+    m_cond.notify_all();
   }
 
   ////////////////////////////////////
@@ -139,35 +183,51 @@ struct InProcMessageBuffer
       return true;
     }
 
-    virtual bool is_terminate_pending()
-    {
-      std::unique_lock<std::mutex> lk(m_mutex);
-      return !!m_halt;
-    }
-
     virtual const halt_message_type *get_terminate_message()
     {
       std::unique_lock<std::mutex> lk(m_mutex);
-      assert(m_halt);
       return m_halt.get();
     }
 
-    virtual void wait_until(
-        bool can_send
-    ){
+    using Events = InProcessBinaryUpstreamConnection::Events;
+
+    Events wait_until(
+        Events events,
+        uint64_t timeoutMicroSeconds
+    ) override {
       std::unique_lock<std::mutex> lk(m_mutex);
-      m_cond.wait(lk, [&](){
-        if(can_send && m_ext2int.size() < MAX_EXT2INT_IN_FLIGHT){
-          return true;
+
+      unsigned res;
+    
+      auto update_res=[&]() -> unsigned
+      {
+        res=0;
+        if(m_ext2int.size() < MAX_EXT2INT_IN_FLIGHT){
+          res |= Events::CAN_SEND;
         }
         if(!m_int2ext.empty()){
-          return true;
+          res |= Events::CAN_RECV;
         }
         if(m_halt){
-          return true;
+          res |= Events::TERMINATED;
         }
-        return false;
-      });
+        return res;
+      };
+
+      m_waiting++;
+      if(events==0){
+        // pass
+      }else if( (events&Events::TIMEOUT) && (timeoutMicroSeconds!=0)){
+        m_cond.wait_for(lk, std::chrono::microseconds(timeoutMicroSeconds),  [&](){
+          return (update_res()&events)!=0; 
+        });
+      }else{
+        m_cond.wait(lk, [&](){
+          return (update_res()&events)!=0; 
+        });
+      };
+      m_waiting--;
+      return Events(res);
     }
 
     virtual void external_log(
@@ -271,6 +331,8 @@ struct EpochSim
   std::unordered_map<const char *,unsigned> m_deviceIdToIndex;
   std::vector<std::tuple<const char*,unsigned,uint32_t,uint32_t> > m_keyValueEvents;
   std::unordered_set<unsigned> m_externalIndices;
+  int m_haltDeviceIndex=-1;
+  TypedDataPtr m_haltMessage;
 
   std::function<void (const char*,uint32_t,uint32_t)> m_onExportKeyValue;
 
@@ -328,7 +390,11 @@ struct EpochSim
     m_deviceIdToIndex[d.name]=d.index;
 
     if(d.isExternal){
-      m_externalIndices.insert(d.index);
+      if(id=="__halt__"){
+        m_haltDeviceIndex=d.index;
+      }else{
+        m_externalIndices.insert(d.index);
+      }
     }
 
     return d.index;
@@ -609,6 +675,10 @@ struct EpochSim
           
           pending.pop();
         }
+
+        // Also make sure that we don't have huge numbers of messages building
+        // up that the client hasn't drained
+        m_pExternalBuffer->wait_for_client_to_drain();
     }
 
 
@@ -816,6 +886,16 @@ struct EpochSim
             throw;
           }
           dst.readyToSend = dst.type->calcReadyToSend(&receiveServices, m_graphProperties.get(), dst.properties.get(), dst.state.get());
+        }else if(dst.index==m_haltDeviceIndex){
+          // Have to special case the halt
+          fprintf(stderr, "Received halt message from somewhere.\n");
+          if(message.payloadSize()!=sizeof(halt_message_type)){
+            throw std::runtime_error("Receive halt message with the wrong size.");
+          } 
+          if(!m_haltMessage){
+            m_pExternalBuffer->set_halt_message(message);
+            m_haltMessage=message;
+          }
         }else{
           sendToExternalConnection=true;
         }
@@ -928,6 +1008,8 @@ int main(int argc, char *argv[])
     int maxSteps=INT_MAX;
     int max_contiguous_idle_steps=10;
 
+    bool expectIdleExit=false;
+
     //double probSend=0.9;
     double probSend=1.0;
 
@@ -1009,6 +1091,9 @@ int main(int argc, char *argv[])
         }
         externalSpec=argv[ia+1];
         ia+=2;
+      }else if(!strcmp("--expect-idle-exit",argv[ia])){
+        expectIdleExit=true;
+        ia+=1;
       }else{
         srcFilePath=argv[ia];
         ia++;
@@ -1095,7 +1180,7 @@ int main(int argc, char *argv[])
         if(dev.type->getOutput(getEndpointPin(address).value)->isIndexedSend()){
           fanout.resize(f.size());
           for(unsigned i=0; i<f.size(); i++){
-            if(graph.m_devices[i].isExternal){
+            if(graph.m_devices[i].isExternal && (i!=graph.m_haltDeviceIndex)){
               auto d=f[i];
               fanout[i]=makeEndpoint(poets_device_address_t{d.dstDevice}, poets_pin_index_t{d.dstPinIndex});
             }else{
@@ -1106,7 +1191,7 @@ int main(int argc, char *argv[])
           fanout.resize(0);
           fanout.reserve(f.size());
           for(unsigned i=0; i<f.size(); i++){
-            if(graph.m_devices[i].isExternal){
+            if(graph.m_devices[i].isExternal && (i!=graph.m_haltDeviceIndex)){
               auto d=f[i];
               fanout.push_back(makeEndpoint(poets_device_address_t{d.dstDevice}, poets_pin_index_t{d.dstPinIndex}));
             }
@@ -1129,10 +1214,11 @@ int main(int argc, char *argv[])
           throw std::runtime_error("Couldn't open shared object file "+so_path);
         }
 
-        in_proc_external_main_t pProc=(in_proc_external_main_t)dlsym(hExternalObj, "in_proc_external_main");
+        pProc=(in_proc_external_main_t)dlsym(hExternalObj, "in_proc_external_main");
         if(!pProc){
           throw std::runtime_error("Couldn't find symbol 'in_proc_external_main' in shared object.");
         }
+        fprintf(stderr, "Found non-null inproc external in %s at %p\n", so_path.c_str(), pProc);
       }else if(externalSpec=="PROVIDER"){
         fprintf(stderr, "Loading default inproc external from provider\n");
         pProc=graph.m_graphType->getDefaultInProcExternalProcedure();
@@ -1158,6 +1244,9 @@ int main(int argc, char *argv[])
         fprintf(stderr, "Checking owned externals and types from inproc external connection against graph instance.\n");
         std::unordered_set<unsigned> foundIndices;
         for(auto i_v : owned){
+          if(i_v.first=="__halt__"){
+            throw std::runtime_error("Client connection tried to take ownership of the __halt__ device.");
+          }
           auto ii=graph.intern(i_v.first);
           auto it=graph.m_deviceIdToIndex.find(ii);
           if(it==graph.m_deviceIdToIndex.end()){
@@ -1212,7 +1301,11 @@ int main(int argc, char *argv[])
     bool capturePreEventState=enableAccurateAssertions || !checkpointName.empty();
 
     for(int i=0; i<maxSteps; i++){
-      bool running = graph.step(rng, probSend, capturePreEventState) && !graph.m_deviceExitCalled;
+      if(graph.m_haltMessage){
+        break;
+      }
+
+      bool running =  !graph.m_deviceExitCalled && graph.step(rng, probSend, capturePreEventState);
 
       if(logLevel>2 || i==nextStats){
         fprintf(stderr, "Epoch %u : sends/device/epoch = %f (%f / %u)\n\n", i, graph.m_statsSends / graph.m_devices.size() / statsDelta, graph.m_statsSends/statsDelta, (unsigned)graph.m_devices.size());
@@ -1239,7 +1332,14 @@ int main(int argc, char *argv[])
           graph.do_hardware_idle(); 
           contiguous_hardware_idle_steps++;
         }else{
-          break; // finished
+          if(graph.m_pExternalBuffer){
+            fprintf(stderr, "Simulator has done %u contiguous hardware idle steps. Blocking until the external connection sends a message.\n", contiguous_hardware_idle_steps);
+            graph.m_pExternalBuffer->wait_for_client_to_send();
+            contiguous_hardware_idle_steps=0;
+          }else{
+            fprintf(stderr, "Simulator has done %u contiguous hardware idle steps. Quiting as the graph seems to have deadlocked.\n", contiguous_hardware_idle_steps);
+            break; // finished
+          }
         }
       }
     }
@@ -1249,6 +1349,23 @@ int main(int argc, char *argv[])
     }
 
     close_resources();
+
+    if(graph.m_haltMessage){
+      if(inProcExternalThread.joinable()){
+        fprintf(stderr, "Joining with in-proc external thread.\n");
+        inProcExternalThread.join();
+      }
+
+      auto m=(const halt_message_type*)graph.m_haltMessage.payloadPtr();
+      exit(m->code);
+    }else{
+      if(expectIdleExit){
+        exit(0);
+      }else{
+        fprintf(stderr, "Simulator exited due to idle devices, but this was not expected (use --expect-idle-exit to indicate this).\n");
+        exit(1); // This is not a successful exit
+      }
+    }
   }catch(std::exception &e){
     close_resources();
     std::cerr<<"Exception : "<<e.what()<<"\n";

@@ -5,10 +5,12 @@
     <DeviceInstances>
       <ExtI id="outsider_0" type="outsider" />
       <DevI id="insider_0" type="reflector" />
+      <ExtI id="__halt__" type="__halt_device_type__" />
     </DeviceInstances>
     <EdgeInstances>
       <EdgeI path="outsider_0:in-insider_0:out" />
       <EdgeI path="insider_0:in-outsider_0:out" />
+      <EdgeI path="__halt__:stop-outsider_0:stop" />
     </EdgeInstances>
   </GraphInstance>
 </Graphs>

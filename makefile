@@ -160,11 +160,13 @@ bin/create_gals_heat_instance : apps/gals_heat/create_gals_heat_instance.cpp
 
 bin/% : tools/%.cpp
 	mkdir -p bin
-	$(CXX) $(CPPFLAGS) $< -o $@ $(LDFLAGS) $(LDLIBS)
+	$(CXX) -c $(CPPFLAGS) $< -o $@.o $(LDFLAGS) $(LDLIBS)
+	$(CXX) $(CPPFLAGS) $@.o -o $@ $(LDFLAGS) $(LDLIBS)
 
 bin/%.debug : tools/%.cpp
 	mkdir -p bin
-	$(CXX) $(CPPFLAGS_DEBUG) $< -o $@ $(LDFLAGS) $(LDLIBS)
+	$(CXX) -c $(CPPFLAGS_DEBUG) $< -o $@.o
+	$(CXX) $(CPPFLAGS_DEBUG) $@.o -o $@ $(LDFLAGS) $(LDLIBS)
 
 bin/%.release : tools/%.cpp
 	mkdir -p bin
@@ -176,7 +178,7 @@ define provider_rules_template
 # $3 : no default. If not empty, don't add to default build
 
 ifeq ($2,)
-$1_src_xml=apps/$1/$2$1_graph_type.xml
+$1_src_xml=apps/$1/$1_graph_type.xml
 else
 $1_src_xml=$2
 endif
@@ -187,8 +189,11 @@ providers/$1.graph.cpp providers/$1.graph.hpp : $$($1_src_xml) $(JING)
 	$$(PYTHON) tools/render_graph_as_cpp.py $$($1_src_xml) providers/$1.graph.cpp
 	$$(PYTHON) tools/render_graph_as_cpp.py --header $$($1_src_xml) providers/$1.graph.hpp
 
-providers/$1.graph.so : providers/$1.graph.cpp
-	g++ $$(CPPFLAGS) -Wno-unused-but-set-variable $$(SO_CPPFLAGS) $$< -o $$@ $$(LDFLAGS) $(LDLIBS)
+providers/$1.graph.o : providers/$1.graph.cpp
+	g++ -c $$(CPPFLAGS) -Wno-unused-but-set-variable $$(SO_CPPFLAGS) $$< -o $$@
+
+providers/$1.graph.so : providers/$1.graph.o
+	g++ $$(CPPFLAGS) $$(SO_CPPFLAGS) $$< -o $$@ $$(LDFLAGS) $(LDLIBS)
 
 $1_provider : providers/$1.graph.so
 

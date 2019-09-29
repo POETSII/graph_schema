@@ -15,7 +15,7 @@ demos/ising_spin/ising_spin_$1.xml : apps/ising_spin/create_ising_spin_instance.
 ALL_TEST_XML += demos/ising_spin/ising_spin_$1.xml
 
 demos/ising_spin/ising_spin_$1.snap : demos/ising_spin/ising_spin_$1.xml bin/epoch_sim providers/ising_spin.graph.so demos/ising_spin/ising_spin_$1.checked
-	bin/epoch_sim --max-steps $2 --snapshots 1 $$@  demos/ising_spin/ising_spin_$1.xml
+	bin/epoch_sim --max-steps $2 --snapshots 1 $$@ --expect-idle-exit  demos/ising_spin/ising_spin_$1.xml
 
 ALL_ISING_SPIN_TESTS += demos/ising_spin/ising_spin_$1.snap
 

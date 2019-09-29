@@ -7,7 +7,8 @@
 #include "graph_persist_dom_reader.hpp"
 
 using xml_v3::makeTypedDataSpec;
-using xml_v3::DeviceTypeDynamic;
+using xml_v3::InternalDeviceTypeDynamic;
+using xml_v3::ExternalDeviceTypeDynamic;
 using xml_v3::InputPinDynamic;
 using xml_v3::OutputPinDynamic;
 using xml_v3::GraphTypeDynamic;
@@ -331,8 +332,8 @@ GraphTypePtr make_gals_heat_graph_type()
         false
     );
 
-    cell=std::shared_ptr<DeviceTypeDynamic>(
-        new DeviceTypeDynamic(
+    cell=std::shared_ptr<InternalDeviceTypeDynamic>(
+        new InternalDeviceTypeDynamic(
             "cell",
             makeTypedDataSpec({
                 makeScalar("wSelf", "float"),
@@ -350,7 +351,6 @@ GraphTypePtr make_gals_heat_graph_type()
             }),
             {in},
             {out},
-            false,
             "None", "None", "None", "None", "None"
         )
     );
