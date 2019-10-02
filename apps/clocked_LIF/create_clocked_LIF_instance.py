@@ -103,7 +103,7 @@ def create_fanin(graph,dstDevInst,dstPortName,dstFixup,reducerFactory,srcDevInst
         
     dstFixup(dstDevInst,len(todo))
 
-import os
+#import os
 appBase=os.path.dirname(os.path.realpath(__file__))
 
 src=appBase+"/clocked_LIF_graph_type.xml"
@@ -112,7 +112,7 @@ src=appBase+"/clocked_LIF_graph_type.xml"
 #parameter for LIF
 Ne=40
 Ni=10
-K=20
+K=10
 
 maxTicks=10
 maxFanIn=8
@@ -181,7 +181,7 @@ for i in range(N):
         #d=2
         #Ir=2
     props={
-        "r_tau_m":to_fix(tau_m), "R":to_fix(R), "U_rest":to_fix(U_rest), "Ir":to_fix(Ir), "fanin":K, "seed":int(urand()*2**32)
+        "r_tau_m":to_fix(1/tau_m), "R":to_fix(R), "U_rest":to_fix(U_rest), "Ir":to_fix(Ir), "fanin":K, "seed":int(urand()*2**32)
     }
     nodes[i]=DeviceInstance(res, "n_{}".format(i), neuronType, props)
     res.add_device_instance(nodes[i])

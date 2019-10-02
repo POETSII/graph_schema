@@ -239,7 +239,7 @@
         <State>
           <Scalar name="rng" type="uint32_t"/>
           <Scalar name="u" type="int32_t"/>
-          <Scalar name="v" type="int32_t"/>
+	 // <Scalar name="v" type="int32_t"/>
           <Scalar name="I" type="int32_t"/>
           <Scalar name="Icount" type="uint32_t"/>
           <Scalar name="fireValue" type="int8_t"/>
@@ -249,7 +249,6 @@
         <OnInit><![CDATA[
           deviceState->rng = deviceProperties->seed;
 
-          deviceState->v=fix_from_int(-65);
           deviceState->u=fix_mul( deviceProperties->r_tau_m , deviceState->v );
 
           deviceState->fireValue=false; // We don't fire in the first round
@@ -292,7 +291,7 @@
           assert(deviceState->Icount==deviceProperties->fanin);
           assert(!deviceState->waitTick && deviceState->sentSpike);
 
-          int32_t &v=deviceState->v;
+         // int32_t &v=deviceState->v;
           int32_t &u=deviceState->u;
           int32_t &I=deviceState->I;
 
@@ -301,15 +300,16 @@
           //const int32_t c_5=fix_from_int(5);
           //const int32_t c_140=fix_from_int(140);
 
-          handler_log(4, " v=%d, u=%d, I=%d", v, u, I);
+          //handler_log(4, " v=%d, u=%d, I=%d", v, u, I);
+	 handler_log(4, "u=%d, I=%d", u, I);
 
           
-          u=fix_add(fix_mul(deviceProperties->r_tau_m,fix_sub(deviceProperties->U_rest,u)), fix_mul(deviceProperties->r_tau_m , I, deviceProperties->R));
+          u=fix_add(fix_mul(deviceProperties->r_tau_m,fix_sub(deviceProperties->U_rest,u)), fix_mul(deviceProperties->r_tau_m , I, deviceProperties->R),u);
 
-          deviceState->fireValue = fix_gte(v , 30);
+          deviceState->fireValue = fix_gte(u , -30);
           if(deviceState->fireValue){
             handler_log(1, "FIRE!");
-            
+            u=deviceProperties->U_rest;
           }
 
           // For accumulation by root
