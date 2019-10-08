@@ -95,5 +95,3 @@ def make_output_pin_properties(op):
         "OUTPUT_PORT_SEND_HANDLER_SOURCE_LOCATION" : preProc,
         "MESSAGETYPE_NUMID" : op.message_type.numid
     })
-
-

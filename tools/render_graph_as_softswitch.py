@@ -2,6 +2,7 @@
 
 from graph.load_xml import load_graph_types_and_instances
 from graph.write_cpp import render_graph_as_cpp
+from graph.auto_timers import add_auto_timers
 
 from graph.make_properties import *
 from graph.calc_c_globals import *
@@ -34,12 +35,41 @@ parser.add_argument('--measure', help="Destination for measured properties", def
 parser.add_argument('--message-types', help="a file that prints the message types and their enumerated values. This is used to decode messages at the executive", default="messages.csv")
 parser.add_argument('--app-pins-addr-map', help="a file that gives the address map of the input pins, used by the executive to send messages to devices", default="appPinInMap.csv")
 parser.add_argument('--externals', help="if set true we are using the externals UserI/O other wise we are using application pins for I/O", type=bool, default=False)
+parser.add_argument('--timers', help="If true, timers will be added to provide accurate timing", type=bool, default=False)
 
 args = parser.parse_args()
 
 sys.path.append(args.graph_schema_dir + "/tools/")
 # Import config.py from tinsel (this has had to be automtically converted to python3)
 from config import p
+
+if args.source=="-":
+    source=sys.stdin
+    sourcePath="[graph-type-file]"
+else:
+    sys.stderr.write("Reading graph type from '{}'\n".format(args.source))
+    source=open(args.source,"rt")
+    sourcePath=os.path.abspath(args.source)
+    sys.stderr.write("Using absolute path '{}' for pre-processor directives\n".format(sourcePath))
+
+(types,instances)=load_graph_types_and_instances(source, sourcePath)
+
+if len(types)!=1:
+    raise RuntimeError("File did not contain exactly one graph type.")
+
+BoardMeshX = 3*p["BoxMeshXLen"]
+BoardMeshY = 2*p["BoxMeshYLen"]
+
+if(len(instances)>0):
+    inst=None
+    for g in instances.values():
+        inst=g
+        break
+
+    timers = []
+    if args.timers:
+        numBoards = BoardMeshX*BoardMeshY
+        timers = add_auto_timers(inst, numBoards)
 
 def print_statistics(dst, baseName, unit, data):
     print("{}Count, -, {}, {}\n".format(baseName, len(data), unit), file=measure_file)
@@ -1216,21 +1246,6 @@ else:
 
 measure_file=open(args.measure, "wt")
 
-if args.source=="-":
-    source=sys.stdin
-    sourcePath="[graph-type-file]"
-else:
-    sys.stderr.write("Reading graph type from '{}'\n".format(args.source))
-    source=open(args.source,"rt")
-    sourcePath=os.path.abspath(args.source)
-    sys.stderr.write("Using absolute path '{}' for pre-processor directives\n".format(sourcePath))
-
-
-(types,instances)=load_graph_types_and_instances(source, sourcePath)
-
-if len(types)!=1:
-    raise RuntimeError("File did not contain exactly one graph type.")
-
 graph=None
 for g in types.values():
     graph=g
@@ -1312,6 +1327,10 @@ if(len(instances)>0):
             assert False, "Unknown contraction method '{}'".format(args.contraction)
 
         device_to_thread = { id:logicalToPhysical[thread] for (id,thread) in device_to_thread.items() }
+
+    if args.timers:
+        for i in range(0, len(timers)):
+            device_to_thread[timers[i].id] = i*1024
 
     destInstPath=os.path.abspath("{}/{}_{}_inst.cpp".format(destPrefix,graph.id,inst.id))
     destInst=open(destInstPath,"wt")
