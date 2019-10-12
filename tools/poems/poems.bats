@@ -2,11 +2,11 @@ load ../bats_helpers
 
 # Warning: this test is flaky. Sometimes it crashes under bats, but
 # it cannot be reproduced in mnay tens of back-to-back runs outside bats.
-@test "Compile and run POEMS with manual gals heat with default args" {
-    (cd tools/poems && make -B run_gals_heat)
-    #(cd tools/poems && gdb -batch --eval-command run --eval-command bt --eval-command quit ./run_gals_heat)
-    (cd tools/poems && ./run_gals_heat)
-}
+#@test "Compile and run POEMS with manual gals heat with default args" {
+#    (cd tools/poems && make -B run_gals_heat)
+#    #(cd tools/poems && gdb -batch --eval-command run --eval-command bt --eval-command quit ./run_gals_heat)
+#    (cd tools/poems && ./run_gals_heat)
+#}
 
 @test "Check compile_poems_sim accepts --release" {
     run tools/poems/compile_poems_sim.sh --release apps/ising_spin/ising_spin_8x8.xml

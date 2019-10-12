@@ -290,12 +290,6 @@ private:
       //fputc('\n', stderr);
     }
 
-    void export_key_value(uint32_t key, uint32_t value)
-    {
-      // Do nothing
-      assert(0); // Plus obsolete
-    }
-
     void vcheckpoint(bool preEvent, int level, const char *tagFmt, va_list tagArgs)
     {
       // Do nothing

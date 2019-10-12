@@ -34,9 +34,9 @@ make_test_wd() {
     # inspired by https://github.com/ztombol/bats-file/blob/master/src/temp.bash
 
     local wd="testing/${BATS_TEST_FILENAME##*/}-${BATS_TEST_NUMBER}"
-    
+
+    ( [ -d "$wd" ] && rm -rf "$wd" )    
     mkdir -p $wd
-    ( [ "$wd" != "" ] && rm $wd/* )
 
     echo $wd
 }

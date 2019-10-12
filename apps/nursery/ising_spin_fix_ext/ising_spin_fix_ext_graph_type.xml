@@ -1,0 +1,209 @@
+<?xml version='1.0' encoding='ASCII'?>
+<Graphs xmlns="https://poets-project.org/schemas/virtual-graph-schema-v3">
+  <GraphType id="ising_spin_fix_ext">
+     <!-- This is supposed to implement the method from [lubachevsky-87-asynchronous-ising-spin-models]:
+     "Efficient Parallel Simulations of Asynchronous Cellular Arrays", 1987, Boris D. Lubachevsky
+
+     The main difference with ising_spin is that this uses fixed point.
+     We are also more careful to ensure that there is a definite least time within
+     a neighbourhood. Every cell is given a tag, such that no two tags are the
+     same for neighbouring cells - in practise this can just be a number from [0..9)
+     0 1 2 0 1 2     0 1 2   0 0 0
+     3 4 5 3 4 5  =  0 1 2 + 3 3 3
+     6 7 8 6 7 8     0 1 2   6 6 6
+     0 1 2 0 1 2
+     3 4 5 3 4 5
+     6 7 8 6 7 8
+     tag = (x%3)+(y%3)*3
+     The tag then forms the 4 LSBs of the generated time, so that there is always
+     a definitive least time within a neighbourhood.
+     The erng has a mean of 2^17, and a maximum step of 2^22-1. Including the tag,
+     that means each step moves (on average) 2^20, and the biggest step is 2^25-1.
+     So we must have maxTime less than 2^32 - 2^25 to avoid wrap-around.
+     Choosing maxStep=2^24 gives about 16 steps per device (for testing purposes, need more for relaxation)
+     
+     For output slices we use the tag 0xF, so it is distinct from any cell time.
+     -->
+    <Properties>
+      <Scalar name="width" type="uint32_t"/>
+      <Scalar name="height" type="uint32_t"/>
+      <Array name="probabilities" length="10" type="uint32_t"/>
+      <Scalar name="slice_step" type="uint32_t" />
+    </Properties>
+	<SharedCode><![CDATA[
+        #ifdef POETS_LEGACY_HAS_HANDLER_EXIT
+        #define _do_handler_exit(code) handler_exit(code)
+        #else
+        #define _do_handler_exit(code) ((void)0)
+        #endif
+
+        #define fake_handler_exit(code) \
+        { \
+            if((code)==0){ \
+                handler_log(0, "_HANDLER_EXIT_SUCCESS_9be65737_"); \
+            }else{ \
+                handler_log(0, "_HANDLER_EXIT_FAIL_9be65737_"); \
+            } \
+            _do_handler_exit(code); \
+        }
+]]></SharedCode>
+    <MetaData>"nativeDimension": 2</MetaData>
+    <SharedCode><![CDATA[
+
+    #pragma POETS EMBED_HEADER
+    #include "ising_spin_shared.hpp"
+
+    ]]></SharedCode>
+    <MessageTypes>
+      <MessageType id="update">
+        <Message>
+          <Scalar name="time" type="uint32_t"/>
+          <Scalar name="spin" type="uint32_t"/>
+        </Message>
+      </MessageType>
+      <MessageType id="pixel">
+        <Message>
+          <Scalar name="x" type="uint16_t"/>
+          <Scalar name="y" type="uint16_t"/>
+          <Scalar name="time" type="uint32_t"/>
+          <Scalar name="spin" type="uint32_t"/>
+        </Message>
+      </MessageType>
+      <MessageType id="window">
+        <Message>
+          <Scalar name="next_time" type="uint32_t"/>
+        </Message>
+      </MessageType>
+    </MessageTypes>
+    <DeviceTypes>
+      <DeviceType id="cell">
+        <Properties>
+          <Scalar name="x" type="uint32_t"/>
+          <Scalar name="y" type="uint32_t"/>
+          <Scalar name="tag" type="uint32_t"/>
+        </Properties>
+        <State>
+          <Scalar name="rng" type="uint32_t"/>
+          <Array name="spins" length="5" type="int32_t"/>
+          <Array name="times" length="6" type="uint32_t"/>
+          <Scalar name="slice_window" type="uint32_t" /> 
+        </State>
+        <SharedCode><![CDATA[
+
+			]]></SharedCode>
+        <OnInit><![CDATA[
+    assert(graphProperties->slice_step <= 0x10000000);
+
+	  // Initialise RNG and choose random starting spin
+	  uint32_t seed;
+	  uint32_t x=deviceProperties->x, y=deviceProperties->y;
+	  uint32_t W=graphProperties->width, H=graphProperties->height;
+
+		handler_log(3, " x=%u, y=%u", x, y);
+
+    uint32_t fakeSeed;
+		cell_init(x, mod(y+H-1, H), deviceState->spins[1], deviceState->times[1], fakeSeed);
+		cell_init( mod(x+1,W), y, 	deviceState->spins[2], deviceState->times[2], fakeSeed);
+		cell_init(x, mod(y+1,H), 	deviceState->spins[3], deviceState->times[3], fakeSeed);
+		cell_init(mod(x+W-1,W), y, deviceState->spins[4], deviceState->times[4], fakeSeed);
+
+	  // Final one is this node
+		cell_init(x, y, 				deviceState->spins[0], deviceState->times[0], seed);
+	  deviceState->rng=seed; // Store the rng state back
+
+    // And the fake time for the slice output time
+    deviceState->times[5]=(graphProperties->slice_step<<4)|0xf;
+
+	  // We now have perfect knowledge of our neighbourhood, and
+	  // when they are planning to fire.
+
+	  handler_log(3, "next_t = %u, spin = %d", deviceState->times[0], deviceState->spins[0]);
+	  ]]></OnInit>
+  <InputPin name="in" messageTypeId="update">
+    <Properties>
+      <Scalar name="direction" type="uint32_t"/>
+    </Properties>
+    <OnReceive><![CDATA[
+    uint32_t nx, ny;
+
+	  if(message->time >= deviceState->times[edgeProperties->direction]){
+  	  deviceState->spins[edgeProperties->direction]=message->spin;
+	    deviceState->times[edgeProperties->direction]=message->time;
+
+	    get_neighbour_coords(deviceProperties->x, deviceProperties->y, graphProperties->width, graphProperties->height, edgeProperties->direction, nx, ny);
+	    handler_log(4, "from %d=(%u,%d), new_time = %u, new_spin  %d", edgeProperties->direction, nx, ny, message->time, message->spin);
+	  }
+	  ]]></OnReceive>
+  </InputPin>
+  <OutputPin name="out" messageTypeId="update">
+    <OnSend><![CDATA[
+    uint32_t nx, ny;
+
+		uint32_t prevTime=deviceState->times[0];
+		int prevSpin=deviceState->spins[0];
+    uint32_t prevRng=deviceState->rng;
+		chooseNextEvent(graphProperties->probabilities,  deviceProperties->tag, deviceState->rng, deviceState->spins, deviceState->times[0]);
+
+    handler_log(3, "  UPDATE: (%u,%u) : (t,s,rng)=(%u,%d,%08x) + {%d,%d,%d,%d} -> (%u,%d,%08x)",
+      deviceProperties->x, deviceProperties->y,
+      prevTime, prevSpin, prevRng,
+      deviceState->spins[1],deviceState->spins[2],deviceState->spins[3],deviceState->spins[4],
+      deviceState->times[0], deviceState->spins[0], deviceState->rng
+    );
+
+		message->spin = deviceState->spins[0];
+		message->time = deviceState->times[0];
+
+		handler_log(3, "tag=%u, next_t = %u, curr_spin = %d", deviceProperties->tag, deviceState->times[0], deviceState->spins[0]);
+	  ]]></OnSend>
+  </OutputPin>
+
+  <InputPin name="pixel_window" messageTypeId="window">
+    <OnReceive><![CDATA[
+    if(is_before(deviceState->slice_window, message->next_time)){
+      deviceState->slice_window=message->next_time;
+    }
+	  ]]></OnReceive>
+  </InputPin>
+
+  <OutputPin name="pixel_out" messageTypeId="pixel">
+    <OnSend><![CDATA[
+      message->x = deviceProperties->x;
+      message->y = deviceProperties->y;
+      message->time = deviceState->times[0];
+      message->spin = deviceState->spins[0];
+
+      deviceState->times[5] += graphProperties->slice_step<<4;
+	  ]]></OnSend>
+        </OutputPin>
+  <ReadyToSend><![CDATA[
+    *readyToSend=0;
+
+    bool isEarliest=true;
+    for(unsigned i=1; i<5; i++){
+      if(is_before(deviceState->times[i], deviceState->times[0])){
+        isEarliest=false;
+        break;
+      }
+    }
+    if(isEarliest){
+      if(is_before(deviceState->times[5] , deviceState->times[0])){
+        if(is_before(deviceState->times[5], deviceState->slice_window)){
+          *readyToSend=RTS_FLAG_pixel_out;
+        }else{
+          // Need to wait for window to move
+        }
+      }else{
+        *readyToSend=RTS_FLAG_out;
+      }
+    }
+	]]></ReadyToSend>
+      </DeviceType>
+
+      <ExternalType id="sink">
+        <InputPin name="pixel_input" messageTypeId="pixel" />
+        <OutputPin name="chunk_advance" messageTypeId="window" />
+      </ExternalType>
+    </DeviceTypes>
+  </GraphType>
+</Graphs>

@@ -535,16 +535,6 @@ private:
             , engine(_engine)
         {}
 
-        void export_key_value(uint32_t key, uint32_t value) override
-        {
-            static bool warned=false;
-            if(!warned) {
-                // no-op
-                fprintf(stderr, "handler_export_key_value is not supported by this engine\n");
-                warned=true;
-            }
-        }
-
         void vcheckpoint(bool preEvent, int level, const char *tagFmt, va_list tagArgs) override
         {
             static bool warned=false;

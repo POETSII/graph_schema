@@ -198,11 +198,6 @@ struct QueueSim
     std::vector<std::unique_ptr<LogWriter::event_t> > m_events;
 
     uint64_t sentinelB=0x23456781;
-
-    std::function<void(const char*, unsigned int, unsigned int)> onKeyValue=[](const char *device, unsigned int key, unsigned int value){
-      // TODO!
-      //fprintf(stderr,   "key-value, %s, %u, %u\n", device, key, value);
-    };
     
 
     queue_t() = delete;
@@ -399,7 +394,7 @@ struct QueueSim
     {
       const typed_data_t *graphPropertiesPtr=parent->m_graphProperties.get();
   
-      ReceiveOrchestratorServicesImpl services(logLevel, stderr, 0, 0, onKeyValue, parent->onHandlerExit);
+      ReceiveOrchestratorServicesImpl services(logLevel, stderr, 0, 0, parent->onHandlerExit);
 
       std::string idSendStr;
       if(m_log){
@@ -469,7 +464,7 @@ struct QueueSim
       assert(device->readyIndex < (int)device->outputs.size());
       auto &output=device->outputs[device->readyIndex];
 
-      SendOrchestratorServicesImpl services(logLevel, stderr, device->id, output.pin->getName().c_str(), onKeyValue, parent->onHandlerExit);
+      SendOrchestratorServicesImpl services(logLevel, stderr, device->id, output.pin->getName().c_str(), parent->onHandlerExit);
 
       uint64_t mid=nextEventId();
       double now=getNow();
@@ -575,12 +570,6 @@ struct QueueSim
   int m_exitCode=0;
   bool m_exitCodeSet=false;
 
-  std::function<void (const char *, uint32_t,uint32_t)> onExportKeyValue=[=](const char *, uint32_t, uint32_t)
-  {
-    fprintf(stderr, "key value not supported in queue sim.\n");
-    throw std::runtime_error("key value not supported in queue sim.");
-  };
-
   std::function<void(const char*, int)> onHandlerExit=[=](const char *device, int code){
     fprintf(stderr, "Device exit from %s, code =%d\n", device, code);
     onExit(device, code);
@@ -598,15 +587,13 @@ struct QueueSim
 
   void dump()
   {
-    std::function<void(const char*, unsigned int, unsigned int)> onKeyValue=[](const char *device, unsigned int key, unsigned int value){
-      fprintf(stderr,   "ERROR: key-value during __print__, %s, %u, %u\n", device, key, value);
-    };
+
     std::function<void(const char*, int)> onHandlerExit=[](const char *device, int code){
       fprintf(stderr, "ERROR: Device exit from %s during __print__, code =%d\n", device, code);
       exit(1);
     };
 
-    ReceiveOrchestratorServicesImpl services(0, stderr, 0, "__print__", onKeyValue, onHandlerExit);
+    ReceiveOrchestratorServicesImpl services(0, stderr, 0, "__print__", onHandlerExit);
     for(auto *device : m_devices){
       auto print=device->type->getInput("__print__");
       if(print){
@@ -637,7 +624,7 @@ struct QueueSim
     // despatching received messages yet, so this must be the
     // first thing they get
     for(auto *device : queue.devices){
-      ReceiveOrchestratorServicesImpl services(logLevel, stderr, device->id, "__init__", queue.onKeyValue, onHandlerExit);
+      ReceiveOrchestratorServicesImpl services(logLevel, stderr, device->id, "__init__", onHandlerExit);
 
       uint64_t mid=queue.nextEventId();
       double now=getNow();

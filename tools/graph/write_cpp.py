@@ -943,7 +943,7 @@ def render_device_type_as_cpp(dt,dst):
     auto deviceProperties=cast_typed_properties<{devicePropertiesStructName}>(gDeviceProperties);
     auto deviceState=cast_typed_properties<{deviceStateStructName}>(gDeviceState);
     HandlerLogImpl handler_log(orchestrator);
-    // Note: no handler_exit or handler_export_key_value in rts, as it should be side effect free
+    // Note: no handler_exit in rts, as it should be side effect free
 
     uint32_t fReadyToSend=0;
     uint32_t *readyToSend=&fReadyToSend;
@@ -977,7 +977,6 @@ def render_device_type_as_cpp(dt,dst):
         auto deviceState=cast_typed_data<{deviceStateStructName}>(gDeviceState);
         HandlerLogImpl handler_log(orchestrator);
         auto handler_exit=[&](int code) -> void {{ orchestrator->application_exit(code); }};
-        auto handler_export_key_value=[&](uint32_t key, uint32_t value) -> void {{ orchestrator->export_key_value(key, value); }};
         auto handler_checkpoint=[&](bool preEvent, int level, const char *fmt, ...) -> void {{
             va_list a;
             va_start(a,fmt);
@@ -1010,7 +1009,6 @@ def render_device_type_as_cpp(dt,dst):
         auto deviceState=cast_typed_data<{deviceStateStructName}>(gDeviceState);
         HandlerLogImpl handler_log(orchestrator);
         auto handler_exit=[&](int code) -> void {{ orchestrator->application_exit(code); }};
-        auto handler_export_key_value=[&](uint32_t key, uint32_t value) -> void {{ orchestrator->export_key_value(key, value); }};
         auto handler_checkpoint=[&](bool preEvent, int level, const char *fmt, ...) -> void {{
             va_list a;
             va_start(a,fmt);
@@ -1041,7 +1039,6 @@ def render_device_type_as_cpp(dt,dst):
         auto deviceState=cast_typed_data<{deviceStateStructName}>(gDeviceState);
         HandlerLogImpl handler_log(orchestrator);
         auto handler_exit=[&](int code) -> void {{ orchestrator->application_exit(code); }};
-        auto handler_export_key_value=[&](uint32_t key, uint32_t value) -> void {{ orchestrator->export_key_value(key, value); }};
         auto handler_checkpoint=[&](bool preEvent, int level, const char *fmt, ...) -> void {{
             va_list a;
             va_start(a,fmt);

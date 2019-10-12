@@ -150,7 +150,6 @@ def load_typed_data_spec(dt, namedTypes={}, namespace=None, loadDocumentation=Fa
         type=get_attrib(dt, "type")
         default=get_attrib_optional(dt, "default")
         if default:
-            sys.stderr.write("  default='{}', converting to json\n".format(default))
             default=json.loads(default) # needed for typedef'd structs
         else:
             d = dt.find("p:Default", namespace)

@@ -334,8 +334,6 @@ struct EpochSim
   int m_haltDeviceIndex=-1;
   TypedDataPtr m_haltMessage;
 
-  std::function<void (const char*,uint32_t,uint32_t)> m_onExportKeyValue;
-
   std::function<void (const char*,bool,int,const char *)> m_onCheckpoint;
 
   int m_checkpointLevel=0;
@@ -493,10 +491,6 @@ struct EpochSim
 
   void init()
   {
-    m_onExportKeyValue=[&](const char *id, uint32_t key, uint32_t value) -> void
-    {
-      throw std::runtime_error("Export key value is no longer supported.");
-    };
 
     m_onDeviceExit=[&](const char *id, int code) ->void
     {
@@ -518,7 +512,7 @@ struct EpochSim
     }
 
     for(auto &dev : m_devices){
-      ReceiveOrchestratorServicesImpl receiveServices{logLevel, stderr, dev.name, "Init handler", m_onExportKeyValue, m_onDeviceExit, m_onCheckpoint  };
+      ReceiveOrchestratorServicesImpl receiveServices{logLevel, stderr, dev.name, "Init handler", m_onDeviceExit, m_onCheckpoint  };
       if(!dev.isExternal){
         dev.type->init(&receiveServices, m_graphProperties.get(), dev.properties.get(), dev.state.get());
         dev.readyToSend = dev.type->calcReadyToSend(&receiveServices, m_graphProperties.get(), dev.properties.get(), dev.state.get());
@@ -588,7 +582,7 @@ struct EpochSim
     fprintf(stderr, "onHardwareIdle\n");
     for(auto &d : m_devices){
       if(!d.isExternal){
-        ReceiveOrchestratorServicesImpl services{logLevel, stderr, d.name, "Idle handler", m_onExportKeyValue, m_onDeviceExit, m_onCheckpoint  };
+        ReceiveOrchestratorServicesImpl services{logLevel, stderr, d.name, "Idle handler", m_onDeviceExit, m_onCheckpoint  };
         d.type->onHardwareIdle(&services, m_graphProperties.get(), d.properties.get(), d.state.get()  );
         d.readyToSend = d.type->calcReadyToSend(&services, m_graphProperties.get(), d.properties.get(), d.state.get());
 
@@ -622,14 +616,14 @@ struct EpochSim
     // Within each step every object gets the chance to send a message with probability probSend
     std::uniform_real_distribution<> udist;
 
-    ReceiveOrchestratorServicesImpl receiveServices{logLevel, stderr, 0, 0, m_onExportKeyValue, m_onDeviceExit, m_onCheckpoint};
+    ReceiveOrchestratorServicesImpl receiveServices{logLevel, stderr, 0, 0, m_onDeviceExit, m_onCheckpoint};
     {
       std::stringstream tmp;
       tmp<<"Epoch "<<m_epoch<<", Recv: ";
       receiveServices.setPrefix(tmp.str().c_str());
     }
 
-    SendOrchestratorServicesImpl sendServices{logLevel, stderr, 0, 0, m_onExportKeyValue, m_onDeviceExit, m_onCheckpoint};
+    SendOrchestratorServicesImpl sendServices{logLevel, stderr, 0, 0, m_onDeviceExit, m_onCheckpoint};
     {
       std::stringstream tmp;
       tmp<<"Epoch "<<m_epoch<<", Send: ";

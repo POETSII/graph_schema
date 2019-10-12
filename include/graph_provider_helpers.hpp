@@ -755,14 +755,12 @@ private:
   std::string m_prefix;
   const char *m_device;
   const char *m_input;
-  std::function<void (const char *,uint32_t,uint32_t)> m_onExportKeyValue;
   std::function<void (const char *,int)> m_onApplicationExit;
   std::function<void (const char *,uint32_t,bool,const char *)> m_onCheckpoint;
 public:
   OrchestratorServicesImpl(
     const char *prefix,
     unsigned logLevel, FILE *dst, const char *device, const char *input,
-    std::function<void (const char *, uint32_t,uint32_t)> onExportKeyValue, // It is up to application to manage sequence
     std::function<void (const char *,int)> onApplicationExit,
     std::function<void (const char *,uint32_t,bool,const char *)> onCheckpoint
   )
@@ -771,7 +769,6 @@ public:
     , m_prefix(prefix)
     , m_device(device)
     , m_input(input)
-    , m_onExportKeyValue(onExportKeyValue)
     , m_onApplicationExit(onApplicationExit)
     , m_onCheckpoint(onCheckpoint)
   {}
@@ -817,10 +814,6 @@ public:
     m_onCheckpoint(m_device, preEvent, level, buffer);
   }
 
-  [[deprecated]] virtual void export_key_value(uint32_t key, uint32_t value) override
-  {
-    throw std::runtime_error("export_key_value is no longer allowed - please remove all uses.");
-  }
 
   virtual void application_exit(int code)
   {
@@ -835,14 +828,13 @@ class ReceiveOrchestratorServicesImpl
 public:
   ReceiveOrchestratorServicesImpl(
     unsigned logLevel, FILE *dst, const char *device, const char *input,
-    std::function<void (const char *, uint32_t,uint32_t)> onExportKeyValue, // It is up to application to manage sequence
     std::function<void (const char *,int)> onApplicationExit,
     std::function<void (const char *,uint32_t,bool,const char *)> onCheckpoint = onCheckpointDefault
   )
     : OrchestratorServicesImpl(
         "Recv : ",
         logLevel,dst,device,input,
-        onExportKeyValue,onApplicationExit,onCheckpoint
+        onApplicationExit,onCheckpoint
     )
   {}
 };
@@ -854,14 +846,13 @@ class SendOrchestratorServicesImpl
 public:
   SendOrchestratorServicesImpl(
     unsigned logLevel, FILE *dst, const char *device, const char *input,
-    std::function<void (const char *, uint32_t,uint32_t)> onExportKeyValue, // It is up to application to manage sequence
     std::function<void (const char *,int)> onApplicationExit,
     std::function<void (const char *,uint32_t,bool,const char *)> onCheckpoint = onCheckpointDefault
   )
     : OrchestratorServicesImpl(
         "Send : ",
         logLevel,dst,device,input,
-        onExportKeyValue,onApplicationExit,onCheckpoint
+        onApplicationExit,onCheckpoint
     )
     {}
 };
