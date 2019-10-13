@@ -28,7 +28,7 @@ if len(sys.argv)>1:
 if len(sys.argv)>2:
     T=float(sys.argv[2])
 
-slice_step=2**18
+slice_step=2**20
 
 sys.stderr.write(f"T={T}, J={J}, H={H}\n")
 
