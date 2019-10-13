@@ -1170,7 +1170,7 @@ def render_graph_as_cpp(graph,dst, destPath, asHeader=False):
 
     dst.write("""
     #ifdef POETS_HAVE_IN_PROC_EXTERNAL_MAIN
-    void poets_in_proc_external_main(InProcessBinaryUpstreamConnection &conn, int argc, const char **argv);
+    extern "C" void poets_in_proc_external_main(InProcessBinaryUpstreamConnection &conn, int argc, const char **argv);
     #endif
     """)
 

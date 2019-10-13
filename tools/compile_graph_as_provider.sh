@@ -70,7 +70,7 @@ fi
 
 export PYTHONPATH=${graph_schema_dir}/tools
 
-CPPFLAGS=" -I ${graph_schema_dir}/include -W -Wall -Wno-unused-parameter -Wno-unused-variable"
+CPPFLAGS=" -g -I ${graph_schema_dir}/include -W -Wall -Wno-unused-parameter -Wno-unused-variable"
 
 CPPFLAGS+=" $(pkg-config --cflags libxml++-2.6)"
 CPPFLAGS+=" -Wno-unused-local-typedefs -Wno-unused-but-set-variable"
@@ -113,16 +113,17 @@ if [[ -f "${search}" ]] ; then
     inproc_external_path="${search}"
     2>&1 echo "Compiling provider ${name} external using inproc source ${inproc_external_path}"
 
-    g++ -c ${CPPFLAGS} ${SO_CPPFLAGS} ${inproc_external_path} -o ${working_dir}/${name}.external.o
+    CPPFLAGS+=" -DPOETS_HAVE_IN_PROC_EXTERNAL_MAIN=1"
 
+    g++ -c ${CPPFLAGS} ${SO_CPPFLAGS} ${inproc_external_path} -o ${working_dir}/${name}.external.o || exit 1
      OBJS+=" ${working_dir}/${name}.external.o"
 fi
 
 2>&1 echo "Compiling provider ${name} devices"
-g++ -c ${CPPFLAGS} ${SO_CPPFLAGS} ${working_dir}/${name}.graph.cpp -o ${working_dir}/${name}.graph.o
+g++ -c ${CPPFLAGS} ${SO_CPPFLAGS} ${working_dir}/${name}.graph.cpp -o ${working_dir}/${name}.graph.o || exit 1
 OBJS+=" ${working_dir}/${name}.graph.o"
 
 2>&1 echo "Linking provider ${name}"
-g++ ${CPPFLAGS} ${SO_CPPFLAGS} ${OBJS} -o ${output_file} ${LDFLAGS} ${LDLIBS}
+g++ ${CPPFLAGS} ${SO_CPPFLAGS} ${OBJS} -o ${output_file} ${LDFLAGS} ${LDLIBS} || exit 1
 
 >&2 echo "Provider is at ${output_file}"

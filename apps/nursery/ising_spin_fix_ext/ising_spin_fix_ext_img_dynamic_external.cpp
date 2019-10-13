@@ -1,7 +1,10 @@
 #include "poets_protocol/InProcessBinaryUpstreamConnection.hpp"
 
 #include <cassert>
-#include <cstdlib>
+#include <unistd.h>
+#include <unordered_map>
+#include <cstring>
+#include <random>
 
 #pragma pack(push,1)
 struct window_message_t
@@ -53,6 +56,7 @@ extern "C" void poets_in_proc_external_main(
         services.external_log(1, "External is allowing infinite slices.");
     }
 
+
     services.connect(
         "ising_spin_fix_ext",
         "ising_spin_fix_ext_.*",
@@ -72,6 +76,21 @@ extern "C" void poets_in_proc_external_main(
     uint32_t timeNow=0|0xf;
     uint64_t timeNow64=timeNow;
     unsigned long long slice_index=0;
+    int next_update_fixed=10;
+
+    std::vector<uint8_t> pixels(totalDevices*3);
+
+    std::vector<std::pair<unsigned,int> > fixedPixels;
+
+    uint8_t variablePositive[3]={0x7F,0,0};
+    uint8_t variableNegative[3]={0,0x7f,0};
+    uint8_t fixedPositive[3]={0xfF,0xff,0xff};
+    uint8_t fixedNegative[3]={0x0,0x0,0x0};
+
+    int maxFixed=16;
+    int fixedProb=32;
+
+    std::mt19937 urng;
 
     std::shared_ptr<std::vector<uint8_t>> msgG;
     while(1){
@@ -83,8 +102,8 @@ extern "C" void poets_in_proc_external_main(
                 services.external_log(1, "Completed %llu slices. Exiting happily.", max_slices);
                 exit(0);
             }
-            
-            services.external_log(2, "Waiting to send.");
+
+            services.external_log(0, "Waiting to send.");
             services.wait_until(Events::CAN_SEND);
             
             timeNow += (gp.slice_step<<4);
@@ -96,8 +115,35 @@ extern "C" void poets_in_proc_external_main(
             auto w=(window_message_t*)&msgG->at(0);
             
             w->next_time=timeNow;
+            w->fix_type=0;
+
+            if( (urng()%fixedProb)==0 ){
+                if(fixedPixels.size()>maxFixed){
+                    auto p=fixedPixels.front();
+                    fixedPixels.erase(fixedPixels.begin());
+                    w->fix_x=p.first%gp.width;
+                    w->fix_y=p.first/gp.height;
+                    w->fix_type=3;
+                }else{
+                    w->fix_x=urng()%gp.width;
+                    w->fix_y=urng()%gp.height;
+                    w->fix_type=1+urng()%2;
+
+                    fixedPixels.push_back(std::make_pair( w->fix_y*gp.width + w->fix_x, w->fix_type==1 ? +1 : -1 ) );
+                }
+            }
+
             bool done=services.send(external_out, msgG);
             assert(done);
+
+            for(auto f : fixedPixels){
+                const auto *pel = f.second>0 ? fixedPositive : fixedNegative;
+                memcpy( &pixels[0] + f.first*3, pel, 3 );
+            }
+
+            fprintf(stdout, "P6\n%u\n%u\n255\n", gp.width, gp.height);
+            
+            fwrite(&pixels[0], 1, pixels.size(), stdout);
         }
 
         services.external_log(2, "Waiting for receive or terminate.");
@@ -131,7 +177,10 @@ extern "C" void poets_in_proc_external_main(
             throw std::runtime_error("Got pixel from time "+std::to_string(msg->time)+" expecting "+std::to_string(timeNow));
         }
 
-        std::cout<<timeNow64<<","<<msg->x<<","<<msg->y<<","<<msg->spin<<std::endl;
+
+        const auto *pel=msg->spin > 0 ? variablePositive : variableNegative;
+        memcpy( &pixels[0] + (msg->y*gp.width + msg->x)*3, pel, 3);
+
         gotNow++;
     }
 

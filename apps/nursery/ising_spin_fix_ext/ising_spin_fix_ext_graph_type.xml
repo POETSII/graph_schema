@@ -58,7 +58,7 @@
       <MessageType id="update">
         <Message>
           <Scalar name="time" type="uint32_t"/>
-          <Scalar name="spin" type="uint32_t"/>
+          <Scalar name="spin" type="int32_t"/>
         </Message>
       </MessageType>
       <MessageType id="pixel">
@@ -66,12 +66,15 @@
           <Scalar name="x" type="uint16_t"/>
           <Scalar name="y" type="uint16_t"/>
           <Scalar name="time" type="uint32_t"/>
-          <Scalar name="spin" type="uint32_t"/>
+          <Scalar name="spin" type="int32_t"/>
         </Message>
       </MessageType>
       <MessageType id="window">
         <Message>
           <Scalar name="next_time" type="uint32_t"/>
+          <Scalar name="fix_x" type="uint16_t" />
+          <Scalar name="fix_y" type="uint16_t" />
+          <Scalar name="fix_type" type="uint16_t" /><!-- 0=ignore, 1=fix_on, 2=fix_off, 3=unfix-->
         </Message>
       </MessageType>
     </MessageTypes>
@@ -85,8 +88,11 @@
         <State>
           <Scalar name="rng" type="uint32_t"/>
           <Array name="spins" length="5" type="int32_t"/>
-          <Array name="times" length="6" type="uint32_t"/>
+          <Array name="times" length="5" type="uint32_t"/>
+          <Scalar name="current_fix_type" type="uint32_t" /> 
+          <Scalar name="slice_next" type="uint32_t" /> 
           <Scalar name="slice_window" type="uint32_t" /> 
+          <Scalar name="slice_window_fix_type" type="uint32_t" /> 
         </State>
         <SharedCode><![CDATA[
 
@@ -112,7 +118,10 @@
 	  deviceState->rng=seed; // Store the rng state back
 
     // And the fake time for the slice output time
-    deviceState->times[5]=(graphProperties->slice_step<<4)|0xf;
+    deviceState->slice_next=(graphProperties->slice_step<<4)|0xf;
+    deviceState->slice_window=(0<<4)|0xf;
+    deviceState->slice_window_fix_type=0; // Ignore
+    deviceState->current_fix_type=0;
 
 	  // We now have perfect knowledge of our neighbourhood, and
 	  // when they are planning to fire.
@@ -126,7 +135,7 @@
     <OnReceive><![CDATA[
     uint32_t nx, ny;
 
-	  if(message->time >= deviceState->times[edgeProperties->direction]){
+	  if(is_before(deviceState->times[edgeProperties->direction] , message->time)){
   	  deviceState->spins[edgeProperties->direction]=message->spin;
 	    deviceState->times[edgeProperties->direction]=message->time;
 
@@ -144,6 +153,13 @@
     uint32_t prevRng=deviceState->rng;
 		chooseNextEvent(graphProperties->probabilities,  deviceProperties->tag, deviceState->rng, deviceState->spins, deviceState->times[0]);
 
+    switch(deviceState->current_fix_type){
+      default: break;
+      case 1: deviceState->spins[0]=+1; break;
+      case 2: deviceState->spins[0]=-1; break;
+      case 3: assert(0); break;
+    }
+
     handler_log(3, "  UPDATE: (%u,%u) : (t,s,rng)=(%u,%d,%08x) + {%d,%d,%d,%d} -> (%u,%d,%08x)",
       deviceProperties->x, deviceProperties->y,
       prevTime, prevSpin, prevRng,
@@ -154,46 +170,61 @@
 		message->spin = deviceState->spins[0];
 		message->time = deviceState->times[0];
 
-		handler_log(3, "tag=%u, next_t = %u, curr_spin = %d", deviceProperties->tag, deviceState->times[0], deviceState->spins[0]);
+		handler_log(3, "tag=%u, next_t = %u, out_t = %u, curr_spin = %d", deviceProperties->tag, deviceState->times[0], deviceState->slice_next, deviceState->spins[0]);
 	  ]]></OnSend>
   </OutputPin>
 
   <InputPin name="pixel_window" messageTypeId="window">
     <OnReceive><![CDATA[
+    handler_log(1, "Pixel windows %u -> %u", deviceState->slice_window, message->next_time);
     if(is_before(deviceState->slice_window, message->next_time)){
       deviceState->slice_window=message->next_time;
+      if(message->fix_type!=0){
+        if(message->fix_x == deviceProperties->x && message->fix_y == deviceProperties->y){
+          deviceState->slice_window_fix_type = message->fix_type;
+        }
+      }
     }
 	  ]]></OnReceive>
   </InputPin>
 
   <OutputPin name="pixel_out" messageTypeId="pixel">
     <OnSend><![CDATA[
+      handler_log(1, "Pixel out (%u,%u,%u) = %d", deviceProperties->x, deviceProperties->y, deviceState->slice_next);
+
       message->x = deviceProperties->x;
       message->y = deviceProperties->y;
-      message->time = deviceState->times[0];
+      message->time = deviceState->slice_next;
       message->spin = deviceState->spins[0];
 
-      deviceState->times[5] += graphProperties->slice_step<<4;
+      deviceState->slice_next += graphProperties->slice_step<<4;
+
+      switch(deviceState->slice_window_fix_type){
+        case 0: break;
+        case 1: deviceState->spins[0]=+1; deviceState->current_fix_type=1; break;
+        case 2: deviceState->spins[0]=-1; deviceState->current_fix_type=2; break;
+        case 3: deviceState->current_fix_type=0; break;
+      }
 	  ]]></OnSend>
         </OutputPin>
   <ReadyToSend><![CDATA[
     *readyToSend=0;
 
-    bool isEarliest=true;
-    for(unsigned i=1; i<5; i++){
-      if(is_before(deviceState->times[i], deviceState->times[0])){
-        isEarliest=false;
-        break;
-      }
-    }
-    if(isEarliest){
-      if(is_before(deviceState->times[5] , deviceState->times[0])){
-        if(is_before(deviceState->times[5], deviceState->slice_window)){
+    if(is_before(deviceState->slice_next, deviceState->times[0])){
+      if(is_before_or_equal(deviceState->slice_next, deviceState->slice_window)){
           *readyToSend=RTS_FLAG_pixel_out;
         }else{
           // Need to wait for window to move
         }
-      }else{
+    }else{
+      bool isEarliest=true;
+      for(unsigned i=1; i<5; i++){
+        if(is_before(deviceState->times[i], deviceState->times[0])){
+          isEarliest=false;
+          break;
+        }
+      }
+      if(isEarliest){
         *readyToSend=RTS_FLAG_out;
       }
     }

@@ -18,7 +18,6 @@ appBase=os.path.dirname(os.path.realpath(__file__))
 src=appBase+"/ising_spin_fix_ext_graph_type.xml"
 (graphTypes,graphInstances)=load_graph_types_and_instances(src,src)
 
-endTime=100
 T=1
 J=1
 H=0
@@ -28,10 +27,8 @@ if len(sys.argv)>1:
     n=int(sys.argv[1])
 if len(sys.argv)>2:
     T=float(sys.argv[2])
-if len(sys.argv)>3:
-    endTime=float(sys.argv[3])
 
-slice_step=2**20
+slice_step=2**18
 
 sys.stderr.write(f"T={T}, J={J}, H={H}\n")
 

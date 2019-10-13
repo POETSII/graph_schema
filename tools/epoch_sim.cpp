@@ -42,6 +42,9 @@ struct InProcMessageBuffer
   };
 
   std::function<void(const std::string &graph_type,const std::string &graph_instance,const std::vector<std::pair<std::string,std::string>> &owned)> m_connect;
+  std::function<size_t (size_t cbBuffer, void *pBuffer)> m_getGraphProperties;
+  std::function<size_t(poets_device_address_t address, size_t cbBuffer, void *pBuffer)> m_getDeviceProperties;
+ 
   std::function<poets_device_address_t(const std::string &s)> m_idToAddress;
   std::function<std::string(poets_device_address_t)> m_addressToId;
   std::function<void(poets_endpoint_address_t,std::vector<poets_endpoint_address_t>&)> m_endpointToFanout;
@@ -117,6 +120,12 @@ struct InProcMessageBuffer
       m_connect(graph_type, graph_instance, owned);
       m_connect=nullptr;
     }
+
+    size_t get_graph_properties(size_t cbBuffer, void *pBuffer) override
+    { return m_getGraphProperties(cbBuffer, pBuffer); }
+
+    size_t get_device_properties(poets_device_address_t address, size_t cbBuffer, void *pBuffer) override
+    { return m_getDeviceProperties(address, cbBuffer, pBuffer); }
 
     poets_device_address_t get_device_address(const std::string &id) override
     { return m_idToAddress(id); }
@@ -235,11 +244,13 @@ struct InProcMessageBuffer
         const char *msg,
         ...
     ){
-      va_list va;
-      va_start(va, msg);
-      vfprintf(stderr, msg, va);
-      va_end(va);
-      fputs("\n", stderr);
+      if(level < logLevel){
+        va_list va;
+        va_start(va, msg);
+        vfprintf(stderr, msg, va);
+        va_end(va);
+        fputs("\n", stderr);
+      }
     }
 };
 
@@ -579,7 +590,9 @@ struct EpochSim
   {
     auto barrierId="b"+std::to_string(nextSeqUnq());
 
-    fprintf(stderr, "onHardwareIdle\n");
+    if(logLevel>1){
+      fprintf(stderr, "onHardwareIdle\n");
+    }
     for(auto &d : m_devices){
       if(!d.isExternal){
         ReceiveOrchestratorServicesImpl services{logLevel, stderr, d.name, "Idle handler", m_onDeviceExit, m_onCheckpoint  };
@@ -937,7 +950,7 @@ struct EpochSim
 
 void usage()
 {
-  fprintf(stderr, "epoch_sim [options] sourceFile?\n");
+  fprintf(stderr, "epoch_sim [options] sourceFile? [--external spec [args]*]\n");
   fprintf(stderr, "\n");
   fprintf(stderr, "  --log-level n\n");
   fprintf(stderr, "  --max-steps n\n");
@@ -948,11 +961,14 @@ void usage()
   fprintf(stderr, "  --prob-send probability\n");
   fprintf(stderr, "  --accurate-assertions : Capture device state before send/recv in case of assertions.\n");
   fprintf(stderr, "  --message-init n: 0 (default) - Zero initialise all messages, 1 - All messages are randomly inisitalised, 2 - Randomly zero or random inisitalise\n");
-  fprintf(stderr, "  --external spec\n");
+  fprintf(stderr, "  --external spec [args]* : External spec, plus any args. Must be the last option\n");
   fprintf(stderr, "\n");
   fprintf(stderr, "External spec could be:\n");
   fprintf(stderr, "  PROVIDER - Take the default in-proc external from the provider.\n");
   fprintf(stderr, "  INPROC:<PATH> - Load the shared object and instantiate InProcessBinaryUpstreamConnection.\n");
+  fprintf(stderr, "\n");
+  fprintf(stderr,"   For directly instantiated providers the startup arguments can be");
+  fprintf(stderr,"   provided by arguments following the external spec.\n");
   exit(1);
 }
 
@@ -988,7 +1004,7 @@ int main(int argc, char *argv[])
 
   try{
 
-    std::string srcFilePath="-";
+    std::string srcFilePath="";
 
     std::string snapshotSinkName;
     unsigned snapshotDelta=0;
@@ -1010,6 +1026,7 @@ int main(int argc, char *argv[])
     bool enableAccurateAssertions=false;
 
     std::string externalSpec;
+    std::vector<std::string> externalArgs;
 
     int ia=1;
     while(ia < argc){
@@ -1078,17 +1095,30 @@ int main(int argc, char *argv[])
         if (messageInit > 2) {
           fprintf(stderr, "Argument for --message-init is too large. Defaulting to 0\n");
         }
+      }else if(!strcmp("--expect-idle-exit",argv[ia])){
+        expectIdleExit=true;
+        ia+=1;
       }else if(!strcmp("--external",argv[ia])){
         if(ia+1 >= argc){
-          fprintf(stderr, "Missing arguments to --external spec \n");
+          fprintf(stderr, "Missing specification to --external\n");
           usage();
         }
         externalSpec=argv[ia+1];
         ia+=2;
-      }else if(!strcmp("--expect-idle-exit",argv[ia])){
-        expectIdleExit=true;
-        ia+=1;
+        // Chomp all the remaining args
+        while(ia<argc){
+          externalArgs.push_back(argv[ia]);
+          ia++;
+        }
+      }else if(argv[ia][0]=='-'){
+        fprintf(stderr, "Didn't understand option '%s'.\n");
+        usage();
+      
       }else{
+        if(!srcFilePath.empty()){
+          fprintf(stderr, "Received two input paths.\n");
+          usage();
+        }
         srcFilePath=argv[ia];
         ia++;
       }
@@ -1100,6 +1130,9 @@ int main(int argc, char *argv[])
 
     filepath srcPath(current_path());
 
+    if(srcFilePath.empty()){
+      srcFilePath="-";
+    }
     if(srcFilePath!="-"){
       filepath p(srcFilePath);
       p=absolute(p);
@@ -1208,9 +1241,9 @@ int main(int argc, char *argv[])
           throw std::runtime_error("Couldn't open shared object file "+so_path);
         }
 
-        pProc=(in_proc_external_main_t)dlsym(hExternalObj, "in_proc_external_main");
+        pProc=(in_proc_external_main_t)dlsym(hExternalObj, "poets_in_proc_external_main");
         if(!pProc){
-          throw std::runtime_error("Couldn't find symbol 'in_proc_external_main' in shared object.");
+          throw std::runtime_error("Couldn't find symbol 'poets_in_proc_external_main' in shared object.");
         }
         fprintf(stderr, "Found non-null inproc external in %s at %p\n", so_path.c_str(), pProc);
       }else if(externalSpec=="PROVIDER"){
@@ -1265,10 +1298,33 @@ int main(int argc, char *argv[])
         connected=true;
         graph.m_pExternalBuffer->m_cond.notify_one(); // We are still under lock here
       };
+      
+      graph.m_pExternalBuffer->m_getGraphProperties=[&](size_t cbBuffer, void *pBuffer) -> size_t
+      {
+        if(cbBuffer < graph.m_graphProperties.payloadSize()){
+          throw std::runtime_error("Buffer is too small");
+        }
+        memcpy(pBuffer, graph.m_graphProperties.payloadPtr(), graph.m_graphProperties.payloadSize());
+        return graph.m_graphProperties.payloadSize();
+      };
+
+      graph.m_pExternalBuffer->m_getDeviceProperties=[&](poets_device_address_t address, size_t cbBuffer, void *pBuffer) -> size_t
+      {
+        auto &dev=graph.m_devices.at(address.value);
+        if(cbBuffer < dev.properties.payloadSize()){
+          throw std::runtime_error("Buffer is too small");
+        }
+        memcpy(pBuffer, dev.properties.payloadPtr(), dev.properties.payloadSize());
+        return dev.properties.payloadSize();
+      };
 
       inProcExternalThread=std::thread([&](){
-        const char *fargv[]={argv[0]};
-        pProc(*graph.m_pExternalBuffer, 1, fargv);
+        std::vector<const char *> fargv;
+        fargv.push_back( argv[0] );
+        for(auto &x : externalArgs){
+          fargv.push_back( x.c_str() );
+        }
+        pProc(*graph.m_pExternalBuffer, fargv.size(), &fargv[0]);
       });
 
       fprintf(stderr, "Waiting for inproc external to call 'connect'\n");
@@ -1327,11 +1383,15 @@ int main(int argc, char *argv[])
           contiguous_hardware_idle_steps++;
         }else{
           if(graph.m_pExternalBuffer){
-            fprintf(stderr, "Simulator has done %u contiguous hardware idle steps. Blocking until the external connection sends a message.\n", contiguous_hardware_idle_steps);
+            if(logLevel>1){
+              fprintf(stderr, "Simulator has done %u contiguous hardware idle steps. Blocking until the external connection sends a message.\n", contiguous_hardware_idle_steps);
+            }
             graph.m_pExternalBuffer->wait_for_client_to_send();
             contiguous_hardware_idle_steps=0;
           }else{
-            fprintf(stderr, "Simulator has done %u contiguous hardware idle steps. Quiting as the graph seems to have deadlocked.\n", contiguous_hardware_idle_steps);
+            if(logLevel>1){
+              fprintf(stderr, "Simulator has done %u contiguous hardware idle steps. Quiting as the graph seems to have deadlocked.\n", contiguous_hardware_idle_steps);
+            }
             break; // finished
           }
         }

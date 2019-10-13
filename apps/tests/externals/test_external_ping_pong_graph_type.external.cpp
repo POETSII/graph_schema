@@ -10,7 +10,7 @@ struct msg_message_t
 };
 #pragma pack(pop)
 
-extern "C" void in_proc_external_main(
+extern "C" void poets_in_proc_external_main(
     InProcessBinaryUpstreamConnection &services,
     int argc,
     const char *argv[]

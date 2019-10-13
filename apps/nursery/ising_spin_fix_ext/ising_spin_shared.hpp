@@ -34,11 +34,61 @@ uint32_t rng_init(uint32_t x, uint32_t y)
     return y;
 }
 
+bool is_before_or_equal(uint32_t a, uint32_t b)
+{
+    /*
+    switch(a>>30){
+    case 0:
+        switch(b>>30){
+        case 0: return a<=b;
+        case 1: return true;
+        default: return false;
+        }
+    case 1:
+    case 2:
+        return a<=b;
+    case 3:
+        switch(b>>30){
+        case 3: return a<=b;
+        case 0: return true;
+        default: return false;
+        }
+    }
+    */
+   return (a==b) || ((a-b)&0x80000000ul);
+}
+
 bool is_before(uint32_t a, uint32_t b)
 {
-    assert( a != b );
-    return (a-b)&0x80000000ul;
+    /*
+    switch(a>>30){
+    case 0:
+        switch(b>>30){
+        case 0: return a<b;
+        case 1: return true;
+        default: return false;
+        }
+    case 1:
+    case 2:
+        return a<b;
+    case 3:
+        switch(b>>30){
+        case 3: return a<b;
+        case 0: return true;
+        default: return false;
+        }
+    }
+    */
+   return ((a-b)&0x80000000ul);
 }
+
+bool is_before_distinct(uint32_t a, uint32_t b)
+{
+    assert( a != b );
+    return is_before(a,b);
+}
+
+
 
     // This produces a time which is approximately distributed
     // with a sort of exponential-ish distribution

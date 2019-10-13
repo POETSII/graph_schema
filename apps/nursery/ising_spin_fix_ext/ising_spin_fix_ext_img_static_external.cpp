@@ -1,7 +1,10 @@
 #include "poets_protocol/InProcessBinaryUpstreamConnection.hpp"
 
 #include <cassert>
-#include <cstdlib>
+#include <unistd.h>
+#include <unordered_map>
+#include <cstring>
+#include <random>
 
 #pragma pack(push,1)
 struct window_message_t
@@ -53,6 +56,7 @@ extern "C" void poets_in_proc_external_main(
         services.external_log(1, "External is allowing infinite slices.");
     }
 
+
     services.connect(
         "ising_spin_fix_ext",
         "ising_spin_fix_ext_.*",
@@ -73,6 +77,11 @@ extern "C" void poets_in_proc_external_main(
     uint64_t timeNow64=timeNow;
     unsigned long long slice_index=0;
 
+    std::vector<uint8_t> pixels(totalDevices*3);
+
+    uint8_t variablePositive[3]={0x7F,0,0};
+    uint8_t variableNegative[3]={0,0x7f,0};
+
     std::shared_ptr<std::vector<uint8_t>> msgG;
     while(1){
         services.external_log(2, "Top of loop, gotNow=%u, totalDevices=%u.", gotNow, totalDevices);
@@ -83,8 +92,8 @@ extern "C" void poets_in_proc_external_main(
                 services.external_log(1, "Completed %llu slices. Exiting happily.", max_slices);
                 exit(0);
             }
-            
-            services.external_log(2, "Waiting to send.");
+
+            services.external_log(0, "Waiting to send.");
             services.wait_until(Events::CAN_SEND);
             
             timeNow += (gp.slice_step<<4);
@@ -96,8 +105,14 @@ extern "C" void poets_in_proc_external_main(
             auto w=(window_message_t*)&msgG->at(0);
             
             w->next_time=timeNow;
+            w->fix_type=0;
+
             bool done=services.send(external_out, msgG);
             assert(done);
+
+            fprintf(stdout, "P6\n%u\n%u\n255\n", gp.width, gp.height);
+            
+            fwrite(&pixels[0], 1, pixels.size(), stdout);
         }
 
         services.external_log(2, "Waiting for receive or terminate.");
@@ -131,7 +146,10 @@ extern "C" void poets_in_proc_external_main(
             throw std::runtime_error("Got pixel from time "+std::to_string(msg->time)+" expecting "+std::to_string(timeNow));
         }
 
-        std::cout<<timeNow64<<","<<msg->x<<","<<msg->y<<","<<msg->spin<<std::endl;
+
+        const auto *pel=msg->spin > 0 ? variablePositive : variableNegative;
+        memcpy( &pixels[0] + (msg->y*gp.width + msg->x)*3, pel, 3);
+
         gotNow++;
     }
 

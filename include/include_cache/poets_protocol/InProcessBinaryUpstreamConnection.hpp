@@ -46,7 +46,7 @@ public:
     /* NOTE: This should be bumped by at least 1 whenever the API
         changes in some way.
     */
-    const size_t INTERFACE_HASH_VAL_BASE=3;
+    const size_t INTERFACE_HASH_VAL_BASE=4;
 
     const size_t INTERFACE_HASH_VAL_0 = hash_combine(INTERFACE_HASH_VAL_BASE, __LINE__);
 
@@ -72,10 +72,25 @@ public:
 
     const size_t INTERFACE_HASH_VAL_1=hash_combine(INTERFACE_HASH_VAL_0, __LINE__);
 
+    //! Returns the overall graph properties
+    /*! \retval The size of the structure that was written.
+        \pre cbBuffer>=sizeof(GRAPH_PROPERTIES_T)
+    */
+    virtual size_t get_graph_properties(size_t cbBuffer, void *pBuffer)=0;
+
+    const size_t INTERFACE_HASH_VAL_1a=hash_combine(INTERFACE_HASH_VAL_1, __LINE__);
+
+    //! Returns the properties of an external
+    /*! \retval The size of the structure that was written.
+        \pre The address must be the address of an external
+        \pre cbBuffer>=sizeof(DEVICE_PROPERTIES_T)
+    */
+    virtual size_t get_device_properties(poets_device_address_t address, size_t cbBuffer, void *pBuffer)=0;
+
     //! Map a device instance id to an address. Throws if it is not known
     virtual poets_device_address_t get_device_address(const std::string &id)=0;
 
-    const size_t INTERFACE_HASH_VAL_2=hash_combine(INTERFACE_HASH_VAL_1, __LINE__);
+    const size_t INTERFACE_HASH_VAL_2=hash_combine(INTERFACE_HASH_VAL_1a, __LINE__);
 
     //! Map a device address to an instance id. Throws if it is not known
     virtual std::string get_device_id(poets_device_address_t address)=0;
