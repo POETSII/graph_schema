@@ -12,10 +12,10 @@ demos/halo_exchange/halo_exchange_$1.xml : apps/halo_exchange/create_halo_exchan
 	mkdir -p $$(dir $$@)
 	$$(PYTHON) apps/halo_exchange/create_halo_exchange_instance.py  $$(subst _, ,$1) > $$@
 
-demos/halo_exchange/halo_exchange_$1.snap demos/halo_exchange/halo_exchange_$1.kv : demos/halo_exchange/halo_exchange_$1.xml bin/epoch_sim providers/halo_exchange.graph.so demos/halo_exchange/halo_exchange_$1.checked
-	bin/epoch_sim  --log-level 0 --max-steps $3 --snapshots $2 demos/halo_exchange/halo_exchange_$1.snap --key-value demos/halo_exchange/halo_exchange_$1.kv  demos/halo_exchange/halo_exchange_$1.xml
+demos/halo_exchange/halo_exchange_$1.snap  : demos/halo_exchange/halo_exchange_$1.xml bin/epoch_sim providers/halo_exchange.graph.so demos/halo_exchange/halo_exchange_$1.checked
+	bin/epoch_sim  --log-level 0 --max-steps $3 --snapshots $2 demos/halo_exchange/halo_exchange_$1.snap   demos/halo_exchange/halo_exchange_$1.xml
 
-ALL_halo_exchange_TESTS += demos/halo_exchange/halo_exchange_$1.snap demos/halo_exchange/halo_exchange_$1.kv
+ALL_halo_exchange_TESTS += demos/halo_exchange/halo_exchange_$1.snap
 
 demos/halo_exchange/halo_exchange_$1.mp4 : demos/halo_exchange/halo_exchange_$1.xml demos/halo_exchange/halo_exchange_$1.snap
 	mkdir -p demos/halo_exchange/halo_exchange_$1.tmp

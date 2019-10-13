@@ -12,10 +12,10 @@ demos/firefly_sync/firefly_sync_$1.xml : apps/firefly_sync/create_firefly_sync_i
 	mkdir -p $$(dir $$@)
 	$$(PYTHON) apps/firefly_sync/create_firefly_sync_instance.py  $$(subst _, ,$1) > $$@
 
-demos/firefly_sync/firefly_sync_$1.snap demos/firefly_sync/firefly_sync_$1.kv : demos/firefly_sync/firefly_sync_$1.xml bin/epoch_sim providers/firefly_sync.graph.so demos/firefly_sync/firefly_sync_$1.checked
-	bin/epoch_sim  --log-level 0 --max-steps $3 --snapshots $2 demos/firefly_sync/firefly_sync_$1.snap --key-value demos/firefly_sync/firefly_sync_$1.kv  demos/firefly_sync/firefly_sync_$1.xml
+demos/firefly_sync/firefly_sync_$1.snap : demos/firefly_sync/firefly_sync_$1.xml bin/epoch_sim providers/firefly_sync.graph.so demos/firefly_sync/firefly_sync_$1.checked
+	bin/epoch_sim  --log-level 0 --max-steps $3 --snapshots $2 demos/firefly_sync/firefly_sync_$1.snap   demos/firefly_sync/firefly_sync_$1.xml
 
-ALL_firefly_sync_TESTS += demos/firefly_sync/firefly_sync_$1.snap demos/firefly_sync/firefly_sync_$1.kv
+ALL_firefly_sync_TESTS += demos/firefly_sync/firefly_sync_$1.snap 
 
 demos/firefly_sync/firefly_sync_$1.mp4 : demos/firefly_sync/firefly_sync_$1.xml demos/firefly_sync/firefly_sync_$1.snap
 	mkdir -p demos/firefly_sync/firefly_sync_$1.tmp

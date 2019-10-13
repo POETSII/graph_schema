@@ -711,7 +711,10 @@ void loadGraph(Registry *registry, const filepath &srcPath, xmlpp::Element *pare
     if(eProperties){
       deviceProperties=dt->getPropertiesSpec()->load(eProperties);
     }else{
-      deviceProperties=dt->getPropertiesSpec()->create();
+      auto ps=dt->getPropertiesSpec();
+      if(ps){
+        deviceProperties=dt->getPropertiesSpec()->create();
+      }
     }
 
     TypedDataPtr deviceState;
@@ -722,7 +725,10 @@ void loadGraph(Registry *registry, const filepath &srcPath, xmlpp::Element *pare
       }  
       deviceState=dt->getStateSpec()->load(eState);
     }else{
-      deviceState=dt->getStateSpec()->create();
+      auto ss=dt->getStateSpec();
+      if(ss){
+        deviceState=dt->getStateSpec()->create();
+      }
     }
 
     uint64_t dId;

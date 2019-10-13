@@ -257,7 +257,11 @@ TypedDataPtr loadTypedDataValue(const TypedDataSpecPtr &spec, xmlpp::Element *e,
 {
   auto value=get_attribute_optional(e, name.c_str());
   if(value.empty()){
-    return spec->create();
+    if(spec){
+      return spec->create();
+    }else{
+      return TypedDataPtr();
+    }
   }else{
     TypedDataPtr res;
     try{

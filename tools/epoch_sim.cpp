@@ -1111,7 +1111,7 @@ int main(int argc, char *argv[])
           ia++;
         }
       }else if(argv[ia][0]=='-'){
-        fprintf(stderr, "Didn't understand option '%s'.\n");
+        fprintf(stderr, "Didn't understand option '%s'.\n", argv[ia]);
         usage();
       
       }else{
