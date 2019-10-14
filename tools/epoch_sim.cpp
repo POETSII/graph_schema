@@ -37,7 +37,7 @@ struct InProcMessageBuffer
   struct message
   {
     poets_endpoint_address_t address;
-    std::shared_ptr<std::vector<uint8_t>> payload;
+    std::vector<uint8_t> payload;
     unsigned sendIndex;
   };
 
@@ -58,7 +58,7 @@ struct InProcMessageBuffer
 
   std::shared_ptr<halt_message_type> m_halt;
 
-  void post_message(poets_endpoint_address_t address, std::shared_ptr<std::vector<uint8_t>> &payload, unsigned sendIndex)
+  void post_message(poets_endpoint_address_t address, std::vector<uint8_t> &payload, unsigned sendIndex)
   {
     std::unique_lock<std::mutex> lk(m_mutex);
     m_int2ext.push(message{address,payload,sendIndex});
@@ -145,15 +145,18 @@ struct InProcMessageBuffer
 
     bool send(
         poets_endpoint_address_t source,
-        const std::shared_ptr<std::vector<uint8_t>> &payload,
+        std::vector<uint8_t> &payload,
         unsigned sendIndex
     ) override {
-      message m{source, payload, sendIndex};
-
       std::unique_lock<std::mutex> lk(m_mutex);
       if(m_ext2int.size() >= MAX_EXT2INT_IN_FLIGHT){
         return false;
       }
+
+      message m;
+      m.address=source;
+      m.sendIndex=sendIndex;
+      std::swap(m.payload, payload);
 
       m_ext2int.push(std::move(m));
       m_cond.notify_one();
@@ -174,7 +177,7 @@ struct InProcMessageBuffer
 
     bool recv(
         poets_endpoint_address_t &source,
-        std::shared_ptr<std::vector<uint8_t>> &payload,
+        std::vector<uint8_t> &payload,
         unsigned &sendIndex
     ) override {
       std::unique_lock<std::mutex> lk(m_mutex);
@@ -182,9 +185,9 @@ struct InProcMessageBuffer
         return false;
       }
 
-      const auto &m=m_int2ext.front();
+      auto &m=m_int2ext.front();
       source=m.address;
-      payload=m.payload;
+      std::swap(payload, m.payload);
       sendIndex=m.sendIndex;
       
       m_int2ext.pop();
@@ -673,11 +676,11 @@ struct EpochSim
             throw std::runtime_error("External connection sent message where sendIndex did not match indexed type of port.");
           }
           auto spec=port->getMessageType()->getMessageSpec();
-          if(spec->payloadSize() != m.payload->size()){
+          if(spec->payloadSize() != m.payload.size()){
             throw std::runtime_error("External connection sent message where payload size did not match type's payload size.");
           }
           TypedDataPtr p=spec->create();
-          memcpy(p.payloadPtr(), &m.payload->at(0), p.payloadSize());
+          memcpy(p.payloadPtr(), &m.payload.at(0), p.payloadSize());
           dev.post_message(portIndex, p, sendIndex);
           
           pending.pop();
@@ -936,7 +939,7 @@ struct EpochSim
       if(sendToExternalConnection){
         assert(m_pExternalBuffer);
         // At least one external device needs to receive this message
-        auto payload=std::make_shared<std::vector<uint8_t>>( message.payloadPtr(), message.payloadPtr()+message.payloadSize() );
+        auto payload=std::vector<uint8_t>( message.payloadPtr(), message.payloadPtr()+message.payloadSize() );
         m_pExternalBuffer->post_message(makeEndpoint(poets_device_address_t{index}, poets_pin_index_t{sel}), payload, sendIndex ? *sendIndex : UINT_MAX);
       }
     }

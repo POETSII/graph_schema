@@ -46,7 +46,7 @@ public:
     /* NOTE: This should be bumped by at least 1 whenever the API
         changes in some way.
     */
-    const size_t INTERFACE_HASH_VAL_BASE=4;
+    const size_t INTERFACE_HASH_VAL_BASE=5;
 
     const size_t INTERFACE_HASH_VAL_0 = hash_combine(INTERFACE_HASH_VAL_BASE, __LINE__);
 
@@ -124,11 +124,16 @@ public:
         \param sendIndex This is only relevant for indexed pins.
                For normal pins it should be UINT_MAX.
 
+        \param payload The data to send. The receiver may take ownership of this data.
+            If the message is sent, then it is undefined what the payload parameter
+            is left with. If it is non-empty, then the payload remains uniquely owned
+            by the caller.
+
         \retval True if the message was sent, false if we would have blocked.
      */
     virtual bool send(
         poets_endpoint_address_t source,
-        const std::shared_ptr<std::vector<uint8_t>> &payload,
+        std::vector<uint8_t> &payload,
         unsigned sendIndex = UINT_MAX
     ) =0;
 
@@ -152,11 +157,14 @@ public:
     /*! This API will produce individual source routed message.
         This method will never block. If can_recv was true, then it will always return a message.
 
+        The payload passed in may or may not be non-empty. If it is non-empty then 
+        the implementation may re-use it, or may substitue in a different vector.
+
         \retval If true then a message was received. If false, then no message was ready.
     */
     virtual bool recv(
         poets_endpoint_address_t &source,
-        std::shared_ptr<std::vector<uint8_t>> &payload,
+        std::vector<uint8_t> &payload,
         unsigned &sendIndex
     ) =0;
 

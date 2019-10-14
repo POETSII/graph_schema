@@ -1,6 +1,6 @@
 
 
-$(eval $(call provider_rules_template,ising_spin_fix_ext,apps/nursery/ising_spin_fix_ext/ising_spin_fix_ext_graph_type.xml,no-default))
+$(eval $(call provider_rules_template,ising_spin_fix_ext,apps/nursery/ising_spin_fix_ext/ising_spin_fix_ext_graph_type.xml))
 
 providers/ising_spin_fix_ext_img_static_external.so : apps/nursery/ising_spin_fix_ext/ising_spin_fix_ext_img_static_external.cpp
 	$(CXX) -c $(CPPFLAGS) $(SO_CPPFLAGS) $< -o providers/ising_spin_fix_ext_img_static_external.o

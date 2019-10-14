@@ -157,6 +157,8 @@ def save_external_type(parent,dt):
     n.attrib["id"]=dt.id
     add_documentation_comment(n, dt.documentation)
 
+    save_typed_struct_spec(n, toNS("p:Properties"), dt.properties)
+
     for p in dt.inputs_by_index:
         pn=etree.SubElement(n,toNS("p:InputPin"))
         pn.attrib["name"]=p.name

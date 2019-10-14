@@ -82,7 +82,7 @@ extern "C" void poets_in_proc_external_main(
     uint8_t variablePositive[3]={0x7F,0,0};
     uint8_t variableNegative[3]={0,0x7f,0};
 
-    std::shared_ptr<std::vector<uint8_t>> msgG;
+    std::vector<uint8_t> msgG;
     while(1){
         services.external_log(2, "Top of loop, gotNow=%u, totalDevices=%u.", gotNow, totalDevices);
 
@@ -100,9 +100,8 @@ extern "C" void poets_in_proc_external_main(
             timeNow64 += (gp.slice_step<<4);
             gotNow=0;
 
-            msgG=std::make_shared<std::vector<uint8_t>>();
-            msgG->resize(sizeof(window_message_t));
-            auto w=(window_message_t*)&msgG->at(0);
+            msgG.resize(sizeof(window_message_t));
+            auto w=(window_message_t*)&msgG[0];
             
             w->next_time=timeNow;
             w->fix_type=0;
@@ -126,18 +125,16 @@ extern "C" void poets_in_proc_external_main(
 
         assert(services.can_send());
 
-        msgG.reset();
-
         poets_endpoint_address_t source;
         unsigned sendIndex;
         if(!services.recv(source, msgG, sendIndex)){
             throw std::runtime_error("Services violated contract");
         }
 
-        if(msgG->size()!=sizeof(pixel_message_t)){
+        if(msgG.size()!=sizeof(pixel_message_t)){
             throw std::runtime_error("Received invalid size message.");
         }
-        auto msg=(const pixel_message_t*)&msgG->at(0);
+        auto msg=(const pixel_message_t*)&msgG[0];
         /*for(unsigned i=0; i<sizeof(pixel_message_t); i++){
             services.external_log(2, "  recv[%u] = %08x", i, msgG->at(i));
         }*/

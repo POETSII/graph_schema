@@ -46,16 +46,18 @@ def write_device_instance(dst,di:DeviceInstance):
     properties=di.properties
     state=di.state
 
+    eltName="ExtI" if di.is_external else "DevI"
+
     dt=di.device_type
     if properties or state:
-        dst.write(f'   <DevI id="{di.id}" type="{dt.id}"')
+        dst.write(f'   <{eltName} id="{di.id}" type="{dt.id}"')
         if properties:
             _write_typed_data_value(dt.properties, properties, "P", dst)
         if state:
             _write_typed_data_value(dt.state, state, "S", dst)
         dst.write(" />\n")
     else:
-        dst.write('   <DevI id="{}" type="{}" />\n'.format(di.id,dt.id))
+        dst.write(f'   <{eltName} id="{di.id}" type="{dt.id}" />\n')
 
 
 

@@ -27,10 +27,11 @@ extern "C" void poets_in_proc_external_main(
 
     auto outsider_0=services.get_device_address("outsider_0");
 
+    auto msgG=std::vector<uint8_t>();
+
     for(unsigned i=0; i<10; i++){
-        auto msgG=std::make_shared<std::vector<uint8_t>>();
-        msgG->resize(sizeof(msg_message_t));
-        auto msg=(msg_message_t*)&(msgG->at(0));
+        msgG.resize(sizeof(msg_message_t));
+        auto msg=(msg_message_t*)&(msgG[0]);
         msg->payload1=i+1;
         msg->payload2=i*i;
 
@@ -40,8 +41,7 @@ extern "C" void poets_in_proc_external_main(
         
         services.external_log(3, "Sending from outsider_0.");
         services.send(makeEndpoint(outsider_0, poets_pin_index_t{0}),  msgG, UINT_MAX);
-        msgG.reset();
-
+       
         services.external_log(3, "Waiting till can recieve.");
         services.wait_until(InProcessBinaryUpstreamConnection::Events::CAN_RECV);
         assert(services.can_recv());
@@ -58,13 +58,13 @@ extern "C" void poets_in_proc_external_main(
         assert(getEndpointDevice(fanout[0])==outsider_0);
         assert(getEndpointPin(fanout[0]) == poets_pin_index_t{0});
 
-        msg=(msg_message_t*)&(msgG->at(0));
+        msg=(msg_message_t*)&(msgG[0]);
         assert(msg->payload1==i+1);
         assert(msg->payload2==i*i);
     }
 
-    auto hmG=std::make_shared<std::vector<uint8_t>>(sizeof(halt_message_type), 0);
-    auto hm=(halt_message_type*)&hmG->at(0);
+    auto hmG=std::vector<uint8_t>(sizeof(halt_message_type), 0);
+    auto hm=(halt_message_type*)&hmG[0];
     
     while(!services.send(makeEndpoint(outsider_0, poets_pin_index_t{1}),  hmG)){
         services.wait_until(InProcessBinaryUpstreamConnection::Events::CAN_SEND);
