@@ -1,0 +1,48 @@
+buildTinselSettings, threads, 6144, -
+buildTinselSettings, hardware_threads, 6144, -
+buildTinselSettings, placement, random, -
+buildTinselSettings, contraction, dense, -
+buildTinselSettings, release_build, 0, -
+buildTinselSettings, hardware_log_level, 4, -
+buildTinselSettings, hardware_assert_enable, 0, -
+buildTinselSettings, hardware_intrathread_send_enable, 1, -
+buildSoftswitchRender, -, 0.40, sec
+graphDeviceInstCount, -, 503, devices
+graphEdgeInstCount, -, 1601, edges
+renderSoftswitchDevicesPerThreadHist, 0, 10786, threads
+
+renderSoftswitchDevicesPerThreadHist, 1, 453, threads
+
+renderSoftswitchDevicesPerThreadHist, 2, 25, threads
+
+renderSoftswitchDevicesPerThreadCount, -, 11264, devices/thread
+
+renderSoftswitchDevicesPerThreadMin, -, 0, devices/thread
+
+renderSoftswitchDevicesPerThreadMax, -, 2, devices/thread
+
+renderSoftswitchDevicesPerThreadMedian, -, 0.0, devices/thread
+
+renderSoftswitchDevicesPerThreadMean, -, 0.04465553977272727, devices/thread
+
+renderSoftswitchDevicesPerThreadStdDev, -, 0.2170357686181177, devices/thread
+
+renderSoftswitchDevicesPerThreadSkewness, -, 63873.2831793802, devices/thread
+
+graphOutputInstCount, -, 41106,
+
+renderSoftswitchOutputInstCostCount, -, 41106, estimatedTotalOutgoingEdgeDistance
+
+renderSoftswitchOutputInstCostMin, -, 0, estimatedTotalOutgoingEdgeDistance
+
+renderSoftswitchOutputInstCostMax, -, 12, estimatedTotalOutgoingEdgeDistance
+
+renderSoftswitchOutputInstCostMedian, -, 0.0, estimatedTotalOutgoingEdgeDistance
+
+renderSoftswitchOutputInstCostMean, -, 0.01454775458570525, estimatedTotalOutgoingEdgeDistance
+
+renderSoftswitchOutputInstCostStdDev, -, 0.21404864255202913, estimatedTotalOutgoingEdgeDistance
+
+renderSoftswitchOutputInstCostSkewness, -, 897927.4476421917, estimatedTotalOutgoingEdgeDistance
+
+buildTinselCompile, -, 3.36, sec
