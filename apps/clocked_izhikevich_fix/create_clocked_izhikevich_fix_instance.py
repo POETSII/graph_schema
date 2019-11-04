@@ -116,18 +116,19 @@ maxTicks=10
 maxFanIn=8
 maxFanOut=4
 
-if len(sys.argv)>1:
-    Ne=int(sys.argv[1])
 if len(sys.argv)>2:
-    Ni=int(sys.argv[2])
+    Ne=int(sys.argv[2])
+    #print (Ne)
 if len(sys.argv)>3:
-    K=int(sys.argv[3])
+    Ni=int(sys.argv[3])
 if len(sys.argv)>4:
-    maxTicks=int(sys.argv[4])
+    K=int(sys.argv[4])
 if len(sys.argv)>5:
-    maxFanIn=int(sys.argv[5])
+    maxTicks=int(sys.argv[5])
 if len(sys.argv)>6:
-    maxFanOut=int(sys.argv[6])
+    maxFanIn=int(sys.argv[6])
+if len(sys.argv)>7:
+    maxFanOut=int(sys.argv[7])
 
 N=Ne+Ni
 K=min(N,K)
