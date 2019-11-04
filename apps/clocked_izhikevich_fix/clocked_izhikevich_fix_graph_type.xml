@@ -42,6 +42,7 @@
 			return (int32_t)(xy);
 		}
 
+
     int32_t fix_mul(int32_t a, int32_t b, int32_t c)
     { return fix_mul(fix_mul(a,b),c); }
 
@@ -126,12 +127,17 @@
     <DeviceTypes>
       <DeviceType id="spike_fanout">
         <State>
+	 <Scalar name="timer_start" type="uint8_t"/> //for real time report Added
           <Scalar name="state" type="uint32_t">
             <Documentation>0 = idle, 1 = emptyPending, 2 = fullPending</Documentation>
           </Scalar>
         </State>
         <InputPin name="spike_in" messageTypeId="spike">
           <OnReceive><![CDATA[
+	  if (!deviceState->timer_start) {
+                // AUTO_TIMER_START
+                deviceState->timer_start = true;
+            }
           assert(deviceState->state==0);
           if(message->fired){
             deviceState->state=2;
@@ -390,7 +396,7 @@
           deviceState->totalFirings=0;
           deviceState->totalTicks++;
           if(deviceState->totalTicks >= graphProperties->maxTicks){
-             fake_handler_exit(0);
+             handler_exit(0);
              *doSend=false;
           }else{
              deviceState->waitCount=deviceProperties->fanin;
