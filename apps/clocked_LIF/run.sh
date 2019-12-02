@@ -9,31 +9,34 @@
 #for both Izhekevich and LIF models.  
 #-------------------------------------------------------------------------------------------------------------------
 
-declare -a Neuron_n=( 100 500)
+declare -a Neuron_n=(500000)
 
-#declare -a Neuron_n=( 100 500 1000 10000 100000 200000)
-echo this execution file is fior LIF model of  neuron:
-#read -p "enter 1 for "Izikevich" and 2 for "LIF" neuron model:" b
-#echo you entered model $b
+#declare -a Neuron_n=(50 100 500 1000 10000 50000 100000)
 
-#if [[ $b -eq 1 ]]
-#then
-#       model=izk
-#       echo $model      
-#elif [[ $b -eq 2 ]];then
-#        model=lif
-#        echo $model
-#else
-#        echo only 1 or 2 for choosing the model run agin the run.sh 
-#	exit 1
-#fi
-model=lif
+
+#echo enter 1 for izikevich and 2 for LIF neuron model:
+read -p "enter 1 for "Izikevich" and 2 for "LIF" neuron model:" b
+echo you entered model $b
+
+if [[ $b -eq 1 ]]
+then
+       model=izk
+       echo $model      
+elif [[ $b -eq 2 ]];then
+        model=lif
+        echo $model
+else
+        echo only 1 or 2 for choosing the model run agin the run.sh 
+	exit 1
+fi
+
 echo enter the fanin and fanout:
 read -p "enter fanin bumber:" fanin
 echo fanainis : $fanin
 read -p "enter the fanout number:" fanout
 echo fanout is: $fanout
-DIR="results"
+DIR="result_scalable"
+mkdir -p $DIR
 if [ "$(ls -A $DIR)" ] ; then
 rm -r ${DIR}/*
 fi
@@ -41,22 +44,52 @@ fi
 for i in ${Neuron_n[@]}
 do 
 ne="$(($i*8/10))"
-ni= "$(($i*2/10))"
-mkdir ${DIR}/${model}_$i 
+ni="$(($i*2/10))"
 
-#mkdir results/izk_$i
-echo this is the beginning of the file
-python3.6  create_clocked_LIF_instance.py clocked_LIF_graph_type.xml $ne $ni 20 10 $fanin $fanout >> ${DIR}/${model}_${i}/${model}_${i}_${fanin}_${fanout}.xml    
-wait
-cd ${DIR}/${model}_${i}
-pts-xmlc ${model}_${i}_${fanin}_${fanout}.xml --timers -x 1 -y 1
-wait
-pts-serve --headless true >> hdOut_${model}_${i}_${fanin}_${fanout}.txt
-wait
-sed -n /Time/p hdOut_${model}_${i}_${fanin}_${fanout}.txt > rTime.txt
-rm code.v data.v tinsel.elf
-cd ../../
+mkdir ${DIR}/${model}_$i
 
+#if [ [model=izk] ]; then	
+#echo $DIR
+#python3.6 create_clocked_izhikevich_fix_instance.py clocked_izhikevich_fix_graph_type.xml $ne $ni 20 10 $fanin $fanout >> ${DIR}/${model}_${i}/${model}_${i}_${fanin}_${fanout}.xml    
+#wait
+#echo " ${DIR}/${model}_${i}/${model}_${i}_${fanin}_${fanout}.xml"
+#cd ${DIR}/${model}_$i
+#pts-xmlc ${model}_${i}_${fanin}_${fanout}.xml --timers -x 2 -y 1
+#pts-xmlc ${model}_${i}_${fanin}_${fanout}.xml --hardware-handler-log-level=0 -x 1 -y 1
+
+#wait
+#pts-serve --headless true >> hdOut_${model}_${i}_${fanin}_${fanout}.txt
+#wait
+#sed -n /Runtime/p hdOut_${model}_${i}_${fanin}_${fanout}.txt > rTime.txt
+#rm code.v data.v tinsel.elf 
+#cd ../../	
+
+if [ [model=lif] ]; then	
+	#mkdir results/izk_$i
+ 	python3.6  create_clocked_LIF_instance.py clocked_LIF_graph_type.xml $ne $ni 20 10 $fanin $fanout >> ${DIR}/${model}_${i}/${model}_${i}_${fanin}_${fanout}.xml    
+	wait
+	cd ${DIR}/${model}_$i
+	#pts-xmlc ${model}_${i}_${fanin}_${fanout}.xml --timers -x 3 -y 1
+	pts-xmlc ${model}_${i}_${fanin}_${fanout}.xml --hardware-handler-log-level=0 -x 1 -y 1
+	
+	wait
+	pts-serve --headless true >> hdOut_${model}_${i}_${fanin}_${fanout}.txt
+	wait
+	sed -n /Runtime/p hdOut_${model}_${i}_${fanin}_${fanout}.txt > rTime.txt
+	rm code.v data.v tinsel.elf 
+	cd ../../
+fi	
 done
-echo whole RUNNING is Finished
+echo all done
+
+
+
+
+
+
+
+
+
+
+
 
