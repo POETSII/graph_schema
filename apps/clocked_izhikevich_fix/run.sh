@@ -9,10 +9,10 @@
 #for both Izhekevich and LIF models.  
 #-------------------------------------------------------------------------------------------------------------------
 
-declare -a Neuron_n=( 100 500 1000 10000 100000 200000)
+declare -a Neuron_n=(500000)
 
-#declare -a Neuron_n=( 100)
-#Neuron_n = (100, 200, 500, 1000, 10000, 100000, 200000)
+#declare -a Neuron_n=(50 100 500 1000 10000 50000 100000)
+
 
 #echo enter 1 for izikevich and 2 for LIF neuron model:
 read -p "enter 1 for "Izikevich" and 2 for "LIF" neuron model:" b
@@ -35,7 +35,8 @@ read -p "enter fanin bumber:" fanin
 echo fanainis : $fanin
 read -p "enter the fanout number:" fanout
 echo fanout is: $fanout
-DIR="results"
+DIR="result_scalable"
+mkdir -p $DIR
 if [ "$(ls -A $DIR)" ] ; then
 rm -r ${DIR}/*
 fi
@@ -43,7 +44,8 @@ fi
 for i in ${Neuron_n[@]}
 do 
 ne="$(($i*8/10))"
-ni= "$(($i*2/10))"
+ni="$(($i*2/10))"
+i
 mkdir ${DIR}/${model}_$i
 
 if [ [model=izk] ]; then	
@@ -52,11 +54,13 @@ python3.6 create_clocked_izhikevich_fix_instance.py clocked_izhikevich_fix_graph
 wait
 echo " ${DIR}/${model}_${i}/${model}_${i}_${fanin}_${fanout}.xml"
 cd ${DIR}/${model}_$i
-pts-xmlc ${model}_${i}_${fanin}_${fanout}.xml --timers -x 1 -y 1
+#pts-xmlc ${model}_${i}_${fanin}_${fanout}.xml --timers -x 2 -y 1
+pts-xmlc ${model}_${i}_${fanin}_${fanout}.xml --hardware-handler-log-level=0 -x 1 -y 1
+
 wait
 pts-serve --headless true >> hdOut_${model}_${i}_${fanin}_${fanout}.txt
 wait
-sed -n /Time/p hdOut_${model}_${i}_${fanin}_${fanout}.txt > rTime.txt
+sed -n /Runtime/p hdOut_${model}_${i}_${fanin}_${fanout}.txt > rTime.txt
 rm code.v data.v tinsel.elf 
 cd ../../	
 
@@ -65,11 +69,14 @@ elif [ [model=lif] ]; then
  	python3.6  create_clocked_LIF_instance.py clocked_LIF_graph_type.xml $ne $ni 20 10 $fanin $fanout >> ${DIR}/${model}_${i}/${model}_${i}_${fanin}_${fanout}.xml    
 	wait
 	cd ${DIR}/${model}_$i
-	pts-xmlc ${model}_${i}_${fanin}_${fanout}.xml --timers -x 1 -y 1
+	#pts-xmlc ${model}_${i}_${fanin}_${fanout}.xml --timers -x 3 -y 1
+	pts-xmlc ${model}_${i}_${fanin}_${fanout}.xml -x 1 -y 1
+
+	
 	wait
 	pts-serve --headless true >> hdOut_${model}_${i}_${fanin}_${fanout}.txt
 	wait
-	sed -n /Time/p hdOut_${model}_${i}_${fanin}_${fanout}.txt > rTime.txt
+	sed -n /Runtime/p hdOut_${model}_${i}_${fanin}_${fanout}.txt > rTime.txt
 	rm code.v data.v tinsel.elf 
 	cd ../../}
 fi	
