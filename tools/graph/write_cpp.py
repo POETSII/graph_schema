@@ -77,11 +77,23 @@ def render_typed_data_init(proto,dst,prefix,indent="    ",arrayIndex="",indexNum
             value=proto.default
         else:
             value=parentDefault
+        print(value)
         for elt in proto.elements_by_index:
-            if value is not None:
-                d = value[elt.name]
-            else:
+            if value == {}:
+                print(1)
                 d = None
+            elif value is None:
+                print(2)
+                d = None
+            else:
+                print(3)
+                d = value[elt.name]
+            # if value is not None:
+            #     d = value[elt.name]
+            # elif value is not {}:
+            #     d = value[elt.name]
+            # else:
+            #     d = None
             if isTypedef or not arrayIndex=="":
                 render_typed_data_init(elt,dst,prefix+"."+elt.name,indent+"  ", arrayIndex, indexNum+1,True,d)
             else:
@@ -566,7 +578,7 @@ def render_typed_data_as_spec(proto,name,elt_name,dst,asHeader=False):
             render_typed_data_add_hash(elt, dst, "src->")
     dst.write('  }\n')
     dst.write("""
-    
+
     std::string toXmlV4ValueSpec(const TypedDataPtr &data, int minorFormatVersion=0) const override
     {
         std::stringstream acc;
@@ -581,7 +593,7 @@ def render_typed_data_as_spec(proto,name,elt_name,dst,asHeader=False):
         m_tupleElt->xmlV4ValueToBinary(src, (char *)res.payloadPtr(), res.payloadSize(), true, minorFormatVersion);
         return res;
     }
-    
+
     """)
 
     dst.write("};\n")

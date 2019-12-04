@@ -48,7 +48,7 @@ endif
 CPPFLAGS += -std=c++11 -O2 -gdwarf-4
 
 # Last optimisation flag overrides
-CPPFLAGS_DEBUG = $(CPPFLAGS) -O0 -fno-omit-frame-pointer 
+CPPFLAGS_DEBUG = $(CPPFLAGS) -O0 -fno-omit-frame-pointer
 
 # Release is max optimised with no asserts
 CPPFLAGS_RELEASE = $(CPPFLAGS) -O3 -DNDEBUG=1
@@ -245,6 +245,10 @@ include apps/nursery/ising_spin_fix_ext/ising_spin_fix_ext.inc
 
 #TODO : Defunct?
 include tools/partitioner.inc
+
+# DPD ONLY
+
+include ../POETS/dpd-xml/makefile.inc
 
 demos : $(ALL_DEMOS)
 
