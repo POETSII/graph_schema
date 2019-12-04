@@ -77,16 +77,12 @@ def render_typed_data_init(proto,dst,prefix,indent="    ",arrayIndex="",indexNum
             value=proto.default
         else:
             value=parentDefault
-        print(value)
         for elt in proto.elements_by_index:
             if value == {}:
-                print(1)
                 d = None
             elif value is None:
-                print(2)
                 d = None
             else:
-                print(3)
                 d = value[elt.name]
             # if value is not None:
             #     d = value[elt.name]
