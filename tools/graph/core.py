@@ -405,7 +405,7 @@ class ArrayTypedDataSpec(TypedDataSpec):
         each possible offset"""
 
         type_size=self.type.size_in_bytes()
-        
+
         # Will the following elements all be aligned?
         # We only need to look at the first four, as we are only interested in words.
         # Any problems that occur will occur within the first four then repeat
@@ -483,7 +483,7 @@ class MessageType(object):
         self.numid=numid
         # DT10: Removing this check for now, as it is over-specialised for POETS ecosystem.
         # For other hardware impls it is wrong, and also stops simulation of apps with
-        # larger messages which are legal. 
+        # larger messages which are legal.
         # size = self._checkMessageSize(self.message)
         # if size > 44:
         #    raise RuntimeError("ERROR: Message \"" + self.id + "\" has a payload that's too large.\n"
@@ -549,7 +549,7 @@ class InputPin(Pin):
         self.properties=properties
         self.state=state
         self.receive_handler=receive_handler
-        
+
 
 class OutputPin(Pin):
     def __init__(self,parent,name,message_type,is_application,metadata,send_handler,source_file,source_line,documentation=None,is_indexed=False):
@@ -592,9 +592,9 @@ class DeviceType(object):
 
     @property
     def is_external(self):
-        """This adds an alias with camel case. Eventually the isExteral should be dropped.""" 
+        """This adds an alias with camel case. Eventually the isExteral should be dropped."""
         return self.isExternal
-    
+
     def get_indexed_outputs(self):
         "Returns a list of any output ports that are indexed"
         return [op for op in self.outputs_by_index if op.is_indexed]
@@ -723,6 +723,14 @@ class DeviceInstance(object):
             if  not is_refinement_compatible(self.device_type.properties,self.properties):
                 raise GraphDescriptionError("Setting property {} on {} results in properties incompatible with device type properties: proto={}, value={}".format(name, self.id, self.device_type.properties, self.properties))
 
+    def set_state(self, name, value):
+        if self.state==None:
+            self.state={}
+        self.state[name]=value
+        if __debug__:
+            if  not is_refinement_compatible(self.device_type.state,self.state):
+                raise GraphDescriptionError("Setting property {} on {} results in state incompatible with device type state: proto={}, value={}".format(name, self.id, self.device_type.properties, self.properties))
+
 
 
 class EdgeInstance(object):
@@ -809,7 +817,7 @@ class GraphInstance:
 
         if not is_refinement_compatible(di.device_type.properties,di.properties):
             raise GraphDescriptionError("DeviceInstance properties don't match device type.")
-    
+
     def _validate_indexed_edges(self,di):
         indexed={} # Map of { (di.id,port.name) : [ ei ] }
 
@@ -824,19 +832,19 @@ class GraphInstance:
             if ports:
                 for p in ports:
                     indexed_port_instances[(di.id,p)]=[]
-        
+
         # Find the relevent edge indices
         for ei in self.edge_instances.values():
             src=(ei.src_device.id,ei.src_pin.name)
             ports=indexed_port_instances.get(src)
             if ports:
                 ports.append(ei.send_index)
-        
+
         # Now actually check that each indexed port list is either all None, or is contiguous
         for ((di_id,port_name),indices) in indexed_port_instances.items():
             if indices.count(None) == len(indices):
                 continue
-            
+
             indices.sort()
             for i in range(len(indices)):
                 if i==indices[i]:
