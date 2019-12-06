@@ -51,7 +51,6 @@ TypedDataSpecElementPtr loadTypedDataSpecElement(xmlpp::Element *eMember)
   xmlpp::Node::PrefixNsMap ns;
   ns["g"]="https://poets-project.org/schemas/virtual-graph-schema-v3";
 
-
   std::string name=get_attribute_required(eMember, "name");
 
   if(eMember->get_name()=="Scalar"){
@@ -67,8 +66,14 @@ TypedDataSpecElementPtr loadTypedDataSpecElement(xmlpp::Element *eMember)
     std::string typeS=get_attribute_optional(eMember, "type");
     if(!typeS.empty()){
       elt=makeScalar("_", typeS);
-    }else{
-      throw std::runtime_error("Arrays of non-scalar not implemented yet.");
+    }else{ // Array of non-scalar
+      auto subArrays = eMember->find("./g:Scalar | ./g:Union | ./g:Array | ./g:Tuple",ns);
+      assert(subArrays.size() == 1);
+      for(auto *nSubMember : eMember->find("./g:Scalar | ./g:Union | ./g:Array | ./g:Tuple",ns))
+      {
+        auto eSubMember=(xmlpp::Element*)nSubMember;
+        elt = loadTypedDataSpecElement( eSubMember );
+      }
     }
     return makeArray(name, length, elt);
 
@@ -275,7 +280,7 @@ DeviceTypePtr loadDeviceTypeElement(
 
   std::string id=get_attribute_required(eDeviceType, "id");
   rapidjson::Document metadata=parse_meta_data(eDeviceType, "./g:MetaData", ns);
-  
+
   std::string readyToSendCode, onInitCode, onHardwareIdleCode, onDeviceIdleCode, sharedCode;
   if(!isExternal){
     auto *eReadyToSendCode=find_single(eDeviceType, "./g:ReadyToSend", ns);
@@ -331,7 +336,7 @@ DeviceTypePtr loadDeviceTypeElement(
 
     std::string name=get_attribute_required(e, "name");
     std::string messageTypeId=get_attribute_required(e, "messageTypeId");
-    
+
     if(messageTypes.find(messageTypeId)==messageTypes.end()){
       throw std::runtime_error("Unknown messageTypeId '"+messageTypeId+"'");
     }
@@ -435,6 +440,7 @@ class GraphTypeDynamic
 public:
   GraphTypeDynamic(
     const std::string &id,
+    std::vector<TypedDataSpecPtr> typedefs,
     TypedDataSpecPtr properties,
     const rapidjson::Document &metadata,
     const std::vector<std::string> &sharedCode,
@@ -463,6 +469,16 @@ GraphTypePtr loadGraphTypeElement(const filepath &srcPath, xmlpp::Element *eGrap
 
 
   std::string id=get_attribute_required(eGraphType, "id");
+
+  std::vector<TypedDataSpecPtr> typedefs;
+  auto *eTypes=find_single(eGraphType, "./g:Types", ns);
+  int i = 0;
+  for (auto *eType : eGraphType->find("./g:TypeDef", ns)) {
+    for (auto *eTypeDef : eType->find("./g:Scalar|./g:Tuple|./g:Array|./g:Union", ns)) {
+      TypedDataSpecPtr TypeDef = loadTypedDataSpec((xmlpp::Element*)eTypeDef);
+      typedefs.push_back(TypeDef);
+    }
+  }
 
   TypedDataSpecPtr properties;
   auto *eGraphProperties=find_single(eGraphType, "./g:Properties", ns);
@@ -508,6 +524,7 @@ GraphTypePtr loadGraphTypeElement(const filepath &srcPath, xmlpp::Element *eGrap
 
   auto res=std::make_shared<GraphTypeDynamic>(
     id,
+    typedefs,
     properties,
     metadata,
     sharedCode,
@@ -648,7 +665,7 @@ void loadGraph(Registry *registry, const filepath &srcPath, xmlpp::Element *pare
     try{
       graphTypeReg=registry->lookupGraphType(graphTypeId);
 
-      
+
     }catch(const unknown_graph_type_error &){
       // pass, try to load dyamically
     }
@@ -662,7 +679,7 @@ void loadGraph(Registry *registry, const filepath &srcPath, xmlpp::Element *pare
     }
   }
 
-  GraphTypePtr graphType = graphTypeReg ? graphTypeReg : graphTypeEmb; 
+  GraphTypePtr graphType = graphTypeReg ? graphTypeReg : graphTypeEmb;
 
   for(auto et : graphType->getMessageTypes()){
     events->onMessageType(et);
@@ -722,7 +739,7 @@ void loadGraph(Registry *registry, const filepath &srcPath, xmlpp::Element *pare
     if(eState){
       if(dt->isExternal()){
         throw std::runtime_error("External instance "+id+" had a state struct.");
-      }  
+      }
       deviceState=dt->getStateSpec()->load(eState);
     }else{
       auto ss=dt->getStateSpec();
@@ -761,7 +778,7 @@ void loadGraph(Registry *registry, const filepath &srcPath, xmlpp::Element *pare
     std::string srcDeviceId, srcPinName, dstDeviceId, dstPinName;
     std::string path=get_attribute_required(eEdge, "path");
     split_path(path, dstDeviceId, dstPinName, srcDeviceId, srcPinName);
-    
+
     int sendIndex=-1;
     std::string sendIndexStr=get_attribute_optional(eEdge, "sendIndex");
     if(!sendIndexStr.empty()){

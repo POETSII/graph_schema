@@ -103,7 +103,7 @@ TypedDataSpecElementPtr loadTypedDataSpecElementFromV4Decl(const std::vector<std
   if(type_names.find(curr)!=type_names.end()){
     // Scalar or array of scalars
     std::string type_name=curr;
-    
+
     eltName=next_token();
     check_is_identifier(eltName);
 
@@ -121,7 +121,7 @@ TypedDataSpecElementPtr loadTypedDataSpecElementFromV4Decl(const std::vector<std
     }
 
     std::vector<TypedDataSpecElementPtr> elts;
-    
+
     peek=peek_token();
     while(peek!="}"){
       elts.push_back(loadTypedDataSpecElementFromV4Decl(tokens, pos));
@@ -308,7 +308,7 @@ DeviceTypePtr loadDeviceTypeElement(
   TypedDataSpecPtr properties;
   TypedDataSpecPtr state;
   std::string readyToSendCode, onInitCode, onHardwareIdleCode, onDeviceIdleCode, sharedCode;
-  
+
   if(!isExternal){
     readyToSendCode=load_code_fragment(eDeviceType, "./g:ReadyToSend");
     onInitCode=load_code_fragment(eDeviceType, "./g:OnInit");
@@ -323,7 +323,7 @@ DeviceTypePtr loadDeviceTypeElement(
   }else{
     state=std::make_shared<TypedDataSpecImpl>();
   }
-  
+
   std::vector<InputPinPtr> inputs;
 
   for(auto *n : eDeviceType->find("./g:InputPin",ns)){
@@ -331,7 +331,7 @@ DeviceTypePtr loadDeviceTypeElement(
 
     std::string name=get_attribute_required(e, "name");
     std::string messageTypeId=get_attribute_required(e, "messageTypeId");
-    
+
     if(messageTypes.find(messageTypeId)==messageTypes.end()){
       throw std::runtime_error("Unknown messageTypeId '"+messageTypeId+"'");
     }
@@ -446,6 +446,7 @@ GraphTypePtr loadGraphTypeElement(const filepath &srcPath, xmlpp::Element *eGrap
 
   auto res=std::make_shared<GraphTypeDynamic>(
     id,
+    std::vector<TypedDataSpecPtr>(),
     properties,
     rapidjson::Document(),
     std::vector<std::string>{sharedCode},
@@ -520,7 +521,7 @@ void loadGraph(Registry *registry, const filepath &srcPath, xmlpp::Element *pare
     }
   }
 
-  GraphTypePtr graphType = graphTypeReg ? graphTypeReg : graphTypeEmb;  
+  GraphTypePtr graphType = graphTypeReg ? graphTypeReg : graphTypeEmb;
 
   for(auto et : graphType->getMessageTypes()){
     events->onMessageType(et);
@@ -548,7 +549,7 @@ void loadGraph(Registry *registry, const filepath &srcPath, xmlpp::Element *pare
     auto *eDevice=dynamic_cast<xmlpp::Element *>(nDevice);
     if(!eDevice)
       continue;
-    
+
     bool isExternal;
     if(eDevice->get_name()=="DevI"){
       isExternal=false;
@@ -603,7 +604,7 @@ void loadGraph(Registry *registry, const filepath &srcPath, xmlpp::Element *pare
     std::string srcDeviceId, srcPinName, dstDeviceId, dstPinName;
     std::string path=get_attribute_required(eEdge, "path");
     split_path(path, dstDeviceId, dstPinName, srcDeviceId, srcPinName);
-    
+
     int sendIndex=-1;
     std::string sendIndexStr=get_attribute_optional(eEdge, "sendIndex");
     if(!sendIndexStr.empty()){

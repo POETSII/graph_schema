@@ -175,7 +175,7 @@ public:
         ScalarType_char    =ScalarType_width_8 | ScalarType_kind_char
     };
 
-    static ScalarType typeNameToScalarType(const std::string &name)
+    static ScalarType typeNameToScalarType(const std::string &name, const std::vector<TypedDataSpecPtr> typedefs)
     {
         if(name=="char") return ScalarType_char;
 
@@ -388,7 +388,7 @@ public:
         case ScalarType_char: throw std::runtime_error("TODO: Is char actually a legal type for v4?");
 
         default: throw std::runtime_error("Unknown or not implemented type.");
-        }        
+        }
     }
 
     virtual void xmlV4ValueToBinary(std::istream &src, char *pBinary, unsigned cbBinary, bool alreadyDefaulted, int minorFormatVersion) const
@@ -743,7 +743,7 @@ public:
     TypedDataSpecElementPtr getElementType() const
     { return m_eltType; }
 
-    
+
     virtual void binaryToXmlV4Value(const char *pBinary, unsigned cbBinary, std::ostream &dst, int minorFormatVersion) const
     {
         if(cbBinary != getPayloadSize() ){
@@ -825,7 +825,7 @@ public:
         if(!getElementType()->check_is_equivalent(tother->getElementType().get(), true, error_prefix+"::[...]")){
             return false;
         }
-        
+
         return true;
     }
 
