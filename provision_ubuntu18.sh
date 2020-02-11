@@ -17,7 +17,7 @@ sudo apt-get install -y libmetis-dev libtbb-dev
 sudo npm install -g bats
 
 # Graph partitioning
-sudo apt-get install -y metis 
+sudo apt-get install -y metis
 
 # Visualisation
 sudo apt-get install -y graphviz imagemagick ffmpeg
@@ -43,3 +43,5 @@ sudo apt-get install -y octave octave-msh octave-geometry hdf5-tools
 # Used to support generation of documentation from schema
 #TODO: No longer needed?
 #sudo apt-get install -y xsltproc ant libsaxon-java docbook docbook-xsl-ns pandoc
+
+sudo apt-get install -y libscotch-dev libboost-all-dev socat

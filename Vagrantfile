@@ -15,7 +15,7 @@ Vagrant.configure(2) do |config|
 
   # Every Vagrant development environment requires a box. You can search for
   # boxes at https://atlas.hashicorp.com/search.
-  config.vm.box = "ubuntu/bionic64"
+  config.vm.box = "hashicorp/bionic64"
 
   # Disable automatic box update checking. If you disable this, then
   # boxes will only be checked for updates when the user runs
@@ -26,9 +26,11 @@ Vagrant.configure(2) do |config|
   # within the machine from a port on the host machine. In the example below,
   # accessing "localhost:8080" will access port 8000 on the guest machine.
   config.vm.network "forwarded_port", guest: 80, host: 8080
-  
+  config.vm.network "forwarded_port", guest: 3000, host: 3000
+  config.vm.network "forwarded_port", guest: 8079, host: 8079
+
   config.ssh.forward_agent = true
-  
+
   config.ssh.forward_x11 = true
 
   # Create a private network, which allows host-only access to the machine
@@ -60,10 +62,10 @@ Vagrant.configure(2) do |config|
   hcpu = Etc.nprocessors
   vcpu = hcpu > 4 ? 4 : ( hcpu > 1 ? hcpu - 1 : 1 )
   vb.cpus = vcpu
-  
+
    # Customize the amount of memory on the VM:
-   vb.memory = 3000     
-  
+   vb.memory = 3000
+
    # If clock drifts more than 500ms, then force it (instead of smooth adjust)
    vb.customize ["guestproperty","set", :id, "/VirtualBox/GuestAdd/VBoxService/--timesync-set-threshold", "500"]
 
