@@ -15,6 +15,10 @@
 
 #include "rapidjson/document.h"
 
+// Forward declare
+class TypedDataSpec;
+typedef std::shared_ptr<TypedDataSpec> TypedDataSpecPtr;
+
 class graph_type_mismatch_error
   : public std::runtime_error
 {
@@ -284,7 +288,7 @@ private:
 public:
     TypedDataSpecElementScalar(const std::string &name, const std::string &typeName, std::string defaultValue=std::string())
         : TypedDataSpecElement(name)
-        , m_type(typeNameToScalarType(typeName))
+        , m_type(typeNameToScalarType(typeName, {}))
         , m_typeString(typeName)
     {
         unsigned cb=scalarTypeWidthBytes(m_type);

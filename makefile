@@ -248,7 +248,7 @@ include tools/partitioner.inc
 
 # DPD ONLY
 
-include ../POETS/dpd-xml/makefile.inc
+#include ../POETS/dpd-xml/makefile.inc
 
 demos : $(ALL_DEMOS)
 
