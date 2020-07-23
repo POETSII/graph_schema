@@ -9,6 +9,7 @@
 #include <cstdio>
 #include <cstring>
 #include <cmath>
+#include <cassert>
 
 //#include "robin_hood.hpp"
 
@@ -44,14 +45,49 @@ struct prototype
     std::vector<config_item> config;
     std::vector<param_info> params;
 
-    int find_param_index(std::string_view name) const
+    int try_find_param_index(std::string_view name) const
     {
-        for(int i=0; i<params.size(); i++){
+        for(unsigned i=0; i<params.size(); i++){
             if(params[i].name==name){
                 return i;
             }
         }
-        throw std::runtime_error("Couldn't find param called "+std::string{name});
+        return -1;
+    }
+
+    int find_param_index(std::string_view name) const
+    {
+        int r=try_find_param_index(name);
+        if(r>-1){
+            return r;
+        }
+        throw std::runtime_error("Couldn't find param called "+std::string{name}+" in prototype name="+std::string{this->name}+" model="+std::string{model});
+    }
+
+    void set_param_if_present(float &dst, int index, int nParams, const double *pParams) const
+    {
+        if(index>-1){
+            assert(index<nParams);
+            double dv=pParams[index];
+            float fv=(float)dv;
+            if(fv!=dv){
+                throw std::runtime_error("Parameter is not representable as float.");
+            }
+            dst=fv;
+        }
+    }
+
+    void set_param_if_present(unsigned &dst, int index, int nParams, const double *pParams) const
+    {
+        if(index>-1){
+            assert(index<nParams);
+            double dv=pParams[index];
+            unsigned uv=(unsigned)dv;
+            if(dv < 0 || uv!=dv){
+                throw std::runtime_error("Parameter is not representable as unsigned.");
+            }
+            dst=uv;
+        }
     }
 
     std::vector<double> param_defaults() const

@@ -12,26 +12,28 @@ class CUBANeuron
     : public Neuron
 {
 public:
+    // Parameters
     float taum;
     float taue;
     float taui;
     float Vt;
     float Vr;
     float El;
-    unsigned refractorySteps;
-    float Vo;
+    unsigned refLen; // Number of refractory steps
+    float Vo;    // Reset voltage
 
+    // State
     float v;
     float ge;
     float gi;
-    unsigned refractoryTimer;
+    unsigned refSteps;
     
     void reset(uint64_t seed)
     {
         v=Vo;
         ge=0;
         gi=0;
-        refractoryTimer=0;
+        refSteps=0;
     }
 
     bool step(float dt, unsigned nStim, const stimulus_type *pStim) override 
@@ -44,7 +46,7 @@ public:
 
         //dv/dt  = (ge+gi-(v-El))/taum : volt (unless refractory)
         float vNext=v; // volt
-        if(refractoryTimer==0){
+        if(refSteps==0){
             vNext = v + dt * (ge + gi - (v-El))/taum;
         }
         //dge/dt = -ge/taue : volt
@@ -56,12 +58,12 @@ public:
         ge=geNext;
         gi=giNext;
 
-        bool fire=v>Vt && refractoryTimer==0;
+        bool fire=v>Vt && refSteps==0;
         if(fire){
             v=Vr;
-            refractoryTimer=refractorySteps;
-        }else if(refractoryTimer>0){
-            refractoryTimer--;
+            refSteps=refLen;
+        }else if(refSteps>0){
+            refSteps--;
         }
 
         return fire;
@@ -84,7 +86,7 @@ neuron_factory_t create_CUBA_neuron_factory(
     indices.push_back(p.find_param_index("Vt"));
     indices.push_back(p.find_param_index("Vr"));
     indices.push_back(p.find_param_index("El"));
-    indices.push_back(p.find_param_index("refractorySteps"));
+    indices.push_back(p.find_param_index("refLen"));
     indices.push_back(p.find_param_index("Vo"));
 
     auto res=[=](const prototype &p, std::string_view id, unsigned nParams, const double *pParams) -> std::shared_ptr<Neuron>
@@ -96,7 +98,7 @@ neuron_factory_t create_CUBA_neuron_factory(
         n->Vt=pParams[indices[3]];
         n->Vr=pParams[indices[4]];
         n->El=pParams[indices[5]];
-        n->refractorySteps=pParams[indices[6]];
+        n->refLen=pParams[indices[6]];
         n->Vo=pParams[indices[7]];
 
         n->reset(0);

@@ -2,20 +2,7 @@
 #include "../include/dumb_snn_source_from_file.hpp"
 
 #include "../include/reference_engine.hpp"
-#include "../include/izhikevich_neuron.hpp"
-#include "../include/CUBA_neuron.hpp"
 
-neuron_factory_t create_neuron_factory(
-    const prototype &p
-){
-    if(p.model=="Izhikevich"){
-        return create_izhikevich_neuron_factory(p);
-    }else if(p.model=="CUBA"){
-        return create_CUBA_neuron_factory(p);
-    }else{
-        throw std::runtime_error("Unknown neuron model "+p.model);
-    }
-}
 
 int main()
 {

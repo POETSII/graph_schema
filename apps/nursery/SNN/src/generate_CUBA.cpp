@@ -6,16 +6,21 @@
 
 int main(int argc, char *argv[])
 {
+    unsigned N=4000;
     unsigned numSteps=10000;
 
-    if(argc>5){
-        numSteps=atoi(argv[1]);
+    if(argc>1){
+        N=atoi(argv[1]);
+    }
+    if(argc>2){
+        numSteps=atoi(argv[2]);
     }
 
     DumbSNNSinkToFile sink(stdout);
 
     std::mt19937_64 rng;
     generate_CUBA(
+        N,
         numSteps,
         rng,
         sink

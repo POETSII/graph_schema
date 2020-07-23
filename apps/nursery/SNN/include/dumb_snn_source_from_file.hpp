@@ -235,7 +235,7 @@ void DumbSNNSourceFromFile(FILE *src, DumbSNNSink *sink)
             throw std::runtime_error("Wrong number of parts for neuron.");
         }
         values.resize(prototype.params.size());
-        for(int i=2; i<parts.size(); i++){
+        for(unsigned i=2; i<parts.size(); i++){
             if(parts[i].empty()){
                 values[i-2]=prototype.params[i-2].defaultVal;
             }else{
@@ -289,7 +289,7 @@ void DumbSNNSourceFromFile(FILE *src, DumbSNNSink *sink)
             throw std::runtime_error("Wrong number of parts for synapse.");
         }
         values.resize(prototype.params.size());
-        for(int i=3; i<parts.size(); i++){
+        for(unsigned i=3; i<parts.size(); i++){
             if(parts[i].empty()){
                 values[i-3]=prototype.params[i-3].defaultVal;
             }else{
@@ -304,9 +304,11 @@ void DumbSNNSourceFromFile(FILE *src, DumbSNNSink *sink)
         );
     }
     //EndNeurons
-    sink->on_end_neurons();
+    sink->on_end_synapses();
 
     sink->on_end_network();
+
+    free(line_buffer);
 };
 
 #endif

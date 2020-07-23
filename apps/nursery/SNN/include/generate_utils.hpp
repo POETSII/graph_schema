@@ -33,7 +33,7 @@ void sample_by_prob(
 
         assert(gdist.min()==0);
 
-        int off=gdist(rng);
+        unsigned off=gdist(rng);
         while(off < c.size()){
              f(c[off]);
             off += 1+gdist(rng);

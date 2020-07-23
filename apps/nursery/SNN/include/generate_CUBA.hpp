@@ -9,6 +9,7 @@
 #include "generate_utils.hpp"
 
 void generate_CUBA(
+    unsigned N,
     unsigned numSteps,
     std::mt19937_64 &rng,
     DumbSNNSink &sink
@@ -28,10 +29,13 @@ void generate_CUBA(
     float Vt = -0.050; // volt
     float Vr = -0.060; // volt
     float El = -0.049; // volt
+    unsigned refLen = 50; // 5ms / 0.1ms
+    float Vo = 0;
 
-    unsigned Ne=3200;
-    unsigned Ni=800;
-    unsigned N=Ne+Ni;
+    double pE=800.0/3200.0;
+
+    unsigned Ne=unsigned(pE*N);
+    unsigned Ni=N-Ne;
 
     prototype Neu{
         0,
@@ -39,14 +43,14 @@ void generate_CUBA(
         "CUBA",
         {},
         {
-            {"taum", "second", taum},
-            {"taue", "second", taue},
-            {"taui", "second", taui},
-            {"Vt", "volt", Vt},
-            {"Vr", "volt", Vr},
-            {"El", "volt", El},
-            {"refractorySteps", "steps", 50}, // 5ms / 0.1ms
-            {"Vo", "volt", 0}
+            //{"taum", "second", taum},
+            //{"taue", "second", taue},
+            //{"taui", "second", taui},
+            //{"Vt", "volt", Vt},
+            //{"Vr", "volt", Vr},
+            //{"El", "volt", El},
+            //{"refLen", "steps", refLen}, // 5ms / 0.1ms
+            {"Vo", "volt", Vo}
         }
     };
 
@@ -59,7 +63,6 @@ void generate_CUBA(
         "SynapseZeroDelayWithTarget",
         {},
         {
-            {"target", "1", 0},
             {"weight", "uV", mv_to_uv_round(we)}
         }
     };
@@ -69,7 +72,6 @@ void generate_CUBA(
         "SynapseZeroDelayWithTarget",
         {},
         {
-            {"target", "1", 1},
             {"weight", "uV", mv_to_uv_round(wi)}
         }
     };
@@ -95,8 +97,8 @@ void generate_CUBA(
         int n=sprintf(id.data(), "%c%u", (i<Ne)?'e':'i', i);
         id.resize(n);
         double r=udist(rng);
-        // Vr + rand() * (Vt - Vr)
-        params[7]=float(Vr + r * (Vt-Vr));
+        // Vo = Vr + rand() * (Vt - Vr)
+        params[0]=float(Vr + r * (Vt-Vr));
         sink.on_neuron(Neu, id, params.size(), &params[0]);
         neuron_ids.push_back(id);
     }
@@ -104,7 +106,7 @@ void generate_CUBA(
 
     sink.on_begin_synapses();
 
-    double pConn=0.02;
+    double pConn=std::max(1.0, (4000*0.02)/N);
 
     robin_hood::unordered_flat_set<unsigned> working;
     working.reserve(N*pConn*1.1);

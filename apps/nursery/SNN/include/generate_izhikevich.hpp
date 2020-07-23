@@ -21,10 +21,7 @@ void generate_izhikevich(
 
     auto f16=[](double x) -> double
     {
-        if(x!=0){
-            x=ldexp(round(ldexp(x,16)),-16);
-        }
-        return x;
+        return round(ldexp(x,16));;
     };
 
     prototype Ex{
@@ -33,14 +30,14 @@ void generate_izhikevich(
         "Izhikevich",
         {},
         {
-            {"a","/ms", 0.02},
-            {"b","/ms", 0.2},
-            {"c","mV", -65}, //-65+15*re*re
-            {"d","mV/ms", -8},   //d=8-6*re*re
-            {"i_offset","nA", 0.0},
-            {"v", "mV", -70},
-            {"u", "mV/ms", -14},
-            {"Ir","1", 5}
+            {"a","/ms", 0.02f},
+            {"b","/ms", 0.2f},
+            {"c","mV", -65.0f}, //-65+15*re*re
+            {"d","mV/ms", -8.0f},   //d=8-6*re*re
+            {"i_offset","nA", 0.0f},
+            {"vO", "mV", -70.0f},
+            {"uO", "mV/ms", -14.0f},
+            {"Ir","nA", 5.0f}
         }
     };
     prototype In{
@@ -49,14 +46,14 @@ void generate_izhikevich(
         "Izhikevich",
         {},
         {
-            {"a", "/ms", 0.02}, //0.02+0.08*ri
-            {"b", "/ms", 0.25}, // 0.25-0.05*ri
-            {"c", "mV",-65}, 
-            {"d", "mV/ms", 2},
-            {"i_offset", "nA", 0.0},
-            {"v", "mV", -70},
-            {"u", "mV/ms", -14},
-            {"Ir", "1", 2}
+            {"a", "/ms", 0.02f}, //0.02+0.08*ri
+            {"b", "/ms", 0.25f}, // 0.25-0.05*ri
+            {"c", "mV",-65.0f}, 
+            {"d", "mV/ms", 2.0f},
+            {"i_offset", "nA", 0.0f},
+            {"vO", "mV", -70.0f},
+            {"uO", "mV/ms", -14.0f},
+            {"Ir", "nA", 2.0f}
         }
     };
 
@@ -66,12 +63,12 @@ void generate_izhikevich(
         "SynapseZeroDelay",
         {},
         {
-            {"weight", "nA", 0.0}
+            {"weight", "nA", 0.0f}
         }
     };
 
     sink.on_begin_network({
-        {"dt" , "mS", (float)dt},
+        {"dt" , "second", (float)dt},
         {"numSteps" ,    "steps", numSteps},
         {"calc_type",    "type", "float_ftz_daz"} // Calculations should be done in this form
     });
@@ -91,10 +88,10 @@ void generate_izhikevich(
         int n=sprintf(id.data(), "e%u", i);
         id.resize(n);
         double re=udist(rng);
-        params[2]=f16(-65+15*re*re);
-        params[3]=f16(8-6*re*re);
-        params[5]=-65;
-        params[6]=params[1]*params[5];
+        params[2]=float(-65+15*re*re);
+        params[3]=float(8-6*re*re);
+        params[5]=-65.0f;
+        params[6]=float(params[1]*params[5]);
         sink.on_neuron(Ex, id, params.size(), &params[0]);
         neuron_ids.push_back(id);
     }
@@ -104,10 +101,10 @@ void generate_izhikevich(
         int n=sprintf(id.data(), "i%u", i);
         id.resize(n);
         double ri=udist(rng);
-        params[0]=f16(0.02+0.08*ri);
-        params[1]=f16(0.25-0.05*ri);
-        params[5]=-65;
-        params[6]=params[1]*params[5];
+        params[0]=float(0.02+0.08*ri);
+        params[1]=float(0.25-0.05*ri);
+        params[5]=-65.0f;
+        params[6]=float(params[1]*params[5]);
         sink.on_neuron(In, id, params.size(), &params[0]);
         neuron_ids.push_back(id);
     }

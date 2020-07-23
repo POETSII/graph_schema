@@ -1,0 +1,239 @@
+<?xml version='1.0' encoding='ASCII'?>
+<Graphs xmlns="https://poets-project.org/schemas/virtual-graph-schema-v4">
+  <GraphType id="SNN_HwIdle_${ModelType}">
+
+    <Documentation><![CDATA[
+    max_steps : Simulation should do exactly this many steps
+    hash_export_timer_gap :  neurons export hash when their timer hits this value
+    hash_export_on_max_steps : whether to always export hash on the final time-step
+    ]]></Documentation>
+
+    <Properties><![CDATA[
+        uint64_t global_rng_seed;
+        uint32_t max_steps;
+        float dt;
+        uint32_t hash_export_timer_gap;
+        uint32_t hash_export_on_max_steps;
+    ]]></Properties>
+
+    <SharedCode><![CDATA[
+    #include "${ModelType_IncludeFile}"
+    ]]></SharedCode>
+
+    <MessageTypes>
+        <MessageType id="spike">
+            <Message><![CDATA[
+            uint32_t nid;
+            uint32_t t; 
+            ]]></Message>
+        </MessageType>
+
+        <MessageType id="neuron_hash">
+            <Message><![CDATA[
+            uint32_t nid;
+            uint32_t t;
+            uint32_t hash;
+            uint32_t total_firings;
+            uint32_t sum_square_firing_gaps;
+            ]]></Message>
+        </MessageType>
+
+        <MessageType id="spike_bundle">
+            <Message><![CDATA[
+            uint32_t time;
+            uint32_t bundle_id;
+            uint16_t count;
+            uint16_t neuron_ids[16]; 
+            ]]></Message>
+        </MessageType>
+    </MessageTypes>
+
+    <DeviceTypes>
+        <DeviceType id="neuron">
+            <SharedCode><![CDATA[
+            void time_step(const GRAPH_PROPERTIES_T *graphProperties, const DEVICE_PROPERTIES_T *deviceProperties, DEVICE_STATE_T *deviceState)
+            {
+                assert(deviceState->rts==0);
+
+                uint32_t rts=0;
+
+                uint32_t time_step=deviceState->time_step;
+
+                if(time_step < graphProperties->max_steps){
+                    time_step++;
+
+                    bool fire=${ModelType}::step(deviceProperties->p, deviceState->s, graphProperties->dt, deviceState->pos_stim, deviceState->neg_stim);
+                    if(fire){
+                        uint32_t delta=time_step - deviceState->last_firing_time;
+                        deviceState->sum_square_firing_gaps += delta * delta;
+                        deviceState->total_firings++;
+                        deviceState->last_firing_time=time_step;
+                        rts=RTS_FLAG_spike_out;
+                    }
+                    
+                    uint32_t hash_export_timer=deviceState->hash_export_timer;
+                    hash_export_timer--;
+                    if(0==hash_export_timer){
+                        rts|=RTS_FLAG_hash_out;
+                        hash_export_timer=graphProperties->hash_export_timer_gap;
+                    }else if(time_step == graphProperties->max_steps && graphProperties->hash_export_on_max_steps){
+                        rts|=RTS_FLAG_hash_out;
+                    }
+
+
+                    deviceState->hash_export_timer=hash_export_timer;
+                    deviceState->time_step=time_step;
+                }
+                
+                deviceState->rts=rts;
+                deviceState->pos_stim=0;
+                deviceState->neg_stim=0;
+            }
+            ]]></SharedCode>
+            <Properties><![CDATA[
+            struct{
+                ${ModelType_DevicePropertyMembers}
+            }p;
+            uint32_t nid;
+            uint32_t hash_export_offset;
+            ]]></Properties>
+            <State><![CDATA[
+            uint32_t time_step;
+            int32_t pos_stim;
+            int32_t neg_stim;
+            uint32_t rts;
+            uint32_t total_firings;
+            uint32_t last_firing_time;
+            uint32_t sum_square_firing_gaps;
+            uint32_t hash_export_timer;
+            struct{
+                ${ModelType_DeviceStateMembers}
+            }s;
+            ]]></State>
+            <ReadyToSend><![CDATA[
+            *readyToSend=deviceState->rts;
+            ]]></ReadyToSend>
+            <OnInit><![CDATA[
+            ${ModelType}::reset(deviceProperties->p, deviceState->s, graphProperties->global_rng_seed);
+            deviceState->time_step=-1;
+            time_step(graphProperties, deviceProperties, deviceState);
+            ]]></OnInit>
+            <OnDeviceIdle/>
+            <OnHardwareIdle><![CDATA[
+            time_step(graphProperties, deviceProperties, deviceState);
+            ]]></OnHardwareIdle>
+            <InputPin name="spike_in" messageTypeId="spike">
+                <Properties><![CDATA[
+                int32_t weight;
+                ]]></Properties>
+                <State/>
+                <OnReceive><![CDATA[
+                auto w=edgeProperties->weight;
+                if(w>=0){
+                    deviceState->pos_stim += w;
+                }else{
+                    deviceState->neg_stim += w;
+                }
+                ]]></OnReceive>
+            </InputPin>
+
+            <OutputPin name="spike_out" messageTypeId="spike">
+                <OnSend><![CDATA[
+                assert(deviceState->rts & RTS_FLAG_spike_out);
+                message->nid=deviceProperties->nid;
+                message->t=deviceState->time_step;
+                deviceState->rts &= ~RTS_FLAG_spike_out;
+                ]]></OnSend>
+            </OutputPin>
+
+            <OutputPin name="hash_out" messageTypeId="neuron_hash">
+                <OnSend><![CDATA[
+                assert(deviceState->rts & RTS_FLAG_hash_out);
+                message->nid=deviceProperties->nid;
+                message->t=deviceState->time_step;
+                message->hash=${ModelType}::hash(deviceProperties->p, deviceState->s);
+                deviceState->rts &= ~RTS_FLAG_spike_out;
+                ]]></OnSend>
+            </OutputPin>
+        </DeviceType>
+
+        <DeviceType id="aggregator">
+            <SharedCode />
+            <Properties><![CDATA[
+            uint16_t bundle_size; 
+            ]]></Properties>
+            <State><![CDATA[
+            uint32_t rts;
+            uint32_t curr_step; 
+            uint16_t counts[2];
+            uint16_t spikes[2][1024];
+            ]]></State>
+            <ReadyToSend><![CDATA[
+            *readyToSend=deviceState->rts;
+            ]]></ReadyToSend>
+            <OnDeviceIdle/>
+            <OnHardwareIdle><![CDATA[
+            // The LSB of curr_step gives the index for current; ~LSB gives index for prev
+
+            uint32_t curr_step=deviceState->curr_step;
+            uint32_t curr_index=curr_step&1;
+            uint32_t prev_index=1^curr_index;
+            assert(deviceState->counts[prev_index]==0);
+            deviceState->rts=deviceState->counts[curr_index] > 0 ? RTS_FLAG_bundle_out : 0;
+            deviceState->curr_step++;
+            ]]></OnHardwareIdle>
+            <OnInit><![CDATA[
+            const uint32_t MAX_CHILDREN=sizeof(deviceState->spikes[0])/sizeof(deviceState->spikes[0][0]);
+            assert(deviceProperties->bundle_size <= MAX_CHILDREN);
+            ]]></OnInit>
+            <InputPin name="spike_in" messageTypeId="spike">
+                <Properties><![CDATA[
+                    uint16_t bId;
+                ]]></Properties>
+                <State/>
+                <OnReceive><![CDATA[
+                
+                assert(deviceState->curr_step==message->t);
+                uint32_t index=deviceState->curr_step&1;
+                uint32_t count=deviceState->counts[index];
+                assert(count < deviceProperties->bundle_size);
+                deviceState->spikes[index][count] = edgeProperties->bId;
+                count++;
+                deviceState->counts[index]=count;
+                ]]></OnReceive>
+            </InputPin>
+            <OutputPin name="bundle_out" messageTypeId="spike_bundle">
+                <OnSend><![CDATA[
+                assert(deviceState->curr_step > 0); // prev_step is one behind, so curr_step==0 implies prev_step==-1
+
+                // This is the index of previous step
+                uint32_t index=1^(deviceState->curr_step&1);
+
+                uint32_t count=deviceState->counts[index];
+                assert(count > 0);
+
+                const uint32_t MAX_SIZE=sizeof(message->neuron_ids)/sizeof(message->neuron_ids[0]);
+                auto todo=std::min(uint32_t(count), MAX_SIZE);
+
+                const auto *spikes=deviceState->spikes[index];
+
+                std::copy(spikes+count-todo, spikes+count, message->neuron_ids);
+                message->count=todo;
+
+                count -= todo;
+                deviceState->counts[index] = count;
+
+                deviceState->rts=count > 0 ? RTS_FLAG_bundle_out : 0;
+                ]]></OnSend>
+            </OutputPin>
+        </DeviceType>
+
+        <ExternalType id="external_output">
+            <Properties/>
+            <InputPin name="spike_in" messageTypeId="spike" ><Properties/></InputPin>
+            <InputPin name="hash_in" messageTypeId="neuron_hash" ><Properties/></InputPin>
+            <InputPin name="spike_bundle_in" messageTypeId="spike_bundle" ><Properties/></InputPin>
+        </ExternalType>
+    </DeviceTypes>
+</GraphType>
+</Graphs>

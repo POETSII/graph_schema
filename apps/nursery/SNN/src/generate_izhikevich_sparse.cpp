@@ -9,7 +9,7 @@ int main(int argc, char *argv[])
     unsigned Ne=800;
     unsigned Ni=200;
     unsigned K=1000;
-    float dt=0.5;
+    float dt=0.0005;
     unsigned numSteps=2000;
 
     if(argc>1){

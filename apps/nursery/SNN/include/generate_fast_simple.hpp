@@ -59,7 +59,7 @@ void generate_fast_simple(
     std::vector<double> params = Ex.param_defaults();
     for(unsigned i=0; i<N; i++){
         std::string id(10, 0);
-        int n=sprintf(id.data(), "e%u", i);
+        int n=sprintf((char*)id.data(), "e%u", i);
         id.resize(n);
         params[2]=i%1024;
         params[3]=i*(1.0/1024);
