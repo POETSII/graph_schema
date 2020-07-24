@@ -41,6 +41,8 @@ function setup()
 }
 
 @test ising_spin_fix_ext_run_32x32_img_dynamic {
+    skip "TODO : This test appears broken."
+
     WD=$(make_test_wd)
 
     apps/nursery/ising_spin_fix_ext/create_ising_spin_fix_ext_instance.py 32 > ${WD}/test.xml

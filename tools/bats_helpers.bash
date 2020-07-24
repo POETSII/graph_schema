@@ -6,14 +6,23 @@ make_target () {
     make $1
 }
 
+function get_graph_schema_dir {
+    local this_path=${BASH_SOURCE[0]}
+    local graph_schema_dir="$(realpath $(dirname ${this_path})/..)"
+    if [[ ! -d "${graph_schema_dir}" ]] ; then
+        exit 1;
+    fi
+    echo $graph_schema_dir
+}
+
 # Sets up the providers path in case we change directory
 if [[ "$POETS_PROVIDER_PATH" == "" ]] ; then
-    export POETS_PROVIDER_PATH="$(pwd)/providers"
+    export POETS_PROVIDER_PATH="$(get_graph_schema_dir)/providers"
 fi
 
 # Sets up python path in case it is not set, or we move directory
 if [[ "$PYTHONPATH" == "" ]] ; then
-    export PYTHONPATH="$(pwd)/tools"
+    export PYTHONPATH="$(get_graph_schema_dir)/tools"
 fi
 
 
@@ -29,15 +38,24 @@ run_no_stderr() {
   set "-$origFlags"
 }
 
+function pppp () {
+    >&3 echo "PWD=$(pwd)"
+}
+
 # Create a working based on the file-name of the test and the test number
-make_test_wd() {
-    # inspired by https://github.com/ztombol/bats-file/blob/master/src/temp.bash
+function make_test_wd() {
+    local wd
+    local gsd=$(get_graph_schema_dir)
 
-    local wd="testing/${BATS_TEST_FILENAME##*/}-${BATS_TEST_NUMBER}"
+    if [[ ! -d "${gsd}" ]] ; then
+        wd=$(mkdtemp -d)
+    else
+        # inspired by https://github.com/ztombol/bats-file/blob/master/src/temp.bash
+        wd="$(get_graph_schema_dir)/testing/${BATS_TEST_FILENAME##*/}/${BATS_TEST_NUMBER}"
 
-    ( [ -d "$wd" ] && rm -rf "$wd" )    
-    mkdir -p $wd
-
+        ( [ -d "$wd" ] && rm -rf "$wd" )    
+        mkdir -p $wd
+    fi
     echo $wd
 }
 
