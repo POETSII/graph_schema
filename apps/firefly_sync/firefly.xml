@@ -34,11 +34,12 @@
 		</Properties>
 		<State>
 			<Scalar type="uint32_t" name="t"/>
+			<Scalar type="uint32_t" name="slowflash_cnt"/>
 			<Scalar type="uint8_t" name="rdy_to_tick"/>
 			<Scalar type="uint8_t" name="rdy_to_flash"/>
 			<Scalar type="uint8_t" name="rdy_to_slowflash"/>
 			<Scalar type="uint8_t" name="rdy_to_log"/>
-			<Scalar type="uint32_t" name="slowflash_cnt"/>
+			
 		</State>
 
 		<ReadyToSend><![CDATA[

@@ -285,7 +285,7 @@ test :
 	@>&2 echo "# Building providers"
 	@make -j -k all_providers 2>/dev/null > /dev/null
 	@>&2 echo "# Running bats"
-	@bats -t -r .
+	@bats  -t -r .
 
 softswitch : $(ALL_SOFTSWITCH)
 	echo $(ALL_SOFTSWITCH)
