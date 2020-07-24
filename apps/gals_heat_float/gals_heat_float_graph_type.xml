@@ -86,9 +86,9 @@
           <Scalar name="ns" type="uint32_t"/>
           <Scalar name="prev_emit_v" type="float"/>
           <Scalar name="prev_emit_t" type="uint32_t"/>
-          <Scalar name="emit" type="uint8_t"/>
           <Scalar name="bound" type="uint32_t"/>
           <Scalar name="bound_time" type="uint32_t"/>
+          <Scalar name="emit" type="uint8_t"/>
         </State>
         <OnInit><![CDATA[
                   deviceState->t=0;
@@ -226,9 +226,9 @@
           <Scalar name="ns" type="uint32_t"/>
           <Scalar name="prev_emit_v" type="float"/>
           <Scalar name="prev_emit_t" type="uint32_t"/>
+          <Scalar name="bound_time" type="uint32_t"/>
           <Scalar name="emit" type="uint8_t"/>
           <Scalar name="bound" type="uint8_t"/>
-          <Scalar name="bound_time" type="uint32_t"/>
         </State>
         <OnInit><![CDATA[
 		  deviceState->v=0.0;

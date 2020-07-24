@@ -126,12 +126,12 @@
         is achieved.
         </Documentation>
         <Message>
+          <Scalar type="uint64_t" name="totalSent" /><!-- Number of share messages sent ever -->
           <Scalar type="uint32_t" name="version" /><!-- Which version this is talking about -->
           <Scalar type="uint32_t" name="count" /><!-- Number of cells at this version -->
           <Scalar type="uint32_t" name="sent" /><!-- Number of sends performed at this version -->
           <Scalar type="uint32_t" name="received" /><!-- Number of receives performed at this version -->
           <Scalar type="uint32_t" name="linkClock" /><!-- Maintain ordered history on this link only -->
-          <Scalar type="uint64_t" name="totalSent" /><!-- Number of share messages sent ever -->
           <Scalar type="uint8_t" name="index" /><!-- Index to tell parent which child this is from -->
         </Message> 
 			</MessageType>
@@ -182,14 +182,14 @@
           <Scalar name="sent" type="uint32_t" />
           <Scalar name="received" type="uint32_t" />
 
+          <Scalar name="totalSent" type="uint64_t" />
+
           <Scalar name="currHeat" type="float" />
           <Scalar name="nextHeat" type="float" />
 
           <Scalar name="clock" type="uint32_t" />
           
           <Array name="nhood" type="float" length="4" />
-
-          <Scalar name="totalSent" type="uint64_t" />
 
           <Scalar name="dirty" type="int8_t" /> <!-- The state has updated, but not yet send upwards for termination -->
 

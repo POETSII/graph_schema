@@ -267,12 +267,12 @@
 				</Properties>
 
 				<State>
+					<Scalar name="round" type="uint32_t" />
 					<Scalar name="acks_pending" type="uint8_t">
 						<Documentation>
 							Number of listeners who have not yet acknowledged.
 						</Documentation>
 					</Scalar>
-					<Scalar name="round" type="uint32_t" />
 				</State>
 
 				<ReadyToSend><![CDATA[
@@ -331,8 +331,8 @@
 					<Scalar name="phase" type="uint32_t" />
 
 					<!-- receive x positions from four nodes defining edge corners -->
-					<Array name="x_buff" type="double" length="8" />
 					<Scalar name="x_buff_got" type="uint32_t" />
+					<Array name="x_buff" type="double" length="8" />
 					<Scalar name="x_ack_pending" type="uint32_t" /> <!-- Boolean. Set once we have used the x, and want the next one -->
 
 					<Scalar name="res_pending" type="uint32_t" /> <!-- Count down to zero as we receive res increments -->
@@ -340,14 +340,16 @@
 					<Scalar name="rms_inc_ack_pending" type="uint32_t" /> <!-- Boolean. Set if we have sent an rms_inc, but it is not acked -->
 
 
+					<Scalar name="round" type="uint32_t" />
+
 					<!-- debugging only -->
+
+
 					<Array name="res_senders" type="uint32_t" length="4" />
 					<Array name="res0_in" type="double" length="4" />
 					<Array name="res1_in" type="double" length="4" />
 					<Array name="res2_in" type="double" length="4" />
 					<Array name="res3_in" type="double" length="4" />
-
-					<Scalar name="round" type="uint32_t" />
 				</State>
 
 				<ReadyToSend><![CDATA[
@@ -541,6 +543,7 @@
 					<Array name="q_buff" type="double" length="8" />   <!-- Pair of 4-tuples --> 
 					<Array name="adt_buff" type="double" length="2" /> <!-- two scalars -->
 					<Scalar name="q_adt_buff_got" type="uint32_t" />
+					<Scalar name="_pad_" type="uint32_t" /> <!-- alignment hack -->
 
 					<!-- this is only for debugging purposes -->
 					<Array name="res1_buff" type="double" length="4" /> 
@@ -698,9 +701,11 @@
 					<Scalar name="q_adt_buff_got" type="uint32_t" />
 
 					<!-- debug only -->
+					<Scalar name="round" type="uint32_t" />
+
 					<Array name="res_buff" type="double" length="4" />
 
-					<Scalar name="round" type="uint32_t" />
+					
 				</State>
 
 				<SharedCode><![CDATA[

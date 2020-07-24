@@ -92,6 +92,7 @@
           <Scalar name="spikes_seen" type="uint32_t"/><!-- Total spikes we have seen -->
           <Scalar name="spikes_seen_delta_t_max" type="int32_t"/><!-- Max difference between send and receive time. -->
           <Scalar name="spikes_seen_delta_t_min" type="int32_t"/><!-- Min difference between send and receive time. -->
+          <Scalar name="_pad_" type="uint32_t" /> <!-- HACK: preserve alignment of next one -->
           <Scalar name="spikes_seen_delta_t_sum" type="int64_t"/><!-- Sum of difference between send and receive time. -->
           <Scalar name="spikes_seen_delta_t_sum_sqr" type="uint64_t"/><!-- Squared difference between send and receive time. -->
           <Scalar name="spikeReady" type="int8_t"/>
