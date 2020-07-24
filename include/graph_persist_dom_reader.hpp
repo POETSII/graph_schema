@@ -7,6 +7,18 @@
 //#include <boost/filesystem.hpp>
 #include <libxml++/parsers/domparser.h>
 
+// Helper function to load graph type from node
+GraphTypePtr loadGraphType(const filepath &srcPath, xmlpp::Element *root, GraphLoadEvents *events=nullptr)
+{
+  if(root->get_namespace_uri()=="https://poets-project.org/schemas/virtual-graph-schema-v3"){
+    return xml_v3::loadGraphType(srcPath, root, events);
+  }else if(root->get_namespace_uri()=="https://poets-project.org/schemas/virtual-graph-schema-v4"){
+    return xml_v4::loadGraphType(srcPath, root, events);
+  }else{
+    throw std::runtime_error("Unknown namespace on Graphs element : "+root->get_namespace_uri());
+  }
+}
+
 // Helper function to load graph type from path
 GraphTypePtr loadGraphType(const filepath &srcPath, GraphLoadEvents *events=nullptr)
 {
@@ -20,13 +32,7 @@ GraphTypePtr loadGraphType(const filepath &srcPath, GraphLoadEvents *events=null
     throw std::runtime_error("Expected document root to be a Graphs element, but got "+root->get_name());
   }
 
-  if(root->get_namespace_uri()=="https://poets-project.org/schemas/virtual-graph-schema-v3"){
-    return xml_v3::loadGraphType(srcPath, root, events);
-  }else if(root->get_namespace_uri()=="https://poets-project.org/schemas/virtual-graph-schema-v4"){
-    return xml_v4::loadGraphType(srcPath, root, events);
-  }else{
-    throw std::runtime_error("Unknown namespace on Graphs element : "+root->get_namespace_uri());
-  }
+  return loadGraphType(srcPath, root, events);
 }
 
 

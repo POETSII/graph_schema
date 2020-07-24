@@ -13,8 +13,12 @@ sudo apt-get install -y libmetis-dev libtbb-dev
 
 # Testing.
 # npm has the most recent version of bats, because life is like that
-# This version does not support parallel jobs though...
-sudo npm install -g bats
+# OLD: This version does not support parallel jobs though...
+# OLD: sudo npm install -g bats
+if [[ "$(which bats)" == "" ]] ; then
+    git clone https://github.com/bats-core/bats-core.git
+    (cd bats-core && sudo ./install.sh /usr/local )
+fi
 
 # Graph partitioning
 sudo apt-get install -y metis 

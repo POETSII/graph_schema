@@ -60,7 +60,19 @@ struct typed_data_t
 {
   // This is opaque data, and should be a POD
   std::atomic<unsigned> _ref_count; // This is exposed in order to allow cross-module optimisations
-  uint32_t _total_size_bytes;  // All typed data instances must be a POD, and this is the total size, including header
+  union{
+    uint32_t _total_size_bytes;  // All typed data instances must be a POD, and this is the total size, including header
+    uint32_t _pad_; // Force alignment to 8 bytes for later member alignment
+  };
+
+  size_t payloadSize() const
+  { return this->_total_size_bytes - sizeof(typed_data_t); }
+
+  const uint8_t *payloadPtr() const
+  { return ((const uint8_t*)this)+sizeof(typed_data_t); }
+
+  uint8_t *payloadPtr()
+  { return ((uint8_t*)this)+sizeof(typed_data_t); }
 };
 #pragma pack(pop)
 
@@ -214,7 +226,7 @@ public:
     if(!m_p)
       return DataPtr();
     typed_data_t *p=(typed_data_t*)malloc(m_p->_total_size_bytes);
-    memcpy(p, m_p, m_p->_total_size_bytes);
+    memcpy((void*)p, (void*)m_p, m_p->_total_size_bytes);
     p->_ref_count=0;
     return DataPtr((T*)p);
   }
@@ -327,7 +339,7 @@ TypedDataPtr clone(const typed_data_t *p)
   TypedDataPtr res;
   if(p){
     typed_data_t *pc=(typed_data_t*)malloc(p->_total_size_bytes);
-    memcpy(pc, p, p->_total_size_bytes);
+    memcpy((void*)pc, (void*)p, p->_total_size_bytes);
     pc->_ref_count=0;
     res.attach(pc);
   }
@@ -412,6 +424,16 @@ public:
     getTupleElement()->dumpStructure(dst, indent);
     dst<<"</TypedDataSpec>\n";
   }
+
+  template<class TVal>
+  void setScalarSubElement(const std::string &path, const TypedDataPtr &data, TVal x) const
+  {
+    auto e=getTupleElement();
+    if(!e){
+      throw std::runtime_error("Cant set sub element by path without element info available.");
+    }
+    e->setScalarSubElement(path, (size_t)data->payloadSize(),(void*) data->payloadPtr(), x);
+  }
 };
 
 
@@ -437,7 +459,7 @@ public:
   virtual ~Pin()
   {}
 
-  virtual const DeviceTypePtr &getDeviceType() const=0;
+  virtual DeviceTypePtr getDeviceType() const=0;
 
   virtual const std::string &getName() const=0;
   virtual unsigned getIndex() const=0;

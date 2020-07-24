@@ -72,7 +72,7 @@ private:
 
   void writeTypedData(const TypedDataSpecPtr &spec, const TypedDataPtr &data, const char *name)
   {
-    if(!spec->is_default(data)){
+    if( data && !spec->is_default(data)){
       std::string json{spec->toJSON(data)};
       if(json.size()>2){ // If it is <=2 it is either empty or just "{}"
         assert(json[json.size()-1]=='}');
@@ -98,11 +98,13 @@ private:
 
     writeTypedDataSpec(ip->getPropertiesSpec(), "Properties");
 
-    writeTypedDataSpec(ip->getStateSpec(), "State");
+    if(!ip->getDeviceType()->isExternal()){
+      writeTypedDataSpec(ip->getStateSpec(), "State");
 
-    xmlTextWriterStartElement(m_dst, (const xmlChar *)"OnReceive");
-    xmlTextWriterWriteCDATA(m_dst, (const xmlChar *)ip->getHandlerCode().c_str());
-    xmlTextWriterEndElement(m_dst);
+      xmlTextWriterStartElement(m_dst, (const xmlChar *)"OnReceive");
+      xmlTextWriterWriteCDATA(m_dst, (const xmlChar *)ip->getHandlerCode().c_str());
+      xmlTextWriterEndElement(m_dst);
+    }
 
     xmlTextWriterEndElement(m_dst);
   }
@@ -115,43 +117,50 @@ private:
     
     writeMetaData(op->getMetadata(), "MetaData");
 
-    xmlTextWriterStartElement(m_dst, (const xmlChar *)"OnSend");
-    xmlTextWriterWriteCDATA(m_dst, (const xmlChar *)op->getHandlerCode().c_str());
-    xmlTextWriterEndElement(m_dst);
+    if(!op->getDeviceType()->isExternal()){
+
+      xmlTextWriterStartElement(m_dst, (const xmlChar *)"OnSend");
+      xmlTextWriterWriteCDATA(m_dst, (const xmlChar *)op->getHandlerCode().c_str());
+      xmlTextWriterEndElement(m_dst);
+    }
+
 
     xmlTextWriterEndElement(m_dst);
   }
 
   void writeDeviceType(DeviceTypePtr deviceType)
   {
-    xmlTextWriterStartElement(m_dst, (const xmlChar *)"DeviceType");
+    xmlTextWriterStartElement(m_dst, deviceType->isExternal() ? (const xmlChar *)"ExternalType" : (const xmlChar *)"DeviceType");
 
     xmlTextWriterWriteAttribute(m_dst, (const xmlChar *)"id", (const xmlChar *)deviceType->getId().c_str() );
 
     writeTypedDataSpec(deviceType->getPropertiesSpec(), "Properties");
-    writeTypedDataSpec(deviceType->getStateSpec(), "State");
 
-    xmlTextWriterStartElement(m_dst, (const xmlChar *)"OnInit");
-    xmlTextWriterWriteCDATA(m_dst, (const xmlChar *)deviceType->getOnInitCode().c_str());
-    xmlTextWriterEndElement(m_dst);
+    if(!deviceType->isExternal()){
+      writeTypedDataSpec(deviceType->getStateSpec(), "State");
 
-    xmlTextWriterStartElement(m_dst, (const xmlChar *)"OnHardwareIdle");
-    xmlTextWriterWriteCDATA(m_dst, (const xmlChar *)deviceType->getOnHardwareIdleCode().c_str());
-    xmlTextWriterEndElement(m_dst);
-
-    xmlTextWriterStartElement(m_dst, (const xmlChar *)"OnDeviceIdle");
-    xmlTextWriterWriteCDATA(m_dst, (const xmlChar *)deviceType->getOnDeviceIdleCode().c_str());
-    xmlTextWriterEndElement(m_dst);
-
-    xmlTextWriterStartElement(m_dst, (const xmlChar *)"ReadyToSend");
-    xmlTextWriterWriteCDATA(m_dst, (const xmlChar *)deviceType->getReadyToSendCode().c_str());
-    xmlTextWriterEndElement(m_dst);
-
-    auto sharedCode=deviceType->getSharedCode();
-    if(!sharedCode.empty()){
-      xmlTextWriterStartElement(m_dst, (const xmlChar *)"SharedCode");
-      xmlTextWriterWriteCDATA(m_dst, (const xmlChar *)sharedCode.c_str());
+      xmlTextWriterStartElement(m_dst, (const xmlChar *)"OnInit");
+      xmlTextWriterWriteCDATA(m_dst, (const xmlChar *)deviceType->getOnInitCode().c_str());
       xmlTextWriterEndElement(m_dst);
+
+      xmlTextWriterStartElement(m_dst, (const xmlChar *)"OnHardwareIdle");
+      xmlTextWriterWriteCDATA(m_dst, (const xmlChar *)deviceType->getOnHardwareIdleCode().c_str());
+      xmlTextWriterEndElement(m_dst);
+
+      xmlTextWriterStartElement(m_dst, (const xmlChar *)"OnDeviceIdle");
+      xmlTextWriterWriteCDATA(m_dst, (const xmlChar *)deviceType->getOnDeviceIdleCode().c_str());
+      xmlTextWriterEndElement(m_dst);
+
+      xmlTextWriterStartElement(m_dst, (const xmlChar *)"ReadyToSend");
+      xmlTextWriterWriteCDATA(m_dst, (const xmlChar *)deviceType->getReadyToSendCode().c_str());
+      xmlTextWriterEndElement(m_dst);
+
+      auto sharedCode=deviceType->getSharedCode();
+      if(!sharedCode.empty()){
+        xmlTextWriterStartElement(m_dst, (const xmlChar *)"SharedCode");
+        xmlTextWriterWriteCDATA(m_dst, (const xmlChar *)sharedCode.c_str());
+        xmlTextWriterEndElement(m_dst);
+      }
     }
 
     writeMetaData(deviceType->getMetadata(), "MetaData");
@@ -219,7 +228,7 @@ private:
 
   void writeTypedDataSpecElementArray(std::shared_ptr<TypedDataSpecElementArray> e)
   {
-    xmlTextWriterStartElement(m_dst, (const xmlChar *)"Tuple");
+    xmlTextWriterStartElement(m_dst, (const xmlChar *)"Array");
     xmlTextWriterWriteAttribute(m_dst, (const xmlChar *)"name", (const xmlChar *)e->getName().c_str()); 
     xmlTextWriterWriteFormatAttribute(m_dst, (const xmlChar *)"length", "%u", e->getElementCount()); 
 
@@ -403,12 +412,14 @@ public:
     m_deviceIds.push_back(id);
     uint64_t idNum=m_deviceIds.size()-1;
 
-    xmlTextWriterStartElement(m_dst, (const xmlChar *)"DevI");
+    xmlTextWriterStartElement(m_dst, dt->isExternal() ? (const xmlChar *)"ExtI" : (const xmlChar *)"DevI");
     xmlTextWriterWriteAttribute(m_dst, (const xmlChar *)"id", (const xmlChar *)id.c_str());
     xmlTextWriterWriteAttribute(m_dst, (const xmlChar *)"type", (const xmlChar *)dt->getId().c_str());
     
     writeTypedData(dt->getPropertiesSpec(), properties, "P");
-    writeTypedData(dt->getStateSpec(), state, "S");
+    if(!dt->isExternal()){
+      writeTypedData(dt->getStateSpec(), state, "S");
+    }
     
     writeMetaData(metadata, "M");
 

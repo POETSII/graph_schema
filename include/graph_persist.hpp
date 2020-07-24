@@ -75,6 +75,8 @@ bool exists(const filepath &p)
 */
 class GraphLoadEvents
 {
+private:
+  uint64_t m_defaultIdCounter=0;
 public:
   virtual ~GraphLoadEvents()
   {}
@@ -101,7 +103,8 @@ public:
     const std::string &id,
     const TypedDataPtr &properties,
     rapidjson::Document &&metadata
-  ) =0;
+  )
+  { return m_defaultIdCounter++; }
 
   //! The graph is now complete
   virtual void onEndGraphInstance(uint64_t /*graphToken*/)
@@ -126,7 +129,10 @@ public:
    const TypedDataPtr &properties,
    const TypedDataPtr &state,
    rapidjson::Document &&metadata=rapidjson::Document()
-  ) =0;
+  )
+  {
+    return m_defaultIdCounter++;
+  }
 
     //! The edge instances within the graph instance will follow
   virtual void onBeginEdgeInstances(uint64_t /*graphToken*/)

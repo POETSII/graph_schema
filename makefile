@@ -23,6 +23,7 @@ CPPFLAGS += -I include -W -Wall -Wno-unused-parameter -Wno-unused-variable
 CPPFLAGS += $(LIBXML_PKG_CONFIG_CPPFLAGS)
 CPPFLAGS += -Wno-unused-local-typedefs
 CPPFLAGS += -I providers
+CPPFLAGS += -I external/robin_hood
 
 LDLIBS += $(LIBXML_PKG_CONFIG_LDLIBS)
 LDFLAGS += $(LIBXML_PKG_CONFIG_LDFLAGS)
@@ -48,7 +49,7 @@ endif
 CPPFLAGS += -std=c++11 -O2 -gdwarf-4
 
 # Last optimisation flag overrides
-CPPFLAGS_DEBUG = $(CPPFLAGS) -O0 -fno-omit-frame-pointer
+CPPFLAGS_DEBUG = $(CPPFLAGS) -O0 -fno-omit-frame-pointer -fsanitize=undefined -fsanitize=address
 
 # Release is max optimised with no asserts
 CPPFLAGS_RELEASE = $(CPPFLAGS) -O3 -DNDEBUG=1
@@ -157,17 +158,17 @@ bin/create_gals_heat_instance : apps/gals_heat/create_gals_heat_instance.cpp
 	$(CXX) $(CPPFLAGS) $< -o $@ $(LDFLAGS) $(LDLIBS)
 
 bin/% : tools/%.cpp
-	mkdir -p bin
+	mkdir -p $(dir $@)
 	$(CXX) -c $(CPPFLAGS) $< -o $@.o $(LDFLAGS) $(LDLIBS)
 	$(CXX) $(CPPFLAGS) $@.o -o $@ $(LDFLAGS) $(LDLIBS)
 
 bin/%.debug : tools/%.cpp
-	mkdir -p bin
+	mkdir -p $(dir $@)
 	$(CXX) -c $(CPPFLAGS_DEBUG) $< -o $@.o
 	$(CXX) $(CPPFLAGS_DEBUG) $@.o -o $@ $(LDFLAGS) $(LDLIBS)
 
 bin/%.release : tools/%.cpp
-	mkdir -p bin
+	mkdir -p $(dir $@)
 	$(CXX) $(CPPFLAGS_RELEASE) $< -o $@ $(LDFLAGS) $(LDLIBS)
 
 define provider_rules_template
@@ -241,6 +242,7 @@ include apps/nursery/nested_arrays/makefile.inc
 include apps/nursery/apsp_vec_barrier/apsp_vec_barrier.inc
 include apps/nursery/barrier_izhikevich_clustered/barrier_izhikevich_clustered.inc
 include apps/nursery/pulsed_izhikevich/pulsed_izhikevich.inc
+include apps/nursery/self_clocked_izhikevich/self_clocked_izhikevich.inc
 include apps/nursery/ising_spin_fix_ext/ising_spin_fix_ext.inc
 
 #TODO : Defunct?
@@ -278,8 +280,10 @@ validate-virtual : $(foreach t,$(VIRTUAL_ALL_TESTS),validate-virtual/$(t) output
 test :
 	@>&2 echo "# Cleaning directory"
 	@make clean 2> /dev/null > /dev/null
-	@>&2 echo "# Building tools and providers"
-	@make -j4 -k all_tools all_providers 2>/dev/null > /dev/null
+	@>&2 echo "# Building tools"
+	@make -j -k all_tools 2>/dev/null > /dev/null
+	@>&2 echo "# Building providers"
+	@make -j -k all_providers 2>/dev/null > /dev/null
 	@>&2 echo "# Running bats"
 	@bats -t -r .
 

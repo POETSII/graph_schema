@@ -66,11 +66,42 @@ protected:
 
         m_binaryDefault=binaryDefault;
 
-        auto def=binaryToJSON(&m_binaryDefault[0], m_binaryDefault.size(), m_jsonDefault.GetAllocator());
+        auto def=binaryToJSON(m_binaryDefault.empty() ? nullptr : &m_binaryDefault[0], m_binaryDefault.size(), m_jsonDefault.GetAllocator());
         def.Swap(m_jsonDefault);
 
     }
 public:
+    enum ScalarType
+    {
+        ScalarType_width_8   = 0x0,
+        ScalarType_width_16  = 0x1,
+        ScalarType_width_32  = 0x2,
+        ScalarType_width_64  = 0x3,
+        ScalarType_width_mask  = 0xF,
+
+        ScalarType_kind_unsigned = 0x10,
+        ScalarType_kind_signed  = 0x20,
+        ScalarType_kind_float   = 0x30,
+        ScalarType_kind_char   = 0x40,
+        ScalarType_kind_mask   = 0xF0,
+
+        ScalarType_uint8_t    =ScalarType_width_8 | ScalarType_kind_unsigned,
+        ScalarType_uint16_t    =ScalarType_width_16 | ScalarType_kind_unsigned,
+        ScalarType_uint32_t    =ScalarType_width_32 | ScalarType_kind_unsigned,
+        ScalarType_uint64_t    =ScalarType_width_64 | ScalarType_kind_unsigned,
+
+        ScalarType_int8_t    =ScalarType_width_8 | ScalarType_kind_signed,
+        ScalarType_int16_t    =ScalarType_width_16 | ScalarType_kind_signed,
+        ScalarType_int32_t    =ScalarType_width_32 | ScalarType_kind_signed,
+        ScalarType_int64_t    =ScalarType_width_64 | ScalarType_kind_signed,
+
+        ScalarType_half    =ScalarType_width_16 | ScalarType_kind_float,
+        ScalarType_float    =ScalarType_width_32 | ScalarType_kind_float,
+        ScalarType_double    =ScalarType_width_64 | ScalarType_kind_float,
+
+        ScalarType_char    =ScalarType_width_8 | ScalarType_kind_char
+    };
+
   virtual ~TypedDataSpecElement()
   {}
 
@@ -93,7 +124,9 @@ public:
         tmp<<"createBinaryDefault - incorrect binary size of "<<cbBinary<<", expected "<<m_binaryDefault.size();
         throw std::runtime_error(tmp.str());
     }
-    std::memcpy(pBinary, &m_binaryDefault[0], m_binaryDefault.size());
+    if(!m_binaryDefault.empty()){
+        std::memcpy(pBinary, &m_binaryDefault[0], m_binaryDefault.size());
+    }
   }
 
   void createBinaryRandom(char *pBinary, unsigned cbBinary) const
@@ -141,6 +174,54 @@ public:
     virtual bool check_is_equivalent(TypedDataSpecElement *other, bool throw_on_error, const std::string &error_prefix) const =0;
 
     virtual void dumpStructure(std::ostream &dst, const std::string &indent) const=0;
+
+    struct sub_element_position
+    {
+        const TypedDataSpecElement *element;
+        size_t offset;
+        size_t length;
+    };
+
+    /* Find the position of an element within the struct.
+        Synatax is:
+          "" (empty) : identify this thing.
+          name : identify a value called "name" within a struct
+          name[idx] : identify element at index "idx" within an array called name
+          name.member : identify element at index "idx" within 
+
+    */
+    virtual sub_element_position findSubElementPosition(const std::string &path) const =0;
+
+    template<class TVal>
+    void setScalarSubElement(const sub_element_position &pos, size_t cbDst, void *pDst, TVal val) const
+    {
+        if(pos.offset+pos.length > getPayloadSize()){
+            throw std::runtime_error("Offset is corrupt");
+        }
+        if(!pos.element->isScalar()){
+            throw std::runtime_error("Target element is not scalar.");
+        }
+        if(pos.length!=sizeof(TVal)){
+            throw std::runtime_error("Size of value doesnt match size of element.");
+        }
+        if(cbDst!=getPayloadSize()){
+            throw std::runtime_error("Size of dst doesnt match struct size.");
+        }
+        memcpy((char*)pDst+pos.offset, &val, pos.length);
+    }
+
+    template<class TVal>
+    void setScalarSubElement(const std::string &path, size_t cbDst, void *pDst, TVal x) const
+    {
+        try{
+            setScalarSubElement(findSubElementPosition(path), cbDst, pDst, x);
+        }catch(std::exception &e)
+        {
+            std::cerr<<"Exception while trying to set sub-element "+path+"\n";
+            throw;
+        }
+    }
+
 };
 typedef std::shared_ptr<TypedDataSpecElement> TypedDataSpecElementPtr;
 
@@ -148,36 +229,6 @@ class TypedDataSpecElementScalar
   : public TypedDataSpecElement
 {
 public:
-    enum ScalarType
-    {
-        ScalarType_width_8   = 0x0,
-        ScalarType_width_16  = 0x1,
-        ScalarType_width_32  = 0x2,
-        ScalarType_width_64  = 0x3,
-        ScalarType_width_mask  = 0xF,
-
-        ScalarType_kind_unsigned = 0x10,
-        ScalarType_kind_signed  = 0x20,
-        ScalarType_kind_float   = 0x30,
-        ScalarType_kind_char   = 0x40,
-        ScalarType_kind_mask   = 0xF0,
-
-        ScalarType_uint8_t    =ScalarType_width_8 | ScalarType_kind_unsigned,
-        ScalarType_uint16_t    =ScalarType_width_16 | ScalarType_kind_unsigned,
-        ScalarType_uint32_t    =ScalarType_width_32 | ScalarType_kind_unsigned,
-        ScalarType_uint64_t    =ScalarType_width_64 | ScalarType_kind_unsigned,
-
-        ScalarType_int8_t    =ScalarType_width_8 | ScalarType_kind_signed,
-        ScalarType_int16_t    =ScalarType_width_16 | ScalarType_kind_signed,
-        ScalarType_int32_t    =ScalarType_width_32 | ScalarType_kind_signed,
-        ScalarType_int64_t    =ScalarType_width_64 | ScalarType_kind_signed,
-
-        ScalarType_half    =ScalarType_width_16 | ScalarType_kind_float,
-        ScalarType_float    =ScalarType_width_32 | ScalarType_kind_float,
-        ScalarType_double    =ScalarType_width_64 | ScalarType_kind_float,
-
-        ScalarType_char    =ScalarType_width_8 | ScalarType_kind_char
-    };
 
     static ScalarType typeNameToScalarType(const std::string &name, const std::vector<TypedDataSpecPtr> typedefs)
     {
@@ -219,6 +270,7 @@ private:
     rapidjson::Value binaryToJSONImpl(const char *pBinary, unsigned cbBinary) const
     {
         assert(cbBinary == scalarTypeWidthBytes(m_type));
+        assert( (intptr_t(pBinary )%sizeof(T))==0 );
         T val=*(const T*)pBinary;
         return rapidjson::Value(val);
     }
@@ -457,6 +509,18 @@ public:
         dst<<indent<<"<Scalar name='"<<getName()<<"' type='"<<getTypeName()<<"' />\n";
     }
 
+    sub_element_position findSubElementPosition(const std::string &path) const override
+    {
+        if(!path.empty()){
+            throw std::runtime_error("Can only use empty path on scalar, but got "+path);
+        }
+        return {
+            this,
+            0,
+            scalarTypeWidthBytes(m_type)
+        };
+    }
+
 };
 typedef std::shared_ptr<TypedDataSpecElementScalar> TypedDataSpecElementScalarPtr;
 
@@ -666,6 +730,40 @@ public:
         dst<<indent<<"</Tuple>\n";
     }
 
+
+    sub_element_position findSubElementPosition(const std::string &path) const override
+    {
+        if(path.empty()){
+            return {
+                this,
+                0,
+                m_sizeBytes
+            };
+        }
+
+        auto epos=path.find_first_of("[.");
+        std::string now=path.substr(0,epos);
+        std::string next;
+        if(epos!=std::string::npos){
+            next=path.substr(epos+1, std::string::npos);
+        }
+        fprintf(stderr, "now=%s, next=%s\n", now.c_str(), next.c_str());
+
+        if(now.empty()){
+            throw std::runtime_error("No immediate part to index into tuple.");
+        }
+
+        auto it=m_elementsAndOffsetsByName.find(now);
+        if(it==m_elementsAndOffsetsByName.end()){
+            throw std::runtime_error("Unknown tuple member "+now);
+        }
+
+        size_t offset=it->second.second;
+        auto res=it->second.first->findSubElementPosition(next);
+        res.offset += offset;
+
+        return res;        
+    }
 };
 typedef std::shared_ptr<TypedDataSpecElementTuple> TypedDataSpecElementTuplePtr;
 
@@ -840,6 +938,46 @@ public:
         dst<<indent<<"</Array>\n";
     }
 
+    sub_element_position findSubElementPosition(const std::string &path) const override
+    {
+        if(path.empty()){
+            return {
+                this,
+                0,
+                m_eltCount * m_eltType->getPayloadSize()
+            };
+        }
+
+        if(path[0]!='['){
+            throw std::runtime_error("Array path doesnt start with [");
+        }
+
+        auto epos=path.find(']');
+        if(epos==std::string::npos){
+            throw std::runtime_error("Array path doesnt contain ]");
+        }
+        std::string index_s=path.substr(1,epos);
+        std::string next=path.substr(epos+1);
+
+        if(index_s.empty()){
+            throw std::runtime_error("No index chars into array.");
+        }
+
+        size_t end=0;
+        unsigned long index=std::stoul(index_s, &end);
+        if(end!=index_s.size()){
+            throw std::runtime_error("Coulndt parse array index as integer.");
+        }
+        if(end >= m_eltCount){
+            throw std::runtime_error("Array index out of range.");
+        }
+
+        size_t offset=index*m_eltType->getPayloadSize();
+        auto res=m_eltType->findSubElementPosition(next);
+        res.offset+=offset;
+
+        return res;        
+    }
 };
 typedef std::shared_ptr<TypedDataSpecElementArray> TypedDataSpecElementArrayPtr;
 

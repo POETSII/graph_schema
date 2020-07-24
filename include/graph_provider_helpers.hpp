@@ -124,7 +124,7 @@ public:
     , m_totalSize(elt->getPayloadSize()+sizeof(typed_data_t))
   {
     m_default.resize(m_payloadSize);
-    m_type->createBinaryDefault(&m_default[0], m_payloadSize);
+    m_type->createBinaryDefault(m_default.empty() ? nullptr : &m_default[0], m_payloadSize);
   }
 
   //! Gets the detailed type of the data spec
@@ -216,7 +216,7 @@ class InputPinImpl
 {
 private:
   std::function<DeviceTypePtr ()> m_deviceTypeSrc; // Avoid circular initialisation with device type
-  mutable DeviceTypePtr m_deviceType;
+  mutable std::weak_ptr<DeviceType> m_deviceType;
   std::string m_name;
   unsigned m_index;
   MessageTypePtr m_messageType;
@@ -247,11 +247,14 @@ protected:
   }
 public:
 
-  virtual const DeviceTypePtr &getDeviceType() const override
+  virtual DeviceTypePtr getDeviceType() const override
   {
-    if(!m_deviceType)
-      m_deviceType=m_deviceTypeSrc();
-    return m_deviceType;
+    DeviceTypePtr res=m_deviceType.lock();
+    if(!res){
+      res=m_deviceTypeSrc();
+      m_deviceType=res;
+    }
+    return res;
   }
 
   virtual const std::string &getName() const override
@@ -292,7 +295,7 @@ public:
   InputPinPtr getBase() const
   { return m_base; }
 
-  virtual const DeviceTypePtr &getDeviceType() const override
+  virtual DeviceTypePtr getDeviceType() const override
   { return m_base->getDeviceType(); }
 
   virtual const std::string &getName() const override
@@ -323,7 +326,7 @@ class OutputPinImpl
 {
 private:
   std::function<DeviceTypePtr ()> m_deviceTypeSrc; // Avoid circular initialisation with device type
-  mutable DeviceTypePtr m_deviceType;
+  mutable std::weak_ptr<DeviceType> m_deviceType;
   std::string m_name;
   unsigned m_index;
   MessageTypePtr m_messageType;
@@ -344,11 +347,14 @@ protected:
     m_metadata.SetObject();
   }
 public:
-  virtual const DeviceTypePtr &getDeviceType() const override
+  virtual DeviceTypePtr getDeviceType() const override
   {
-    if(!m_deviceType)
-      m_deviceType=m_deviceTypeSrc();
-    return m_deviceType;
+    DeviceTypePtr res=m_deviceType.lock();
+    if(!res){
+      res=m_deviceTypeSrc();
+      m_deviceType=res;
+    }
+    return res;
   }
 
   virtual const std::string &getName() const override
@@ -383,7 +389,7 @@ public:
   OutputPinPtr getBase() const
   { return m_base; }
 
-  virtual const DeviceTypePtr &getDeviceType() const override
+  virtual DeviceTypePtr getDeviceType() const override
   { return m_base->getDeviceType();  }
 
   virtual const std::string &getName() const override

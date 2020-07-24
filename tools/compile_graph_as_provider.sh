@@ -5,6 +5,7 @@ graph_schema_dir="${script_dir}/.."
 
 input_file=""
 output_file=""
+CPPFLAGS=""
 
 function error {
     >&2 echo "$1"
@@ -26,6 +27,11 @@ while [[ $# -gt 0 ]] ; do
         [[ "$working" == "" ]] || error "Duplicate working dir option"
         [[ $# -gt 1 ]] || error "Missing working dir value"
         working_dir="$2"
+        shift 2
+        ;;
+    -I)
+        [[ $# -gt 1 ]] || error "Missing include path"
+        CPPFLAGS="$CPPFLAGS -I $2"
         shift 2
         ;;
     *)
@@ -70,7 +76,7 @@ fi
 
 export PYTHONPATH=${graph_schema_dir}/tools
 
-CPPFLAGS=" -g -I ${graph_schema_dir}/include -W -Wall -Wno-unused-parameter -Wno-unused-variable"
+CPPFLAGS+=" -g -I ${graph_schema_dir}/include -W -Wall -Wno-unused-parameter -Wno-unused-variable"
 
 CPPFLAGS+=" $(pkg-config --cflags libxml++-2.6)"
 CPPFLAGS+=" -Wno-unused-local-typedefs -Wno-unused-but-set-variable"
@@ -120,7 +126,9 @@ if [[ -f "${search}" ]] ; then
 fi
 
 2>&1 echo "Compiling provider ${name} devices"
-g++ -c ${CPPFLAGS} ${SO_CPPFLAGS} ${working_dir}/${name}.graph.cpp -o ${working_dir}/${name}.graph.o || exit 1
+X="g++ -c ${CPPFLAGS} ${SO_CPPFLAGS} ${working_dir}/${name}.graph.cpp -o ${working_dir}/${name}.graph.o"
+2>&1 echo "  $X"
+$X || exit 1
 OBJS+=" ${working_dir}/${name}.graph.o"
 
 2>&1 echo "Linking provider ${name}"
