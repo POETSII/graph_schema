@@ -324,7 +324,7 @@ uint64_t id_to_seed(std::string_view id, uint64_t seed)
     h=(h^seed)*prime;
     while(begin!=end){
         size_t todo=end-begin;
-        assert( (todo & 0xFF) == *begin); // Should be little endian for portability
+        assert( (char)(todo & 0xFFu) == (char)*begin); // Should be little endian for portability
         uint64_t tmp=0;
         memcpy(&tmp, begin, todo); // avoid undefined behaviour
         h=(h^tmp)*prime;

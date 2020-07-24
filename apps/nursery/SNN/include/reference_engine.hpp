@@ -56,7 +56,6 @@ private:
     {
         unsigned dest;
         unsigned delay;
-        unsigned target;
         stimulus_type weight;
     };
 
@@ -69,13 +68,11 @@ private:
     };
 
     float m_dt;
-    int m_total_steps;
-
-    unsigned m_max_stimulus_index = 0;
+    unsigned m_total_steps;
 
     std::vector<synapse_proto_t> m_synapse_protos;
 
-    std::vector<neuron_factory_t> m_neuron_factories;
+    std::vector<neuron_factory_functor_t> m_neuron_factories;
 
     std::vector<neuron_info_t> m_neurons;
     robin_hood::unordered_map<std::string,unsigned> m_id_to_index;
@@ -103,7 +100,8 @@ public:
         const prototype &prototype
     )
     {
-        m_neuron_factories.push_back(create_neuron_factory(prototype));
+        auto model=create_neuron_model(prototype.model);
+        m_neuron_factories.push_back(model->create_factory(prototype));
     }
 
 
@@ -224,22 +222,7 @@ public:
             delay=unsigned(d);
         }
 
-        unsigned target=0;
-        assert(p.target_index!=-1);
-        if(p.target_index!=-1){
-            double t=pParams[p.target_index];
-            if(round(t)!=t || t<0){
-                throw std::runtime_error("Invalid target");
-            }
-            target=unsigned(t);
-            if(synapse_prototype.name=="SI"){
-                 assert(target==1);
-            }
-        }
-
-        m_max_stimulus_index=std::max(m_max_stimulus_index, target);
-
-        m_neurons.at(src_index).fanout.push_back({dst_index,delay, target, (int)w });
+        m_neurons.at(src_index).fanout.push_back({dst_index,delay, (int)w });
     }
 
     virtual void on_end_synapses()
@@ -259,21 +242,19 @@ public:
         std::list<std::vector<stimulus_type>> stimulus_backing;
         std::vector<std::vector<stimulus_type>*> stimulus_window;
 
-        unsigned stim_stride=m_max_stimulus_index+1;
-        fprintf(stderr, "sim_stride=%u\n", stim_stride);
-
         auto add_stim_vec=[&]()
         {
-            stimulus_backing.emplace_back(m_neurons.size()*stim_stride, 0);
+            stimulus_backing.emplace_back(m_neurons.size()*2, 0);
             stimulus_window.push_back(&stimulus_backing.back());
         };
 
-        auto write_stimulus=[&](unsigned delay, unsigned nid, unsigned target, stimulus_type stim)
+        auto write_stimulus=[&](unsigned delay, unsigned dst, stimulus_type stim)
         {
             while(delay>=stimulus_window.size()){
                 add_stim_vec();
             }
-            (*stimulus_window[delay])[nid*stim_stride+target] += stim;
+            int neg=stim<0;
+            (*stimulus_window[delay])[dst*2+neg] += stim;
         };
 
         add_stim_vec();
@@ -282,14 +263,15 @@ public:
             auto stim_now=stimulus_window.front();
             stimulus_window.erase(stimulus_window.begin(), stimulus_window.begin()+1);
 
+            const auto *stim_vec=&stim_now->at(0);
             for(unsigned i=0; i<m_neurons.size(); i++){
                 const auto &ni=m_neurons[i];
-                bool f=ni.neuron->step(m_dt, stim_stride, &(*stim_now)[i*stim_stride]);
+                bool f=ni.neuron->step(m_dt, stim_vec[i*2+0], stim_vec[i*2+1]);
                 //fprintf(stderr, "  t=%u, n=%u, st[0]=%d, st[1]=%d\n", t, i, stim_now->at(i*stim_stride), stim_now->at(i*stim_stride+1));
                 if(f){
                     //on_firing(t,i);
                     for(const auto &s : ni.fanout){
-                        write_stimulus(s.delay, s.dest, s.target, s.weight);
+                        write_stimulus(s.delay, s.dest, s.weight);
                     }
                 }
                 if(i!=0){

@@ -1,0 +1,229 @@
+<?xml version='1.0' encoding='ASCII'?>
+<Graphs xmlns="https://poets-project.org/schemas/virtual-graph-schema-v4">
+  <GraphType id="self_clocked_izhikevich">
+    <Documentation>
+
+      This variant uses a clock-tree threaded through all the 
+      neurons to keep time. However, there is no attempt to
+      make sure spikes are delivered in the correct time-step.
+
+    </Documentation>
+
+    <Properties>
+    uint32_t max_time;
+    </Properties>
+
+    <SharedCode><![CDATA[
+    uint32_t urng(uint32_t &state)
+    {
+      state = state*1664525+1013904223;
+      return state;
+    }
+
+    // Worlds crappiest gaussian
+    float grng(uint32_t &state)
+    {
+      uint32_t u=urng(state);
+      int32_t acc=0;
+      for(unsigned i=0;i<8;i++){
+        acc += u&0xf;
+        u=u>>4;
+      }
+      // a four-bit uniform has mean 7.5 and variance ((15-0+1)^2-1)/12 = 85/4
+      // sum of four uniforms has mean 8*7.5=60 and variance of 8*85/4=170
+      const float scale=0.07669649888473704; // == 1/sqrt(170)
+      return (acc-60.0f) * scale;
+    }
+    ]]></SharedCode>
+
+    <MessageTypes>
+        <MessageType id="spike">
+            <Message>
+            uint32_t source_neuron_id;
+            uint32_t time_step;
+            </Message>
+        </MessageType>
+        <MessageType id="tick">
+            <Message>
+            uint32_t time_step;
+            </Message>
+        </MessageType>
+        <MessageType id="tock">
+            <Message>
+            uint32_t time_step;
+            uint32_t spikes_sent;
+            uint32_t spikes_received[6]; // 0==this time-step, 1==prev,..., 5==older
+            </Message>
+        </MessageType>
+    </MessageTypes>
+
+    <DeviceTypes>
+        <ExternalType id="sink">
+            <Properties/>
+            <InputPin name="tocks_in" messageTypeId="tock" />
+        </ExternalType>
+
+        <DeviceType id="neuron">
+            <Properties>
+                uint32_t neuron_id;
+                float a;
+                float b;
+                float c;
+                float d;
+                float Ir;
+                uint32_t rng_init;
+                uint32_t children;
+                uint8_t is_root;
+            </Properties>
+            <State>
+                float u;
+                float v;
+                float stimulus;
+                uint32_t rng;
+                uint32_t time_step;
+                uint32_t tocks_recv;
+
+                uint32_t spikes_sent;
+                uint32_t spikes_received[6]; // 0==this time-step, 1==prev,..., 5==older
+
+                uint8_t spike_pending;
+                uint8_t tick_pending;
+                uint8_t tock_pending;
+            </State>
+            
+            <SharedCode/>
+
+            <OnHardwareIdle />
+            <OnDeviceIdle />
+
+            <ReadyToSend><![CDATA[
+                if(deviceState->tick_pending){
+                    *readyToSend=RTS_FLAG_tick_out;
+                }else if(deviceState->tock_pending){
+                    *readyToSend=RTS_FLAG_tock_out;
+                }else if(deviceState->spike_pending){
+                    *readyToSend=RTS_FLAG_spike_out;
+                }else{
+                    *readyToSend=0;
+                }
+            ]]></ReadyToSend>
+
+            <OnInit><![CDATA[
+            deviceState->v=-65;
+            deviceState->u=deviceProperties->b * deviceState->v;
+
+            deviceState->rng=deviceProperties->rng_init;
+            deviceState->stimulus=deviceProperties->Ir * grng(deviceState->rng);
+                    
+            ]]></OnInit>        
+
+            <InputPin name="tick_in" messageTypeId="tick">
+                <Properties/>
+                <State/>
+                <OnReceive><![CDATA[
+                    assert(deviceState->tick_pending==0);
+                    assert(deviceState->spike_pending==0);
+                    assert(deviceState->tocks_recv==0);
+                    deviceState->tick_pending=1;
+
+                    float v=deviceState->v;
+                    float u=deviceState->u;
+                    float I=deviceState->stimulus;
+
+                    v=v+0.5*(0.04*v*v+5*v+140-u+I); // step 0.5 ms
+                    v=v+0.5*(0.04*v*v+5*v+140-u+I); // for numerical
+                    u=u+deviceProperties->a*(deviceProperties->b*v-u);                 // stability
+
+                    deviceState->spike_pending = v >= 30;
+                    if(deviceState->spike_pending){
+                        handler_log(3, "FIRE!");
+
+                        v=deviceProperties->c;
+                        u += deviceProperties->d;
+                    }
+
+                    deviceState->u=u;
+                    deviceState->v=v;
+                    deviceState->stimulus=deviceProperties->Ir * grng(deviceState->rng);
+
+
+                    deviceState->time_step++;
+                    assert(message->time_step == deviceState->time_step);
+                    deviceState->spikes_sent=deviceState->spike_pending;
+                ]]></OnReceive>
+            </InputPin>
+
+            <OutputPin name="tick_out" messageTypeId="tick">
+                <OnSend><![CDATA[
+                assert(deviceState->tick_pending==1);
+                assert(deviceState->spike_pending==0);
+                assert(deviceState->tocks_recv==0);
+                deviceState->tick_pending=0;
+                ]]></OnSend>
+            </OutputPin>
+
+            <OutputPin name="spike_out" messageTypeId="spike">
+                <OnSend><![CDATA[
+                assert(deviceState->tick_pending==0);
+                assert(deviceState->spike_pending==1);
+                deviceState->spike_pending=0;
+                ]]></OnSend>
+            </OutputPin>
+
+            <InputPin name="spike_in" messageTypeId="spike">
+                <Properties>
+                float weight;
+                </Properties>
+                <State/>
+                <OnReceive><![CDATA[
+                assert(message->time_step <= deviceState->time_step);
+                deviceState->stimulus += edgeProperties->weight;
+                uint32_t delta=deviceState->time_step - message->time_step;
+                delta=std::min(5u, delta);
+                deviceState->spikes_received[delta++];
+                ]]></OnReceive>
+            </InputPin>
+
+            <InputPin name="tock_in" messageTypeId="tock">
+                <Properties/>
+                <State/>
+                <OnReceive><![CDATA[
+                    assert(deviceState->tick_pending==0);
+                    assert(deviceState->spike_pending==0);
+                    assert(deviceState->tock_pending==0);
+                    deviceState->tocks_recv++;
+                    deviceState->spikes_sent+=message->spikes_sent;
+                    for(unsigned i=0; i<6; i++){
+                        deviceState->spikes_received[i]+=message->spikes_received[i];
+                    }
+                    if(deviceState->tocks_recv==deviceProperties->children){
+                        deviceState->tocks_recv=0;
+                       deviceState->tock_pending=1;
+                    }
+                ]]></OnReceive>
+            </InputPin>
+
+            <OutputPin name="tock_out" messageTypeId="tock">
+                <OnSend><![CDATA[
+                assert(deviceState->tick_pending==0);
+                assert(deviceState->spike_pending==0);
+                assert(deviceState->tocks_recv==0);
+                assert(deviceState->tock_pending==1);
+                deviceState->tock_pending=0;
+                message->spikes_sent = deviceState->spikes_sent;
+                deviceState->spikes_sent=0;
+                for(unsigned i=0; i<6; i++){
+                    message->spikes_received[i]=deviceState->spikes_received[i];
+                    deviceState->spikes_received[i]=0;
+                }
+
+                if(deviceProperties->is_root && deviceState->time_step < graphProperties->max_time){
+                    deviceState->time_step++;
+                    deviceState->tick_pending=1;
+                }
+                ]]></OnSend>
+            </OutputPin>
+        </DeviceType>
+    </DeviceTypes>
+</GraphType>
+</Graphs>

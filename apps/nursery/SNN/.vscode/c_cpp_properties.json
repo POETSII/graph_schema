@@ -1,0 +1,31 @@
+{
+    "configurations": [
+        {
+            "name": "Linux",
+            "includePath": [
+                "${workspaceFolder}/**",
+                "${workspaceFolder}/../../../external/robin_hood",
+                "${workspaceFolder}/../../../include",
+                "${workspaceFolder}/../../../../external_interface_spec/include",
+                "/usr/include",
+                
+                "/usr/include/libxml2",
+                "/usr/include/libxml++-2.6",
+                "/usr/lib/x86_64-linux-gnu/libxml++-2.6/include",
+
+                "/usr/include/glibmm-2.4",
+                "/usr/lib/x86_64-linux-gnu/glibmm-2.4/include",
+                "/usr/include/glib-2.0",
+                "/usr/lib/x86_64-linux-gnu/glib-2.0/include",
+                "/usr/include/sigc++-2.0",
+                "/usr/lib/x86_64-linux-gnu/sigc++-2.0/include"
+            ],
+            "defines": [],
+            "compilerPath": "/usr/lib/ccache/clang",
+            "cStandard": "c11",
+            "cppStandard": "c++17",
+            "intelliSenseMode": "clang-x64"
+        }
+    ],
+    "version": 4
+}

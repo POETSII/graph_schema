@@ -36,7 +36,7 @@ private:
         }
         fprintf(m_dst, "Begin%s,%s,%s\n", type.c_str(), p.name.c_str(), p.model.c_str());
         on_config(p.config);
-        for(int i=0; i<p.params.size();i++){
+        for(unsigned i=0; i<p.params.size();i++){
             fprintf(m_dst, "Param,%s,%s", p.params[i].name.c_str(), p.params[i].unit.c_str());
             print_num(p.params[i].defaultVal);
             fputc('\n', m_dst);
@@ -50,7 +50,7 @@ private:
         if(p.params.size()!=nValues){
             throw std::runtime_error("Values length doesn't match prototpe.");
         }
-        for(int i=0; i<p.params.size();i++){
+        for(unsigned i=0; i<p.params.size();i++){
             if(p.params[i].defaultVal==pValues[i]){
                 fputc(',', m_dst);
             }else{

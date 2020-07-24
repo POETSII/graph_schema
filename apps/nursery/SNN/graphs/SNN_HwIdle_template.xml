@@ -152,7 +152,7 @@
                 message->nid=deviceProperties->nid;
                 message->t=deviceState->time_step;
                 message->hash=${ModelType}::hash(deviceProperties->p, deviceState->s);
-                deviceState->rts &= ~RTS_FLAG_spike_out;
+                deviceState->rts &= ~RTS_FLAG_hash_out;
                 ]]></OnSend>
             </OutputPin>
         </DeviceType>

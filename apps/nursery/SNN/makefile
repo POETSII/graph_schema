@@ -8,7 +8,7 @@ ifeq ($(POETS_EXTERNAL_INTERFACE_SPEC),)
 	CPPFLAGS += -I include/include_cache
 else
 	HAVE_POETS_EXTERNAL_INTERFACE_SPEC=1
-	CPPFLAGS+= -I $(POETS_EXTERNAL_INTERFACE_SPEC)/include
+	CPPFLAGS += -I $(POETS_EXTERNAL_INTERFACE_SPEC)/include
 endif
 
 
@@ -31,6 +31,10 @@ CPPFLAGS += $(LIBXML_PKG_CONFIG_CPPFLAGS)
 
 LDLIBS += $(LIBXML_PKG_CONFIG_LDLIBS)
 LDFLAGS += $(LIBXML_PKG_CONFIG_LDFLAGS)
+
+ifneq ($(RELEASE_WITH_ASSERTS),)
+CPPFLAGS += -O3
+endif
 
 #CPPFLAGS += -O3 -DNDEBUG=1
 
@@ -71,6 +75,6 @@ all_graph_providers : $(ALL_GRAPH_PROVIDERS)
 all_programs : all_generators all_tools all_graph_providers
 
 clean :
-	-rm bin/*
-	-rm providers/*
-	-rm src/*.o
+	-rm -f bin/*
+	-rm -f providers/*
+	-rm -f src/*.o

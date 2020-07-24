@@ -48,7 +48,7 @@ public:
     ){
         m_synapses++;
         if(0==(m_synapses%(100000000))){
-            fprintf(stderr, "synapses=%llu=2^%f=10^%f\n", m_synapses, std::log2((double)m_synapses), std::log10((double)m_synapses));
+            fprintf(stderr, "synapses=%llu=2^%f=10^%f\n", (unsigned long long)m_synapses, std::log2((double)m_synapses), std::log10((double)m_synapses));
         }
         acc += pParams[0];
     }
@@ -66,11 +66,11 @@ int main()
 
     std::mt19937_64 rng;
     generate_fast_simple(
-        1000000,
-        1000, // K
+        10000,
+        100, // K
         rng,
         sink
     );
 
-    fprintf(stderr, "N=%u, M=%u, check=%f\n", sink.m_neurons, sink.m_synapses, sink.acc);
+    fprintf(stderr, "N=%u, M=%llu, check=%f\n", sink.m_neurons, (unsigned long long)sink.m_synapses, sink.acc);
 }
