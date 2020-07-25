@@ -63,7 +63,8 @@ load bats_helpers
     find_PIP0020_DIR
     [ -x tools/convert_v4_graph_to_v3.py ]
     WD=$(make_test_wd)
+    GS=$(get_graph_schema_dir)
     tools/convert_v3_graph_to_v4.py apps/ising_spin/ising_spin_graph_type.xml $WD/ising_spin_graph_type.v4.xml
     tools/convert_v4_graph_to_v3.py $WD/ising_spin_graph_type.v4.xml > $WD/ising_spin_graph_type.v3.xml
-    (cd $WD && ../../tools/compile_graph_as_provider.sh ising_spin_graph_type.v3.xml) 
+    (cd $WD && ${GS}/tools/compile_graph_as_provider.sh ising_spin_graph_type.v3.xml) 
 }

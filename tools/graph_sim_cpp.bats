@@ -45,20 +45,22 @@ setup() {
 
 @test "simulate ising_spin using graph_sim and capture event log" {
     WD=$(make_test_wd)
+    GS=$(get_graph_schema_dir)
     run bin/graph_sim --log-events $WD/event.log apps/ising_spin/ising_spin_8x8.xml
     cat $WD/event.log | grep '</GraphLog>'
     # Note: this line is based on the specific pre-generated XML. It will need changing if the XML changes.
     cat $WD/event.log | grep -E "\<RecvEvent sendEventId=\"[^\"]+\" pin=\"in\" dev=\"${LAST_DEV}\""
-    (cd $WD && ../../tools/render_event_log_as_dot.py event.log)
+    (cd $WD && ${GS}/tools/render_event_log_as_dot.py event.log)
     # Don't render the event log as it is massive
 }
 
 @test "simulate ising_spin using graph_sim and capture truncated event log" {
     WD=$(make_test_wd)
+    GS=$(get_graph_schema_dir)
     run bin/graph_sim --max-events 10 --log-events $WD/event.log apps/ising_spin/ising_spin_8x8.xml
     OO=$(cat $WD/event.log | grep -E -c '<SendEvent|<RecvEvent')
     [ "${OO}" == "11" ]
-    (cd $WD && ../../tools/render_event_log_as_dot.py event.log)
+    (cd $WD && ${GS}/tools/render_event_log_as_dot.py event.log)
     (cd $WD && dot -Tsvg -O graph.dot)    
 }
 

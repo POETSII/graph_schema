@@ -27,11 +27,12 @@ LAST_DEV="n_4_3"
 }
 
 @test "simulate ising_spin using queue_sim and capture event log" {
-    WD=$(make_test_wd)
+    local GS=$(get_graph_schema_dir)
+    local WD=$(make_test_wd)
     run bin/queue_sim --log-events $WD/event.log apps/ising_spin/ising_spin_8x8.xml
     cat $WD/event.log | grep '</GraphLog>'
     # Note: this line is based on the specific pre-generated XML. It will need changing if the XML changes.
     cat $WD/event.log | grep -E "\<RecvEvent sendEventId=\"[^\"]+\" pin=\"in\" dev=\"${LAST_DEV}\""
-    (cd $WD && ../../tools/render_event_log_as_dot.py event.log)
+    (cd $WD && ${GS}/tools/render_event_log_as_dot.py event.log)
     # Don't render the event log as it is massive
 }
