@@ -102,8 +102,8 @@ struct Izhikevich
 
     static const int STIMULUS_COUNT = 2;
     
-    template<class TP, class TS>
-    static void reset(const TP &p, TS &s, uint64_t seed)
+    template<class THL, class TP, class TS>
+    static void reset(THL handler_log, const TP &p, TS &s, uint64_t seed)
     {
         s.u=p.uO;
         s.v=p.vO;
@@ -121,8 +121,8 @@ struct Izhikevich
         return h.acc;
     }
 
-    template<class TP, class TS>
-    static bool step(const TP &p, TS &s, float dt, int32_t pos_stim, int32_t neg_stim) 
+    template<class THL, class TP, class TS>
+    static bool step(THL handler_log, const TP &p, TS &s, float dt, int32_t pos_stim, int32_t neg_stim) 
     {
         const float STIM_SCALE=ldexp(2,-16);
 

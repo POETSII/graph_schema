@@ -36,8 +36,10 @@ struct HardwareIdleSink
     TypedDataPtr synapseProperties;
 
     bool connect_external_hash=true;
+    bool connect_external_spikes=true;
     DeviceTypePtr externalDeviceType;
     InputPinPtr externalHashInPin;
+    InputPinPtr externalSpikeInPin;
     uint64_t external_sink_index;
 
     struct neuron_info
@@ -130,6 +132,7 @@ struct HardwareIdleSink
 
         externalDeviceType=graphType->getDeviceType("external_output");
         externalHashInPin=externalDeviceType->getInput("hash_in");
+        externalSpikeInPin=externalDeviceType->getInput("spike_in");
 
         synapseProperties=neuronSpikeInPin->getPropertiesSpec()->create();
         if(synapseProperties->payloadSize()!=4){
@@ -240,6 +243,15 @@ struct HardwareIdleSink
                 writer->onEdgeInstance(gid,
                     external_sink_index, externalDeviceType, externalHashInPin,
                     ni.second.sink_index, neuronDeviceType, neuronHashOutPin,
+                    -1, TypedDataPtr{}, TypedDataPtr{}
+                );
+            }
+        }
+        if(connect_external_spikes){
+            for(auto &ni : m_neurons){
+                writer->onEdgeInstance(gid,
+                    external_sink_index, externalDeviceType, externalSpikeInPin,
+                    ni.second.sink_index, neuronDeviceType, neuronSpikeOutPin,
                     -1, TypedDataPtr{}, TypedDataPtr{}
                 );
             }

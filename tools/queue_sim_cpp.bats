@@ -34,5 +34,5 @@ LAST_DEV="n_4_3"
     # Note: this line is based on the specific pre-generated XML. It will need changing if the XML changes.
     cat $WD/event.log | grep -E "\<RecvEvent sendEventId=\"[^\"]+\" pin=\"in\" dev=\"${LAST_DEV}\""
     (cd $WD && ${GS}/tools/render_event_log_as_dot.py event.log)
-    # Don't render the event log as it is massive
+    # Don't render the event log to image as it is massive
 }

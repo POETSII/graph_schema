@@ -77,6 +77,8 @@ fi
 export PYTHONPATH=${graph_schema_dir}/tools
 
 CPPFLAGS+=" -g -I ${graph_schema_dir}/include -W -Wall -Wno-unused-parameter -Wno-unused-variable"
+CPPFLAGS+=" -I ${graph_schema_dir}/external/robin_hood"
+CPPFLAGS+=" -DPOETS_COMPILING_AS_PROVIDER=1"
 
 CPPFLAGS+=" $(pkg-config --cflags libxml++-2.6)"
 CPPFLAGS+=" -Wno-unused-local-typedefs -Wno-unused-but-set-variable"

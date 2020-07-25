@@ -32,7 +32,7 @@ void generate_CUBA(
     unsigned refLen = 50; // 5ms / 0.1ms
     float Vo = 0;
 
-    double pE=800.0/3200.0;
+    double pE=(3200-800.0)/3200.0;
 
     unsigned Ne=unsigned(pE*N);
     unsigned Ni=N-Ne;

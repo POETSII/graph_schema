@@ -45,10 +45,14 @@ define algorithm_neuron_template
 
 providers/SNN_$(1)_$(2)_graph_type.xml : bin/create_graph_type graphs/SNN_$(1)_template.xml
 	mkdir -p providers
-	$$<  $(1) $(2) > $$@
+	bin/create_graph_type $(2) < graphs/SNN_$(1)_template.xml > $$@
 
-providers/SNN_$(1)_$(2).graph.so : providers/SNN_$(1)_$(2)_graph_type.xml
-	${GRAPH_SCHEMA}/tools/compile_graph_as_provider.sh -I include/neuron_models/ --working-dir providers $$<
+providers/SNN_$(1)_$(2)_graph_type.external.cpp : bin/create_graph_type graphs/SNN_$(1)_template.external.cpp
+	mkdir -p providers
+	bin/create_graph_type $(2) < graphs/SNN_$(1)_template.external.cpp > $$@
+
+providers/SNN_$(1)_$(2).graph.so : providers/SNN_$(1)_$(2)_graph_type.xml providers/SNN_$(1)_$(2)_graph_type.external.cpp
+	${GRAPH_SCHEMA}/tools/compile_graph_as_provider.sh -I include/neuron_models/ --working-dir providers $$< -o $$@
 
 ALL_GRAPH_TYPES += providers/SNN_$(1)_$(2)_graph_type.xml 
 ALL_GRAPH_PROVIDERS += providers/SNN_$(1)_$(2).graph.so

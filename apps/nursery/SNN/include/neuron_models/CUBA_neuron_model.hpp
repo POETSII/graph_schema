@@ -7,6 +7,8 @@ https://brian2.readthedocs.io/en/2.0rc/examples/CUBA.html
 
 #include <cstdint>
 
+#include "../shared_utils.hpp"
+
 
 struct CUBA
 {
@@ -109,8 +111,8 @@ struct CUBA
 
     static const int STIMULUS_COUNT = 2;
     
-    template<class TP, class TS>
-    static void reset(const TP &p, TS &s, uint64_t seed)
+    template<class THL, class TP, class TS>
+    static void reset(THL handler_log, const TP &p, TS &s, uint64_t seed)
     {
         s.v=p.Vo;
         s.ge=0;
@@ -126,19 +128,20 @@ struct CUBA
         return h.acc;
     }
 
-    template<class TP, class TS>
-    static bool step(const TP &p, TS &s, float dt, int32_t pos_stim, int32_t neg_stim) 
+    template<class THL, class TP, class TS>
+    static bool step(THL handler_log, const TP &p, TS &s, float dt, int32_t pos_stim, int32_t neg_stim) 
     {
         // stimulus is an integer number of uV
         const float SCALE=1e-6; // Get stimulus in volts
 
         float ge=s.ge;
         float gi=s.gi;
+        float v=s.v;
 
 
         //-fprintf(stderr, "pos_stim=%d, neg_stim=%d\n", pos_stim, neg_stim);
 
-        //fprintf(stderr, " ge=%g, gi=%g, El=%g, dt=%g, taum=%g, Vt=%g\n", ge, gi, p.El, dt, p.taum, p.Vt);
+        handler_log(3,"ge=%g, gi=%g, v=%g\n", ge, gi, v);
 
         ge = add(ge, mul(to_float(pos_stim) , SCALE) );
         gi = add(gi, mul(to_float(neg_stim) , SCALE) );
@@ -146,7 +149,6 @@ struct CUBA
         bool fire=false;
 
         //dv/dt  = (ge+gi-(v-El))/taum : volt (unless refractory)
-        float v=s.v;
         unsigned refSteps=s.refSteps;
         if(refSteps==0){
             v = add(v, mul( sub(add(ge,gi), sub(v,p.El)), div(dt,p.taum) ) );

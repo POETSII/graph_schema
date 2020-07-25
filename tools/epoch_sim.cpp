@@ -1210,8 +1210,8 @@ int main(int argc, char *argv[])
         if(dev.type->getOutput(getEndpointPin(address).value)->isIndexedSend()){
           fanout.resize(f.size());
           for(unsigned i=0; i<f.size(); i++){
-            if(graph.m_devices[i].isExternal && (i!=graph.m_haltDeviceIndex)){
-              auto d=f[i];
+            const auto &d=f[i];
+            if(graph.m_devices[d.dstDevice].isExternal && (d.dstDevice!=graph.m_haltDeviceIndex)){
               fanout[i]=makeEndpoint(poets_device_address_t{d.dstDevice}, poets_pin_index_t{d.dstPinIndex});
             }else{
               fanout[i]=poets_endpoint_address_t();
@@ -1220,9 +1220,9 @@ int main(int argc, char *argv[])
         }else{
           fanout.resize(0);
           fanout.reserve(f.size());
-          for(unsigned i=0; i<f.size(); i++){
-            if(graph.m_devices[i].isExternal && (i!=graph.m_haltDeviceIndex)){
-              auto d=f[i];
+          for(unsigned i=0; i<f.size(); i++){ 
+            const auto &d=f[i];
+            if(graph.m_devices[d.dstDevice].isExternal && (d.dstDevice!=graph.m_haltDeviceIndex)){
               fanout.push_back(makeEndpoint(poets_device_address_t{d.dstDevice}, poets_pin_index_t{d.dstPinIndex}));
             }
           }

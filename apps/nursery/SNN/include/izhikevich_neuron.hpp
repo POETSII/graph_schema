@@ -20,12 +20,12 @@ public:
     
     void reset(uint64_t seed)
     {
-        model::reset(p, s, seed);
+        model::reset(handler_log, p, s, seed);
     }
 
     bool step(float dt, int32_t pos_stim, int32_t neg_stim)
     {
-        return model::step(p, s, dt, pos_stim, neg_stim);
+        return model::step(handler_log, p, s, dt, pos_stim, neg_stim);
     }
 
     float project() const

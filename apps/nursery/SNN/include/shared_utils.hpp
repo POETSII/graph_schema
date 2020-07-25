@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <cmath>
 #include <array>
+#include <cstdarg>
 
 #if __cplusplus >= 201703L 
 #include <string_view>
@@ -333,6 +334,17 @@ uint64_t id_to_seed(std::string_view id, uint64_t seed)
     return uint64_t(h>>64) ^ uint64_t(h);
 }
 
+#endif
+
+
+#ifndef POETS_COMPILING_AS_PROVIDER
+void handler_log(int ll, const char *msg, ...)
+{
+    va_list v;
+    va_start(v, msg);
+    vfprintf(stderr, msg, v);
+    va_end(v);
+}
 #endif
 
 #endif
