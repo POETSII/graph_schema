@@ -13,7 +13,13 @@ int main()
 
     DumbSNNSourceFromFile(stdin, &engine);
 
-    engine.run(0, [&](unsigned t, unsigned neuron){
-        fprintf(stdout, "%u,%u\n", t, neuron);
-    });
+    engine.run(
+        [&](unsigned t, unsigned neuron){
+            fprintf(stdout, "%u,%u,S\n", t, neuron);
+        },
+        [&](uint32_t t, uint32_t neuron, uint32_t hash, const stats_msg_t &msg)
+        {
+            fprintf(stdout, "%u,%u,H,%08x,%u,%llu\n", t, neuron, hash, msg.stats_total_firings, (unsigned long long)msg.stats_sum_square_firing_gaps);
+        }
+    );
 }

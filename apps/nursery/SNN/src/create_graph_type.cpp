@@ -4,6 +4,8 @@
 #include "graph_persist_dom_reader.hpp"
 #include "graph_persist_sax_writer.hpp"
 
+#include "../include/shared_utils.hpp"
+
 #include <regex>
 #include <fstream>
 #include <iostream>

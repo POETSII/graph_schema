@@ -48,6 +48,10 @@ endif
 # dwarf-4 sometimes produces better debug info (?)
 CPPFLAGS += -std=c++11 -O2 -gdwarf-4
 
+# Try to help libubsan merge RTTI on imported classes
+# https://stackoverflow.com/a/57379835
+CPPFLAGS += -rdynamic
+
 # Last optimisation flag overrides
 CPPFLAGS_DEBUG = $(CPPFLAGS) -O0 -fno-omit-frame-pointer -fsanitize=undefined -fsanitize=address
 

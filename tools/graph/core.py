@@ -196,7 +196,9 @@ class TupleTypedDataSpec(TypedDataSpec):
             self.default = self.expand(self.default)
         for e in elements:
             if e.name in self._elts_by_name:
-                raise GraphDescriptionError("Tuple element name appears twice.")
+                raise GraphDescriptionError(f"Tuple element {name} appears twice.")
+            if e.size_in_bytes()==0:
+                raise GraphDescriptionError(f"Tuple element {name} is zero-length.")
             self._elts_by_name[e.name]=e
             self._elts_by_index.append(e)
             self._hash = self._hash ^ hash(e)

@@ -10,7 +10,7 @@
 #include <string_view>
 #endif
 
-uint32_t MWC64X(uint64_t *state)
+inline uint32_t MWC64X(uint64_t *state)
 {
     /* Compiles to 6 instructions in RISCV (ignoring loads/stores, so state is in regs)
     mulhu a7, a4, a6
@@ -26,7 +26,7 @@ uint32_t MWC64X(uint64_t *state)
 }
 
 
-float MWC64Gaussian_Tab64_CLT4(uint64_t *state)
+inline float MWC64Gaussian_Tab64_CLT4(uint64_t *state)
 {
     // Table has 14 fractional bits
     const int16_t tab1[64] = {
@@ -160,7 +160,7 @@ float MWC64Gaussian_Tab64_CLT4(uint64_t *state)
 
 /* Generates four independent gaussians at once.
 */
-std::array<float,4> MWC64Gaussian_Tab64_Hadamard4(uint64_t *state)
+inline std::array<float,4> MWC64Gaussian_Tab64_Hadamard4(uint64_t *state)
 {
     // Table has 14 fractional bits
     const int16_t tab1[64] = {
@@ -311,7 +311,7 @@ up to ~100,000,000 neurons, so the birthday prob
 of clashes is very low, and not disastrous if it
 does happen anyway.
 */
-uint64_t id_to_seed(std::string_view id, uint64_t seed)
+inline uint64_t id_to_seed(std::string_view id, uint64_t seed)
 {
     using uint128 = unsigned __int128;
 
@@ -324,13 +324,15 @@ uint64_t id_to_seed(std::string_view id, uint64_t seed)
     uint128 h=basis;
     h=(h^seed)*prime;
     while(begin!=end){
-        size_t todo=end-begin;
-        assert( (char)(todo & 0xFFu) == (char)*begin); // Should be little endian for portability
+        size_t todo=std::min(size_t(8), size_t(end-begin));
         uint64_t tmp=0;
         memcpy(&tmp, begin, todo); // avoid undefined behaviour
-        h=(h^tmp)*prime;
+        assert( (char)(tmp & 0xFFu) == (char)*begin); // Should be little endian for portability
+        h=(h^tmp)*prime+(h>>64);
         begin+=todo;
     }
+    h=h*prime+(h>>64);
+    h=h*prime+(h>>64);
     return uint64_t(h>>64) ^ uint64_t(h);
 }
 
@@ -338,7 +340,7 @@ uint64_t id_to_seed(std::string_view id, uint64_t seed)
 
 
 #ifndef POETS_COMPILING_AS_PROVIDER
-void handler_log(int ll, const char *msg, ...)
+inline void handler_log(int ll, const char *msg, ...)
 {
     va_list v;
     va_start(v, msg);
@@ -346,5 +348,120 @@ void handler_log(int ll, const char *msg, ...)
     va_end(v);
 }
 #endif
+
+
+template<class TS, class TCB>
+void stats_config_walk(TS &s, TCB &cb)
+{
+    cb("stats_export_interval", uint32_t(), s.stats_export_interval);
+}
+
+struct stats_config_t
+{
+    uint32_t stats_export_interval;
+
+    template<class TCB>
+    void walk(TCB &cb)
+    {
+        stats_config_walk(*this, cb);
+    }
+};
+
+
+template<class TS, class TCB>
+void stats_acc_walk(TS &s, TCB &cb)
+{
+    cb("stats_sum_square_firing_gaps", uint64_t(), s.stats_sum_square_firing_gaps);
+    cb("stats_last_firing", uint32_t(), s.stats_last_firing);
+    cb("stats_total_firings", uint32_t(), s.stats_total_firings);
+    cb("stats_export_countdown", uint32_t(), s.stats_export_countdown);
+}
+
+struct stats_acc_t
+{
+    uint64_t stats_sum_square_firing_gaps;
+    uint32_t stats_last_firing;
+    uint32_t stats_total_firings;
+    uint32_t stats_export_countdown;
+
+    template<class TCB>
+    void walk(TCB &cb)
+    {
+        stats_acc_walk(*this, cb);
+    }
+};
+
+struct stats_msg_t
+{
+    uint64_t stats_sum_square_firing_gaps;
+    uint32_t stats_total_firings;
+};
+
+
+
+template<class TConfig, class TAcc>
+bool neuron_stats_acc_init(const TConfig &config, TAcc &acc)
+{
+    acc.stats_last_firing=0;
+    acc.stats_total_firings=0;
+    acc.stats_sum_square_firing_gaps=0;
+    acc.stats_export_countdown=config.stats_export_interval;
+    return config.stats_export_interval==1;
+}
+
+template<class TConfig, class TAcc>
+bool neuron_stats_acc_update(const TConfig &config, TAcc &acc, uint32_t t, bool fired)
+{
+    if(fired){
+        if(acc.stats_total_firings!=0){
+            assert(t > acc.stats_last_firing);
+            uint32_t delta=t-acc.stats_last_firing;
+            acc.stats_sum_square_firing_gaps += delta*delta;
+        }
+        acc.stats_last_firing=t;
+        acc.stats_total_firings++;
+    }
+    bool do_export=false;
+    auto stats_export_countdown=acc.stats_export_countdown;
+    //fprintf(stderr, "stats_countdown=%u\n", stats_export_countdown);
+    stats_export_countdown--;
+    if(stats_export_countdown==0){
+        do_export=true;
+        stats_export_countdown=config.stats_export_interval;
+    }
+    acc.stats_export_countdown=stats_export_countdown;
+    return do_export;
+}
+
+template<class THL>
+struct handler_log_dump
+{
+    THL &handler_log;
+    int level=3;
+
+    void operator()(const char *name, uint32_t , const uint32_t &v)
+    {
+        handler_log(level, "%s = %u\n", name, v);
+    }
+
+    void operator()(const char *name, uint64_t , const uint64_t &v)
+    {
+        handler_log(level, "%s = %llu\n", name, (unsigned long long) v);
+    }
+
+    void operator()(const char *name, float , const float &v)
+    {
+        handler_log(level, "%s = %.10g\n", name, v);
+    }
+};
+
+template<class TAcc,class TMsg>
+void neuron_stats_acc_export(const TAcc &acc, TMsg &msg)
+{
+    msg.stats_total_firings=acc.stats_total_firings;
+    msg.stats_sum_square_firing_gaps=acc.stats_sum_square_firing_gaps;
+    //fprintf(stderr, "stats_countdown=%u\n", acc.stats_export_countdown);
+}
+
 
 #endif

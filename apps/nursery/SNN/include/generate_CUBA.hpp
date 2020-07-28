@@ -50,6 +50,7 @@ void generate_CUBA(
             //{"Vr", "volt", Vr},
             //{"El", "volt", El},
             //{"refLen", "steps", refLen}, // 5ms / 0.1ms
+            {"nid", "1", 0},
             {"Vo", "volt", Vo}
         }
     };
@@ -79,7 +80,8 @@ void generate_CUBA(
     sink.on_begin_network({
         {"dt" , "second", (float)dt},
         {"numSteps" ,    "steps", numSteps},
-        {"calc_type",    "type", "float_ftz_daz"} // Calculations should be done in this form
+        {"calc_type",    "type", "float_ftz_daz"}, // Calculations should be done in this form
+        {"globalSeed",   "1",    rng()&0xFFFFFFFFFFFFull}
     });
 
     sink.on_begin_prototypes();
@@ -90,6 +92,8 @@ void generate_CUBA(
 
     std::vector<std::string> neuron_ids;
 
+    uint32_t nid=0;
+
     sink.on_begin_neurons();
     std::vector<double> params = Neu.param_defaults();
     for(unsigned i=0; i<N; i++){
@@ -98,7 +102,8 @@ void generate_CUBA(
         id.resize(n);
         double r=udist(rng);
         // Vo = Vr + rand() * (Vt - Vr)
-        params[0]=float(Vr + r * (Vt-Vr));
+        params[0]=nid++;
+        params[1]=float(Vr + r * (Vt-Vr));
         sink.on_neuron(Neu, id, params.size(), &params[0]);
         neuron_ids.push_back(id);
     }

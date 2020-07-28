@@ -4,7 +4,7 @@
 std::shared_ptr<NeuronModel> create_neuron_model(
     std::string_view model
 ){
-    if(model=="Izhikevich"){
+    if(model=="izhikevich"){
         return std::make_shared<IzhikevichNeuronModel>();
     }else if(model=="CUBA"){
         return std::make_shared<CUBANeuronModel>();

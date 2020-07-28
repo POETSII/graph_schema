@@ -1,6 +1,7 @@
 #ifndef zero_delay_engine_hpp
 #define zero_delay_engine_hpp
 
+#include "shared_utils.hpp"
 
 #pragma STDC FENV_ACCESS ON
 
@@ -56,7 +57,7 @@ private:
     {
         unsigned dest;
         unsigned delay;
-        stimulus_type weight;
+        int32_t weight;
     };
 
     struct neuron_info_t
@@ -65,15 +66,21 @@ private:
         unsigned index;
         std::shared_ptr<Neuron> neuron;
         std::vector<synapse_info_t> fanout;
+        stats_acc_t stats;
     };
 
     float m_dt;
     unsigned m_total_steps;
 
+public:
+    uint32_t stats_export_interval;
+private:
+
     std::vector<synapse_proto_t> m_synapse_protos;
 
     std::vector<neuron_factory_functor_t> m_neuron_factories;
 
+    uint64_t m_globalSeed;
     std::vector<neuron_info_t> m_neurons;
     robin_hood::unordered_map<std::string,unsigned> m_id_to_index;
 public:
@@ -90,7 +97,10 @@ public:
             throw std::runtime_error("dt not representable as single precision.");
         }
 
+        m_globalSeed=get_config_int(config, "globalSeed", "1");
+
         m_total_steps=get_config_int(config, "numSteps", "steps");
+        stats_export_interval=m_total_steps;
     }
 
     virtual void on_begin_prototypes()
@@ -181,11 +191,12 @@ public:
             std::string{id},
             index,
             neuron,
+            {},
             {}
         });
         if(!m_id_to_index.insert({std::string{id}, index}).second){
             throw std::runtime_error("Duplicate neuron id.");
-        }
+      }
     }
 
     virtual void on_end_neurons()
@@ -231,12 +242,15 @@ public:
     virtual void on_end_network()
     {}
 
-    void run(uint64_t seed, std::function<void(unsigned,unsigned)> on_firing)
+    void run(
+        std::function<void(unsigned,unsigned)> on_firing,
+        std::function<void(uint32_t,uint32_t,uint32_t,const stats_msg_t&)> on_stats
+    )
     {
         CheckDenormalsDisabled();
 
         for(const auto &ni : m_neurons){
-            ni.neuron->reset(seed);
+            ni.neuron->reset(m_globalSeed);
         }
 
         std::list<std::vector<stimulus_type>> stimulus_backing;
@@ -259,27 +273,39 @@ public:
 
         add_stim_vec();
 
-        for(unsigned t=0; t<m_total_steps; t++){
+        for(unsigned i=0; i<m_neurons.size(); i++){
+            auto &ni=m_neurons[i];
+            if(neuron_stats_acc_init(*this, ni.stats)){
+                //ni.neuron->dump();
+                stats_msg_t msg;
+                neuron_stats_acc_export(ni.stats, msg);
+                on_stats(0,ni.neuron->nid(),ni.neuron->hash(),msg);
+            }
+        }
+
+        for(unsigned t=1; t<=m_total_steps; t++){
             auto stim_now=stimulus_window.front();
             stimulus_window.erase(stimulus_window.begin(), stimulus_window.begin()+1);
 
             const auto *stim_vec=&stim_now->at(0);
             for(unsigned i=0; i<m_neurons.size(); i++){
-                const auto &ni=m_neurons[i];
+                auto &ni=m_neurons[i];
                 bool f=ni.neuron->step(m_dt, stim_vec[i*2+0], stim_vec[i*2+1]);
-                //fprintf(stderr, "  t=%u, n=%u, st[0]=%d, st[1]=%d\n", t, i, stim_now->at(i*stim_stride), stim_now->at(i*stim_stride+1));
+                //fprintf(stderr, "  t=%u, n=%u, st[0]=%d, st[1]=%d\n", t, i, stim_vec[i*2+0], stim_vec[i*2+1]);
                 if(f){
-                    //on_firing(t,i);
+                    on_firing(t,ni.neuron->nid());
                     for(const auto &s : ni.fanout){
                         write_stimulus(s.delay, s.dest, s.weight);
                     }
                 }
-                if(i!=0){
-                    fprintf(stdout, ",");
+                bool e=neuron_stats_acc_update(*this, ni.stats, t, f);
+                if(e){
+                    //ni.neuron->dump();
+                    stats_msg_t msg;
+                    neuron_stats_acc_export(ni.stats, msg);
+                    on_stats(t,ni.neuron->nid(),ni.neuron->hash(),msg);
                 }
-                fprintf(stdout, "%g", ni.neuron->project());
             }
-            fprintf(stdout, "\n");
 
             stim_now->assign(stim_now->size(), 0);
             stimulus_window.push_back(stim_now);

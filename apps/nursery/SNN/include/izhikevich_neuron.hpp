@@ -11,7 +11,7 @@ class IzhikevichNeuron
     : public Neuron
 {
 public:
-    using model = Izhikevich;
+    using model = izhikevich;
     using properties_t = typename model::properties_t;
     using state_t = typename model::state_t;
 
@@ -38,6 +38,19 @@ public:
         return {&p, sizeof(p)};
     }
 
+    uint32_t hash() const override
+    {
+        return model::hash(p,s);
+    }
+
+    uint32_t nid() const override
+    { return p.nid; }
+
+    virtual void dump() const
+    {
+        model::dump(handler_log, p, s);
+    }
+
     /*void dump(FILE *dst)
     {
         fprintf(dst, "a=%f,b=%f,c=%f,d=%f,i_offset=%f,Ir=%f,v=%f,u=%f,rng=%llu\n",
@@ -56,22 +69,22 @@ protected:
 public:
     IzhikevichNeuronModel()
     {
-        add_standard_substitutions<Izhikevich::properties_t,Izhikevich::state_t>("Izhikevich");
+        add_standard_substitutions<izhikevich::properties_t,izhikevich::state_t>("izhikevich");
     }
 
     virtual neuron_factory_functor_t create_factory(const prototype &p) const
     {
-        auto indices=build_param_indices<Izhikevich::properties_t>(p);
+        auto indices=build_param_indices<izhikevich::properties_t>(p);
 
         auto res=[=](const prototype &p, std::string_view id, unsigned nParams, const double *pParams) -> std::shared_ptr<Neuron>
         {
-            if(p.model!="Izhikevich"){
+            if(p.model!="izhikevich"){
                 throw std::runtime_error("Wrong model in prototype.");
             }
 
             auto n=std::make_shared<IzhikevichNeuron>();
 
-            apply_param_indices<Izhikevich::properties_t>(indices, n->p, nParams, pParams);
+            apply_param_indices<izhikevich::properties_t>(indices, n->p, nParams, pParams);
 
             n->reset(0);
 

@@ -98,6 +98,8 @@ struct InProcMessageBuffer
       throw std::runtime_error("Received a halt message of the wrong size (internal error?)");
     }
 
+    fprintf(stderr, "set_halt_message - code=%u\n", ((halt_message_type*)message.payloadPtr())->code);
+
     std::unique_lock<std::mutex> lk(m_mutex);
     assert(!m_halt);
     m_halt.reset(new halt_message_type());
@@ -1405,15 +1407,17 @@ int main(int argc, char *argv[])
       fprintf(stderr, "Done\n");
     }
 
+    if(inProcExternalThread.joinable()){
+      fprintf(stderr, "Joining with in-proc external thread.\n");
+      inProcExternalThread.join();
+      fprintf(stderr, "Join complete.\n");
+    }
+
     close_resources();
 
     if(graph.m_haltMessage){
-      if(inProcExternalThread.joinable()){
-        fprintf(stderr, "Joining with in-proc external thread.\n");
-        inProcExternalThread.join();
-      }
-
       auto m=(const halt_message_type*)graph.m_haltMessage.payloadPtr();
+      fprintf(stderr, " exiting with code %u.\n", m->code);
       exit(m->code);
     }else{
       if(expectIdleExit){

@@ -8,6 +8,8 @@
 
 #include "generate_utils.hpp"
 
+#include "shared_utils.hpp"
+
 void generate_izhikevich(
     unsigned Ne,
     unsigned Ni,
@@ -27,9 +29,10 @@ void generate_izhikevich(
     prototype Ex{
         0,
         "Ex",
-        "Izhikevich",
+        "izhikevich",
         {},
         {
+            {"nid", "1", 0},
             {"a","/ms", 0.02f},
             {"b","/ms", 0.2f},
             {"c","mV", -65.0f}, //-65+15*re*re
@@ -37,15 +40,17 @@ void generate_izhikevich(
             {"i_offset","nA", 0.0f},
             {"vO", "mV", -70.0f},
             {"uO", "mV/ms", -14.0f},
-            {"Ir","nA", 5.0f}
+            {"Ir","nA", 5.0f},
+            {"rngO", "1", 0}
         }
     };
     prototype In{
         1,
         "In",
-        "Izhikevich",
+        "izhikevich",
         {},
         {
+            {"nid", "1", 0},
             {"a", "/ms", 0.02f}, //0.02+0.08*ri
             {"b", "/ms", 0.25f}, // 0.25-0.05*ri
             {"c", "mV",-65.0f}, 
@@ -53,7 +58,8 @@ void generate_izhikevich(
             {"i_offset", "nA", 0.0f},
             {"vO", "mV", -70.0f},
             {"uO", "mV/ms", -14.0f},
-            {"Ir", "nA", 2.0f}
+            {"Ir", "nA", 2.0f},
+            {"rngO", "1", 0}
         }
     };
 
@@ -70,7 +76,8 @@ void generate_izhikevich(
     sink.on_begin_network({
         {"dt" , "second", (float)dt},
         {"numSteps" ,    "steps", numSteps},
-        {"calc_type",    "type", "float_ftz_daz"} // Calculations should be done in this form
+        {"calc_type",    "type", "float_ftz_daz"}, // Calculations should be done in this form
+        {"globalSeed",   "1",    rng()&0xFFFFFFFFFFFFull}
     });
 
     sink.on_begin_prototypes();
@@ -81,6 +88,8 @@ void generate_izhikevich(
 
     std::vector<std::string> neuron_ids;
 
+    uint32_t nid=0;
+
     sink.on_begin_neurons();
     std::vector<double> params = Ex.param_defaults();
     for(unsigned i=0; i<Ne; i++){
@@ -88,10 +97,12 @@ void generate_izhikevich(
         int n=sprintf(id.data(), "e%u", i);
         id.resize(n);
         double re=udist(rng);
-        params[2]=float(-65+15*re*re);
-        params[3]=float(8-6*re*re);
-        params[5]=-65.0f;
-        params[6]=float(params[1]*params[5]);
+        params[0]=nid++;
+        params[3]=float(-65+15*re*re);
+        params[4]=float(8-6*re*re);
+        params[6]=-65.0f;
+        params[7]=float(params[1]*params[5]);
+        params[9]=double( id_to_seed(id,0)  & (((1ull)<<50)-1 ));
         sink.on_neuron(Ex, id, params.size(), &params[0]);
         neuron_ids.push_back(id);
     }
@@ -101,10 +112,12 @@ void generate_izhikevich(
         int n=sprintf(id.data(), "i%u", i);
         id.resize(n);
         double ri=udist(rng);
-        params[0]=float(0.02+0.08*ri);
-        params[1]=float(0.25-0.05*ri);
-        params[5]=-65.0f;
-        params[6]=float(params[1]*params[5]);
+        params[0]=nid++;
+        params[1]=float(0.02+0.08*ri);
+        params[2]=float(0.25-0.05*ri);
+        params[6]=-65.0f;
+        params[7]=float(params[1]*params[5]);
+        params[9]=double( id_to_seed(id,0) & (((1ull)<<50)-1));
         sink.on_neuron(In, id, params.size(), &params[0]);
         neuron_ids.push_back(id);
     }

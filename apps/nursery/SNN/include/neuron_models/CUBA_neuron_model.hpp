@@ -52,6 +52,7 @@ struct CUBA
     template<class TP, class TCB>
     static void walk_properties(TP &p, TCB &cb)
     {
+        cb("nid", uint32_t(), p.nid);
         cb("taum", float(), p.taum);
         cb("taue", float(), p.taue);
         cb("taui", float(),  p.taui);
@@ -65,7 +66,8 @@ struct CUBA
     struct properties_t
     {
         // Parameters
-
+        
+        uint32_t nid = 0;
         float taum = 0.020; // second
         float taue = 0.005; // second
         float taui = 0.010; // second
@@ -175,6 +177,14 @@ struct CUBA
 
         return fire;
     }
+
+    template<class THL, class TP, class TS>
+    static void dump(THL handler_log, const TP &p, TS &s)
+    {
+        handler_log_dump<THL> dumper{handler_log, 3};
+        walk_properties(p, dumper);
+        walk_state(s, dumper);
+    } 
 };
 
 #endif

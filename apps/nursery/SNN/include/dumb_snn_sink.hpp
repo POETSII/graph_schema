@@ -28,6 +28,35 @@ struct config_item
     std::string name;
     std::string unit;
     std::variant<double,std::string> value;
+
+    int64_t get_value_int(std::string_view _unit) const
+    {
+        if(unit!=_unit){
+            throw std::runtime_error("Incorrect unit for config item "+unit);
+        }
+        double v=std::get<double>(value);
+        double iv=round(v);
+        if(v!=iv){
+            throw std::runtime_error("Value is not an integer.");
+        }
+        return (int64_t)iv;
+    }
+
+    double get_value_real(std::string_view _unit) const
+    {
+        if(unit!=_unit){
+            throw std::runtime_error("Incorrect unit for config item "+unit);
+        }
+        return std::get<double>(value);
+    }
+
+    std::string get_value_string(std::string_view _unit) const
+    {
+        if(unit!=_unit){
+            throw std::runtime_error("Incorrect unit for config item "+unit);
+        }
+        return std::get<std::string>(value);
+    }
 };
 
 struct param_info
@@ -156,8 +185,7 @@ public:
 
     virtual void on_end_network() =0;
 
-protected:
-    double get_config_real(const std::vector<config_item> &config, const std::string &name, const std::string &unit)
+    static double get_config_real(const std::vector<config_item> &config, const std::string &name, const std::string &unit)
     {
         for(const auto &ci : config){
             if(ci.name==name){
@@ -174,7 +202,7 @@ protected:
         throw std::runtime_error("Missing config item "+name);
     }
 
-    int64_t get_config_int(const std::vector<config_item> &config, const std::string &name, const std::string &unit)
+    static int64_t get_config_int(const std::vector<config_item> &config, const std::string &name, const std::string &unit)
     {
         double d=get_config_real(config,name,unit);
         if(round(d)!=d){
@@ -183,7 +211,7 @@ protected:
         return (int64_t)round(d);
     }
 
-    std::string get_config_string(const std::vector<config_item> &config, const std::string &name, const std::string &unit)
+    static std::string get_config_string(const std::vector<config_item> &config, const std::string &name, const std::string &unit)
     {
         for(const auto &ci : config){
             if(ci.name==name){

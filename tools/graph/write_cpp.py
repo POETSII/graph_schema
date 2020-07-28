@@ -225,11 +225,17 @@ def render_typedef_data_load(proto,dst,prefix,indent,parentName,subNum,indexNum=
         render_typed_data_load_v4_tuple(proto,dst,prefix+parentName+".",indent+"    ","n"+str(subNum),int(subNum)+1,arrayIndex)
     elif isinstance(proto, ScalarTypedDataSpec):
 
-        if proto.type=="int64_t" or proto.type=="int32_t" or proto.type=="int16_t" or proto.type=="int8_t" or proto.type=="char" :
+        if proto.type=="int32_t" or proto.type=="int16_t" or proto.type=="int8_t" or proto.type=="char" :
             dst.write('{}  {}{}=n{}{}.GetInt();\n'.format(indent, prefix, parentName, subNum, arrayIndex))
 
-        elif proto.type=="uint64_t" or proto.type=="uint32_t" or proto.type=="uint16_t" or proto.type=="uint8_t":
+        elif proto.type=="int64_t" :
+            dst.write('{}  {}{}=n{}{}.GetInt64();\n'.format(indent, prefix, parentName, subNum, arrayIndex))
+
+        elif proto.type=="uint32_t" or proto.type=="uint16_t" or proto.type=="uint8_t":
             dst.write('{}  {}{}=n{}{}.GetUint();\n'.format(indent, prefix, parentName, subNum, arrayIndex))
+
+        elif proto.type=="uint64_t":
+            dst.write('{}  {}{}=n{}{}.GetUint64();\n'.format(indent, prefix, parentName, subNum, arrayIndex))
 
         elif proto.type=="float" or proto.type=="double":
             dst.write('{}  {}{}=n{}{}.GetDouble();\n'.format(indent, prefix, parentName, subNum, arrayIndex))
@@ -276,11 +282,17 @@ def render_typed_data_load_v4_tuple(proto,dst,prefix,indent,parentName,subNum,ar
         dst.write('{}  const rapidjson::Value &n{}={}{}["{}"];\n'.format(indent,subNum,parentName,arrayIndex,elt.name))
         if isinstance(elt,ScalarTypedDataSpec):
 
-            if elt.type=="int64_t" or elt.type=="int32_t" or elt.type=="int16_t" or elt.type=="int8_t" or elt.type=="char" :
+            if elt.type=="int32_t" or elt.type=="int16_t" or elt.type=="int8_t" or elt.type=="char" :
                 dst.write('{}  {}{}=n{}.GetInt();\n'.format(indent, prefix, elt.name, subNum))
 
-            elif elt.type=="uint64_t" or elt.type=="uint32_t" or elt.type=="uint16_t" or elt.type=="uint8_t":
+            elif elt.type=="int64_t":
+                dst.write('{}  {}{}=n{}.GetInt64();\n'.format(indent, prefix, elt.name, subNum))
+
+            elif elt.type=="uint32_t" or elt.type=="uint16_t" or elt.type=="uint8_t":
                 dst.write('{}  {}{}=n{}.GetUint();\n'.format(indent, prefix, elt.name, subNum))
+
+            elif elt.type=="uint64_t" :
+                dst.write('{}  {}{}=n{}.GetUint64();\n'.format(indent, prefix, elt.name, subNum))
 
             elif elt.type=="float" or elt.type=="double":
                 dst.write('{}  {}{}=n{}.GetDouble();\n'.format(indent, prefix, elt.name, subNum))
@@ -505,7 +517,7 @@ def render_typed_data_as_spec(proto,name,elt_name,dst,asHeader=False):
     render_typed_data_as_elements(proto, dst,"      ")
     dst.write("    ;\n")
     dst.write("    m_default.resize(payloadSize());\n")
-    dst.write("    m_tupleElt->createBinaryDefault(&m_default[0], m_default.size());\n");
+    dst.write("    m_tupleElt->createBinaryDefault(m_default.empty() ? nullptr : &m_default[0], m_default.size());\n");
     dst.write("    ")
     dst.write("  }\n")
     dst.write("  std::shared_ptr<TypedDataSpecElementTuple> getTupleElement() const override { return m_tupleElt; }\n")
@@ -518,7 +530,9 @@ def render_typed_data_as_spec(proto,name,elt_name,dst,asHeader=False):
         dst.write("    res->_total_size_bytes=sizeof({});\n".format(name))
         #for elt in proto.elements_by_index:
         #    render_typed_data_init(elt, dst, "    res->");
-        dst.write("    memcpy( ((char*)res)+sizeof(typed_data_t), &m_default[0], m_default.size() );")
+        dst.write("    if(!m_default.empty()){\n")
+        dst.write("        memcpy( ((char*)res)+sizeof(typed_data_t), &m_default[0], m_default.size() );")
+        dst.write("    }\n")
         dst.write("    return TypedDataPtr(res);\n")
     else:
         dst.write("    return TypedDataPtr();\n")

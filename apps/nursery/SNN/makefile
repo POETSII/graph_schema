@@ -38,7 +38,7 @@ endif
 
 #CPPFLAGS += -O3 -DNDEBUG=1
 
-NEURON_TYPES=CUBA Izhikevich
+NEURON_TYPES=CUBA izhikevich
 ALGORITHM_TYPES=HwIdle
 
 define algorithm_neuron_template
@@ -60,7 +60,7 @@ endef
 
 $(foreach nt,$(NEURON_TYPES),$(foreach at,$(ALGORITHM_TYPES),$(eval $(call algorithm_neuron_template,$(at),$(nt)))))
 
-src/%.o : src/%.o
+src/%.o : src/%.cpp
 	$(CXX) -c $(CPPFLAGS) -o $@ $<
 
 bin/% : src/%.o src/neuron_factory.o
@@ -69,7 +69,7 @@ bin/% : src/%.o src/neuron_factory.o
 
 all_generators : bin/generate_izhikevich_sparse bin/generate_CUBA
 
-all_tools : bin/reference_simulator bin/create_graph_type bin/create_graph_instance
+all_tools : bin/reference_simulator bin/create_graph_type bin/create_graph_instance_v2
 
 all_tests : bin/test_dumb_snn_files bin/test_sink_snn bin/test_source_snn bin/test_source_sink_inmem
 

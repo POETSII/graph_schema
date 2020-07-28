@@ -5,15 +5,15 @@
     <Documentation><![CDATA[
     max_steps : Simulation should do exactly this many steps
     hash_export_timer_gap :  neurons export hash when their timer hits this value
-    hash_export_on_max_steps : whether to always export hash on the final time-step
     ]]></Documentation>
 
     <Properties><![CDATA[
         uint64_t global_rng_seed;
         int32_t max_steps;
         float dt;
-        uint32_t hash_export_timer_gap;
-        uint32_t hash_export_on_max_steps;
+        uint32_t total_neurons;
+        uint32_t _pad_;
+        ${Stats_GraphPropertiesMembers}
     ]]></Properties>
 
     <SharedCode><![CDATA[
@@ -21,6 +21,17 @@
     ]]></SharedCode>
 
     <MessageTypes>
+        <MessageType id="__halt_message__">
+            <Message><![CDATA[
+            int32_t code;
+            uint32_t param1;
+            uint32_t param2;
+            uint32_t param3;
+            int8_t description[24];
+            ]]></Message>
+        </MessageType>
+
+
         <MessageType id="spike">
             <Message><![CDATA[
             uint32_t nid;
@@ -33,8 +44,8 @@
             uint32_t nid;
             uint32_t t;
             uint32_t hash;
-            uint32_t total_firings;
-            uint32_t sum_square_firing_gaps;
+            uint32_t stats_total_firings;
+            uint64_t stats_sum_square_firing_gaps;
             ]]></Message>
         </MessageType>
 
@@ -60,33 +71,21 @@
 
                 int32_t time_step=deviceState->time_step;
 
-                
-
-                handler_log(3, "time_step=%d, max_steps=%d", time_step, graphProperties->max_steps);
-
                 if(time_step < graphProperties->max_steps){
                     time_step++;
 
+                    handler_log(3, "time_step=%d, max_steps=%d, dt=%g", time_step, graphProperties->max_steps, graphProperties->dt);
+
                     bool fire=${ModelType}::step(handler_log, deviceProperties->p, deviceState->s, graphProperties->dt, deviceState->pos_stim, deviceState->neg_stim);
                     if(fire){
-                        uint32_t delta=time_step - deviceState->last_firing_time;
-                        deviceState->sum_square_firing_gaps += delta * delta;
-                        deviceState->total_firings++;
-                        deviceState->last_firing_time=time_step;
                         rts=RTS_FLAG_spike_out;
                     }
-                    
-                    uint32_t hash_export_timer=deviceState->hash_export_timer;
-                    hash_export_timer--;
-                    if(0==hash_export_timer){
-                        rts|=RTS_FLAG_hash_out;
-                        hash_export_timer=graphProperties->hash_export_timer_gap;
-                    }else if(time_step == graphProperties->max_steps && graphProperties->hash_export_on_max_steps){
-                        rts|=RTS_FLAG_hash_out;
+
+                    bool do_export=neuron_stats_acc_update(*graphProperties, *deviceState, time_step, fire);
+                    if(do_export){
+                        rts |= RTS_FLAG_hash_out;
                     }
 
-
-                    deviceState->hash_export_timer=hash_export_timer;
                     deviceState->time_step=time_step;
                 }
                 
@@ -99,18 +98,16 @@
             struct{
                 ${ModelType_DevicePropertyMembers}
             }p;
-            uint32_t nid;
-            uint32_t hash_export_offset;
             ]]></Properties>
             <State><![CDATA[
             int32_t time_step;
             int32_t pos_stim;
             int32_t neg_stim;
             uint32_t rts;
-            uint32_t total_firings;
-            uint32_t last_firing_time;
-            uint32_t sum_square_firing_gaps;
-            uint32_t hash_export_timer;
+
+            ${Stats_DeviceStateMembers}
+
+            uint32_t _pad_;
             struct{
                 ${ModelType_DeviceStateMembers}
             }s;
@@ -120,9 +117,11 @@
             ]]></ReadyToSend>
             <OnInit><![CDATA[
             handler_log(3, "Init");
+            deviceState->time_step=0;
             ${ModelType}::reset(handler_log, deviceProperties->p, deviceState->s, graphProperties->global_rng_seed);
-            deviceState->time_step=-1;
-            time_step(handler_log, graphProperties, deviceProperties, deviceState);
+            if(neuron_stats_acc_init(*graphProperties, *deviceState)){
+                deviceState->rts = RTS_FLAG_hash_out;
+            }
             ]]></OnInit>
             <OnDeviceIdle/>
             <OnHardwareIdle><![CDATA[
@@ -148,7 +147,7 @@
                 <OnSend><![CDATA[
                 handler_log(2, "Fire");
                 assert(deviceState->rts & RTS_FLAG_spike_out);
-                message->nid=deviceProperties->nid;
+                message->nid=deviceProperties->p.nid;
                 message->t=deviceState->time_step;
                 deviceState->rts &= ~RTS_FLAG_spike_out;
                 ]]></OnSend>
@@ -157,9 +156,14 @@
             <OutputPin name="hash_out" messageTypeId="neuron_hash">
                 <OnSend><![CDATA[
                 assert(deviceState->rts & RTS_FLAG_hash_out);
-                message->nid=deviceProperties->nid;
+                message->nid=deviceProperties->p.nid;
                 message->t=deviceState->time_step;
                 message->hash=${ModelType}::hash(deviceProperties->p, deviceState->s);
+                if(0){
+                    handler_log_dump<typeof(handler_log)> dumper{handler_log, 3};
+                    ${ModelType}::dump(handler_log, deviceProperties->p, deviceState->s);
+                }
+                neuron_stats_acc_export(*deviceState, *message);
                 deviceState->rts &= ~RTS_FLAG_hash_out;
                 ]]></OnSend>
             </OutputPin>
@@ -241,6 +245,12 @@
             <InputPin name="spike_in" messageTypeId="spike" ><Properties/></InputPin>
             <InputPin name="hash_in" messageTypeId="neuron_hash" ><Properties/></InputPin>
             <InputPin name="spike_bundle_in" messageTypeId="spike_bundle" ><Properties/></InputPin>
+            <OutputPin name="stop" messageTypeId="__halt_message__" />
+        </ExternalType>
+
+        <ExternalType id="__halt_device_type__">
+            <Properties/>
+            <InputPin name="stop" messageTypeId="__halt_message__"><Properties/></InputPin>
         </ExternalType>
     </DeviceTypes>
 </GraphType>

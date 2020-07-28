@@ -108,69 +108,75 @@ def load_external_type(graph,dtNode,sourceFile):
 def load_device_type(graph,dtNode,sourceFile):
     id=get_attrib(dtNode,"id")
 
-    properties=load_struct_spec(dtNode, "p:Properties")
-    state=load_struct_spec(dtNode, "p:State")
+    try:
 
-    shared_code=[]
-    tt=get_child_text(dtNode, "p:SharedCode", ns)[0]
-    if tt is not None:
-        shared_code.append(tt)
-    metadata=None
-    documentation=None
-    dt=DeviceType(graph,id,properties,state,metadata,shared_code,isExternal=False,documentation=documentation)
+        properties=load_struct_spec(dtNode, "p:Properties")
+        state=load_struct_spec(dtNode, "p:State")
 
-    for p in dtNode.findall("p:InputPin",ns):
-        name=get_attrib(p,"name")
-        message_type_id=get_attrib(p,"messageTypeId")
-        if message_type_id not in graph.message_types:
-            raise XMLSyntaxError("Unknown messageTypeId {}".format(message_type_id),p)
-        message_type=graph.message_types[message_type_id]
-        # NOTE: application pin support needed for as long as 2to3 is relevant.
-        is_application=get_attrib_optional_bool(p,"application") # TODO: REMOVE APPLICATION PIN
-        properties=load_struct_spec(p, "p:Properties")
-        state=load_struct_spec(p, "p:State")
-        pinMetadata=None
+        shared_code=[]
+        tt=get_child_text(dtNode, "p:SharedCode", ns)[0]
+        if tt is not None:
+            shared_code.append(tt)
+        metadata=None
         documentation=None
-        
-        (handler,sourceLine)=get_child_text(p,"p:OnReceive",ns)
-        dt.add_input(name,message_type,is_application,properties,state,pinMetadata, handler,sourceFile,sourceLine,documentation)
-        #sys.stderr.write("      Added input {}\n".format(name))
+        dt=DeviceType(graph,id,properties,state,metadata,shared_code,isExternal=False,documentation=documentation)
 
-    for p in dtNode.findall("p:OutputPin",ns):
-        name=get_attrib(p,"name")
-        message_type_id=get_attrib(p,"messageTypeId")
-        if message_type_id not in graph.message_types:
-            raise XMLSyntaxError("Unknown messageTypeId {}".format(message_type_id),p)
-        is_application=False
-        is_indexed=get_attrib_optional_bool(p,"indexed")
-        message_type=graph.message_types[message_type_id]
-        pinMetadata=None
-        (handler,sourceLine)=get_child_text(p,"p:OnSend",ns)
-        documentation = None
-        dt.add_output(name,message_type,is_application,pinMetadata,handler,sourceFile,sourceLine,documentation,is_indexed)
-        #sys.stderr.write("      Added input {}\n".format(name))
+        for p in dtNode.findall("p:InputPin",ns):
+            name=get_attrib(p,"name")
+            message_type_id=get_attrib(p,"messageTypeId")
+            if message_type_id not in graph.message_types:
+                raise XMLSyntaxError("Unknown messageTypeId {}".format(message_type_id),p)
+            message_type=graph.message_types[message_type_id]
+            # NOTE: application pin support needed for as long as 2to3 is relevant.
+            is_application=get_attrib_optional_bool(p,"application") # TODO: REMOVE APPLICATION PIN
+            properties=load_struct_spec(p, "p:Properties")
+            state=load_struct_spec(p, "p:State")
+            pinMetadata=None
+            documentation=None
+            
+            (handler,sourceLine)=get_child_text(p,"p:OnReceive",ns)
+            dt.add_input(name,message_type,is_application,properties,state,pinMetadata, handler,sourceFile,sourceLine,documentation)
+            #sys.stderr.write("      Added input {}\n".format(name))
+            
 
-    (handler,sourceLine)=get_child_text(dtNode,"p:ReadyToSend",ns)
-    dt.ready_to_send_handler=handler
-    dt.ready_to_send_source_line=sourceLine
-    dt.ready_to_send_source_file=sourceFile
+        for p in dtNode.findall("p:OutputPin",ns):
+            name=get_attrib(p,"name")
+            message_type_id=get_attrib(p,"messageTypeId")
+            if message_type_id not in graph.message_types:
+                raise XMLSyntaxError("Unknown messageTypeId {}".format(message_type_id),p)
+            is_application=False
+            is_indexed=get_attrib_optional_bool(p,"indexed")
+            message_type=graph.message_types[message_type_id]
+            pinMetadata=None
+            (handler,sourceLine)=get_child_text(p,"p:OnSend",ns)
+            documentation = None
+            dt.add_output(name,message_type,is_application,pinMetadata,handler,sourceFile,sourceLine,documentation,is_indexed)
+            #sys.stderr.write("      Added input {}\n".format(name))
 
-    (handler,sourceLine)=get_child_text(dtNode,"p:OnInit", ns)
-    dt.init_handler=handler
-    dt.init_source_line=sourceLine
-    dt.init_source_file=sourceFile
+        (handler,sourceLine)=get_child_text(dtNode,"p:ReadyToSend",ns)
+        dt.ready_to_send_handler=handler
+        dt.ready_to_send_source_line=sourceLine
+        dt.ready_to_send_source_file=sourceFile
 
-    (handler,sourceLine)=get_child_text(dtNode,"p:OnHardwareIdle",ns)
-    dt.on_hardware_idle_handler=handler
-    dt.on_hardware_idle_source_line=sourceLine
-    dt.on_hardware_idle_source_file=sourceFile
+        (handler,sourceLine)=get_child_text(dtNode,"p:OnInit", ns)
+        dt.init_handler=handler
+        dt.init_source_line=sourceLine
+        dt.init_source_file=sourceFile
 
-    (handler,sourceLine)=get_child_text(dtNode,"p:OnDeviceIdle",ns)
-    dt.on_device_idle_handler=handler
-    dt.on_device_idle_source_line=sourceLine
-    dt.on_device_idle_source_file=sourceFile
+        (handler,sourceLine)=get_child_text(dtNode,"p:OnHardwareIdle",ns)
+        dt.on_hardware_idle_handler=handler
+        dt.on_hardware_idle_source_line=sourceLine
+        dt.on_hardware_idle_source_file=sourceFile
 
-    return dt
+        (handler,sourceLine)=get_child_text(dtNode,"p:OnDeviceIdle",ns)
+        dt.on_device_idle_handler=handler
+        dt.on_device_idle_source_line=sourceLine
+        dt.on_device_idle_source_file=sourceFile
+
+        return dt
+    except:
+        sys.stderr.write(f"Exception while loading device type {id}\n")
+        raise
 
 def load_graph_type(graphNode, sourcePath):
     deviceTypeTag = "{{{}}}DeviceType".format(ns["p"])

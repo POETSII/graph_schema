@@ -43,6 +43,19 @@ public:
         //std::cerr<<"sizeof(p)=="<<sizeof(p)<<"\n";
         return {&p, sizeof(p)};
     }
+
+    uint32_t hash() const override
+    {
+        return model::hash(p,s);
+    }
+
+    uint32_t nid() const override
+    { return p.nid; }
+
+    virtual void dump() const
+    {
+        model::dump(handler_log, p, s);
+    }
 };
 
 class CUBANeuronModel

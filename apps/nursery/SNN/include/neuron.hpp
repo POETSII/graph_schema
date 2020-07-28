@@ -9,6 +9,8 @@
 
 #include "dumb_snn_sink.hpp"
 
+#include "shared_utils.hpp"
+
 using stimulus_type = int32_t;
 
 class Neuron
@@ -23,20 +25,21 @@ public:
 
     virtual std::pair<const void*,size_t> get_properties() const =0;
 
+    virtual uint32_t hash() const =0;
+
+    virtual void dump() const=0;
+
+    virtual uint32_t nid() const=0;
+
     virtual float project() const =0;
 };
 
-using neuron_factory_functor_t = std::function<std::shared_ptr<Neuron>(const prototype &p, std::string_view id, unsigned nParams, const double *pParams)>;
-
-class NeuronModel
-{
-protected:
-    std::string m_name;
-    std::map<std::string,std::string> m_substitutions;
-
-    struct collect_members
+struct collect_members
     {
         std::stringstream dest;
+
+        collect_members()
+        {}
 
         void operator()(const char *name, float, float &value)
         {
@@ -52,6 +55,26 @@ protected:
         }
     };
 
+template<class T>
+std::string collect_struct_members()
+{
+
+    T p;
+    collect_members cp;
+    p.walk(cp);
+    return cp.dest.str();
+}
+
+
+
+using neuron_factory_functor_t = std::function<std::shared_ptr<Neuron>(const prototype &p, std::string_view id, unsigned nParams, const double *pParams)>;
+
+class NeuronModel
+{
+protected:
+    std::string m_name;
+    std::map<std::string,std::string> m_substitutions;
+
     template<class TP, class TS>
     void add_standard_substitutions(const char *name)
     {
@@ -63,15 +86,12 @@ protected:
 
         subs["ModelType_IncludeFile"]=m_name+"_neuron_model.hpp";
 
-        TP p;
-        collect_members cp;
-        p.walk(cp);
-        subs["ModelType_DevicePropertyMembers"]=cp.dest.str();
 
-        TS s;
-        collect_members cs;
-        s.walk(cs);
-        subs["ModelType_DeviceStateMembers"]=cs.dest.str();
+        subs["ModelType_DevicePropertyMembers"]=collect_struct_members<TP>();
+        subs["ModelType_DeviceStateMembers"]=collect_struct_members<TS>();
+
+        subs["Stats_GraphPropertiesMembers"]=collect_struct_members<stats_config_t>();
+        subs["Stats_DeviceStateMembers"]=collect_struct_members<stats_acc_t>();
     }
 
     enum param_type

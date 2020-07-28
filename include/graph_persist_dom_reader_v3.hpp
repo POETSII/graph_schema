@@ -310,7 +310,7 @@ DeviceTypePtr loadDeviceTypeElement(
 
     for(auto *n : eDeviceType->find("./g:SharedCode", ns)){
       auto ch=xmlNodeGetContent(n->cobj());
-      sharedCode += *ch + "\n";
+      sharedCode += std::string((char*)ch) + "\n";
       xmlFree(ch);
     }
   }
