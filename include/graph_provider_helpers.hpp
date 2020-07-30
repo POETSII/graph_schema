@@ -147,7 +147,9 @@ public:
     p->_ref_count=0;
     p->_total_size_bytes=m_totalSize;
 
-    memcpy(((char*)p)+sizeof(typed_data_t), &m_default[0], m_payloadSize);
+    if(m_default.size()>0){
+      memcpy(((char*)p)+sizeof(typed_data_t), &m_default[0], m_payloadSize);
+    } 
 
     return TypedDataPtr(p);
   }

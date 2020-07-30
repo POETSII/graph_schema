@@ -361,7 +361,7 @@ public:
         if(name=="DeviceInstances"){            
             return &m_ebDeviceInstances;
         }else if(name=="EdgeInstances"){
-            m_events->onBeginDeviceInstances(m_gId);
+            m_events->onBeginEdgeInstances(m_gId);
             return &m_ebEdgeInstances;
         }else{
             throw std::runtime_error("Unknown child of GraphInstance");

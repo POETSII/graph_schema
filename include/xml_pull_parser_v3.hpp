@@ -203,7 +203,10 @@ private:
         auto dt=m_deviceTypes.at(deviceType);
         TypedDataPtr deviceProperties;
         if(properties.empty()){
-            deviceProperties=dt->getPropertiesSpec()->create();
+            auto ps=dt->getPropertiesSpec();
+            if(ps){
+                deviceProperties=ps->create();
+            }
         }else{
             deviceProperties=parseTypedDataFromText(dt->getPropertiesSpec(), properties);
         }
@@ -216,7 +219,10 @@ private:
         
         TypedDataPtr deviceState;
         if(state.empty()){
-            deviceState=dt->getStateSpec()->create();
+            auto ss=dt->getStateSpec();
+            if(ss){
+                deviceState=ss->create();
+            }
         }else{
             deviceState=parseTypedDataFromText(dt->getStateSpec(), state);
         }
@@ -373,7 +379,7 @@ public:
 
             return &m_ebDeviceInstances;
         }else if(name=="EdgeInstances"){
-            m_events->onBeginDeviceInstances(m_gId);
+            m_events->onBeginEdgeInstances(m_gId);
             return &m_ebEdgeInstances;
         }else{
             throw std::runtime_error("Unknown child of GraphInstance");

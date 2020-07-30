@@ -169,6 +169,11 @@ public:
     o.m_p=0;
   }
 
+  bool empty() const
+  {
+    return m_p==nullptr || payloadSize()==0;
+  }
+
   const T *get() const
   { return m_p; }
 
