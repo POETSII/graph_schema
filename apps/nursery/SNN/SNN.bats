@@ -68,7 +68,7 @@ function setup_file
 @test "run_generate_CUBA_sparse_large_and_check." {
     WD=$(make_test_wd)
     ( cd $BATS_TEST_DIRNAME &&
-        bin/generate_CUBA 10000 100  |
+        bin/generate_CUBA 6000 1000  |
         tee >(gzip - > ${WD}/net.txt.gz ) |
          bin/test_sink_snn > /dev/null
     )

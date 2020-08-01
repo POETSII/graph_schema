@@ -3,7 +3,7 @@
 
 #include "graph_core.hpp"
 
-bool check_typed_data_specs_structurally_similar(
+inline bool check_typed_data_specs_structurally_similar(
     const std::string &prefix, TypedDataSpecPtr ref, TypedDataSpecPtr got, bool throw_on_mismatch
 ){
     if(!ref){
@@ -42,7 +42,7 @@ bool check_typed_data_specs_structurally_similar(
 }
 
 
-bool check_graph_types_structurally_similar(
+inline bool check_graph_types_structurally_similar(
     GraphTypePtr ref,
     GraphTypePtr got,
     bool throw_on_mismatch

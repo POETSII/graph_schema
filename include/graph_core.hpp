@@ -150,7 +150,7 @@ public:
       release();
       m_p=o.m_p;
       if(m_p){
-	std::atomic_fetch_add(&m_p->_ref_count, 1u);
+	      std::atomic_fetch_add(&m_p->_ref_count, 1u);
       }
     }
     return *this;
@@ -167,6 +167,19 @@ public:
     : m_p((T*)o.m_p)
   {
     o.m_p=0;
+  }
+
+  DataPtr(const std::vector<char> &payload)
+    : m_p(nullptr)
+  {
+    if(!payload.empty()){
+      unsigned totalSize=sizeof(typed_data_t)+payload.size();
+      m_p=(typed_data_t*)malloc(totalSize);
+      m_p->_ref_count=1;
+      m_p->_total_size_bytes=totalSize;
+
+      memcpy(((char*)m_p)+sizeof(typed_data_t), &payload[0], payload.size());
+    }
   }
 
   bool empty() const
@@ -339,7 +352,7 @@ DataPtr<T> make_data_ptr()
 
 typedef DataPtr<typed_data_t> TypedDataPtr;
 
-TypedDataPtr clone(const typed_data_t *p)
+inline TypedDataPtr clone(const typed_data_t *p)
 {
   TypedDataPtr res;
   if(p){
@@ -380,6 +393,16 @@ public:
 
   //! Creates a default-values instance of the data structure
   virtual TypedDataPtr create() const=0;
+
+  /*! Either return the properties p, or the default. 
+      The return struct may be shared, and should not be modified without cloning.
+  */ 
+  virtual TypedDataPtr get_shared_copy(TypedDataPtr &p) const=0;
+
+  /*! Either return the properties p, or the default. 
+      The return struct is unique, and can be modified without affecting others.
+  */ 
+  virtual TypedDataPtr get_unique_copy(TypedDataPtr &p) const=0;
 
   //! Return true if the given instance is either NULL, or is identical to the spec default
   virtual bool is_default(const TypedDataPtr &v) const=0;

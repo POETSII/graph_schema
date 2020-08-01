@@ -1042,24 +1042,24 @@ public:
 };
 */
 
-TypedDataSpecElementScalarPtr makeScalar(const std::string &name, const std::string &type, const std::string &defaultValue=std::string())
+inline TypedDataSpecElementScalarPtr makeScalar(const std::string &name, const std::string &type, const std::string &defaultValue=std::string())
 {
     return std::make_shared<TypedDataSpecElementScalar>(name, type, defaultValue);
 }
 
-TypedDataSpecElementTuplePtr makeTuple(const std::string &name, const std::initializer_list<TypedDataSpecElementPtr> &elts)
+inline TypedDataSpecElementTuplePtr makeTuple(const std::string &name, const std::initializer_list<TypedDataSpecElementPtr> &elts)
 {
     return std::make_shared<TypedDataSpecElementTuple>(name, elts.begin(), elts.end());
 }
 
 template<class TIt>
-TypedDataSpecElementTuplePtr makeTuple(const std::string &name, TIt begin, TIt end)
+inline TypedDataSpecElementTuplePtr makeTuple(const std::string &name, TIt begin, TIt end)
 {
     return std::make_shared<TypedDataSpecElementTuple>(name, begin, end);
 }
 
 
-TypedDataSpecElementArrayPtr makeArray(const std::string &name, unsigned n, TypedDataSpecElementPtr elt)
+inline TypedDataSpecElementArrayPtr makeArray(const std::string &name, unsigned n, TypedDataSpecElementPtr elt)
 {
     return std::make_shared<TypedDataSpecElementArray>(name, n, elt);
 }

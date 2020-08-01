@@ -13,7 +13,7 @@
 namespace xml_v3
 {
 
-void split_path(const std::string &src, std::string &dstDevice, std::string &dstPin, std::string &srcDevice, std::string &srcPin)
+inline void split_path(const std::string &src, std::string &dstDevice, std::string &dstPin, std::string &srcDevice, std::string &srcPin)
 {
   int colon1=src.find(':');
   int arrow=src.find('-',colon1+1);
@@ -29,7 +29,7 @@ void split_path(const std::string &src, std::string &dstDevice, std::string &dst
 }
 
 
-rapidjson::Document parse_meta_data(xmlpp::Element *parent, const char *name, xmlpp::Node::PrefixNsMap &ns)
+inline rapidjson::Document parse_meta_data(xmlpp::Element *parent, const char *name, xmlpp::Node::PrefixNsMap &ns)
 {
   auto *eMetaData=find_single(parent, name, ns);
   if(eMetaData){
@@ -46,7 +46,7 @@ rapidjson::Document parse_meta_data(xmlpp::Element *parent, const char *name, xm
 }
 
 
-TypedDataSpecElementPtr loadTypedDataSpecElement(xmlpp::Element *eMember)
+inline TypedDataSpecElementPtr loadTypedDataSpecElement(xmlpp::Element *eMember)
 {
   xmlpp::Node::PrefixNsMap ns;
   ns["g"]="https://poets-project.org/schemas/virtual-graph-schema-v3";
@@ -95,7 +95,7 @@ TypedDataSpecElementPtr loadTypedDataSpecElement(xmlpp::Element *eMember)
 
 }
 
-TypedDataSpecPtr loadTypedDataSpec(xmlpp::Element *eTypedDataSpec)
+inline TypedDataSpecPtr loadTypedDataSpec(xmlpp::Element *eTypedDataSpec)
 {
   xmlpp::Node::PrefixNsMap ns;
   ns["g"]="https://poets-project.org/schemas/virtual-graph-schema-v3";
@@ -113,7 +113,7 @@ TypedDataSpecPtr loadTypedDataSpec(xmlpp::Element *eTypedDataSpec)
   return std::make_shared<TypedDataSpecImpl>(elt);
 }
 
-TypedDataSpecPtr makeTypedDataSpec(
+inline TypedDataSpecPtr makeTypedDataSpec(
   const std::vector<TypedDataSpecElementPtr> &members
 ){
   auto elt=makeTuple("_", members.begin(), members.end());
@@ -121,7 +121,7 @@ TypedDataSpecPtr makeTypedDataSpec(
   return std::make_shared<TypedDataSpecImpl>(elt);
 }
 
-MessageTypePtr loadMessageTypeElement(xmlpp::Element *eMessageType)
+inline MessageTypePtr loadMessageTypeElement(xmlpp::Element *eMessageType)
 {
   xmlpp::Node::PrefixNsMap ns;
   ns["g"]="https://poets-project.org/schemas/virtual-graph-schema-v3";
@@ -239,7 +239,7 @@ public:
   }
 };
 
-std::string readTextContent(xmlpp::Element *p)
+inline std::string readTextContent(xmlpp::Element *p)
 {
   std::string acc;
   for(auto *n : p->get_children()){
@@ -254,7 +254,7 @@ std::string readTextContent(xmlpp::Element *p)
   return acc;
 }
 
-DeviceTypePtr loadDeviceTypeElement(
+inline DeviceTypePtr loadDeviceTypeElement(
   const std::map<std::string,MessageTypePtr> &messageTypes,
   xmlpp::Element *eDeviceType
 )
@@ -462,7 +462,7 @@ public:
   }
 };
 
-GraphTypePtr loadGraphTypeElement(const filepath &srcPath, xmlpp::Element *eGraphType, GraphLoadEvents *events=0)
+inline GraphTypePtr loadGraphTypeElement(const filepath &srcPath, xmlpp::Element *eGraphType, GraphLoadEvents *events=0)
 {
   xmlpp::Node::PrefixNsMap ns;
   ns["g"]="https://poets-project.org/schemas/virtual-graph-schema-v3";
@@ -507,9 +507,6 @@ GraphTypePtr loadGraphTypeElement(const filepath &srcPath, xmlpp::Element *eGrap
     messageTypesById[mt->getId()]=mt;
 
     messageTypes.push_back(mt);
-    if(events){
-      events->onMessageType(mt);
-    }
   }
 
   auto *eDeviceTypes=find_single(eGraphType, "./g:DeviceTypes", ns);
@@ -517,9 +514,6 @@ GraphTypePtr loadGraphTypeElement(const filepath &srcPath, xmlpp::Element *eGrap
     auto eDeviceType=(xmlpp::Element*)nDeviceType;
     auto dt=loadDeviceTypeElement(messageTypesById, eDeviceType);
     deviceTypes.push_back( dt );
-    if(events){
-      events->onDeviceType(dt);
-    }
   }
 
   auto res=std::make_shared<GraphTypeDynamic>(
@@ -539,9 +533,9 @@ GraphTypePtr loadGraphTypeElement(const filepath &srcPath, xmlpp::Element *eGrap
   return res;
 }
 
-GraphTypePtr loadGraphType(const filepath &srcPath, xmlpp::Element *parent, GraphLoadEvents *events, const std::string &id);
+inline GraphTypePtr loadGraphType(const filepath &srcPath, xmlpp::Element *parent, GraphLoadEvents *events, const std::string &id);
 
-GraphTypePtr loadGraphTypeReferenceElement(const filepath &srcPath, xmlpp::Element *eGraphTypeReference, GraphLoadEvents *events)
+inline GraphTypePtr loadGraphTypeReferenceElement(const filepath &srcPath, xmlpp::Element *eGraphTypeReference, GraphLoadEvents *events)
 {
   std::string id=get_attribute_required(eGraphTypeReference, "id");
   std::string src=get_attribute_required(eGraphTypeReference, "src");
@@ -564,7 +558,7 @@ GraphTypePtr loadGraphTypeReferenceElement(const filepath &srcPath, xmlpp::Eleme
 }
 
 //! Given a graph an element of type "g:Graphs", look for a graph type with given id.
-GraphTypePtr loadGraphType(const filepath &srcPath, xmlpp::Element *parent, GraphLoadEvents *events, const std::string &id)
+inline GraphTypePtr loadGraphType(const filepath &srcPath, xmlpp::Element *parent, GraphLoadEvents *events, const std::string &id)
 {
   xmlpp::Node::PrefixNsMap ns;
   ns["g"]="https://poets-project.org/schemas/virtual-graph-schema-v3";
@@ -587,7 +581,7 @@ GraphTypePtr loadGraphType(const filepath &srcPath, xmlpp::Element *parent, Grap
 }
 
 //! Given a graph an element of type "g:Graphs", look for a graph type with given id.
-GraphTypePtr loadGraphType(const filepath &srcPath, xmlpp::Element *parent, GraphLoadEvents *events)
+inline GraphTypePtr loadGraphType(const filepath &srcPath, xmlpp::Element *parent, GraphLoadEvents *events)
 {
   xmlpp::Node::PrefixNsMap ns;
   ns["g"]="https://poets-project.org/schemas/virtual-graph-schema-v3";
@@ -610,7 +604,7 @@ GraphTypePtr loadGraphType(const filepath &srcPath, xmlpp::Element *parent, Grap
 }
 
 // Helper function to load graph type from path
-GraphTypePtr loadGraphType(const filepath &srcPath, const std::string &id, GraphLoadEvents *events)
+inline GraphTypePtr loadGraphType(const filepath &srcPath, const std::string &id, GraphLoadEvents *events)
 {
   auto parser=std::make_shared<xmlpp::DomParser>(srcPath.native());
   if(!*parser){
@@ -622,7 +616,7 @@ GraphTypePtr loadGraphType(const filepath &srcPath, const std::string &id, Graph
   return loadGraphType(srcPath, root, events, id);
 }
 
-std::map<std::string,GraphTypePtr> loadAllGraphTypes(const filepath &srcPath, xmlpp::Element *parent, GraphLoadEvents *events)
+inline std::map<std::string,GraphTypePtr> loadAllGraphTypes(const filepath &srcPath, xmlpp::Element *parent, GraphLoadEvents *events)
 {
   xmlpp::Node::PrefixNsMap ns;
   ns["g"]="https://poets-project.org/schemas/virtual-graph-schema-v3";
@@ -641,7 +635,7 @@ std::map<std::string,GraphTypePtr> loadAllGraphTypes(const filepath &srcPath, xm
 }
 
 
-void loadGraph(Registry *registry, const filepath &srcPath, xmlpp::Element *parent, GraphLoadEvents *events)
+inline void loadGraph(Registry *registry, const filepath &srcPath, xmlpp::Element *parent, GraphLoadEvents *events)
 {
   xmlpp::Node::PrefixNsMap ns;
   ns["g"]="https://poets-project.org/schemas/virtual-graph-schema-v3";
@@ -681,12 +675,6 @@ void loadGraph(Registry *registry, const filepath &srcPath, xmlpp::Element *pare
 
   GraphTypePtr graphType = graphTypeReg ? graphTypeReg : graphTypeEmb;
 
-  for(auto et : graphType->getMessageTypes()){
-    events->onMessageType(et);
-  }
-  for(auto dt : graphType->getDeviceTypes()){
-    events->onDeviceType(dt);
-  }
   events->onGraphType(graphType);
 
   TypedDataPtr graphProperties;

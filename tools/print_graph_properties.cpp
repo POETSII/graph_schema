@@ -49,18 +49,7 @@ public:
   {
     fprintf(stderr, "  onGraphType(%s)\n", graph->getId().c_str());
   }
-
-  virtual void onDeviceType(const DeviceTypePtr &device) override
-  {
-    fprintf(stderr, "  onDeviceType(%s)\n", device->getId().c_str());
-  }
-
-  virtual void onMessageType(const MessageTypePtr &message) override
-  {
-    fprintf(stderr, "  onMessageType(%s)\n", message->getId().c_str());
-  }
-
-
+  
   virtual uint64_t onBeginGraphInstance(const GraphTypePtr &graphType,
 				 const std::string &id,
 				 const TypedDataPtr &properties,

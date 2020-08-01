@@ -3,6 +3,8 @@
 
 #include "xml_pull_parser.hpp"
 
+#include "graph_compare.hpp"
+
 
 int main(int argc, char *argv[])
 {

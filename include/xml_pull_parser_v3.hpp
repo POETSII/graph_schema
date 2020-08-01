@@ -349,11 +349,7 @@ public:
             }
             m_graphType=it->second;
         }
-        for(auto et : m_graphType->getMessageTypes()){
-            m_events->onMessageType(et);
-        }
         for(auto dt : m_graphType->getDeviceTypes()){
-            m_events->onDeviceType(dt);
             m_deviceTypes[dt->getId()]=dt;
         }
         m_events->onGraphType(m_graphType);

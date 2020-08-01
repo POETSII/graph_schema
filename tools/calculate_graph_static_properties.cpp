@@ -41,18 +41,13 @@ public:
 
   virtual void onGraphType(const GraphTypePtr &graph) override
   {
+    for(auto dt : graph->getDeviceTypes()){
+      device_type_to_instance_count[dt->getId()]=0;
+    }
+    for(auto mt : graph->getMessageTypes()){
+      message_type_to_edge_count[mt->getId()]=0;
+    }
   }
-
-  virtual void onDeviceType(const DeviceTypePtr &device) override
-  {
-    device_type_to_instance_count[device->getId()]=0;
-  }
-
-  virtual void onMessageType(const MessageTypePtr &message) override
-  {
-    message_type_to_edge_count[message->getId()]=0;
-  }
-
 
   virtual uint64_t onBeginGraphInstance(const GraphTypePtr &graphType,
 				 const std::string &id,

@@ -46,11 +46,15 @@ endif
 
 # Default is moderately optimised with asserts
 # dwarf-4 sometimes produces better debug info (?)
-CPPFLAGS += -std=c++11 -O2 -gdwarf-4
+CPPFLAGS += -std=c++17 -O1 -gdwarf-4 -v -ftime-report
 
 # Try to help libubsan merge RTTI on imported classes
 # https://stackoverflow.com/a/57379835
 CPPFLAGS += -rdynamic
+
+# Used to indicate that functions should be linked in as
+# seperate objects.
+CPPFLAGS += -DPOETS_GRAPH_SCHEMA_SEPERATE_COMPILATION=1
 
 # Last optimisation flag overrides
 CPPFLAGS_DEBUG = $(CPPFLAGS) -O0 -fno-omit-frame-pointer -fsanitize=undefined -fsanitize=address
@@ -161,19 +165,59 @@ bin/create_gals_heat_instance : apps/gals_heat/create_gals_heat_instance.cpp
 	mkdir -p bin
 	$(CXX) $(CPPFLAGS) $< -o $@ $(LDFLAGS) $(LDLIBS)
 
-bin/% : tools/%.cpp
-	mkdir -p $(dir $@)
-	$(CXX) -c $(CPPFLAGS) $< -o $@.o $(LDFLAGS) $(LDLIBS)
-	$(CXX) $(CPPFLAGS) $@.o -o $@ $(LDFLAGS) $(LDLIBS)
 
-bin/%.debug : tools/%.cpp
-	mkdir -p $(dir $@)
-	$(CXX) -c $(CPPFLAGS_DEBUG) $< -o $@.o
-	$(CXX) $(CPPFLAGS_DEBUG) $@.o -o $@ $(LDFLAGS) $(LDLIBS)
+# Things extracted into objects to speed up compilation and make ccache more effective
+STANDARD_IMPL_SRCS = \
+  graph_persist_sax_writer_impl \
+  graph_persist_dom_reader_impl \
+  xml_pull_parser_impl
 
-bin/%.release : tools/%.cpp
+STANDARD_IMPL_OBJS = $(foreach s, $(STANDARD_IMPL_SRCS), obj/$s.o )
+STANDARD_IMPL_OBJS_DEBUG = $(foreach s, $(STANDARD_IMPL_SRCS), obj/$s.debug.o )
+STANDARD_IMPL_OBJS_RELEASE = $(foreach s, $(STANDARD_IMPL_SRCS), obj/$s.release.o )
+
+obj/%.o : src/%.cpp
+	mkdir -p obj
+	$(CXX) -c $(CPPFLAGS) $< -o $@ $(LDFLAGS) $(LDLIBS)
+
+obj/%.debug.o : src/%.cpp
+	mkdir -p obj
+	$(CXX) -c $(CPPFLAGS_DEBUG) $< -o $@ $(LDFLAGS) $(LDLIBS)
+
+obj/%.release.o : src/%.cpp
+	mkdir -p obj
+	$(CXX) -c $(CPPFLAGS_RELEASE) $< -o $@ $(LDFLAGS) $(LDLIBS)
+
+
+###############
+## Rules for the actual binaries
+
+bin/%.o : tools/%.cpp
 	mkdir -p $(dir $@)
-	$(CXX) $(CPPFLAGS_RELEASE) $< -o $@ $(LDFLAGS) $(LDLIBS)
+	$(CXX) -c $(CPPFLAGS) $< -o $@
+
+bin/% : bin/%.o $(STANDARD_IMPL_OBJS)	
+
+	$(CXX) $(CPPFLAGS) $(STANDARD_IMPL_OBJS) $@.o  -o $@ $(LDFLAGS) $(LDLIBS)
+
+
+bin/%.debug.o : tools/%.cpp
+	mkdir -p $(dir $@)
+	$(CXX) -c $(CPPFLAGS_DEBUG) $< -o $@
+
+bin/%.debug : bin/%.debug.o $(STANDARD_IMPL_OBJS_DEBUG)
+	mkdir -p $(dir $@)
+	$(CXX) $(CPPFLAGS_DEBUG)  $(STANDARD_IMPL_OBJS_DEBUG) $@.o -o $@ $(LDFLAGS) $(LDLIBS)
+
+
+bin/%.release.o : tools/%.cpp
+	mkdir -p $(dir $@)
+	$(CXX) -c $(CPPFLAGS_RELEASE) $< -o $@
+
+bin/%.release : bin/%.release.o $(STANDARD_IMPL_OBJS_RELEASE)
+	mkdir -p $(dir $@)
+	$(CXX) $(CPPFLAGS_RELEASE)  $(STANDARD_IMPL_OBJS_RELEASE) $@.o -o $@ $(LDFLAGS) $(LDLIBS)
+
 
 define provider_rules_template
 # $1 : name
@@ -258,7 +302,8 @@ include tools/partitioner.inc
 
 demos : $(ALL_DEMOS)
 
-all_tools : bin/print_graph_properties bin/epoch_sim bin/graph_sim bin/hash_sim2 bin/structurally_compare_graph_types
+all_tools : bin/print_graph_properties bin/epoch_sim bin/graph_sim bin/hash_sim2 bin/structurally_compare_graph_types \
+	bin/convert_v3_graph_to_v4
 
 #############################
 # Most testing of graphs is done with epoch_sim. Give graph_sim some exercise here
@@ -285,9 +330,9 @@ test :
 	@>&2 echo "# Cleaning directory"
 	@make clean 2> /dev/null > /dev/null
 	@>&2 echo "# Building tools"
-	@make -j -k all_tools 2>/dev/null > /dev/null
+	@make -j 4 -k all_tools 2>/dev/null > /dev/null
 	@>&2 echo "# Building providers"
-	@make -j -k all_providers 2>/dev/null > /dev/null
+	@make -j 4 -k all_providers 2>/dev/null > /dev/null
 	@>&2 echo "# Running bats"
 	@bats  -t -r .
 

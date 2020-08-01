@@ -22,7 +22,7 @@
 #include "rapidjson/prettywriter.h"
 
 
-xmlpp::Element *find_single(xmlpp::Element *parent, const std::string &name, const xmlpp::Node::PrefixNsMap &ns=xmlpp::Node::PrefixNsMap())
+inline xmlpp::Element *find_single(xmlpp::Element *parent, const std::string &name, const xmlpp::Node::PrefixNsMap &ns=xmlpp::Node::PrefixNsMap())
 {
   auto all=parent->find(name,ns);
   if(all.size()==0)
@@ -35,12 +35,12 @@ xmlpp::Element *find_single(xmlpp::Element *parent, const std::string &name, con
   return res;
 }
 
-xmlpp::Element *load_typed_data_tuple(xmlpp::Element *parent, const std::string &name)
+inline xmlpp::Element *load_typed_data_tuple(xmlpp::Element *parent, const std::string &name)
 {
   return find_single(parent, std::string("./Tuple[@name='")+name+"']");
 }
 
-std::string get_attribute_required(xmlpp::Element *eParent, const char *name)
+inline std::string get_attribute_required(xmlpp::Element *eParent, const char *name)
 {
   auto a=eParent->get_attribute(name);
   if(a==0)
@@ -49,7 +49,7 @@ std::string get_attribute_required(xmlpp::Element *eParent, const char *name)
   return a->get_value();
 }
 
-std::string get_attribute_optional(xmlpp::Element *eParent, const char *name)
+inline std::string get_attribute_optional(xmlpp::Element *eParent, const char *name)
 {
   auto a=eParent->get_attribute(name);
   if(a==0)
@@ -58,7 +58,7 @@ std::string get_attribute_optional(xmlpp::Element *eParent, const char *name)
   return a->get_value();
 }
 
-bool get_attribute_optional_bool(xmlpp::Element *eParent, const char *name)
+inline bool get_attribute_optional_bool(xmlpp::Element *eParent, const char *name)
 {
   auto a=get_attribute_optional(eParent, name);
   if(a.empty()){
@@ -86,7 +86,7 @@ T *cast_typed_data(typed_data_t *data)
 
 
 // Write a round-trippable number
-std::string float_to_string(float x)
+inline std::string float_to_string(float x)
 {
   // https://randomascii.wordpress.com/2012/03/08/float-precisionfrom-zero-to-100-digits-2/
   char buffer[16]={0};
@@ -96,7 +96,7 @@ std::string float_to_string(float x)
   return buffer;
 }
 
-std::string float_to_string(double x)
+inline std::string float_to_string(double x)
 {
   // https://randomascii.wordpress.com/2012/03/08/float-precisionfrom-zero-to-100-digits-2/
   char buffer[32]={0};
@@ -116,7 +116,7 @@ private:
   unsigned m_totalSize;
 
   std::vector<char> m_default;
-
+  mutable TypedDataPtr m_defaultShared;
 public:
   TypedDataSpecImpl(TypedDataSpecElementTuplePtr elt=makeTuple("_", {}))
     : m_type(elt)
@@ -133,6 +133,41 @@ public:
     return m_type;
   }
 
+  TypedDataPtr get_shared_copy(TypedDataPtr &p) const override 
+  {
+    if(m_default.empty()){
+      return TypedDataPtr();
+    }
+
+    if(p){
+      assert(p.payloadSize()==payloadSize());
+      return p;
+    }
+    if(!m_defaultShared){
+      m_defaultShared=create();
+    }
+    return m_defaultShared;
+  }
+
+  TypedDataPtr get_unique_copy(TypedDataPtr &p) const override
+  {
+    if(m_default.empty()){
+      return TypedDataPtr();
+    }
+
+    if(p){
+      if(p.is_unique()){
+        TypedDataPtr res(p);
+        p.reset();
+        return res;
+      }else{
+        return p.clone();
+      }
+    }else{
+      return create();
+    }
+  }
+
   //! Size of the actual content, not including typed_data_t header
   virtual size_t payloadSize() const override
   { return m_type->getPayloadSize(); }
@@ -143,6 +178,10 @@ public:
 
   virtual TypedDataPtr create() const override
   {
+    if(m_default.empty()){
+      return TypedDataPtr();
+    }
+
     typed_data_t *p=(typed_data_t*)malloc(m_totalSize);
     p->_ref_count=0;
     p->_total_size_bytes=m_totalSize;
@@ -912,7 +951,7 @@ public:
   }
 };
 
-void handler_assert_func (const char *file, int line, const char *assertFunc,const char *cond)
+inline void handler_assert_func (const char *file, int line, const char *assertFunc,const char *cond)
 {
   throw provider_assertion_error(file,line,assertFunc,cond);
 }

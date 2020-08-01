@@ -1,6 +1,7 @@
 #include "simulator_context.hpp"
 #include "graph_persist_dom_reader.hpp"
 
+#include <libxml++/parsers/domparser.h>
 
 void usage()
 {

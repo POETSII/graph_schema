@@ -3,6 +3,9 @@
 
 #include "xml_pull_parser_shared.hpp"
 
+// TODO: Clean up dependency chains a bit
+#include "graph_persist_dom_reader_v4.hpp"
+
 namespace pull
 {
 namespace xml_v4
@@ -337,11 +340,7 @@ public:
             }
             m_graphType=it->second;
         }
-        for(auto et : m_graphType->getMessageTypes()){
-            m_events->onMessageType(et);
-        }
         for(auto dt : m_graphType->getDeviceTypes()){
-            m_events->onDeviceType(dt);
             m_deviceTypes[dt->getId()]=dt;
         }
         m_events->onGraphType(m_graphType);

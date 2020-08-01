@@ -1,0 +1,1 @@
+#include "graph_persist_sax_writer_impl.hpp"

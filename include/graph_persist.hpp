@@ -44,13 +44,13 @@ struct filepath
   }
 };
 
-filepath current_path()
+inline filepath current_path()
 {
   std::shared_ptr<char> p(getcwd(0,0),free);
   return filepath(p.get());
 }
 
-filepath absolute(const filepath &relPath, const filepath &basePath=current_path())
+inline filepath absolute(const filepath &relPath, const filepath &basePath=current_path())
 {
   if(relPath.path.size()>0 && relPath.path[0]=='/'){
     return relPath;
@@ -58,7 +58,7 @@ filepath absolute(const filepath &relPath, const filepath &basePath=current_path
   return basePath.native()+"/"+relPath.native();
 }
 
-bool exists(const filepath &p)
+inline bool exists(const filepath &p)
 {
   return 0==access(p.path.c_str(), F_OK);
 }
@@ -72,6 +72,7 @@ bool exists(const filepath &p)
   Most of the time you won't know what the metadata means,
   so you grab hold of it when you are given it, add or read
   anything you know about, then pass it on to the destination.
+
 */
 class GraphLoadEvents
 {
@@ -82,12 +83,6 @@ public:
   {}
 
   virtual void onGraphType(const GraphTypePtr &graph)
-  {}
-
-  virtual void onDeviceType(const DeviceTypePtr &device)
-  {}
-
-  virtual void onMessageType(const MessageTypePtr &edge)
   {}
 
   // Should meta-data be parsed and extracted?
@@ -120,7 +115,8 @@ public:
 
   // Tells the consumer that a new instance is being added
   /*! The return value is a unique identifier that means something
-    to the consumer. */
+    to the consumer.
+    */
   virtual uint64_t onDeviceInstance
   (
    uint64_t graphInst,

@@ -49,9 +49,6 @@ export interface GraphBuildEvents
 export interface GraphLoadEvents
     extends GraphBuildEvents
 {
-    onDeviceType(deviceType:DeviceType) : void;
-
-    onEdgeType(edgeType:EdgeType) : void;
 
     onGraphType(graphType:GraphType) : void;
 
@@ -250,15 +247,6 @@ export class GraphBuilder
 {
     g:GraphInstance|null = null;
 
-    onDeviceType(deviceType:DeviceType) : void
-    {
-        // noop
-    }
-
-    onEdgeType(edgeType:EdgeType) : void
-    {
-        // noop
-    }
 
     onGraphType(graphType:GraphType) : void
     {

@@ -6,6 +6,10 @@
 #include "libxml++/parsers/textreader.h"
 
 #include <algorithm>
+#include <functional>
+
+// TODO: Clean up dependency chains a bit
+#include "graph_persist_dom_reader_v3.hpp"
 
 namespace pull
 {
@@ -49,6 +53,9 @@ public:
     { return false; }
 
     virtual bool parseAsNode() const
+    { return false; }
+
+    virtual bool seperateCDATA() const
     { return false; }
 
     /* Used to explicitly request a namespace check. Most of the time we don't bother to improve speed. */
@@ -111,33 +118,49 @@ void parseElement(TextReader *reader, ElementBindings *bindings)
     bindings->onAttributesFinished();
     if(!reader->is_empty_element()){
         Glib::ustring text;
+        bool isCDATA=false;
+
+        auto flush_text = [&]()
+        {
+            if(!text.empty()){
+                auto it=std::find_if( text.begin(), text.end(), [](char c){ return !isspace(c); } );
+                if(it!=text.end()){
+                    bindings->onText(text);
+                }
+                text.clear();
+            }
+        };
+        
         bool finished=false;
         while(!finished && reader->read()){
             switch(reader->get_node_type()){
-            case TextReader::Text:
             case TextReader::CDATA:
+                isCDATA=true;
+            case TextReader::Text:
             case TextReader::SignificantWhitespace:
             case TextReader::Whitespace:
                 text += reader->get_value();
+                if(isCDATA && bindings->seperateCDATA()){
+                    flush_text();
+                }
                 break;
             case TextReader::Element:
                 {
+                    flush_text();
                     auto child=bindings->onEnterChild(reader->get_local_name());
                     parseElement( reader, child );
                     bindings->onExitChild(child);
                 }
                 break;
             case TextReader::EndElement:
+                flush_text();
                 finished=true;
                 break;
             default:
                 throw std::runtime_error("Unexpected node type.");
             }
         }
-        auto it=std::find_if( text.begin(), text.end(), [](char c){ return !isspace(c); } );
-        if(it!=text.end()){
-            bindings->onText(text);
-        }
+        
     }
 
     bindings->onEnd();

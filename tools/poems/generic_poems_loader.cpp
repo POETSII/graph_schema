@@ -4,6 +4,9 @@
 
 #include "xml_pull_parser.hpp"
 
+#include <libxml++/parsers/domparser.h>
+
+
 FILE *g_stats_file;
 std::string g_stats_prefix;
 
