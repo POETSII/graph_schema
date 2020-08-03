@@ -155,7 +155,7 @@ protected:
 
   graph_type_info m_gi;
 
-  const size_t MAX_LINE_SIZE = 4096;
+  const size_t MAX_LINE_SIZE = 1024;
   const size_t MAX_CHUNK_SIZE = 65536;
 
   std::vector<char> m_lineBuffer;
@@ -164,6 +164,8 @@ protected:
   std::vector<std::vector<char>> m_lineBufferCache;
 
   std::vector<uint16_t> m_device_instance_to_device_type_index;
+
+  std::vector<std::string> m_device_ids; // debug only
 
   unsigned m_prevDeviceType=0;
   std::string m_prevDeviceId;
@@ -217,6 +219,7 @@ protected:
      flush_line();
     }
     if(!m_lineBufferChunk.empty()){
+      xmlTextWriterStartElement(m_dst, (const xmlChar*)"C");
       xmlTextWriterStartCDATA(m_dst);
       for(auto &l : m_lineBufferChunk){
         for(char c : l){
@@ -230,6 +233,7 @@ protected:
       m_lineBufferChunk.clear();
       m_lineBufferChunkSize=0;
       xmlTextWriterEndCDATA(m_dst);
+      xmlTextWriterEndElement(m_dst);
 
       // Reset so that each chunk can be decoded independently
       m_prevDeviceType=0;
@@ -309,6 +313,9 @@ public:
     }
     uint32_t device_type_index=m_gi.device_id_to_index.at(dt->getId());
     m_device_instance_to_device_type_index.push_back(device_type_index);
+    #ifndef NDEBUG
+    m_device_ids.push_back(id);
+    #endif
 
     auto iti=m_seenIds.insert( id );
     if(!iti.second){
@@ -324,7 +331,7 @@ public:
     }
 
     if(!is_id_increment(id, m_prevDeviceId)){
-      flags |= DeviceInst_ChangeDeviceType;
+      flags |= DeviceInst_NotIncrementalId;
     }
     m_prevDeviceId=id;
 
@@ -456,16 +463,27 @@ public:
     //////////////////////////////////
     // Do the actual encoding
 
+    unsigned bOff=m_lineBuffer.size();
+
     m_codec.encode_digit(flags, m_lineBuffer);
 
     if( (flags & EdgeInst_ChangeBothEndpoints) == EdgeInst_ChangeBothEndpoints ){
       uint64_t total=(uint64_t(dstEndpoint)<<m_bitsPerSrcEndpoint) + srcEndpoint;
+      //fprintf(stderr, "  total=%llu\n", (unsigned long long)total);
       m_codec.encode_bits( m_bitsPerDstEndpoint+m_bitsPerSrcEndpoint, total, m_lineBuffer  );
     }else if(flags & EdgeInst_ChangeDestEndpoint){
       m_codec.encode_bits( m_bitsPerDstEndpoint, dstEndpoint, m_lineBuffer );
     }else if(flags & EdgeInst_ChangeSrcEndpoint){
       m_codec.encode_bits( m_bitsPerSrcEndpoint, srcEndpoint, m_lineBuffer );
     }
+
+    /*fprintf(stderr, "F=%u, %s:%s-%s:%s = %u:%u-%u:%u\n",
+        (flags & EdgeInst_ChangeBothEndpoints),
+        m_device_ids[dstDevInst].c_str(), dstPin->getName().c_str(),
+        m_device_ids[srcDevInst].c_str(), srcPin->getName().c_str(),
+        (unsigned)dstDevInst, destPinIndex,
+        (unsigned)srcDevInst, srcPinIndex
+    );*/
 
     if(flags & EdgeInst_HasIndex){
       m_codec.encode_bits( m_bitsPerDeviceId, sendIndex, m_lineBuffer);
@@ -478,6 +496,15 @@ public:
     if(flags & EdgeInst_HasState){
       m_codec.encode_bytes(state.payloadSize(), state.payloadPtr(), m_lineBuffer);
     }
+
+    unsigned eOff=m_lineBuffer.size();
+
+    /*fprintf(stderr, "chars=");
+    for(auto o=bOff; o<eOff; o++){
+      fprintf(stderr, "%c", m_lineBuffer[o]);
+    }
+    fprintf(stderr, "\n");
+    */
 
     maybe_flush();
   }
@@ -498,7 +525,7 @@ public:
 }; // detail
 
 
-inline std::shared_ptr<GraphLoadEvents> createSAXWriterBase85OnFile(const std::string &path, const sax_writer_options &options=sax_writer_options{})
+std::shared_ptr<GraphLoadEvents> createSAXWriterBase85OnFile(const std::string &path, const sax_writer_options &options=sax_writer_options{})
 {
   if(!options.format.empty() && options.format!="base85"){
     throw std::runtime_error("Attempt to create SAX writer with wrong format specified.");

@@ -4,6 +4,7 @@
 #include "xml_pull_parser_shared.hpp"
 #include "xml_pull_parser_v3.hpp"
 #include "xml_pull_parser_v4.hpp"
+#include "xml_pull_parser_base85.hpp"
 
 namespace pull
 {
@@ -22,7 +23,7 @@ private:
     xml_v4::ElementBindingsGraphType m_ebGraphTypeV4;
     xml_v4::ElementBindingsGraphInstance m_ebGraphInstanceV4;
 
-    xml_v4::ElementBindingsGraphInstance m_ebGraphInstanceBase85;
+    xml_base85::ElementBindingsGraphInstance m_ebGraphInstanceBase85;
 
     bool m_graphTypeOnly=false;
 
@@ -44,7 +45,7 @@ public:
         , m_ebGraphTypeV4(srcPath, events, registry, m_localGraphTypes)
         , m_ebGraphInstanceV4(m_events, registry, m_localGraphTypes, graphTypeOnly) 
 
-        , m_ebGraphInstanceBase85(m_events, registry, m_localGraphTypes, graphTypeOnly) 
+        , m_ebGraphInstanceBase85(m_events, registry, m_localGraphTypes) 
 
         , m_graphTypeOnly(graphTypeOnly)
     {}

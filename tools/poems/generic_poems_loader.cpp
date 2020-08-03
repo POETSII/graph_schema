@@ -1,8 +1,8 @@
 #include "poems.hpp"
 
-#include "graph_persist_dom_reader.hpp"
+#include "graph_persist_dom_reader_impl.hpp"
 
-#include "xml_pull_parser.hpp"
+#include "xml_pull_parser_impl.hpp"
 
 #include <libxml++/parsers/domparser.h>
 

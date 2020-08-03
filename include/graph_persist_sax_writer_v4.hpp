@@ -532,9 +532,9 @@ public:
 }; // detail
 
 
-inline std::shared_ptr<GraphLoadEvents> createSAXWriterV4OnFile(const std::string &path, const sax_writer_options &options=sax_writer_options{})
+std::shared_ptr<GraphLoadEvents> createSAXWriterV4OnFile(const std::string &path, const sax_writer_options &options=sax_writer_options{})
 {
-  if(options.format!="v4"){
+  if(!options.format.empty() && options.format!="v4"){
     throw std::runtime_error("Attempt to create SAX writer with wrong format specified.");
   }
 

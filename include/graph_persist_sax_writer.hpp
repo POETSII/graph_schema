@@ -15,8 +15,4 @@ struct sax_writer_options
 */
 std::shared_ptr<GraphLoadEvents> createSAXWriterOnFile(const std::string &path, const sax_writer_options &options=sax_writer_options{});
 
-#ifndef POETS_GRAPH_SCHEMA_SEPERATE_COMPILATION
-#include "graph_persist_sax_writer_impl.hpp"
-#endif
-
 #endif

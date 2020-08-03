@@ -397,12 +397,33 @@ public:
   /*! Either return the properties p, or the default. 
       The return struct may be shared, and should not be modified without cloning.
   */ 
-  virtual TypedDataPtr get_shared_copy(TypedDataPtr &p) const=0;
+  virtual TypedDataPtr get_shared_copy(TypedDataPtr &p) const
+  {
+    TypedDataPtr res;
+    if(p){
+      res=p;
+    }else if(payloadSize()){
+      res=create();
+    }
+    return res;
+  }
 
   /*! Either return the properties p, or the default. 
       The return struct is unique, and can be modified without affecting others.
   */ 
-  virtual TypedDataPtr get_unique_copy(TypedDataPtr &p) const=0;
+  virtual TypedDataPtr get_unique_copy(TypedDataPtr &p) const
+  {
+    TypedDataPtr res;
+    if(p){
+      if(p.is_unique()){
+        res=p;
+        p.reset();
+      }
+    }else if(payloadSize()){
+      res=create();
+    }
+    return res;
+  }
 
   //! Return true if the given instance is either NULL, or is identical to the spec default
   virtual bool is_default(const TypedDataPtr &v) const=0;

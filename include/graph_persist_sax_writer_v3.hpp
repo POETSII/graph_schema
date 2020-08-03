@@ -539,7 +539,7 @@ public:
 
 std::shared_ptr<GraphLoadEvents> createSAXWriterV3OnFile(const std::string &path, const sax_writer_options &options=sax_writer_options{})
 {
-  if(options.format!="v3"){
+  if(!options.format.empty() && options.format!="v3"){
     throw std::runtime_error("Attempt to create SAX writer with wrong format specified.");
   }
 

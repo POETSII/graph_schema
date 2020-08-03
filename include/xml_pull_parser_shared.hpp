@@ -136,6 +136,7 @@ void parseElement(TextReader *reader, ElementBindings *bindings)
             switch(reader->get_node_type()){
             case TextReader::CDATA:
                 isCDATA=true;
+                 [[fallthrough]]
             case TextReader::Text:
             case TextReader::SignificantWhitespace:
             case TextReader::Whitespace:

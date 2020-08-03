@@ -20,10 +20,51 @@ class ElementBindingsTextChunks
 private:
     Glib::ustring m_eltName;
     sink_t m_sink;
+
+    class ElementBindingsC
+        : public ElementBindingsComposite
+    {
+    public:
+        ElementBindingsTextChunks *parent;
+
+        ElementBindingsC(ElementBindingsTextChunks *p)
+            : parent(p)
+        {}
+
+        void onBegin(const Glib::ustring &name) override
+        {
+            if(name!="C"){
+                throw std::runtime_error("Unexpected element name.");
+            }
+        }
+        void onAttribute(const Glib::ustring &name, const Glib::ustring &value) override
+        {
+            throw std::runtime_error("Didnt expect attributes in DeviceInstances85/C");
+        }
+
+        ElementBindings *onEnterChild(const Glib::ustring &name) override
+        { throw std::runtime_error("Didnt expect children in DeviceInstances85/C"); }
+
+        void onExitChild(ElementBindings *) override
+        { throw std::runtime_error("Didnt expect children in DeviceInstances85/C"); }
+
+        void onText(const Glib::ustring &text ) override
+        { 
+            parent->m_sink(text);
+        }
+
+        void onEnd() override
+        {
+        }
+    } m_chunk;
 public:
+    ElementBindingsTextChunks() = delete;
+    ElementBindingsTextChunks(const ElementBindingsTextChunks &) = delete;
+
     ElementBindingsTextChunks(const Glib::ustring &eltName, sink_t sink)
         : m_eltName(eltName)
         , m_sink(sink)
+        , m_chunk(this)
     {}
 
     void onBegin(const Glib::ustring &name) override
@@ -33,20 +74,26 @@ public:
         }
     }
 
-  void onAttribute(const Glib::ustring &name, const Glib::ustring &value) override
-  {
-    throw std::runtime_error("Didnt expect attributes in DeviceInstances85");
-  }
+    void onAttribute(const Glib::ustring &name, const Glib::ustring &value) override
+    {
+        throw std::runtime_error("Didnt expect attributes in DeviceInstances85");
+    }
 
     ElementBindings *onEnterChild(const Glib::ustring &name) override
-    { throw std::runtime_error("Didnt expect children in DeviceInstances85")}
+    { 
+        if(name=="C"){
+            return &m_chunk;
+        }else{
+            throw std::runtime_error("Unexpected child element.");
+        }
+    }
 
     void onExitChild(ElementBindings *) override
-    { throw std::runtime_error("Didnt expect children in DeviceInstances85"); }
+    { }
 
     void onText(const Glib::ustring &text ) override
     { 
-        m_sink(text);
+         throw std::runtime_error("Unexpected text.");
     }
 
     void onEnd() override
@@ -60,11 +107,12 @@ class ElementBindingsGraphInstance
 private:
 
     std::string m_textGraphProperties;
-    
-    ElementBindingsTextChunks m_ebDeviceInstance;
-    ElementBindingsTextChunks m_ebEdgeInstance;
 
     GraphLoadEvents *m_events;
+    
+    ElementBindingsTextChunks m_ebDeviceInstances;
+    ElementBindingsTextChunks m_ebEdgeInstances;
+    
     Registry *m_registry;
     std::unordered_map<std::string,GraphTypePtr> &m_localGraphTypes;
 
@@ -78,19 +126,17 @@ private:
 
     uint64_t m_gId;
 
-    std::vector<std::string, std::pair<uint64_t,unsigned> > m_deviceSinkIds;
+    std::vector<std::pair<uint64_t,unsigned> > m_deviceSinkIds;
+    std::vector<std::string> m_deviceIds; // debug only
 
     unsigned m_bitsPerDeviceIndex;
-
-    unsigned m_deviceTypeIndex=0
-    std::string m_deviceId;
     
-    void dechunkify(const Glib::ustring &text, std::function<void(const std::vector<std::pair<const char *,const char*>> &)> &cb)
+    void dechunkify(const Glib::ustring &text, const std::function<void(const std::vector<std::pair<const char *,const char*>> &)> &cb)
     {
         std::vector<std::pair<const char*,const char *>> lines;
-        unsigned pos=0;
+        Glib::ustring::size_type pos=0;
         while(pos < text.size()){
-            auto e=text.find('\n');
+            auto e=text.find('\n',pos);
             if(e==Glib::ustring::npos){
                 e=text.size();
             }
@@ -110,47 +156,55 @@ private:
         unsigned deviceTypeIndex=0;
         std::string deviceId;
 
+        int chunkOff=0;
         for(auto [begin,end] : chunk){
+            auto beginI=begin;
             while(begin!=end){
+                assert(*begin != '\n');
+
                 unsigned flags=m_codec.decode_digit(begin, end);
 
                 if(flags&Flags::DeviceInst_ChangeDeviceType){
                     deviceTypeIndex=m_codec.decode_bits(begin, end, m_gi.bits_per_device_type_index);
                 }
 
-                const auto &di = m_gi.device_types.at(m_deviceTypeIndex);
+                const auto &di = m_gi.device_types.at(deviceTypeIndex);
 
                 if(flags&Flags::DeviceInst_NotIncrementalId){
-                    deviceId=m_codec.device_c_identifier(begin, end);
+                    m_codec.decode_c_identifier(begin, end, deviceId);
                 }else{
-                    assert(!m_prevDeviceId.empty());
+                    assert(!deviceId.empty());
                     deviceId.back() += 1;
                 }
 
                 TypedDataPtr properties(di.default_properties);
                 if(flags&Flags::DeviceInst_HasProperties){
-                    m_codec.decode(begin, end, properties.payloadSize(), properties.payloadPtr());
+                    m_codec.decode_bytes(begin, end, properties.payloadSize(), properties.payloadPtr());
                 }
 
                 TypedDataPtr state(di.default_state);
                 if(flags&Flags::DeviceInst_HasState){
-                    m_codec.decode(begin, end, state.payloadSize(), state.payloadPtr());
+                    m_codec.decode_bytes(begin, end, state.payloadSize(), state.payloadPtr());
                 }
 
                 auto dId=m_events->onDeviceInstance(
-                    m_gId, di.deviceType, m_deviceId,
+                    m_gId, di.deviceType, deviceId,
                     properties, state
                 );
 
                 m_deviceSinkIds.push_back({dId, deviceTypeIndex});
+                #ifndef NDEBUG
+                m_deviceIds.push_back(deviceId);
+                #endif
             }
+            chunkOff++;
         }
     }
 
     void on_device_instance_text(const Glib::ustring &text)
     {
-        dechunkify(text, [&](const char *begin, const char *end){
-            on_device_line(begin, end);
+        dechunkify(text, [&](const auto &chunk){
+            on_device_chunk(chunk);
         });
     }
 
@@ -158,7 +212,7 @@ private:
     {
         using Flags = detail::GraphSAXWriterBase85::EdgeFlags;
 
-        unsigned deviceIndexBits=m_gi.bits_per_device_type_index;
+        unsigned deviceIndexBits=m_bitsPerDeviceIndex;
         unsigned dstPinBits=m_gi.max_input_pin_bits;
         unsigned srcPinBits=m_gi.max_output_pin_bits;
         unsigned dstBits=deviceIndexBits+dstPinBits;
@@ -174,22 +228,29 @@ private:
         unsigned srcDeviceIndex=0;
         unsigned srcPinIndex=0;
 
+        unsigned chunkOff=0;
         for(auto [begin,end] : chunk){
+            auto beginI=begin;
             while(begin!=end){
+                unsigned bOff=begin-beginI;
+
                 unsigned flags=m_codec.decode_digit(begin, end);
 
-                if( (flags&Flags::EdgeInst_ChangeBothEndpoints) == EdgeInst_ChangeBothEndpoints ){
+                if( (flags&Flags::EdgeInst_ChangeBothEndpoints) == Flags::EdgeInst_ChangeBothEndpoints ){
                     auto both=m_codec.decode_bits(begin, end, totalBits);
+                    //fprintf(stderr, "  both=%llu\n", (unsigned long long)both);
                     dstDeviceIndex=(both>>(dstPinBits+srcBits)) & deviceIndexMask;
                     dstPinIndex=(both>>srcBits) & dstPinMask;
-                    srcDeviceIndex=(both>>srcPinIndex) & deviceIndexMask;
+                    srcDeviceIndex=(both>>srcPinBits) & deviceIndexMask;
                     srcPinIndex=both&srcPinMask;
                 }else if(flags&Flags::EdgeInst_ChangeDestEndpoint){
                     auto dst=m_codec.decode_bits(begin, end, dstBits);
+                    //fprintf(stderr, "  dst=%llu\n", (unsigned long long)dst);
                     dstDeviceIndex=(dst>>dstPinBits) & deviceIndexMask;
                     dstPinIndex=dst & dstPinMask;
                 }else if(flags&Flags::EdgeInst_ChangeSrcEndpoint){
                     auto src=m_codec.decode_bits(begin, end, srcBits);
+                    //fprintf(stderr, "  src=%llu\n", (unsigned long long)src);
                     srcDeviceIndex=(src>>srcPinBits) & deviceIndexMask;
                     srcPinIndex=src & srcPinMask;
                 }else{
@@ -205,9 +266,19 @@ private:
                 const auto &dst_ip=dst_dt.input_pins.at(dstPinIndex);
                 const auto &src_op=src_dt.output_pins.at(srcPinIndex);
 
+                #ifndef NDEBUG
+                /*fprintf(stderr, "F=%u, %s:%s-%s:%s = %u:%u-%u:%u\n",
+                    (flags & Flags::EdgeInst_ChangeBothEndpoints),
+                    m_deviceIds[dstDeviceIndex].c_str(), dst_ip.pin->getName().c_str(),
+                    m_deviceIds[srcDeviceIndex].c_str(), src_op.pin->getName().c_str(),
+                    dstDeviceIndex, dstPinIndex,
+                    srcDeviceIndex, srcPinIndex
+                );*/
+                #endif
+
                 int sendIndex=-1;
                 if(flags & Flags::EdgeInst_HasIndex){
-                    if(!src_op.pin->isIndexed()){
+                    if(!src_op.pin->isIndexedSend()){
                         throw std::runtime_error("Send index specified for non indexed output pin.");
                     }
                     sendIndex=m_codec.decode_bits(begin, end, m_bitsPerDeviceIndex);
@@ -220,23 +291,35 @@ private:
 
                 TypedDataPtr state(dst_ip.default_state);
                 if(flags&Flags::EdgeInst_HasState){
-                    m_codec.decode(begin, end, state.payloadSize(), state.payloadPtr());
+                    m_codec.decode_bytes(begin, end, state.payloadSize(), state.payloadPtr());
                 }
 
+                unsigned eOff=begin-beginI;
+
+                /*fprintf(stderr, "chars=");
+                for(auto o=bOff; o<eOff; o++){
+                    fprintf(stderr, "%c",beginI[o]);
+                }
+                fprintf(stderr, "\n");
+                */
+
                 m_events->onEdgeInstance(m_gId,
-                    dstDeviceIndex, dst_dt.deviceType, dst_ip.pin,
-                    srcDeviceIndex, src_dt.deviceType, src_op.pin,
+                    dst_di.first, dst_dt.deviceType, dst_ip.pin,
+                    src_di.first, src_dt.deviceType, src_op.pin,
                     sendIndex,
                     properties, state
                 );
+
+                
             }
+            chunkOff++;
         }
     }
 
     void on_edge_instance_text(const Glib::ustring &text)
     {
-        dechunkify(text, [&](const char *begin, const char *end){
-            on_edge_chunk(begin, end);
+        dechunkify(text, [&](const auto &chunk){
+            on_edge_chunk(chunk);
         });
     }
 
@@ -249,14 +332,17 @@ public:
     )
         : m_events(events)
         , m_ebDeviceInstances("DeviceInstancesBase85", [&](const Glib::ustring &s){
-            on_device_instance_text(text);
+            on_device_instance_text(s);
         })
         , m_ebEdgeInstances("EdgeInstancesBase85", [&](const Glib::ustring &s){
-            on_edge_instance_text(text);
+            on_edge_instance_text(s);
         })
         , m_registry(registry)
         , m_localGraphTypes(localGraphTypes)
     {}
+
+    bool seperateCDATA() const
+    { return true; }
 
     void onBegin(const Glib::ustring &name)
     {
@@ -304,10 +390,6 @@ public:
             }
             m_graphType=it->second;
         }
-        for(auto dt : m_graphType->getDeviceTypes()){
-            m_deviceTypes[dt->getId()]=dt;
-        }
-        m_events->onGraphType(m_graphType);
 
         m_gi=detail::graph_type_info(m_graphType);
 
@@ -318,7 +400,6 @@ public:
         }
 
         m_gId=m_events->onBeginGraphInstance(m_graphType, m_graphId, m_graphProperties, {} );
-        m_events->onBeginDeviceInstances(m_gId);
     }
 
     ElementBindings *onEnterChild(const Glib::ustring &name)
@@ -338,6 +419,7 @@ public:
     {
         if(bindings==&m_ebDeviceInstances){
             m_events->onEndDeviceInstances(m_gId);
+            m_bitsPerDeviceIndex=(unsigned)std::ceil(std::log2(m_deviceSinkIds.size()+1));
         }else if(bindings==&m_ebEdgeInstances){
             m_events->onEndEdgeInstances(m_gId);
         }else{

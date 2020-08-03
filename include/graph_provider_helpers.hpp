@@ -28,7 +28,7 @@ inline xmlpp::Element *find_single(xmlpp::Element *parent, const std::string &na
   if(all.size()==0)
     return 0;
   if(all.size()>1)
-    throw std::runtime_error("More than on matching element.");
+    throw std::runtime_error("More than on matching element with name "+std::string(name));
   auto res=dynamic_cast<xmlpp::Element*>(all[0]);
   if(res==0)
     throw std::runtime_error("Path did not identify an element.");

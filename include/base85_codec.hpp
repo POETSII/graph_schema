@@ -12,7 +12,9 @@
 struct Base85Codec
 {
   static const unsigned BASE=85;
-  static const char ZERO='_';
+  static const char ZERO='_'; // the rest of the scalar unit is all zero
+  static const char ONES='^'; // the rest of the scalar unit is all one
+  static const char ZERO_FILL='`'; // the rest of the binary data is zero
   const char C_ID_TERMINATOR='@';
 
   char forwards[BASE];
@@ -28,13 +30,19 @@ struct Base85Codec
     "0123456789"   // 10
     "!\"#$%'()*+" // 10
     ",-./:;<=>?"  // 10
-    "@\\^"; // b
+    "@\\|"; // 
 
     if(strlen(chars)!=85){
       throw std::logic_error("expected exactly BASE chars.");
     }
     if(strchr(chars,ZERO)!=0){
       throw std::logic_error("chars contained zero char.");
+    }
+    if(strchr(chars,ONES)!=0){
+      throw std::logic_error("chars contained one char.");
+    }
+    if(strchr(chars,ZERO_FILL)!=0){
+      throw std::logic_error("chars contained zero fill char.");
     }
     if(strchr(chars,']')!=0){
       throw std::logic_error("chars contains ] character, so could break out of CDATA.");
@@ -82,37 +90,92 @@ struct Base85Codec
   }
 
   char *encode_bytes(size_t nBytes, const uint8_t *src, char *dst) const
+#ifndef NDEBUG
+    // TODO : For whatever reason, compiling with -O3 kills performance on this
+    // function, and is about an order of magnitude slower.
+    // This is still really fragile performance-wise.
+  __attribute__ ((optimize(2)))
+#endif
   {
     const uint8_t *end=src+nBytes;
 
     unsigned full=nBytes/4;
     unsigned partial=nBytes%4;
 
+    unsigned nTrailingZeroBytes=0;
+    {
+      for(unsigned i=0; i<partial; i++){
+        if(src[nBytes-i-1]==0){
+          nTrailingZeroBytes++;
+        }else{
+          break;
+        }
+      }
+
+      if(nTrailingZeroBytes==partial){
+        for(int i=full-1; i>=0; i--){
+          if(0 == *(uint32_t*)(src+4*i)){
+            nTrailingZeroBytes+=4;
+          }else{
+            break;
+          }
+        }
+      }
+    }
+
+#ifndef NDEBUG
+    for(unsigned i=nBytes-nTrailingZeroBytes; i<nTrailingZeroBytes; i++){
+      assert(src[i]==0);
+    }
+#endif
+
+    unsigned nLeadingNonZeroBytes=nBytes-nTrailingZeroBytes;
+    unsigned nLeadingNonZeroWords=nLeadingNonZeroBytes/4;
+
     for(unsigned j=0; j<full; j++){
         uint_fast32_t acc=*(const uint32_t*)src;
+        bool last_non_zero = j==nLeadingNonZeroWords;
+        uint_fast32_t ones=0xFFFFFFFFul;
         for(unsigned i=0; i<5; i++){
             if(acc==0){
-                *dst++=ZERO;
+                if(last_non_zero){
+                    *dst++=ZERO_FILL;
+                    return dst;
+                }else{
+                    *dst++=ZERO;
+                    break;
+                }
+            }
+            if(acc==ones){
+                *dst++=ONES;
                 break;
             }
             uint_fast32_t digit=acc % BASE;
             acc=acc/BASE;
+            ones=ones/BASE;  // hopefully compile-time optimised...
             *dst++ = forwards[digit];
         }
-      src+=4;
+        src+=4;
     }
 
     if(partial){
         unsigned partial_digits=partial+1;
         uint32_t acc=0;
         memcpy(&acc, src, partial);
+        uint_fast32_t ones=0xFFFFFFFFul>>(32-8*partial);
         for(unsigned i=0; i<partial_digits; i++){
+           assert(acc<=ones);
             if(acc==0){
-                *dst++=ZERO;
-                break;
+              *dst++=ZERO_FILL;
+              return dst;
+            }
+            if(acc==ones){
+              *dst++=ONES;
+              break;
             }
             uint_fast32_t digit=acc % BASE;
             acc=acc/BASE;
+            ones=ones/BASE;
             *dst++ = forwards[digit];
         }
     }
@@ -176,7 +239,7 @@ struct Base85Codec
     // Encoding the length always takes at least one byte anyway
   void encode_c_identifier(const std::string &s, std::vector<char> &dst) const
   {
-      dst.insert(dst.end(), dst.begin(), dst.end());
+      dst.insert(dst.end(), s.begin(), s.end());
       dst.push_back(C_ID_TERMINATOR);
   }
 
@@ -190,21 +253,35 @@ struct Base85Codec
     const unsigned char *usrc=(const unsigned char*)begin;
     const unsigned char *uend=(const unsigned char*)end;
 
+    bool fill_zero=false;
+
     for(unsigned j=0; j<full; j++){
       uint_fast32_t acc=0;
-      uint_fast32_t scale=1;
-      for(int i=0; i<5; i++){
-        if(usrc==uend){
-          throw std::runtime_error("Out of chars.");
-        }
-        auto uch=*usrc++;
-        if(uch==(unsigned char)ZERO){
+      if(!fill_zero){
+        uint_fast32_t scale=1;
+        uint_fast32_t ones=0xFFFFFFFFul;
+        for(int i=0; i<5; i++){
+          if(usrc==uend){
+            throw std::runtime_error("Out of chars.");
+          }
+          auto uch=*usrc++;
+          if(uch==(unsigned char)ZERO){
+              break;
+          }
+          if(uch==(unsigned char)ONES){
+            acc += scale * ones;
             break;
+          }
+          if(uch==(unsigned char)ZERO_FILL){
+              fill_zero=true;
+              break;
+          }
+          auto digit=backwards[uch];
+          cross_or |= digit;
+          acc += scale * digit;
+          scale *= BASE;
+          ones /= BASE;
         }
-        auto digit=backwards[uch];
-        cross_or |= digit;
-        acc += scale * digit;
-        scale *= BASE;
       }
       *(uint32_t*)dst=acc;
       dst+=4;
@@ -213,19 +290,31 @@ struct Base85Codec
     if(partial>0){
         assert(partial < 5);
         uint_fast32_t acc=0;
-        uint_fast32_t scale=1;
-        for(unsigned i=0; i<(partial+1); i++){
-          if(usrc==uend){
-            throw std::runtime_error("Out of chars.");
-          }
-          auto uch=*usrc++;
-          if(uch==(unsigned char)ZERO){
+        if(!fill_zero){
+          uint_fast32_t scale=1;
+          uint_fast32_t ones=0xFFFFFFFFul>>(32-8*partial);
+          for(unsigned i=0; i<(partial+1); i++){
+            if(usrc==uend){
+              throw std::runtime_error("Out of chars.");
+            }
+            auto uch=*usrc++;
+            if(uch==(unsigned char)ZERO){
+                break;
+            }
+            if(uch==(unsigned char)ONES){
+              acc += scale*ones;
               break;
+            }
+            if(uch==(unsigned char)ZERO_FILL){
+                fill_zero=true;
+                break;
+            }
+            auto digit=backwards[uch];
+            cross_or |= digit;
+            acc += scale * digit;
+            scale *= BASE;
+            ones /= BASE;
           }
-          auto digit=backwards[uch];
-          cross_or |= digit;
-          acc += scale * digit;
-          scale *= BASE;
         }
         memcpy(dst, &acc, partial);
     }
@@ -242,10 +331,11 @@ struct Base85Codec
     if(begin>=end){
       throw std::runtime_error("Not enough chars.");
     }
-    auto digit=backwards[(unsigned)*begin++];
+    auto digit=backwards[(unsigned)*begin];
     if(digit==0xFF){
       throw std::runtime_error("Invalid char.");
     }
+    begin++;
     return digit;
   }
 

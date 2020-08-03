@@ -303,7 +303,7 @@ include tools/partitioner.inc
 demos : $(ALL_DEMOS)
 
 all_tools : bin/print_graph_properties bin/epoch_sim bin/graph_sim bin/hash_sim2 bin/structurally_compare_graph_types \
-	bin/convert_v3_graph_to_v4
+	bin/convert_graph_to_v4 bin/convert_graph_to_base85 bin/convert_graph_to_v3
 
 #############################
 # Most testing of graphs is done with epoch_sim. Give graph_sim some exercise here
