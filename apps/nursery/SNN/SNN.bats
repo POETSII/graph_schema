@@ -67,6 +67,7 @@ function setup_file
 }
 
 @test "run_generate_CUBA_sparse_large_and_check." {
+    skip "TODO : too slow without memory optimisations"
     WD=$(make_test_wd)
     ( cd $BATS_TEST_DIRNAME &&
         bin/generate_CUBA 6000 1000  |
@@ -75,13 +76,18 @@ function setup_file
     )
 }
 
-@test "create_CUBA_instance_and_simulate." {
+@test "create_small_CUBA_instance_and_simulate." {
+    >&3 echo "BATS_TEST_DIRNAME=${BATS_TEST_DIRNAME}"
     WD=$(make_test_wd)
-    bin/generate_CUBA  |
-        tee >(gzip - > ${WD}/net.txt.gz ) |
-        bin/create_graph_instance_v2 | gzip - > ${WD}/net.xml.gz
+    (cd ${BATS_TEST_DIRNAME} && {
+            ${BATS_TEST_DIRNAME}/bin/generate_CUBA 1000  |
+            tee >(gzip - > ${WD}/net.txt.gz ) |
+            ${BATS_TEST_DIRNAME}/bin/create_graph_instance_v2 | gzip - > ${WD}/net.xml.gz
+        }
+    )
     >&3 echo "pwd=$(pwd)"
-    POETS_PROVIDER_PATH=$(pwd)/providers $(get_graph_schema_dir)/bin/epoch_sim --max-contiguous-idle-steps 1000000 ${WD}/net.xml.gz --external PROVIDER > ${WD}/out.txt
+    echo "POETS_PROVIDER_PATH=${BATS_TEST_DIRNAME}/providers $(get_graph_schema_dir)/bin/epoch_sim --max-contiguous-idle-steps 1000000 ${WD}/net.xml.gz --external PROVIDER > ${WD}/out.txt"
+    POETS_PROVIDER_PATH=${BATS_TEST_DIRNAME}/providers $(get_graph_schema_dir)/bin/epoch_sim --max-contiguous-idle-steps 1000000 ${WD}/net.xml.gz --external PROVIDER > ${WD}/out.txt
 }
 
 
