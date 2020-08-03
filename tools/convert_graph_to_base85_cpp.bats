@@ -8,16 +8,16 @@ load bats_helpers
 @test "BinConvert v3 ising spin to base85" {
     run_no_stderr bin/convert_graph_to_base85 apps/ising_spin/ising_spin_8x8.xml
     [ $status -eq 0 ]
-    echo $output | grep 'b_e_b_e_c_e_d_e_e_e_f_e_g_e_h_f_b_`'
-    echo $output | grep 'hpd_b_gq_c_gc_d_gBbe_hfp_b_gs_c_ge_d_'
+    echo $output | grep 'cn_0_0@e_b_e_c_e_d_e_e_e_f_e_g_e_h_gn_1_0'
+    echo $output | grep 'hpd_b_gq_c_gc_d_gBbe_hfp_b_gs_c_ge_d_gDbe_hlB_b_gu_c_gg'
     echo $output | grep '</Graphs>'
 }
 
 @test "BinConvert compressed v3 ising spin to base85" {
     run_no_stderr bin/convert_graph_to_base85 apps/ising_spin/ising_spin_8x8.xml.gz
     [ $status -eq 0 ]
-    echo $output | grep 'b_e_b_e_c_e_d_e_e_e_f_e_g_e_h_f_b_`'
-    echo $output | grep 'hpd_b_gq_c_gc_d_gBbe_hfp_b_gs_c_ge_d_'
+    echo $output | grep 'cn_0_0@e_b_e_c_e_d_e_e_e_f_e_g_e_h_gn_1_0'
+    echo $output | grep 'hpd_b_gq_c_gc_d_gBbe_hfp_b_gs_c_ge_d_gDbe_hlB_b_gu_c_gg'
     echo $output | grep '</Graphs>'
 }
 
@@ -27,8 +27,8 @@ load bats_helpers
     [ -f $WD/graph.xml.gz ]
     gunzip $WD/graph.xml.gz
     [ -f $WD/graph.xml ]
-    grep 'b_e_b_e_c_e_d_e_e_e_f_e_g_e_h_f_b_`' $WD/graph.xml
-    grep 'hpd_b_gq_c_gc_d_gBbe_hfp_b_gs_c_ge_d_' $WD/graph.xml
+    grep 'cn_0_0@e_b_e_c_e_d_e_e_e_f_e_g_e_h_gn_1_0' $WD/graph.xml
+    grep 'hpd_b_gq_c_gc_d_gBbe_hfp_b_gs_c_ge_d_gDbe_hlB_b_gu_c_ggx' $WD/graph.xml
     grep '</Graphs>' $WD/graph.xml
 }
 
