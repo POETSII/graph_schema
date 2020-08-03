@@ -2,8 +2,8 @@
 #include "../include/dumb_snn_source_from_file.hpp"
 #include "../include/network.hpp"
 
-#include "graph_persist_dom_reader.hpp"
-#include "graph_persist_sax_writer.hpp"
+#include "graph_persist_dom_reader_impl.hpp"
+#include "graph_persist_sax_writer_impl.hpp"
 
 #include <regex>
 #include <fstream>

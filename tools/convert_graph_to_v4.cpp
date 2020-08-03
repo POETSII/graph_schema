@@ -20,7 +20,7 @@ int main(int argc, char *argv[])
       dstFileName=std::string(argv[2]);
     }
 
-    auto writer=createSAXWriterV4OnFile(dstFileName.c_str());
+    auto writer=detail::GraphSAXWriterV4::createSAXWriterV4OnFile(dstFileName.c_str());
 
     loadGraphPull(nullptr, srcFileName, writer.get());
 

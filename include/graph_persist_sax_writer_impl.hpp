@@ -9,11 +9,11 @@
 std::shared_ptr<GraphLoadEvents> createSAXWriterOnFile(const std::string &path, const sax_writer_options &options)
 {
   if(options.format=="v3"){
-    return createSAXWriterV3OnFile(path, options);
+    return detail::GraphSAXWriterV3::createSAXWriterV3OnFile(path, options);
   }else if(options.format=="v4" || options.format.empty()){
-    return createSAXWriterV4OnFile(path, options);
+    return detail::GraphSAXWriterV4::createSAXWriterV4OnFile(path, options);
   }else if(options.format=="base85"){
-    return createSAXWriterBase85OnFile(path, options);
+    return detail::GraphSAXWriterBase85::createSAXWriterBase85OnFile(path, options);
   }else{
     throw std::runtime_error("Didnt understand format for SAXWriter : "+options.format);
   }

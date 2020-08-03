@@ -527,27 +527,29 @@ public:
     moveState(State_PostEdgeInstances, State_Graph);
     m_graphType.reset();
   }
+
+  static std::shared_ptr<GraphLoadEvents> createSAXWriterV4OnFile(const std::string &path, const sax_writer_options &options=sax_writer_options{})
+  {
+    if(!options.format.empty() && options.format!="v4"){
+      throw std::runtime_error("Attempt to create SAX writer with wrong format specified.");
+    }
+
+    bool compress=options.compress;
+    if(path.size() > 3 && path.substr(path.size()-3)==".gz" ){
+      compress=true;
+    }
+
+    xmlTextWriterPtr dst=xmlNewTextWriterFilename(path.c_str(), compress?1:0);
+    if(!dst)
+      throw std::runtime_error("createSAXWriterOnFile("+path+") - Couldn't create xmlTextWriter");
+
+    return std::make_shared<detail::GraphSAXWriterV4>(dst, options.sanity);
+  }
 };
 
 }; // detail
 
 
-std::shared_ptr<GraphLoadEvents> createSAXWriterV4OnFile(const std::string &path, const sax_writer_options &options=sax_writer_options{})
-{
-  if(!options.format.empty() && options.format!="v4"){
-    throw std::runtime_error("Attempt to create SAX writer with wrong format specified.");
-  }
 
-  bool compress=options.compress;
-  if(path.size() > 3 && path.substr(path.size()-3)==".gz" ){
-    compress=true;
-  }
-
-  xmlTextWriterPtr dst=xmlNewTextWriterFilename(path.c_str(), compress?1:0);
-  if(!dst)
-    throw std::runtime_error("createSAXWriterOnFile("+path+") - Couldn't create xmlTextWriter");
-
-  return std::make_shared<detail::GraphSAXWriterV4>(dst, options.sanity);
-}
 
 #endif

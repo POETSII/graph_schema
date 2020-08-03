@@ -1,7 +1,7 @@
 #include "graph.hpp"
 
 #include "xml_pull_parser.hpp"
-#include "graph_persist_sax_writer_base85.hpp"
+#include "graph_persist_sax_writer.hpp"
 
 #include <iostream>
 #include <fstream>
@@ -20,7 +20,9 @@ int main(int argc, char *argv[])
       dstFileName=std::string(argv[2]);
     }
 
-    auto writer=createSAXWriterBase85OnFile(dstFileName.c_str());
+    sax_writer_options options;
+    options.format="base85";
+    auto writer=createSAXWriterOnFile(dstFileName.c_str(), options);
 
     loadGraphPull(nullptr, srcFileName, writer.get());
 
