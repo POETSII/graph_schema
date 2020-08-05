@@ -309,6 +309,26 @@ private:
         dst<<tmp;
     }
 
+    void binaryToXmlV4ValueImplFloat(const char *pBinary, unsigned cbBinary, std::ostream &dst) const
+    {
+        assert(cbBinary == scalarTypeWidthBytes(m_type));
+        float val;
+        memcpy(&val, pBinary, sizeof(float));
+        int prec=dst.precision(9);
+        dst<<std::scientific<<val;
+        dst.precision(prec);
+    }
+
+    void binaryToXmlV4ValueImplDouble(const char *pBinary, unsigned cbBinary, std::ostream &dst) const
+    {
+        assert(cbBinary == scalarTypeWidthBytes(m_type));
+        double val;
+        memcpy(&val, pBinary, sizeof(double));
+        int prec=dst.precision(17);
+        dst<<std::scientific<<val;
+        dst.precision(prec);
+    }
+
     template<class T>
     void xmlV4ValueToBinaryImpl(std::istream &src, char *pBinary, unsigned cbBinary) const
     {
@@ -438,8 +458,8 @@ public:
         case ScalarType_int64_t:binaryToXmlV4ValueImpl<int64_t>(pBinary, cbBinary, dst); return;
 
         case ScalarType_half: throw std::runtime_error("Half not implemented yet.");
-        case ScalarType_float:binaryToXmlV4ValueImpl<float>(pBinary, cbBinary, dst); return;
-        case ScalarType_double:binaryToXmlV4ValueImpl<double>(pBinary, cbBinary, dst); return;
+        case ScalarType_float:binaryToXmlV4ValueImplFloat(pBinary, cbBinary, dst); return;
+        case ScalarType_double:binaryToXmlV4ValueImplDouble(pBinary, cbBinary, dst); return;
 
         case ScalarType_char: throw std::runtime_error("TODO: Is char actually a legal type for v4?");
 

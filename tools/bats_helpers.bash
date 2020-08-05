@@ -51,13 +51,42 @@ function make_test_wd() {
         wd=$(mkdtemp -d)
     else
         # inspired by https://github.com/ztombol/bats-file/blob/master/src/temp.bash
-        wd="$(get_graph_schema_dir)/testing/${BATS_TEST_FILENAME##*/}/${BATS_TEST_NUMBER}"
+        wd="${gsd}/testing/${BATS_TEST_FILENAME##*/}/${BATS_TEST_NUMBER}"
 
         ( [ -d "$wd" ] && rm -rf "$wd" )    
         mkdir -p $wd
     fi
     echo $wd
 }
+
+# Identify a working directory shared amongst all tests in file
+function get_bats_file_wd() {
+    local wd
+    local gsd=$(get_graph_schema_dir)
+
+    if [[ ! -d "${gsd}" ]] ; then
+        >&3 echo "# ERROR: Couldnt find graph_schema_dir, dont know how to make shared dir"
+        wd="/tmp/poets-graph_schema-testing/${BATS_TEST_FILENAME##*/}/_test_shared_dir"
+    else
+        wd="${gsd}/testing/${BATS_TEST_FILENAME##*/}/_test_shared_dir"
+    fi
+    echo $wd
+}
+
+# Create a working directory shared amongst all tests in a file
+# Should be called from setup_file
+function create_bats_file_wd() {
+    local wd=$(get_bats_file_wd)
+
+    if [[ "$wd" =~ ^.*/_test_shared_dir ]] ; then
+        ( [ -d "$wd" ] && rm -rf "$wd" )
+        mkdir -p $wd
+    fi
+
+    echo "${wd}"
+}
+
+
 
 
 # Looks for the xml v4 spec directory, and stores it in PIP0020_DIR.

@@ -44,7 +44,7 @@ endef
 
 
 gals_heat_fix_FILTERS_TIME = \
-  --bind-dev "*" "state" "timeNow" "color" "blend_colors( (255,255,0), (255,0,255), 0, 10, (value%10))"
+  --bind-dev "cell" "state" "t" "color" "blend_colors( (255,255,0), (255,0,255), 0, 10, (value%10))"
 
 gals_heat_fix_FILTERS_VALUE = \
   --bind-dev "cell" "state" "v" "color" "heat(-20000000, +20000000, value)"

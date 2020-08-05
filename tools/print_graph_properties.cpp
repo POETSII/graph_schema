@@ -108,6 +108,7 @@ public:
    uint64_t srcDevInst,  const DeviceTypePtr &srcDevType, const OutputPinPtr &srcPin,
    int sendIndex,
    const TypedDataPtr &properties,
+   const TypedDataPtr &state,
   rapidjson::Document &&metadata
   ) override
   {

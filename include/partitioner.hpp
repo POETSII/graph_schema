@@ -41,6 +41,7 @@ private:
         OutputPinPtr srcPin;
         InputPinPtr dstPin;
         TypedDataPtr properties;
+        TypedDataPtr state;
         rapidjson::Document metadata;
     };
 
@@ -175,6 +176,7 @@ private:
         uint64_t dstDevInst, const DeviceTypePtr &dstDevType, const InputPinPtr &dstPin,
         uint64_t srcDevInst,  const DeviceTypePtr &srcDevType, const OutputPinPtr &srcPin,
         const TypedDataPtr &properties,
+        const TypedDataPtr &state,
         rapidjson::Document &&metadata
     ) override
     {
@@ -188,7 +190,7 @@ private:
         if(src==dst)
             return;
 
-        m_edges.push_back(std::make_shared<edge_t>(edge_t{weight,src,dst,srcPin,dstPin,properties,std::move(metadata)}));
+        m_edges.push_back(std::make_shared<edge_t>(edge_t{weight,src,dst,srcPin,dstPin,properties,state,std::move(metadata)}));
         auto e=m_edges.back();
         src->outputs.push_back(e);
         dst->inputs.push_back(e);
@@ -456,6 +458,7 @@ public:
                 nHandles[e->dst->index], e->dst->deviceType, e->dstPin,
                 nHandles[e->src->index], e->src->deviceType, e->srcPin,
                 e->properties,
+                TypedDataPtr(),
                 std::move(e->metadata)
             );
         }

@@ -102,7 +102,7 @@ void parseElement(TextReader *reader, ElementBindings *bindings)
     if(bindings->parseAsNode()){
         Element *elt=(Element *)reader->expand();
         bindings->onNode(elt);
-        delete elt;
+        xmlpp::Node::free_wrappers(elt->cobj());
         reader->next();
         return;
     }

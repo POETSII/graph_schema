@@ -806,6 +806,7 @@ public:
         uint64_t srcDevInst,  const DeviceTypePtr &srcDevType, const OutputPinPtr &srcPin,
         int sendIndex,
         const TypedDataPtr &properties,
+        const TypedDataPtr &state,
         rapidjson::Document &&metadata
     ) override
     {
@@ -828,7 +829,7 @@ public:
         edge.route.sourceDevicePin=srcPin->getIndex();
         edge.inputPin=dstPin;
         edge.properties=properties;
-        edge.state=dstPin->getStateSpec()->create();
+        edge.state=state;
         edge.sendIndex=sendIndex;
 
         auto &srcDev = m_devices.at(edge.route.sourceDeviceAddress);

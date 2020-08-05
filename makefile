@@ -46,7 +46,7 @@ endif
 
 # Default is moderately optimised with asserts
 # dwarf-4 sometimes produces better debug info (?)
-CPPFLAGS += -std=c++17 -O1 -gdwarf-4 -v -ftime-report
+CPPFLAGS += -std=c++17 -O1 -gdwarf-4 
 
 # Try to help libubsan merge RTTI on imported classes
 # https://stackoverflow.com/a/57379835
@@ -347,6 +347,7 @@ clean :
 	-rm -rf bin/*
 	-rm -rf demos/*
 	-rm -rf providers/*
+	-rm -f src/*.o
 	-rm -rf external/trang-20091111
 	-rm -rf external/jing-20081028
 	-rm -rf derived/*

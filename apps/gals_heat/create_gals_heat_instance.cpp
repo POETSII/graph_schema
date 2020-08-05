@@ -127,7 +127,7 @@ int main(int argc, char *argv[])
         gInst,
         dst.first, dst.second ? dirichletType : cellType, dst.second ? dirichletIn : cellIn,
         src.first, src.second ? dirichletType : cellType, src.second ? dirichletOut : cellOut,
-        TypedDataPtr()
+        TypedDataPtr(), TypedDataPtr()
        );
     };
   

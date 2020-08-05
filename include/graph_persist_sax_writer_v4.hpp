@@ -452,7 +452,7 @@ public:
     xmlTextWriterStartElement(m_dst, (const xmlChar *)"EdgeInstances");
   }
 
-  virtual void onEdgeInstance
+  void onEdgeInstance
   (
    uint64_t gId,
    uint64_t dstDevInst, const DeviceTypePtr &dstDevType, const InputPinPtr &dstPin,

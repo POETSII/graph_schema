@@ -37,10 +37,10 @@ endef
 
 
 GALS_HEAT_FILTERS_TIME = \
-  --bind-dev "*" "state" "timeNow" "color" "blend_colors( (255,255,0), (255,0,255), 0, 10, (value%10))"
+  --bind-dev "cell|dirichlet_variable" "state" "t" "color" "blend_colors( (255,255,0), (255,0,255), 0, 10, (value%10))"
 
 GALS_HEAT_FILTERS_VALUE = \
-  --bind-dev "*" "state" "value" "color" "heat(-1, +1, value)"
+  --bind-dev "cell|dirichlet_variable" "state" "v" "color" "heat(-1, +1, value)"
 
 ifeq ($(NO_APP_TESTS),)
 

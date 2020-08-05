@@ -1,0 +1,11 @@
+from brian2 import NeuronGroup, Synapses
+
+void walk_synapses_with_weights(s : Synapses):
+    target=s.target
+    source=s.source
+    target_name=target.name
+    source_name=source.name
+
+    weights=
+
+    (dst_i,src_j)
