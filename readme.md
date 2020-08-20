@@ -1,4 +1,4 @@
-graph_schema - Version 3
+graph_schema - Version 4
 ========================
 
 This repository is intended to describe the format for graphs via:
@@ -26,14 +26,19 @@ unless `make test` works.
 Current TODO list
 -----------------
 
-- Add externals to epoch_sim
 - Add externals to graph_sim
 - Correctly hook up __halt__ if it is present (then deprecate fake_handler_exit)
 
 Current BUG list
 ----------------
 
-- None known
+Version 4.3 features
+
+* epoch_sim supports externals and halt
+* epoch_sim can now do out of order messages, so can find more bugs
+* New high-density base85 coding for graphs (works, but experimental)
+* New tools for comparing topologies: `bin/topologically_compare_graph_instances` and `bin/topologically_diff_graph_instances`
+* Better support for v4 xml in C++ producers and consumers, with more uniform API
 
 Version 4.2 features
 --------------------
@@ -659,6 +664,28 @@ Parameters:
 
 You can apply different filters for different device types, and so ignore devices
 which don't represent pixels.
+
+### bin/structurally_compare_graph_types
+
+Takes two graph-types and checks that they are the same in terms of
+the device and message structures. This does _not_ check whether the
+code is identical.
+
+### bin/topologically_compare_graph_instances
+
+Takes two graph instances and checks that the topology is the same,
+i.e. it checks that there is the same set of device and edge instances,
+and that they have the same properties.
+
+### bin/topologically_diff_graph_instances
+
+Takes two graph instances and checks that the topology is the same,
+i.e. it checks that there is the same set of device and edge instances,
+and that they have the same properties. In addition, it tries to
+print out a diff which highlights where the actually changes are.
+
+This is similar to `bin/topologically_compare_graph_instances`, but the
+ability to also print diffs means it might be slower for large graphs.
 
 ### tools/preprocess_graph_type.py
 
