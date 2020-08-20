@@ -38,6 +38,18 @@ $(GS_ROOT)/bin/calculate_graph_static_properties :
 %.v4.static_properties.json : %.v4.xml.gz $(GS_ROOT)/bin/calculate_graph_static_properties %.benchmark_properties.json
 	$(GS_ROOT)/bin/calculate_graph_static_properties $< $*.benchmark_properties.json > $@ 
 
+%.base85.xml.gz : %.v4.xml.gz $(GS_ROOT)/bin/convert_graph_to_base85 
+	$(GS_ROOT)/bin/convert_graph_to_base85 $< $@
+
+%.xz : %.gz
+	gunzip $< -c | xz --stdout > $@
+
+# This is insane, I know. However, you can generate big files in less time
+# using this method, plus sometimes they are actually smaller than straight xz
+# by quite a large margin
+%.gz.xz : %.gz
+	xz --stdout $< > $@
+
 $(DISTRIB_DIR)/% : $(OUTPUT_DIR)/%
 	mkdir -p $(dir $@)
 	cp $< $@
@@ -57,12 +69,12 @@ $(OUTPUT_DIR)/$1/$1_s$2.benchmark_properties.json :
 	mkdir -p $(OUTPUT_DIR)/$1
 	> $$@ echo '{ "benchmark_group":"$1", "benchmark_instance_id":"$1_s$2", "benchmark_instance_scale":$2 }'
 
-$(OUTPUT_DIR)/$1/$1_s$2.v3.xml.gz :
+$(OUTPUT_DIR)/$1/$1_s$2.v3.xml.gz : $4
 	mkdir -p $(OUTPUT_DIR)/$1
 	GRAPH_SCHEMA_DEFAULT_XML_OUTPUT_VERSION=3 $(subst __S__,$2,$3) | gzip - > $$@
 
-$(OUTPUT_DIR)/$1/$1_s$2.v4.xml.gz :
-	mkdir -p $1
+$(OUTPUT_DIR)/$1/$1_s$2.v4.xml.gz : $4
+	mkdir -p $(OUTPUT_DIR)/$1
 	GRAPH_SCHEMA_DEFAULT_XML_OUTPUT_VERSION=4 $(subst __S__,$2,$3) | gzip - > $$@
 
 #################################################
@@ -251,6 +263,13 @@ $(OUTPUT_DIR)/$1/$1_s$2.v4.poems_sim.status : $(OUTPUT_DIR)/$1/$1_s$2.v4.xml.gz 
 
 $1_ALL_V3_XML_GZ += $(OUTPUT_DIR)/$1/$1_s$2.v3.xml.gz
 $1_ALL_V4_XML_GZ += $(OUTPUT_DIR)/$1/$1_s$2.v4.xml.gz
+$1_ALL_BASE85_XML_GZ += $(OUTPUT_DIR)/$1/$1_s$2.base85.xml.gz
+
+$1_ALL_V4_XML_XZ += $(OUTPUT_DIR)/$1/$1_s$2.v4.xml.xz
+$1_ALL_BASE85_XML_XZ += $(OUTPUT_DIR)/$1/$1_s$2.base85.xml.xz
+
+$1_ALL_V4_XML_GZ_XZ += $(OUTPUT_DIR)/$1/$1_s$2.v4.xml.gz.xz
+$1_ALL_BASE85_XML_GZ_XZ += $(OUTPUT_DIR)/$1/$1_s$2.base85.xml.gz.xz
 
 $1_ALL_V3_STATIC_PROPERTIES += $(OUTPUT_DIR)/$1/$1_s$2.v3.static_properties.json
 $1_ALL_V3_EPOCH_SIM += $(OUTPUT_DIR)/$1/$1_s$2.v3.epoch_sim.status
@@ -298,6 +317,11 @@ all_v4_poems_engines : $(OUTPUT_DIR)/$1/$1.v4.poems.engine
 
 $1_all_v3_xml_gz : $($1_ALL_V3_XML_GZ)
 $1_all_v4_xml_gz : $($1_ALL_V4_XML_GZ)
+$1_all_base85_xml_gz : $($1_ALL_BASE85_XML_GZ)
+$1_all_v4_xml_xz : $($1_ALL_V4_XML_XZ)
+$1_all_base85_xml_xz : $($1_ALL_BASE85_XML_XZ)
+$1_all_v4_xml_gz_xz : $($1_ALL_V4_XML_GZ_XZ)
+$1_all_base85_xml_gz_xz : $($1_ALL_BASE85_XML_GZ_XZ)
 
 $1_all_v3_static_properties : $($1_ALL_V3_STATIC_PROPERTIES)
 $1_all_v3_graph_sim : $($1_ALL_V3_GRAPH_SIM)
@@ -311,6 +335,14 @@ ALL_CLASSES += $1
 
 all_v3_xml_gz : $1_all_v3_xml_gz
 all_v4_xml_gz : $1_all_v4_xml_gz
+all_base85_xml_gz : $1_all_base85_xml_gz
+all_v4_xml_xz : $1_all_v4_xml_xz
+all_base85_xml_xz : $1_all_base85_xml_xz
+all_v4_xml_gz_xz : $1_all_v4_xml_gz_xz
+all_base85_xml_gz_xz : $1_all_base85_xml_gz_xz
+
+all_xml_xz : all_v4_xml_xz all_base85_xml_xz
+all_xml_gz_xz : all_v4_xml_gz_xz all_base85_xml_gz_xz
 
 all_v3_static_properties : $1_all_v3_static_properties
 all_v3_epoch_sim : $1_all_v3_epoch_sim

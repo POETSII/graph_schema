@@ -52,6 +52,9 @@ The files that can appear are:
 - `{CLASS}/{CLASS}_s{S}.v4.xml.gz` : Version 4 instance of the XML, gzipped up. This _should_
   be structurally and functionally identical to the v3 version.
 
+- `{CLASS}/{CLASS}_s{S}.base85.xml.gz` : Base 85 (version 4) instance of the XML, gzipped up. This _should_
+  be structurally and functionally identical to the v3 version.
+
 - `{CLASS}/{CLASS}_s{S}.v3.static_properties.json` : Some summary statistics for the graph, which
     describes numbers of devices, edges, degree distribution, edge type count, and so on. It is
     calculated from the v3 xml, but should be the same for v4.
