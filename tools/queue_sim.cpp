@@ -1,3 +1,5 @@
+#include "fenv_control.hpp"
+
 #include "graph.hpp"
 
 #include <libxml++/parsers/domparser.h>
@@ -861,7 +863,7 @@ struct QueueSim
     return index;
   }
 
-  void onEdgeInstance(uint64_t gId, uint64_t dstDevIndex, const DeviceTypePtr &dstDevType, const InputPinPtr &dstInput, uint64_t srcDevIndex, const DeviceTypePtr &srcDevType, const OutputPinPtr &srcOutput, int sendIndex, const TypedDataPtr &properties, rapidjson::Document &&) override
+  void onEdgeInstance(uint64_t gId, uint64_t dstDevIndex, const DeviceTypePtr &dstDevType, const InputPinPtr &dstInput, uint64_t srcDevIndex, const DeviceTypePtr &srcDevType, const OutputPinPtr &srcOutput, int sendIndex, const TypedDataPtr &properties, const TypedDataPtr &state, rapidjson::Document &&) override
   {
     device_t *dstDevice=m_devices.at(dstDevIndex);
     device_t *srcDevice=m_devices.at(srcDevIndex);
@@ -874,7 +876,7 @@ struct QueueSim
     edge.pinName=intern(dstInput->getName());
     edge.device=dstDevice;
     edge.pin=dstInput;
-    edge.state=dstInput->getStateSpec()->create();
+    edge.state=state;
     edge.properties=properties;
 
     unsigned dstQueue=dstDevice->owner;
@@ -934,6 +936,7 @@ void onsignal_close_log (int)
 int main(int argc, char *argv[])
 {
   try{
+    DisableDenormals();
 
     g_timeNowBase=getNow();
 

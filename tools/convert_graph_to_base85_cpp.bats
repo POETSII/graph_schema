@@ -28,7 +28,7 @@ load bats_helpers
     gunzip $WD/graph.xml.gz
     [ -f $WD/graph.xml ]
     grep 'cn_0_0@e_b_e_c_e_d_e_e_e_f_e_g_e_h_gn_1_0' $WD/graph.xml
-    grep 'hpd_b_gq_c_gc_d_gBbe_hfp_b_gs_c_ge_d_gDbe_hlB_b_gu_c_ggx' $WD/graph.xml
+    grep 'hpd_b_gq_c_gc_d_gBbe_hfp_b_gs_c_ge_d_gDbe_hlB_b_gu_c_gg' $WD/graph.xml
     grep '</Graphs>' $WD/graph.xml
 }
 

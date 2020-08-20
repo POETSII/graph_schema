@@ -18,6 +18,8 @@
 #include <thread>
 #include <chrono>
 
+#include "fenv_control.hpp"
+
 #include "poets_protocol/InProcessBinaryUpstreamConnection.hpp"
 
 #include <cstring>
@@ -249,7 +251,7 @@ struct InProcMessageBuffer
         const char *msg,
         ...
     ){
-      if(level < logLevel){
+      if(level < (int)logLevel){
         va_list va;
         va_start(va, msg);
         vfprintf(stderr, msg, va);
@@ -360,6 +362,16 @@ struct EpochSim
   std::function<void (const char*,int)> m_onDeviceExit;
 
   std::shared_ptr<InProcMessageBuffer> m_pExternalBuffer;
+
+  struct delayed_message_t
+  {
+    std::string idSend;
+    output *out;
+    TypedDataPtr payload;
+    unsigned src_epoch;
+  };
+
+  std::vector<delayed_message_t> m_delayed;
 
   uint64_t m_unq;
 
@@ -557,6 +569,11 @@ struct EpochSim
   }
 
   double m_statsSends=0;
+  double m_statsDelays=0;
+  double m_statsShearCount=0;
+  double m_statsShearSum=0;
+  double m_statsShearSumSqr=0;
+  double m_statsShearMax=0;
   unsigned m_epoch=0;
 
 //Generate either a zero initialised message, or a random message based on
@@ -628,7 +645,7 @@ struct EpochSim
   }
 
   template<class TRng>
-  bool step(TRng &rng, double probSend,bool capturePreEventState)
+  bool step(TRng &rng, double probSend,bool capturePreEventState, double probDelay)
   {
 
     // Within each step every object gets the chance to send a message with probability probSend
@@ -647,6 +664,82 @@ struct EpochSim
       tmp<<"Epoch "<<m_epoch<<", Send: ";
       sendServices.setPrefix(tmp.str().c_str());
     }
+
+  
+
+    auto do_recv=[&](output &out, const TypedDataPtr &message, const std::string &idSend, unsigned srcEpoch)
+    {
+      auto &dst=m_devices[out.dstDevice];
+      auto &in=dst.inputs[out.dstPinIndex];
+      auto &slot=in[out.dstPinSlot];
+
+      slot.firings++;
+
+      if(srcEpoch!=m_epoch){
+        double shear=m_epoch-srcEpoch;
+        m_statsShearCount++;
+        m_statsShearMax=std::max(m_statsShearMax, shear);
+        m_statsShearSum+=shear;
+        m_statsShearSumSqr+=shear*shear;
+      }
+
+      if(logLevel>3){
+        fprintf(stderr, "    sending to device %d = %s\n", dst.index, dst.id.c_str());
+      }
+
+      const auto &pin=dst.type->getInput(out.dstPinIndex);
+
+      if(!dst.isExternal){
+        TypedDataPtr prevState;
+        if(capturePreEventState){
+          prevState=dst.state.clone();
+        }
+        receiveServices.setDevice(out.dstDeviceId, out.dstInputName);
+        try{
+          pin->onReceive(&receiveServices, m_graphProperties.get(), dst.properties.get(), dst.state.get(), slot.properties.get(), slot.state.get(), message.get());
+        }catch(provider_assertion_error &e){
+          fprintf(stderr, "Caught handler exception during Receive. devId=%s, dstDevType=%s, dstPin=%s.\n", dst.name, dst.type->getId().c_str(), pin->getName().c_str());
+          fprintf(stderr, "  %s\n", e.what());
+
+          fprintf(stderr, "     message = %s\n", pin->getMessageType()->getMessageSpec()->toJSON(message).c_str());
+          if(capturePreEventState){
+            fprintf(stderr, "  preRecvState = %s\n", dst.type->getStateSpec()->toJSON(prevState).c_str());
+          }
+          fprintf(stderr, "     currState = %s\n", dst.type->getStateSpec()->toJSON(dst.state).c_str());
+
+          throw;
+        }
+        dst.readyToSend = dst.type->calcReadyToSend(&receiveServices, m_graphProperties.get(), dst.properties.get(), dst.state.get());
+      }else{
+        throw std::runtime_error("Should not be handling external messages here.");
+      }
+
+      if(m_log){
+        std::vector<std::pair<bool,std::string> > tags;
+        std::swap(tags, m_checkpointKeys);
+
+        auto id=nextSeqUnq();
+        auto idStr=std::to_string(id);
+
+        m_log->onRecvEvent(
+          idStr.c_str(),
+          m_epoch,
+          0.0,
+          std::move(tags),
+          dst.type,
+          dst.name,
+          dst.readyToSend,
+          id,
+          std::vector<std::string>(),
+          dst.state,
+          pin,
+          idSend.c_str()
+        );
+      }
+    };
+    
+
+   
 
     /// Drain any incoming external messages first;
     if(m_pExternalBuffer){
@@ -693,6 +786,27 @@ struct EpochSim
         m_pExternalBuffer->wait_for_client_to_drain();
     }
 
+    ///////////////////////////////////////
+    // Pick any random messages in the buffer
+
+    if(!m_delayed.empty()){
+      double probRelease=1-probDelay;
+      
+      std::binomial_distribution<> dist(m_delayed.size(), probRelease);
+      unsigned n=dist(rng);
+      assert(n <= m_delayed.size());
+
+      for(int i=0; i<n; i++){
+        unsigned sel=rng() % m_delayed.size();
+        auto &m=m_delayed.at(sel);
+        do_recv(*m.out, m.payload, m.idSend, m.src_epoch);
+        std::swap(m_delayed[sel], m_delayed.back());
+        m_delayed.resize(m_delayed.size()-1);
+      }
+    }
+
+    ////////////////////////////////////////
+    //
 
     std::vector<int> sendSel(m_devices.size());
 
@@ -715,6 +829,8 @@ struct EpochSim
     double threshSendDbl=ldexp(probSend, 32);
     uint32_t threshSend=(uint32_t)std::min((double)0xFFFFFFFFul,std::max(0.0,threshSendDbl));
     uint32_t threshRng=rng();
+
+    uint32_t threshDelay=(uint32_t)std::min((double)0xFFFFFFFFul,std::max(0.0,ldexp(probDelay,32)));
 
     for(unsigned i=0;i<m_devices.size();i++){
       unsigned index=(i+rot)%m_devices.size();
@@ -865,40 +981,9 @@ struct EpochSim
       
       bool sendToExternalConnection=false;
       for(auto &out : *pOutputVec){
-        
-        auto &dst=m_devices[out.dstDevice];
-        auto &in=dst.inputs[out.dstPinIndex];
-        auto &slot=in[out.dstPinSlot];
+        auto &dst = m_devices[out.dstDevice];
 
-        slot.firings++;
-
-        if(logLevel>3){
-          fprintf(stderr, "    sending to device %d = %s\n", dst.index, dst.id.c_str());
-        }
-
-        const auto &pin=dst.type->getInput(out.dstPinIndex);
-
-        if(!dst.isExternal){
-          if(capturePreEventState){
-            prevState=dst.state.clone();
-          }
-          receiveServices.setDevice(out.dstDeviceId, out.dstInputName);
-          try{
-            pin->onReceive(&receiveServices, m_graphProperties.get(), dst.properties.get(), dst.state.get(), slot.properties.get(), slot.state.get(), message.get());
-          }catch(provider_assertion_error &e){
-            fprintf(stderr, "Caught handler exception during Receive. devId=%s, dstDevType=%s, dstPin=%s.\n", dst.name, dst.type->getId().c_str(), pin->getName().c_str());
-            fprintf(stderr, "  %s\n", e.what());
-
-            fprintf(stderr, "     message = %s\n", pin->getMessageType()->getMessageSpec()->toJSON(message).c_str());
-            if(capturePreEventState){
-              fprintf(stderr, "  preRecvState = %s\n", dst.type->getStateSpec()->toJSON(prevState).c_str());
-            }
-            fprintf(stderr, "     currState = %s\n", dst.type->getStateSpec()->toJSON(dst.state).c_str());
-
-            throw;
-          }
-          dst.readyToSend = dst.type->calcReadyToSend(&receiveServices, m_graphProperties.get(), dst.properties.get(), dst.state.get());
-        }else if(dst.index==m_haltDeviceIndex){
+        if(dst.index==(unsigned)m_haltDeviceIndex){
           // Have to special case the halt
           fprintf(stderr, "Received halt message from somewhere.\n");
           if(message.payloadSize()!=sizeof(halt_message_type)){
@@ -908,32 +993,27 @@ struct EpochSim
             m_pExternalBuffer->set_halt_message(message);
             m_haltMessage=message;
           }
-        }else{
+          continue;
+        }
+        if(dst.isExternal){
           sendToExternalConnection=true;
+          continue;
         }
-
-        if(m_log){
-          std::vector<std::pair<bool,std::string> > tags;
-          std::swap(tags, m_checkpointKeys);
-
-          auto id=nextSeqUnq();
-          auto idStr=std::to_string(id);
-
-          m_log->onRecvEvent(
-            idStr.c_str(),
-            m_epoch,
-            0.0,
-            std::move(tags),
-            dst.type,
-            dst.name,
-            dst.readyToSend,
-            id,
-            std::vector<std::string>(),
-            dst.state,
-            pin,
-            idSend.c_str()
-          );
+        
+        threshRng= threshRng*1664525+1013904223UL;
+        if(threshRng < threshDelay){
+          m_delayed.push_back(delayed_message_t{
+            idSend,
+            &out,
+            message,
+            m_epoch
+          });
+          anyReady=true;
+          m_statsDelays++;
+          continue;
         }
+        
+        do_recv(out, message, idSend, m_epoch);
 
         anyReady = anyReady || dst.anyReady();
       }
@@ -946,7 +1026,7 @@ struct EpochSim
       }
     }
     ++m_epoch;
-    return sent || anyReady;
+    return sent || anyReady || !m_delayed.empty();
   }
 
 
@@ -964,6 +1044,8 @@ void usage()
   fprintf(stderr, "  --snapshots interval destFile\n");
   fprintf(stderr, "  --log-events destFile\n");
   fprintf(stderr, "  --prob-send probability\n");
+  fprintf(stderr, "  --prob-delay probability\n");
+  fprintf(stderr, "  --rng-seed seed\n");
   fprintf(stderr, "  --accurate-assertions : Capture device state before send/recv in case of assertions.\n");
   fprintf(stderr, "  --message-init n: 0 (default) - Zero initialise all messages, 1 - All messages are randomly inisitalised, 2 - Randomly zero or random inisitalise\n");
   fprintf(stderr, "  --external spec [args]* : External spec, plus any args. Must be the last option\n");
@@ -1008,6 +1090,7 @@ int main(int argc, char *argv[])
 
 
   try{
+    DisableDenormals();
 
     std::string srcFilePath="";
 
@@ -1018,7 +1101,7 @@ int main(int argc, char *argv[])
 
     std::string checkpointName;
 
-    unsigned statsDelta=1;
+    unsigned statsDelta=10;
 
     int maxSteps=INT_MAX;
     int max_contiguous_idle_steps=10;
@@ -1027,6 +1110,8 @@ int main(int argc, char *argv[])
 
     //double probSend=0.9;
     double probSend=1.0;
+    double probDelay=0.0;
+    std::mt19937_64 rng;
 
     bool enableAccurateAssertions=false;
 
@@ -1071,6 +1156,29 @@ int main(int argc, char *argv[])
           usage();
         }
         probSend=strtod(argv[ia+1], 0);
+        if(probSend < ldexp(2,-10) || probSend>1){
+          fprintf(stderr, "Probability of sending must be in range [2^-10,1] ");
+          usage();
+        }
+        ia+=2;
+      }else if(!strcmp("--prob-delay",argv[ia])){
+        if(ia+1 >= argc){
+          fprintf(stderr, "Missing argument to --prob-delay\n");
+          usage();
+        }
+        probDelay=strtod(argv[ia+1], 0);
+        if(probDelay < 0 || probDelay>=(1-ldexp(2,-10))){
+          fprintf(stderr, "Probability of sending must be in range [0,1-2^-10) ");
+          usage();
+        }
+        ia+=2;
+      }else if(!strcmp("--rng-seed",argv[ia])){
+        if(ia+1 >= argc){
+          fprintf(stderr, "Missing argument to --rng-seed\n");
+          usage();
+        }
+        unsigned seed=strtoull(argv[ia+1], nullptr, 0);
+        rng.seed(seed);
         ia+=2;
       }else if(!strcmp("--snapshots",argv[ia])){
         if(ia+2 >= argc){
@@ -1213,7 +1321,7 @@ int main(int argc, char *argv[])
           fanout.resize(f.size());
           for(unsigned i=0; i<f.size(); i++){
             const auto &d=f[i];
-            if(graph.m_devices[d.dstDevice].isExternal && (d.dstDevice!=graph.m_haltDeviceIndex)){
+            if(graph.m_devices[d.dstDevice].isExternal && (d.dstDevice!=(unsigned)graph.m_haltDeviceIndex)){
               fanout[i]=makeEndpoint(poets_device_address_t{d.dstDevice}, poets_pin_index_t{d.dstPinIndex});
             }else{
               fanout[i]=poets_endpoint_address_t();
@@ -1224,7 +1332,7 @@ int main(int argc, char *argv[])
           fanout.reserve(f.size());
           for(unsigned i=0; i<f.size(); i++){ 
             const auto &d=f[i];
-            if(graph.m_devices[d.dstDevice].isExternal && (d.dstDevice!=graph.m_haltDeviceIndex)){
+            if(graph.m_devices[d.dstDevice].isExternal && (d.dstDevice!=(unsigned)graph.m_haltDeviceIndex)){
               fanout.push_back(makeEndpoint(poets_device_address_t{d.dstDevice}, poets_pin_index_t{d.dstPinIndex}));
             }
           }
@@ -1340,9 +1448,6 @@ int main(int argc, char *argv[])
       fprintf(stderr, "Inproc external is connected.\n");
     }
 
-
-    std::mt19937 rng;
-
     graph.init();
 
     if(snapshotWriter){
@@ -1360,14 +1465,24 @@ int main(int argc, char *argv[])
         break;
       }
 
-      bool running =  !graph.m_deviceExitCalled && graph.step(rng, probSend, capturePreEventState);
+      bool running =  !graph.m_deviceExitCalled && graph.step(rng, probSend, capturePreEventState, probDelay);
 
       if(logLevel>2 || i==nextStats){
-        fprintf(stderr, "Epoch %u : sends/device/epoch = %f (%f / %u)\n\n", i, graph.m_statsSends / graph.m_devices.size() / statsDelta, graph.m_statsSends/statsDelta, (unsigned)graph.m_devices.size());
+        fprintf(stderr, "Epoch %u : sends/device/epoch = %f (%g / %u), delayedMsgs/epoch = %g,  meanShear = %g, maxShear = %g\n\n", i,
+          graph.m_statsSends / graph.m_devices.size() / statsDelta, graph.m_statsSends/statsDelta, (unsigned)graph.m_devices.size(),
+          graph.m_statsDelays / (double)statsDelta,
+          graph.m_statsShearSum / graph.m_statsShearCount,
+          graph.m_statsShearMax
+        );
       }
       if(i==nextStats){
         nextStats=nextStats+statsDelta;
         graph.m_statsSends=0;
+        graph.m_statsDelays=0;
+        graph.m_statsShearCount=0;
+        graph.m_statsShearSum=0;
+        graph.m_statsShearSumSqr=0;
+        graph.m_statsShearMax=0;
       }
 
       if(snapshotWriter && i==nextSnapshot){

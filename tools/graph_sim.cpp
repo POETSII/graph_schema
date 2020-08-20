@@ -1,3 +1,5 @@
+#include "fenv_control.hpp"
+
 #include "simulator_context.hpp"
 #include "graph_persist_dom_reader.hpp"
 
@@ -40,6 +42,8 @@ void onsignal_close_resources (int)
 
 int main(int argc, char *argv[])
 {
+    DisableDenormals();
+
     std::string srcFilePath="-";
 
     std::string logSinkName;

@@ -8,6 +8,10 @@ function test_graph {
     run bin/epoch_sim $1
     [[ $status -eq 0 ]]
     echo $output | grep "exit_node:finished : _HANDLER_EXIT_SUCCESS_9be65737_"
+
+    run bin/epoch_sim --prob-send 0.5 --prob-delay 0.5 $1
+    [[ $status -eq 0 ]]
+    echo $output | grep "exit_node:finished : _HANDLER_EXIT_SUCCESS_9be65737_"
     
     run bin/graph_sim --strategy FIFO $1
     [[ $status -eq 0 ]]

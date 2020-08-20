@@ -705,6 +705,8 @@ class GraphTypeReference(object):
 
 
 class DeviceInstance(object):
+    __slots__ = ["parent", "id", "device_type", "properties", "state", "metadata"]
+
     def __init__(self,parent,id,device_type,properties=None,state=None,metadata=None):
         if __debug__:
             if(properties is not None and not is_refinement_compatible(device_type.properties,properties)):
@@ -716,6 +718,10 @@ class DeviceInstance(object):
         self.properties=properties
         self.state=state
         self.metadata=metadata
+
+    @property
+    def is_external(self):
+        return self.device_type.is_external
 
     def set_property(self, name, value):
         if self.properties==None:
@@ -736,6 +742,11 @@ class DeviceInstance(object):
 
 
 class EdgeInstance(object):
+
+    __slots__ = [
+        "parent",  "id",  "dst_device" , "src_device", "message_type",
+        "dst_pin", "src_pin", "properties",  "state", "metadata",  "send_index"
+    ]
 
     # Upgrade note: The state argument added as keyword only, as it is obscure, and experience from adding state to
     # DeviceInstance caused a lot of problems

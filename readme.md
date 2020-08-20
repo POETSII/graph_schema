@@ -382,10 +382,21 @@ python tools/convert_43_graph_to_v3.py <path-to-v4-XML> > <path-to-new-XML-file>
 This is an epoch based orchestrator. In each epoch, each device gets a chance to
 send from one port, with probability `probSend`. The order in which devices send
 in each round is somewhat randomised. All devices are always ready to recieve, so
-there is no blocking or transmission delay. Note that this simulator tends to
+by default there is no blocking or transmission delay. Note that this simulator tends to
 be very "nice", and makes applications that are sensitive to ordering appear
 to work. epoch_sim is good for initial debugging and dev, but does not  guarantee
 it will work in hardware.
+
+Epoch sim can now also simulate some elements of out-of-order transmission
+and message over-taking. If you use the `--prob-delay` option, you can
+specify the probability that a given message _delivery_ will be delayed.
+So for example, if you specify a delay probability of 0.5, then every
+message that can be received in an epoch has a 50/50 chance of actual
+delivery. Any message that is not delivered will be saved in a buffer,
+and retried in the next epoch. In the next epoch any buffered messages
+will again be given a 50/50 chance of delivery. So in general, if you
+select `probDelay>0`, the number of epochs taken to receive any 
+given message is a geometric distribution with parameter `probDelay`.
 
 Example usage:
 ```
@@ -409,7 +420,10 @@ Parameters:
   the given file.
 
 - `--prob-send probability` : Control the probability that a device ready to send
-  gets to send within each epoch. Default is 0.75.
+  gets to send within each epoch. Default is 1.00.
+
+- `--prob-delay probability` : Control the probability that a message that could
+  be received in the current epoch is delayed to the next epoch. Default is 0.0.
 
 - `--log-events destFile` : Log all events that happen into a complete history. This
   can be processed by other tools, such as `tools/render_event_log_as_dot.py'.

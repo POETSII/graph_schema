@@ -9,7 +9,7 @@ setup() {
 }
 
 @test "simulate ising_spin using epoch_sim for 4 steps" {
-    run bin/epoch_sim --max-steps 5 apps/ising_spin/ising_spin_8x8.xml 
+    run bin/epoch_sim --max-steps 5 --stats-delta 1 apps/ising_spin/ising_spin_8x8.xml 
     echo $output | grep "Epoch 4"
     echo $output | grep "Done"
 }

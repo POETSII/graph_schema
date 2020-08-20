@@ -1,6 +1,8 @@
 #ifndef graph_provider_helpers_hpp
 #define graph_provider_helpers_hpp
 
+#include "fenv_control.hpp"
+
 #include "graph.hpp"
 
 #include <unordered_map>

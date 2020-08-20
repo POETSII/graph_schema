@@ -52,6 +52,14 @@ CPPFLAGS += -std=c++17 -O1 -gdwarf-4
 # https://stackoverflow.com/a/57379835
 CPPFLAGS += -rdynamic
 
+# In some cases we want to try to achieve reproducible floating-point,
+# including with no denormals. This (hopefully) convinces gcc not to
+# optimise past those things. 
+# Using SSE is generally a good things anyway
+CPPFLAGS+= -mfpmath=sse -msse2
+# These may inhibit optimisations
+CPPFLAGS+= -frounding-math -fsignaling-nans
+
 # Used to indicate that functions should be linked in as
 # seperate objects.
 CPPFLAGS += -DPOETS_GRAPH_SCHEMA_SEPERATE_COMPILATION=1
@@ -303,7 +311,8 @@ include tools/partitioner.inc
 demos : $(ALL_DEMOS)
 
 all_tools : bin/print_graph_properties bin/epoch_sim bin/graph_sim bin/hash_sim2 bin/structurally_compare_graph_types \
-	bin/convert_graph_to_v4 bin/convert_graph_to_base85 bin/convert_graph_to_v3
+	bin/convert_graph_to_v4 bin/convert_graph_to_base85 bin/convert_graph_to_v3 \
+	bin/topologically_compare_graph_instances bin/topologically_diff_graph_instances
 
 #############################
 # Most testing of graphs is done with epoch_sim. Give graph_sim some exercise here

@@ -28,6 +28,18 @@ function setup()
     diff <(gzip -d -c $WD/out.csv.gz | sort) <(gzip -c -d apps/nursery/ising_spin_fix_ext/ref-out-32x32-steps20.csv.gz | sort)
 }
 
+@test ising_spin_fix_ext_run_32x32_delays_csv {
+    WD=$(make_test_wd)
+
+    apps/nursery/ising_spin_fix_ext/create_ising_spin_fix_ext_instance.py 32 > ${WD}/test.xml
+    # run for 10 slices
+    bin/epoch_sim ${WD}/test.xml --log-level 0 --prob-send 0.5 --stats-delta 1000000 --external PROVIDER \
+             10 | gzip -9 > $WD/out.csv.gz
+
+    # outputs can come out in unknown order, so need to sort
+    diff <(gzip -d -c $WD/out.csv.gz | sort) <(gzip -c -d apps/nursery/ising_spin_fix_ext/ref-out-32x32-steps20.csv.gz | sort)
+}
+
 @test ising_spin_fix_ext_run_32x32_img_static {
     WD=$(make_test_wd)
 

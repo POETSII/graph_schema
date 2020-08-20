@@ -1,3 +1,5 @@
+#include "fenv_control.hpp"
+
 #include "graph.hpp"
 
 #include <libxml++/parsers/domparser.h>
@@ -588,6 +590,7 @@ void usage()
 int main(int argc, char *argv[])
 {
   try{
+    DisableDenormals();
 
     std::string srcFilePath="-";
 

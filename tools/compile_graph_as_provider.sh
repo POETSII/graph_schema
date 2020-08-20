@@ -34,6 +34,11 @@ while [[ $# -gt 0 ]] ; do
         CPPFLAGS="$CPPFLAGS -I $2"
         shift 2
         ;;
+    --release)
+        # Go for reasonably optimal
+        CPPFLAGS="$CPPFLAGS  -O2 -DNDEBUG=1"
+        shift
+        ;;
     *)
         [[ "$input_file" == "" ]] || error "More than one input file"
         input_file="$1"
@@ -82,6 +87,9 @@ CPPFLAGS+=" -DPOETS_COMPILING_AS_PROVIDER=1"
 
 CPPFLAGS+=" $(pkg-config --cflags libxml++-2.6)"
 CPPFLAGS+=" -Wno-unused-local-typedefs -Wno-unused-but-set-variable"
+
+CPPFLAGS+=" -mfpmath=sse -msse2"
+CPPFLAGS+=" -frounding-math -fsignaling-nans"
 
 LDLIBS="$(pkg-config --libs-only-l libxml++-2.6)"
 LDFLAGS+="$(pkg-config --libs-only-L --libs-only-other libxml++-2.6)"
