@@ -202,6 +202,23 @@ public:
         throw std::runtime_error("Missing config item "+name);
     }
 
+    static double get_config_real(const std::vector<config_item> &config, const std::string &name, const std::string &unit, double defaultValue)
+    {
+        for(const auto &ci : config){
+            if(ci.name==name){
+                if(ci.unit!=unit){
+                     throw std::runtime_error("Config item "+name+" is in the wrong unit. Expected '"+unit+"' but got '"+ci.unit+"'");
+                }
+                if(auto p=std::get_if<double>(&ci.value)){
+                    return *p;
+                }else{
+                    throw std::runtime_error("Config itme "+name+" has the wrong value type.");
+                }
+            }
+        }
+        return defaultValue;
+    }
+
     static int64_t get_config_int(const std::vector<config_item> &config, const std::string &name, const std::string &unit)
     {
         double d=get_config_real(config,name,unit);
@@ -211,7 +228,17 @@ public:
         return (int64_t)round(d);
     }
 
-    static std::string get_config_string(const std::vector<config_item> &config, const std::string &name, const std::string &unit)
+    static int64_t get_config_int(const std::vector<config_item> &config, const std::string &name, const std::string &unit, int defaultValue)
+    {
+        double d=get_config_real(config,name,unit, defaultValue);
+        if(round(d)!=d){
+            throw std::runtime_error("Expected int, but got real.");
+        }
+        return (int64_t)round(d);
+    }
+
+
+    static std::optional<std::string> get_config_string_optional(const std::vector<config_item> &config, const std::string &name, const std::string &unit)
     {
         for(const auto &ci : config){
             if(ci.name==name){
@@ -225,8 +252,19 @@ public:
                 }
             }
         }
-        throw std::runtime_error("No config item called "+name);
+        return std::optional<std::string>();
     }
+
+
+    static std::string get_config_string(const std::vector<config_item> &config, const std::string &name, const std::string &unit)
+    {
+        auto s=get_config_string_optional(config, name, unit);
+        if(!s.has_value()){
+            throw std::runtime_error("No config item called "+name);
+        }
+        return s.value();
+    }
+
 };
 
 #endif

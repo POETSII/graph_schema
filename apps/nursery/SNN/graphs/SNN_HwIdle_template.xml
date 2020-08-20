@@ -12,7 +12,7 @@
         int32_t max_steps;
         float dt;
         uint32_t total_neurons;
-        uint32_t _pad_;
+        uint32_t send_hash_on_spike;
         ${Stats_GraphPropertiesMembers}
     ]]></Properties>
 
@@ -36,6 +36,7 @@
             <Message><![CDATA[
             uint32_t nid;
             uint32_t t; 
+            uint32_t hash;
             ]]></Message>
         </MessageType>
 
@@ -76,14 +77,24 @@
 
                     handler_log(3, "time_step=%d, max_steps=%d, dt=%g", time_step, graphProperties->max_steps, graphProperties->dt);
 
+                    bool calc_hash=false;
                     bool fire=${ModelType}::step(handler_log, deviceProperties->p, deviceState->s, graphProperties->dt, deviceState->pos_stim, deviceState->neg_stim);
                     if(fire){
                         rts=RTS_FLAG_spike_out;
+                        if(graphProperties-> send_hash_on_spike){
+                            calc_hash=true;
+                        }
                     }
 
                     bool do_export=neuron_stats_acc_update(*graphProperties, *deviceState, time_step, fire);
                     if(do_export){
                         rts |= RTS_FLAG_hash_out;
+                        calc_hash=true;
+                    }
+
+                    deviceState->state_hash=0;
+                    if(calc_hash){
+                        deviceState->state_hash=${ModelType}::hash(deviceProperties->p, deviceState->s);
                     }
 
                     deviceState->time_step=time_step;
@@ -107,7 +118,7 @@
 
             ${Stats_DeviceStateMembers}
 
-            uint32_t _pad_;
+            uint32_t state_hash;
             struct{
                 ${ModelType_DeviceStateMembers}
             }s;
@@ -149,6 +160,7 @@
                 assert(deviceState->rts & RTS_FLAG_spike_out);
                 message->nid=deviceProperties->p.nid;
                 message->t=deviceState->time_step;
+                message->hash=deviceState->state_hash;
                 deviceState->rts &= ~RTS_FLAG_spike_out;
                 ]]></OnSend>
             </OutputPin>
@@ -158,7 +170,7 @@
                 assert(deviceState->rts & RTS_FLAG_hash_out);
                 message->nid=deviceProperties->p.nid;
                 message->t=deviceState->time_step;
-                message->hash=${ModelType}::hash(deviceProperties->p, deviceState->s);
+                message->hash=deviceState->state_hash;
                 if(0){
                     handler_log_dump<typeof(handler_log)> dumper{handler_log, 3};
                     ${ModelType}::dump(handler_log, deviceProperties->p, deviceState->s);

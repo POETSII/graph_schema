@@ -1,0 +1,258 @@
+<?xml version='1.0' encoding='ASCII'?>
+<Graphs xmlns="https://poets-project.org/schemas/virtual-graph-schema-v4">
+  <GraphType id="SNN_GALSExact_${ModelType}">
+
+    <Documentation><![CDATA[
+    max_steps : Simulation should do exactly this many steps
+    hash_export_timer_gap :  neurons export hash when their timer hits this value
+    ]]></Documentation>
+
+    <Properties><![CDATA[
+        uint64_t global_rng_seed;
+        int32_t max_steps;
+        float dt;
+        uint32_t total_neurons;
+        uint32_t send_hash_on_spike;
+        ${Stats_GraphPropertiesMembers}
+    ]]></Properties>
+
+    <SharedCode><![CDATA[
+    #include "${ModelType_IncludeFile}"
+    ]]></SharedCode>
+
+    <MessageTypes>
+        <MessageType id="__halt_message__">
+            <Message><![CDATA[
+            int32_t code;
+            uint32_t param1;
+            uint32_t param2;
+            uint32_t param3;
+            int8_t description[24];
+            ]]></Message>
+        </MessageType>
+
+
+        <MessageType id="spikem">
+            <Message><![CDATA[
+            uint32_t nid;
+            uint32_t t_plus_fired;
+            uint32_t hash;
+            ]]></Message>
+        </MessageType>
+
+        <MessageType id="neuron_hash">
+            <Message><![CDATA[
+            uint32_t nid;
+            uint32_t t;
+            uint32_t hash;
+            uint32_t stats_total_firings;
+            uint64_t stats_sum_square_firing_gaps;
+            ]]></Message>
+        </MessageType>
+
+        <MessageType id="spike_bundle">
+            <Message><![CDATA[
+            uint32_t time;
+            uint32_t bundle_id;
+            uint16_t count;
+            uint16_t neuron_ids[16]; 
+            ]]></Message>
+        </MessageType>
+    </MessageTypes>
+
+    <DeviceTypes>
+        <DeviceType id="neuron">
+            <SharedCode><![CDATA[
+            template<class THL>
+            void time_step(THL handler_log,
+                const GRAPH_PROPERTIES_T *graphProperties,
+                const DEVICE_PROPERTIES_T *deviceProperties, DEVICE_STATE_T *deviceState,
+                spikem_message_t *message,
+                bool *doSend
+                )
+            {
+                // Here we are _inside_ the spike_out handler. We will send
+                // that message whether we spike or not, _unless_ we have exceeded
+                // the maximum sim time.
+
+                assert(deviceState->rts==RTS_FLAG_spikem_out);
+                assert(deviceState->seen[0] == deviceProperties->nhood);
+
+                uint32_t rts=0;
+
+                int32_t time_step=deviceState->time_step;
+
+                if(time_step >= graphProperties->max_steps){
+                    *doSend=false;
+                }else{
+                    time_step++;
+
+                    handler_log(3, "time_step=%d, max_steps=%d, dt=%g", time_step, graphProperties->max_steps, graphProperties->dt);
+
+                    bool calc_hash=false;
+                    bool fire=${ModelType}::step(handler_log, deviceProperties->p, deviceState->s, graphProperties->dt, deviceState->pos_stim[0], deviceState->neg_stim[0]);
+                    if(fire){
+                        if(graphProperties-> send_hash_on_spike){
+                            calc_hash=true;
+                        }
+                    }
+
+                    bool do_export=neuron_stats_acc_update(*graphProperties, *deviceState, time_step, fire);
+                    if(do_export){
+                        rts |= RTS_FLAG_hash_out;
+                        calc_hash=true;
+                    }
+
+                    deviceState->state_hash=0;
+                    if(calc_hash){
+                        deviceState->state_hash=${ModelType}::hash(deviceProperties->p, deviceState->s);
+                    }
+
+                    deviceState->seen[0]=deviceState->seen[1];
+                    deviceState->pos_stim[0]=deviceState->pos_stim[1];
+                    deviceState->neg_stim[0]=deviceState->neg_stim[1];
+                    
+                    deviceState->seen[1]=0;
+                    deviceState->pos_stim[1]=0;
+                    deviceState->neg_stim[1]=0;
+
+                    
+                    message->nid=deviceProperties->p.nid;
+                    if(fire){
+                        message->t_plus_fired=(time_step<<1)|1;
+                    }else{
+                        message->t_plus_fired=(time_step<<1);
+                    }
+                    message->hash=deviceState->state_hash;
+
+                    if(rts==0){
+                        // Only if we dont have a hash export pending...
+                        if(deviceState->seen[0] == deviceProperties->nhood){
+                            rts=RTS_FLAG_spikem_out;
+                        }
+                    }
+
+                    deviceState->time_step=time_step;
+                }
+                
+                deviceState->rts=rts;
+            }
+            ]]></SharedCode>
+            <Properties><![CDATA[
+            struct{
+                ${ModelType_DevicePropertyMembers}
+            }p;
+            uint32_t nhood;
+            ]]></Properties>
+            <State><![CDATA[
+            uint32_t time_step;
+
+            uint32_t seen[2];
+            int32_t pos_stim[2];
+            int32_t neg_stim[2];
+
+            uint32_t rts;
+
+            ${Stats_DeviceStateMembers}
+
+            uint32_t state_hash;
+            struct{
+                ${ModelType_DeviceStateMembers}
+            }s;
+            ]]></State>
+            <ReadyToSend><![CDATA[
+            *readyToSend=deviceState->rts;
+            ]]></ReadyToSend>
+            <OnInit><![CDATA[
+            handler_log(3, "Init");
+            assert(deviceProperties->nhood!=0); // This model does not work with no neighbours
+            assert(deviceState->time_step==0); // We rely on zero/default init to save instr.
+            ${ModelType}::reset(handler_log, deviceProperties->p, deviceState->s, graphProperties->global_rng_seed);
+            deviceState->seen[0]=deviceProperties->nhood; // Force a fire for timestep 0
+            if(neuron_stats_acc_init(*graphProperties, *deviceState)){
+                deviceState->state_hash=${ModelType}::hash(deviceProperties->p, deviceState->s);
+                deviceState->rts = RTS_FLAG_hash_out;
+            }else{
+                // Only one can be enabled
+                deviceState->rts = RTS_FLAG_spikem_out;
+            }
+                handler_log(3, " -> seen=%u, nhood=%u, rts=%x", deviceState->seen[0], deviceProperties->nhood, deviceState->rts);
+ 
+            ]]></OnInit>
+            <OnDeviceIdle/>
+            <OnHardwareIdle/>
+            <InputPin name="spikem_in" messageTypeId="spikem">
+                <Properties><![CDATA[
+                int32_t weight;
+                ]]></Properties>
+                <State/>
+                <OnReceive><![CDATA[
+                auto t=message->t_plus_fired>>1;
+                bool fired=message->t_plus_fired&1;
+                assert(t==deviceState->time_step || t==deviceState->time_step+1);
+                unsigned index = t != deviceState->time_step;
+                if(fired){
+                    auto w=edgeProperties->weight;
+                    if(w>=0){
+                        deviceState->pos_stim[index] += w;
+                    }else{
+                        deviceState->neg_stim[index] += w;
+                    }
+                }
+                deviceState->seen[index]++;
+                if(index==0){
+                    if(deviceState->seen[0]==deviceProperties->nhood){
+                        assert(!(deviceState->rts&RTS_FLAG_spikem_out));
+                        if(deviceState->rts==0){
+                            // Only if no hash pending
+                            deviceState->rts=RTS_FLAG_spikem_out;
+                        }
+                    }
+                }
+                handler_log(3, " -> seen=%u, nhood=%u, rts=%x", deviceState->seen[0], deviceProperties->nhood, deviceState->rts);
+ 
+                ]]></OnReceive>
+            </InputPin>
+
+            <OutputPin name="spikem_out" messageTypeId="spikem">
+                <OnSend><![CDATA[
+                assert(deviceState->rts & RTS_FLAG_spikem_out);
+                assert(deviceState->seen[0] == deviceProperties->nhood);
+
+                time_step(handler_log, graphProperties, deviceProperties, deviceState, message, doSend);
+
+                handler_log(3, " -> seen=%u, nhood=%u, rts=%x", deviceState->seen[0], deviceProperties->nhood, deviceState->rts);
+                ]]></OnSend>
+            </OutputPin>
+
+            <OutputPin name="hash_out" messageTypeId="neuron_hash">
+                <OnSend><![CDATA[
+                assert(deviceState->rts & RTS_FLAG_hash_out);
+                assert(!(deviceState->rts & RTS_FLAG_spikem_out));
+                message->nid=deviceProperties->p.nid;
+                message->t=deviceState->time_step;
+                message->hash=deviceState->state_hash;
+
+                neuron_stats_acc_export(*deviceState, *message);
+                deviceState->rts = 0;
+                if(deviceState->seen[0]==deviceProperties->nhood){
+                    deviceState->rts = RTS_FLAG_spikem_out;
+                }
+                ]]></OnSend>
+            </OutputPin>
+        </DeviceType>
+
+        <ExternalType id="external_output">
+            <Properties/>
+            <InputPin name="spikem_in" messageTypeId="spikem" ><Properties/></InputPin>
+            <InputPin name="hash_in" messageTypeId="neuron_hash" ><Properties/></InputPin>
+            <OutputPin name="stop" messageTypeId="__halt_message__" />
+        </ExternalType>
+
+        <ExternalType id="__halt_device_type__">
+            <Properties/>
+            <InputPin name="stop" messageTypeId="__halt_message__"><Properties/></InputPin>
+        </ExternalType>
+    </DeviceTypes>
+</GraphType>
+</Graphs>

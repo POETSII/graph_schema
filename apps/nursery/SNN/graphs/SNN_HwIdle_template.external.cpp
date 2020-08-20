@@ -10,6 +10,7 @@ struct spike_message_t
 {
     uint32_t nid;
     uint32_t t; 
+    uint32_t hash;
 };
 #pragma pack(pop)
 
@@ -20,6 +21,7 @@ struct graph_properties_t
     int32_t max_steps;
     float dt;
     uint32_t total_neurons;
+    uint32_t send_hash_on_spike;
     uint32_t hash_export_timer_gap;
     uint32_t hash_export_on_max_steps;
 };
@@ -146,7 +148,7 @@ extern "C" void poets_in_proc_external_main(
 
             auto msg=(const spike_message_t*)&msgG[0];
 
-            fprintf(stdout, "%u,%u,S\n", msg->t, msg->nid );
+            fprintf(stdout, "%u,%u,S,%08x\n", msg->t, msg->nid, msg->hash);
         }else if(dest_pin==poets_pin_index_t{1}){
             if(msgG.size()!=sizeof(neuron_hash_message_t)){
                  throw std::runtime_error("Received invalid size message.");

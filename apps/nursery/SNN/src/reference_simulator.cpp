@@ -1,3 +1,5 @@
+#include "fenv_control.hpp"
+
 #include "../include/dumb_snn_sink_to_file.hpp"
 #include "../include/dumb_snn_source_from_file.hpp"
 
@@ -6,16 +8,15 @@
 
 int main()
 {
-     _MM_SET_FLUSH_ZERO_MODE(_MM_FLUSH_ZERO_ON );
-    _MM_SET_DENORMALS_ZERO_MODE(_MM_DENORMALS_ZERO_ON );
+    DisableDenormals();
 
     ReferenceEngine engine;
 
     DumbSNNSourceFromFile(stdin, &engine);
 
     engine.run(
-        [&](unsigned t, unsigned neuron){
-            fprintf(stdout, "%u,%u,S\n", t, neuron);
+        [&](unsigned t, unsigned neuron, uint32_t hash){
+            fprintf(stdout, "%u,%u,S,%08x\n", t, neuron, hash);
         },
         [&](uint32_t t, uint32_t neuron, uint32_t hash, const stats_msg_t &msg)
         {

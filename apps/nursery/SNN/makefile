@@ -39,7 +39,7 @@ endif
 #CPPFLAGS += -O3 -DNDEBUG=1
 
 NEURON_TYPES=CUBA izhikevich
-ALGORITHM_TYPES=HwIdle
+ALGORITHM_TYPES=HwIdle GALSExact
 
 define algorithm_neuron_template
 

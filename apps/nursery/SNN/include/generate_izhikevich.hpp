@@ -77,7 +77,8 @@ void generate_izhikevich(
         {"dt" , "second", (float)dt},
         {"numSteps" ,    "steps", numSteps},
         {"calc_type",    "type", "float_ftz_daz"}, // Calculations should be done in this form
-        {"globalSeed",   "1",    rng()&0xFFFFFFFFFFFFull}
+        {"globalSeed",   "1",    rng()&0xFFFFFFFFFFFFull},
+        {"sendHashOnSpike", "1", 1}
     });
 
     sink.on_begin_prototypes();

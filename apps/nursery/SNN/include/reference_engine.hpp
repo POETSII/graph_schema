@@ -1,34 +1,9 @@
 #ifndef zero_delay_engine_hpp
 #define zero_delay_engine_hpp
 
+#include "fenv_control.hpp"
+
 #include "shared_utils.hpp"
-
-#pragma STDC FENV_ACCESS ON
-
-#include <xmmintrin.h>	// SSE instructions
-#include <pmmintrin.h>	// SSE instructions
-
-#ifndef __SSE2_MATH__
-#error "Denormal control probably won't work."
-#endif
-
-inline void CheckDenormalsDisabled()
-{
-    if( _MM_GET_FLUSH_ZERO_MODE() != _MM_FLUSH_ZERO_ON ){
-        throw std::runtime_error("Denormals appear enabled.");
-    }
-    if( _MM_GET_DENORMALS_ZERO_MODE() != _MM_DENORMALS_ZERO_ON ){
-        throw std::runtime_error("Denormals appear enabled.");
-    }
-
-    volatile float x=2e-38f; // Just above sub-normal
-    volatile float zero=0;
-
-    x=x*0.5f;
-    if(x!=zero){
-        throw std::runtime_error("Denormals appear enabled.");
-    }
-}
 
 #include "neuron.hpp"
 
@@ -83,6 +58,7 @@ private:
     uint64_t m_globalSeed;
     std::vector<neuron_info_t> m_neurons;
     robin_hood::unordered_map<std::string,unsigned> m_id_to_index;
+    bool m_send_hash_on_spike=false;
 public:
     virtual void on_begin_network(
         const std::vector<config_item> &config
@@ -99,8 +75,12 @@ public:
 
         m_globalSeed=get_config_int(config, "globalSeed", "1");
 
+        m_send_hash_on_spike=get_config_int(config, "sendHashOnSpike", "1");
+
+        bool dump_hash_each_step=get_config_int(config, "dumpHashEachStep", "1", false);
+
         m_total_steps=get_config_int(config, "numSteps", "steps");
-        stats_export_interval=m_total_steps;
+        stats_export_interval=dump_hash_each_step ? 1 : m_total_steps;
     }
 
     virtual void on_begin_prototypes()
@@ -243,7 +223,7 @@ public:
     {}
 
     void run(
-        std::function<void(unsigned,unsigned)> on_firing,
+        std::function<void(unsigned,unsigned,uint32_t)> on_firing,
         std::function<void(uint32_t,uint32_t,uint32_t,const stats_msg_t&)> on_stats
     )
     {
@@ -293,7 +273,11 @@ public:
                 bool f=ni.neuron->step(m_dt, stim_vec[i*2+0], stim_vec[i*2+1]);
                 //fprintf(stderr, "  t=%u, n=%u, st[0]=%d, st[1]=%d\n", t, i, stim_vec[i*2+0], stim_vec[i*2+1]);
                 if(f){
-                    on_firing(t,ni.neuron->nid());
+                    uint32_t hash=0;
+                    if(m_send_hash_on_spike){
+                        hash=ni.neuron->hash();
+                    }
+                    on_firing(t,ni.neuron->nid(), hash);
                     for(const auto &s : ni.fanout){
                         write_stimulus(s.delay, s.dest, s.weight);
                     }

@@ -340,12 +340,16 @@ inline uint64_t id_to_seed(std::string_view id, uint64_t seed)
 
 
 #ifndef POETS_COMPILING_AS_PROVIDER
+inline int g_handler_log_level = 3;
+
 inline void handler_log(int ll, const char *msg, ...)
 {
-    va_list v;
-    va_start(v, msg);
-    vfprintf(stderr, msg, v);
-    va_end(v);
+    if(ll<=g_handler_log_level){
+        va_list v;
+        va_start(v, msg);
+        vfprintf(stderr, msg, v);
+        va_end(v);
+    }
 }
 #endif
 

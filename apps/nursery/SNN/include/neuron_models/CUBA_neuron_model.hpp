@@ -33,7 +33,7 @@ struct CUBA
     {
         uint32_t acc=0;
 
-        void operator()(const char *, float, float &x)
+        void operator()(const char *, float, float x)
         {
             union {
                 uint32_t i;
@@ -92,6 +92,7 @@ struct CUBA
         cb("ge", float(), s.ge);
         cb("gi", float(), s.gi);
         cb("refSteps", uint32_t(), s.refSteps);
+        cb("vp", float(), s.vp);
     }
 
     struct state_t
@@ -101,6 +102,7 @@ struct CUBA
         float ge;
         float gi;
         uint32_t refSteps; // Refractory time
+        float vp; // v in previous time-step. Used to get distinct hashes on spike
 
         template<class TCB>
         void walk(TCB &cb)
@@ -120,6 +122,7 @@ struct CUBA
         s.ge=0;
         s.gi=0;
         s.refSteps=0;
+        s.vp=0;
     }
 
     template<class TP, class TS>
@@ -139,11 +142,11 @@ struct CUBA
         float ge=s.ge;
         float gi=s.gi;
         float v=s.v;
-
+        float vp=v;
 
         //-fprintf(stderr, "pos_stim=%d, neg_stim=%d\n", pos_stim, neg_stim);
 
-        handler_log(3,"ge=%g, gi=%g, v=%g\n", ge, gi, v);
+        handler_log(4,"ge=%g, gi=%g, v=%g\n", ge, gi, v);
 
         ge = add(ge, mul(to_float(pos_stim) , SCALE) );
         gi = add(gi, mul(to_float(neg_stim) , SCALE) );
@@ -174,6 +177,7 @@ struct CUBA
         s.ge=ge;
         s.gi=gi;
         s.v=v;
+        s.vp=vp;
 
         return fire;
     }

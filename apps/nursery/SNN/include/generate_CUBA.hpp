@@ -61,7 +61,7 @@ void generate_CUBA(
     prototype SynE{
         0,
         "SE",
-        "SynapseZeroDelayWithTarget",
+        "SynapseZeroDelay",
         {},
         {
             {"weight", "uV", mv_to_uv_round(we)}
@@ -70,7 +70,7 @@ void generate_CUBA(
     prototype SynI{
         1,
         "SI",
-        "SynapseZeroDelayWithTarget",
+        "SynapseZeroDelay",
         {},
         {
             {"weight", "uV", mv_to_uv_round(wi)}
@@ -81,7 +81,8 @@ void generate_CUBA(
         {"dt" , "second", (float)dt},
         {"numSteps" ,    "steps", numSteps},
         {"calc_type",    "type", "float_ftz_daz"}, // Calculations should be done in this form
-        {"globalSeed",   "1",    rng()&0xFFFFFFFFFFFFull}
+        {"globalSeed",   "1",    rng()&0xFFFFFFFFFFFFull},
+        {"sendHashOnSpike", "1", 1}
     });
 
     sink.on_begin_prototypes();
