@@ -167,6 +167,8 @@ public:
   virtual bool isUnion() const
   { return false; }
 
+  virtual unsigned getAlignment() const =0;
+
   virtual void binaryToXmlV4Value(const char *pBinary, unsigned cbBinary, std::ostream &dst, int minorFormatVersion) const=0;
 
   virtual void xmlV4ValueToBinary(std::istream &src, char *pBinary, unsigned cbBinary, bool alreadyDefaulted, int minorFormatVersion) const=0;
@@ -381,6 +383,11 @@ public:
     virtual bool isScalar() const
     { return true; }
 
+    virtual unsigned getAlignment() const override
+    {
+        return scalarTypeWidthBytes(m_type);
+    }
+
     virtual rapidjson::Value binaryToJSON(const char *pBinary, unsigned cbBinary, rapidjson::Document::AllocatorType&) const override
     {
         if(cbBinary!=scalarTypeWidthBytes(m_type)){
@@ -554,6 +561,7 @@ private:
     elements_by_index_t m_elementsByIndex;
     elements_and_offsets_by_name_t m_elementsAndOffsetsByName;
     unsigned m_sizeBytes;
+    unsigned m_alignment;
 
     void add(TypedDataSpecElementPtr element)
     {
@@ -572,12 +580,22 @@ public:
     {
         std::vector<char> tmp;
 
+        m_alignment=1;
+
         while(begin!=end){
             unsigned cb=(*begin)->getPayloadSize();
 
             add(*begin);
 
             unsigned off=tmp.size();
+            unsigned align=(*begin)->getAlignment();
+            m_alignment=std::max(m_alignment, align);
+            if( (off % align) !=0 ){
+                std::stringstream tmp;
+                tmp<<"Member "<<(*begin)->getName()<<" needs alignment of "<<align<<" but is at offset "<<off<<" in parent tuple.";
+                throw std::runtime_error(tmp.str());
+            }
+
             tmp.resize(off+cb);
             (*begin)->createBinaryDefault(&tmp[off], cb);
 
@@ -592,6 +610,9 @@ public:
 
     virtual bool isTuple() const override
     { return true; }
+
+    virtual unsigned getAlignment() const
+    { return m_alignment; }
 
     virtual void JSONToBinary(const rapidjson::Value &value, char *pBinary, unsigned cbBinary, bool alreadyDefaulted=false) const override
     {
@@ -794,6 +815,7 @@ class TypedDataSpecElementArray
 private:
     unsigned m_eltCount;
     TypedDataSpecElementPtr m_eltType;
+    unsigned m_alignment;
 public:
     TypedDataSpecElementArray(const std::string &name, unsigned count, TypedDataSpecElementPtr type, const std::string &defaultValue=std::string())
         : TypedDataSpecElement(name)
@@ -801,6 +823,17 @@ public:
         , m_eltType(type)
     {
         unsigned size=count*type->getPayloadSize();
+
+        m_alignment=type->getAlignment();
+        unsigned offset=0;
+        for(unsigned i=0; i<std::min(size,8u); i++){
+            if((offset % m_alignment) != 0){
+                std::stringstream tmp;
+                tmp<<"In array "<<getName()<<" of length "<<count<<" the element type has alignment "<<m_alignment<<", but the offset of index "<<i<<" is "<<offset;
+                throw std::runtime_error(tmp.str());
+            }
+            offset+=m_alignment;
+        }
 
         std::vector<char> tmp(size, 0);
         if(!defaultValue.empty()){
@@ -814,6 +847,9 @@ public:
 
     virtual bool isArray() const override
     { return true; }
+
+    virtual unsigned getAlignment() const
+    { return m_alignment; }
 
     virtual void JSONToBinary(const rapidjson::Value &value, char *pBinary, unsigned cbBinary, bool alreadyDefaulted=false) const override
     {
