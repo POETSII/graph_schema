@@ -637,12 +637,17 @@ public:
   virtual bool isExternal() const=0;
 
   virtual unsigned getInputCount() const=0;
+
+  // This will throw if the index is out of range
   virtual const InputPinPtr &getInput(unsigned index) const=0;
+  // This will throw it the name is not known
   virtual InputPinPtr getInput(const std::string &name) const=0;
   virtual const std::vector<InputPinPtr> &getInputs() const=0;
 
   virtual unsigned getOutputCount() const=0;
+  // This will throw if the index is out of range
   virtual const OutputPinPtr &getOutput(unsigned index) const=0;
+  // This will throw if the name is not known
   virtual OutputPinPtr getOutput(const std::string &name) const=0;
   virtual const std::vector<OutputPinPtr> &getOutputs() const=0;
 

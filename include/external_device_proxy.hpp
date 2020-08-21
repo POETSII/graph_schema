@@ -150,8 +150,9 @@ public:
   virtual InputPinPtr getInput(const std::string &name) const override
   {
     auto it=m_inputsByName.find(name);
-    if(it==m_inputsByName.end())
-      return InputPinPtr();
+    if(it==m_inputsByName.end()){
+      throw std::runtime_error("No input called "+name);
+    }
     return it->second;
   }
 
@@ -161,8 +162,9 @@ public:
   virtual OutputPinPtr getOutput(const std::string &name) const override
   {
     auto it=m_outputsByName.find(name);
-    if(it==m_outputsByName.end())
-      return OutputPinPtr();
+    if(it==m_outputsByName.end()){
+      throw std::runtime_error("No output called "+name);
+    }
     return it->second;
   }
 
