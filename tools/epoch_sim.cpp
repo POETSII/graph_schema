@@ -117,7 +117,7 @@ struct InProcMessageBuffer
         const std::string &graph_instance,  //! Regex for matching graph instance, or empty
         const std::vector<std::pair<std::string,std::string>> &owned    //! Vector of (device_id,device_type) pairs
     ) {
-      std::unique_lock<std::mutex> lk;
+      std::unique_lock<std::mutex> lk{m_mutex};
       if(!m_connect){
         throw std::runtime_error("connect was called twice.");
       }
@@ -1374,6 +1374,7 @@ int main(int argc, char *argv[])
       graph.m_pExternalBuffer->m_connect = [&](const std::string &graphType, const std::string &graphInst, const std::vector<std::pair<std::string,std::string> > &owned)
       {
         fprintf(stderr, "Recevied call to connect from inproc external.\n");
+
         if(!std::regex_match(graph.m_graphType->getId(), std::regex(graphType))){
           throw std::runtime_error("Graph type of "+graph.m_graphType->getId()+" does not match externals type of "+graphType);
         }
@@ -1431,6 +1432,8 @@ int main(int argc, char *argv[])
         return dev.properties.payloadSize();
       };
 
+      std::unique_lock<std::mutex> lk(graph.m_pExternalBuffer->m_mutex);
+
       inProcExternalThread=std::thread([&](){
         std::vector<const char *> fargv;
         fargv.push_back( argv[0] );
@@ -1441,10 +1444,8 @@ int main(int argc, char *argv[])
       });
 
       fprintf(stderr, "Waiting for inproc external to call 'connect'\n");
-      {
-        std::unique_lock<std::mutex> lk(graph.m_pExternalBuffer->m_mutex);
-        graph.m_pExternalBuffer->m_cond.wait(lk, [&]{ return connected; });
-      }
+      graph.m_pExternalBuffer->m_cond.wait(lk, [&]{ return connected; });
+      
       fprintf(stderr, "Inproc external is connected.\n");
     }
 
