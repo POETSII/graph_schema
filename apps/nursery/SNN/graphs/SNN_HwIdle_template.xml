@@ -116,9 +116,12 @@
             int32_t neg_stim;
             uint32_t rts;
 
+            uint32_t state_hash;
+            uint32_t _pad_;
+
             ${Stats_DeviceStateMembers}
 
-            uint32_t state_hash;
+            
             struct{
                 ${ModelType_DeviceStateMembers}
             }s;

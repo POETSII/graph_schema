@@ -1,0 +1,435 @@
+<?xml version='1.0' encoding='ASCII'?>
+<Graphs xmlns="https://poets-project.org/schemas/virtual-graph-schema-v4">
+  <GraphType id="SNN_CountExact_${ModelType}">
+
+    <Documentation><![CDATA[
+    Each neuron has two times:
+    - tNow : the time-step the neuron is currently at
+    - tWin : the latest time the neuron can step to.
+
+    tNow==tWin : the neuron cannot step until it receives a new tWin
+    tNow<tWin : the neuron can advance forwards by (at least) one step.
+
+    For now we only consider the case where tNow<=tWin<=tNow+1, i.e. a gap
+    of 0 or 1.
+
+    When advancing, the neuron can fire or not fire:
+    - Not fire: message only sent to reducer Reduce[nS=1,cS=0,nR=0]
+    - Fire: send spike to peers, then sent to reducer Reduce[nS=1,cS=nPeers,nR=0]
+
+    The spike which is sent for the transition from tNow to tNow+1=tWin will
+    be associated with the time-step tNow+1=tWin, so it will be used by any
+    peers during their transition from tNow+1 to tNow+2.
+
+    When receiving spikes from peers, the neuron accumulates the
+    stimulus, then does recv_notifies_pending++. Any non-zero
+    value of recv_notifies_pending then eventually gets sent
+    to the reduced as Reduce[nS=0,cS=0,nR=recv_notifies_pending],
+    then recv_notifies_pending=0
+
+    Firing conditions are:
+    - tNow < tWin : Spike (may or may not actually send spike)
+    - send_notify_pending == 1 : Reducer
+    - recv_notifies_pending > 0 : Reducer
+    
+    In the reducers, we simply sum together the incoming components,
+    and forward them on whenever they complete.
+
+    The sync node looks at the final reducer sum,
+    and waits until nS==totalNeurons && cS==nR
+    At this point we know that:
+    - Every neuron has advanced, so for every neuron tNow==tWin
+    - cS is the total number of spikes sent
+    - nR is the total number of spikes received
+    - all spikes sent have been received.
+    We can then send an advance to tWin=tWin+1 using an
+    expander network.
+
+    Any spike received could be from either tNow or tNow+1, depending
+    on whether the current neuron manages to spike before its peer.
+    If a spike is received for tNow+1 the neuron needs to make sure
+    it preserves the accumulated stimulus for tNow, so double-buffering
+    is needed.
+    
+    A spike could be received for tWin+1, but only if tNow==tWin.
+    This would reflect the case where the peer spike received the
+    window advancement message and sent a spike, which then arrived
+    at the current neuron before the window advancement message.
+    A neuron could use such a spike to advance to the next time,
+    but needs to make sure that it doesnt advance twice when
+    the actual window message arrives.
+
+
+    ]]></Documentation>
+
+    <Properties><![CDATA[
+        uint64_t global_rng_seed;
+        int32_t max_steps;
+        float dt;
+        uint32_t total_neurons;
+        uint32_t send_hash_on_spike;
+        ${Stats_GraphPropertiesMembers}
+    ]]></Properties>
+
+    <SharedCode><![CDATA[
+    #include "${ModelType_IncludeFile}"
+    ]]></SharedCode>
+
+    <MessageTypes>
+        <MessageType id="__halt_message__">
+            <Message><![CDATA[
+            int32_t code;
+            uint32_t param1;
+            uint32_t param2;
+            uint32_t param3;
+            int8_t description[24];
+            ]]></Message>
+        </MessageType>
+
+
+        <MessageType id="spike">
+            <Message><![CDATA[
+            uint32_t nid;
+            uint32_t t;
+            uint32_t hash;
+            ]]></Message>
+        </MessageType>
+
+        <MessageType id="reduce">
+            <Message><![CDATA[
+            uint32_t tNow;
+            uint32_t numNeuronsStepped;
+            uint32_t numSpikesSent;
+            uint32_t numSpikesRecv;
+            ]]></Message>
+        </MessageType>
+
+        <MessageType id="advance">
+            <Message><![CDATA[
+            uint32_t tWin;
+            ]]></Message>
+        </MessageType>
+
+        <MessageType id="neuron_hash">
+            <Message><![CDATA[
+            uint32_t nid;
+            uint32_t t;
+            uint32_t hash;
+            uint32_t stats_total_firings;
+            uint64_t stats_sum_square_firing_gaps;
+            ]]></Message>
+        </MessageType>
+
+        <MessageType id="spike_bundle">
+            <Message><![CDATA[
+            uint32_t time;
+            uint32_t bundle_id;
+            uint16_t count;
+            uint16_t neuron_ids[16]; 
+            ]]></Message>
+        </MessageType>
+    </MessageTypes>
+
+    <DeviceTypes>
+        <DeviceType id="neuron">
+            <SharedCode><![CDATA[
+            template<class THL>
+            void time_step(THL handler_log,
+                const GRAPH_PROPERTIES_T *graphProperties,
+                const DEVICE_PROPERTIES_T *deviceProperties, DEVICE_STATE_T *deviceState,
+                spike_message_t *message,
+                bool *doSend
+                )
+            {
+                // Here we are _inside_ the spike_out handler. We will
+                // only send the message if we actually spike. The
+                // next rts will either be stats export, or reduce_out
+
+                assert(deviceState->rts==RTS_FLAG_spike_out);
+                assert(deviceState->tNow+1 == deviceState->tWin);
+                assert(deviceState->numNeuronsStepped==0);
+                assert(deviceState->numSpikesSent==0);
+                assert(deviceState->numSpikesRecv[0]==0); // we must have reduced in order to advance
+                // Note that deviceState>numSpikesRecv[1] could be more than 0
+
+                uint32_t rts=0;
+
+                *doSend=false;
+
+                auto tNow=deviceState->tNow;
+                if(tNow >= graphProperties->max_steps){
+                    // Do nothing
+                    assert(*doSend==false);
+                }else{
+                    tNow++;
+                    deviceState->numNeuronsStepped=1;
+
+                    handler_log(3, "time_step=%d, max_steps=%d, dt=%g", tNow, graphProperties->max_steps, graphProperties->dt);
+
+                    bool calc_hash=false;
+                    bool fire=${ModelType}::step(handler_log, deviceProperties->p, deviceState->s, graphProperties->dt, deviceState->pos_stim[0], deviceState->neg_stim[0]);
+                    
+                    // fire=(deviceProperties->p.nid % 4) == (tNow%4);
+                    
+                    
+                    if(fire){
+                        if(graphProperties-> send_hash_on_spike){
+                            calc_hash=true;
+                        }
+                        deviceState->numSpikesSent += deviceProperties->fanout;
+                        *doSend=true;
+                    }else{
+                        assert(*doSend==false);
+                    }
+
+                    bool do_export=neuron_stats_acc_update(*graphProperties, *deviceState, tNow, fire);
+                    if(do_export){
+                        rts |= RTS_FLAG_hash_out;
+                        calc_hash=true;
+                    }
+
+                    deviceState->state_hash=0;
+                    if(calc_hash){
+                        deviceState->state_hash=${ModelType}::hash(deviceProperties->p, deviceState->s);
+                    }
+
+                    deviceState->numSpikesRecv[0]=deviceState->numSpikesRecv[1];
+                    deviceState->pos_stim[0]=deviceState->pos_stim[1];
+                    deviceState->neg_stim[0]=deviceState->neg_stim[1];
+
+                    deviceState->numSpikesRecv[1]=0;
+                    deviceState->pos_stim[1]=0;
+                    deviceState->neg_stim[1]=0;
+
+                    message->nid=deviceProperties->p.nid;
+                    message->t=tNow;
+                    message->hash=deviceState->state_hash;
+
+                    if(rts==0){  // Only if we dont have a hash export pending...
+                        // we are immediately dirty and can reduce
+                        rts = RTS_FLAG_reduce_out;
+                    }
+                }
+                
+                deviceState->tNow=tNow;
+                deviceState->rts=rts;
+            }
+            ]]></SharedCode>
+            <Properties><![CDATA[
+            struct{
+                ${ModelType_DevicePropertyMembers}
+            }p;
+            uint32_t fanout;
+            ]]></Properties>
+            <State><![CDATA[
+            uint32_t tNow;
+            uint32_t tWin;
+
+            uint32_t numNeuronsStepped;
+            uint32_t numSpikesSent;
+            uint32_t numSpikesRecv[2];
+            int32_t pos_stim[2];
+            int32_t neg_stim[2];
+
+            uint32_t rts;
+            uint32_t state_hash;
+
+            ${Stats_DeviceStateMembers}
+            
+            struct{
+                ${ModelType_DeviceStateMembers}
+            }s;
+            ]]></State>
+            <ReadyToSend><![CDATA[
+            *readyToSend=deviceState->rts;
+            ]]></ReadyToSend>
+            <OnInit><![CDATA[
+            handler_log(3, "Init");
+            deviceState->tNow=0;
+            deviceState->tWin=1; // Always start ready to go
+
+            ${ModelType}::reset(handler_log, deviceProperties->p, deviceState->s, graphProperties->global_rng_seed);
+            if(neuron_stats_acc_init(*graphProperties, *deviceState)){
+                deviceState->state_hash=${ModelType}::hash(deviceProperties->p, deviceState->s);
+                deviceState->rts = RTS_FLAG_hash_out;
+            }else{
+                // Only one can be enabled
+                deviceState->rts = RTS_FLAG_spike_out;
+            }
+            
+            ]]></OnInit>
+            <OnDeviceIdle/>
+            <OnHardwareIdle/>
+            <InputPin name="spike_in" messageTypeId="spike">
+                <Properties><![CDATA[
+                int32_t weight;
+                ]]></Properties>
+                <State/>
+                <OnReceive><![CDATA[
+                int offset=message->t - deviceState->tNow;
+                assert(offset==0 || offset==1);
+
+                auto w=edgeProperties->weight;
+                if(w>=0){
+                    deviceState->pos_stim[offset] += w;
+                }else{
+                    deviceState->neg_stim[offset] += w;
+                }
+                
+                deviceState->numSpikesRecv[offset]++;
+
+                // If this message comes from "the future", that means
+                // that we have an advance message incoming. So we might
+                // as well move forwards now.
+                if(deviceState->tWin < message->t){
+                    assert(deviceState->rts==0);
+                    assert(deviceState->tWin+1 == message->t);
+                    deviceState->tWin = message->t;
+                    deviceState->rts = RTS_FLAG_spike_out;
+                }else if(deviceState->rts==0){
+                    assert(deviceState->tWin == message->t);
+                    deviceState->rts=RTS_FLAG_reduce_out;
+                }
+            ]]></OnReceive>
+            </InputPin>
+
+            <OutputPin name="reduce_out" messageTypeId="reduce">
+                <Properties/>
+                <State/>
+                <OnSend><![CDATA[
+                assert(deviceState->tNow==deviceState->tWin);
+                assert(deviceState->rts==RTS_FLAG_reduce_out);
+                assert(deviceState->numNeuronsStepped | deviceState->numSpikesSent | deviceState->numSpikesRecv[0]);
+                assert(deviceState->numSpikesRecv[1]==0);
+
+                message->tNow = deviceState->tNow;
+                message->numNeuronsStepped = deviceState->numNeuronsStepped;
+                message->numSpikesSent = deviceState->numSpikesSent;
+                message->numSpikesRecv = deviceState->numSpikesRecv[0];
+
+                deviceState->numNeuronsStepped=0;
+                deviceState->numSpikesSent=0;
+                deviceState->numSpikesRecv[0]=0;
+
+                // there is nothing that can happen now until we receive
+                // either a spike or an advance message
+                deviceState->rts=0;
+                ]]></OnSend>
+            </OutputPin>
+
+            <OutputPin name="spike_out" messageTypeId="spike">
+                <OnSend><![CDATA[
+                assert(deviceState->rts & RTS_FLAG_spike_out);
+                time_step(handler_log, graphProperties, deviceProperties, deviceState, message, doSend);
+                ]]></OnSend>
+            </OutputPin>
+
+            <OutputPin name="hash_out" messageTypeId="neuron_hash">
+                <OnSend><![CDATA[
+                assert(deviceState->rts == RTS_FLAG_hash_out);
+                message->nid=deviceProperties->p.nid;
+                message->t=deviceState->tNow;
+                message->hash=deviceState->state_hash;
+
+                neuron_stats_acc_export(*deviceState, *message);
+                deviceState->rts = 0;
+                if(deviceState->numNeuronsStepped | deviceState->numSpikesSent | deviceState->numSpikesRecv[0]){
+                    deviceState->rts = RTS_FLAG_reduce_out;
+                }
+                ]]></OnSend>
+            </OutputPin>
+
+            <InputPin name="advance_in" messageTypeId="advance">
+                <Properties/>
+                <State/>
+                <OnReceive><![CDATA[
+                if(deviceState->tWin+1 == message->tWin){
+                    // we must have already exported and done any dirty reduces,
+                    // so should be idle here.
+                    assert(deviceState->rts==0);
+                    deviceState->tWin=message->tWin;
+                    deviceState->rts=RTS_FLAG_spike_out;
+                }else{
+                    assert(message->tWin <= deviceState->tWin);
+                    // We can receive messages from the past.
+                    // In principle some random advance message from
+                    // many cycles back may appear, so we just have
+                    // to ignore them.
+
+                    // From a verification point of view, this means
+                    // that at each cycle a whole bunch of advance
+                    // messages could be left behind. However, for
+                    // any finite size message space they must eventually
+                    // be delivered and ignored, so progress will
+                    // happen.
+                }
+                ]]></OnReceive>
+            </InputPin>
+        </DeviceType>
+
+        <DeviceType id="sync">
+            <SharedCode />
+            <Properties/>
+            <State><![CDATA[
+            uint32_t tWin;
+            uint32_t numNeuronsStepped;
+            uint32_t numSpikesSent;
+            uint32_t numSpikesRecv;
+            ]]></State>
+            <ReadyToSend><![CDATA[
+            *readyToSend=0;
+            if( ( deviceState->numNeuronsStepped == graphProperties->total_neurons )
+                    &&
+                ( deviceState->numSpikesSent == deviceState->numSpikesRecv) )
+            {
+                *readyToSend = RTS_FLAG_advance_out;
+            }
+            ]]></ReadyToSend>
+            <OnInit><![CDATA[
+            deviceState->tWin=1;
+            ]]></OnInit>
+            <OnDeviceIdle />
+            <OnHardwareIdle />
+            <InputPin name="reduce_in" messageTypeId="reduce">
+                <Properties/>
+                <State/>
+                <OnReceive><![CDATA[
+                assert(message->tNow == deviceState->tWin);
+                deviceState->numNeuronsStepped += message->numNeuronsStepped;
+                deviceState->numSpikesSent += message->numSpikesSent;
+                deviceState->numSpikesRecv += message->numSpikesRecv;
+
+                assert(deviceState->numNeuronsStepped <= graphProperties->total_neurons);
+                ]]></OnReceive>
+            </InputPin>
+            <OutputPin name="advance_out" messageTypeId="advance">
+                <OnSend><![CDATA[
+                assert(
+                    ( deviceState->numNeuronsStepped == graphProperties->total_neurons )
+                    &&
+                    ( deviceState->numSpikesSent == deviceState->numSpikesRecv)
+                );
+                deviceState->tWin++;
+                message->tWin=deviceState->tWin;
+
+                deviceState->numNeuronsStepped =0;
+                deviceState->numSpikesSent =0;
+                deviceState->numSpikesRecv =0;
+                ]]></OnSend>
+            </OutputPin>
+        </DeviceType>
+
+        <ExternalType id="external_output">
+            <Properties/>
+            <InputPin name="spike_in" messageTypeId="spike" ><Properties/></InputPin>
+            <InputPin name="hash_in" messageTypeId="neuron_hash" ><Properties/></InputPin>
+            <OutputPin name="stop" messageTypeId="__halt_message__" />
+        </ExternalType>
+
+        <ExternalType id="__halt_device_type__">
+            <Properties/>
+            <InputPin name="stop" messageTypeId="__halt_message__"><Properties/></InputPin>
+        </ExternalType>
+    </DeviceTypes>
+</GraphType>
+</Graphs>

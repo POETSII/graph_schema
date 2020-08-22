@@ -379,6 +379,7 @@ void stats_acc_walk(TS &s, TCB &cb)
     cb("stats_last_firing", uint32_t(), s.stats_last_firing);
     cb("stats_total_firings", uint32_t(), s.stats_total_firings);
     cb("stats_export_countdown", uint32_t(), s.stats_export_countdown);
+    cb("_pad_stats_", uint32_t(), s._pad_stats_);
 }
 
 struct stats_acc_t
@@ -387,6 +388,7 @@ struct stats_acc_t
     uint32_t stats_last_firing;
     uint32_t stats_total_firings;
     uint32_t stats_export_countdown;
+    uint32_t _pad_stats_;
 
     template<class TCB>
     void walk(TCB &cb)

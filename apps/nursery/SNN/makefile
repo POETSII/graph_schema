@@ -38,8 +38,8 @@ endif
 
 #CPPFLAGS += -O3 -DNDEBUG=1
 
-NEURON_TYPES=CUBA izhikevich
-ALGORITHM_TYPES=HwIdle GALSExact
+NEURON_TYPES=CUBA izhikevich poisson
+ALGORITHM_TYPES=HwIdle GALSExact CountExact
 
 define algorithm_neuron_template
 
@@ -67,7 +67,7 @@ bin/% : src/%.o src/neuron_factory.o
 	mkdir -p bin
 	$(CXX) $(CPPFLAGS) -o $@ $^ $(LDFLAGS) $(LDLIBS)
 
-all_generators : bin/generate_izhikevich_sparse bin/generate_CUBA
+all_generators : bin/generate_izhikevich_sparse bin/generate_CUBA bin/generate_poisson
 
 all_tools : bin/reference_simulator bin/create_graph_type bin/create_graph_instance_v2
 
