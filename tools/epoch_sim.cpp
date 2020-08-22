@@ -645,7 +645,7 @@ struct EpochSim
   }
 
   template<class TRng>
-  bool step(TRng &rng, double probSend,bool capturePreEventState, double probDelay)
+  bool step(TRng &rng, double probSend,bool capturePreEventState, double probDelay, unsigned maxDelayedCount)
   {
 
     // Within each step every object gets the chance to send a message with probability probSend
@@ -791,10 +791,15 @@ struct EpochSim
 
     if(!m_delayed.empty()){
       double probRelease=1-probDelay;
+
+      unsigned couldGo=std::min((size_t)maxDelayedCount, m_delayed.size());
+      assert(m_delayed.size() >= couldGo);
+      unsigned mustGo=m_delayed.size()-couldGo;
       
-      std::binomial_distribution<> dist(m_delayed.size(), probRelease);
+      std::binomial_distribution<> dist(couldGo, probRelease);
       unsigned n=dist(rng);
       assert(n <= m_delayed.size());
+      n+=mustGo;
 
       for(int i=0; i<n; i++){
         unsigned sel=rng() % m_delayed.size();
@@ -1045,6 +1050,7 @@ void usage()
   fprintf(stderr, "  --log-events destFile\n");
   fprintf(stderr, "  --prob-send probability\n");
   fprintf(stderr, "  --prob-delay probability\n");
+  fprintf(stderr, "  --max-delayed-count num  : By default this will equal the number of devices.\n");
   fprintf(stderr, "  --rng-seed seed\n");
   fprintf(stderr, "  --accurate-assertions : Capture device state before send/recv in case of assertions.\n");
   fprintf(stderr, "  --message-init n: 0 (default) - Zero initialise all messages, 1 - All messages are randomly inisitalised, 2 - Randomly zero or random inisitalise\n");
@@ -1111,6 +1117,7 @@ int main(int argc, char *argv[])
     //double probSend=0.9;
     double probSend=1.0;
     double probDelay=0.0;
+    int maxDelayedCount=-1;
     std::mt19937_64 rng;
 
     bool enableAccurateAssertions=false;
@@ -1171,6 +1178,13 @@ int main(int argc, char *argv[])
           fprintf(stderr, "Probability of sending must be in range [0,1-2^-10) ");
           usage();
         }
+        ia+=2;
+      }else if(!strcmp("--max-delayed-count",argv[ia])){
+        if(ia+1 >= argc){
+          fprintf(stderr, "Missing argument to --max-delayed-count\n");
+          usage();
+        }
+        maxDelayedCount=atoi(argv[ia+1]);
         ia+=2;
       }else if(!strcmp("--rng-seed",argv[ia])){
         if(ia+1 >= argc){
@@ -1282,6 +1296,10 @@ int main(int argc, char *argv[])
     loadGraph(&registry, srcPath, parser.get_document()->get_root_node(), &graph);
     if(logLevel>1){
       fprintf(stderr, "Loaded\n");
+    }
+
+    if(maxDelayedCount==-1){
+      maxDelayedCount=graph.m_devices.size();
     }
 
     if(snapshotDelta!=0){
@@ -1466,7 +1484,7 @@ int main(int argc, char *argv[])
         break;
       }
 
-      bool running =  !graph.m_deviceExitCalled && graph.step(rng, probSend, capturePreEventState, probDelay);
+      bool running =  !graph.m_deviceExitCalled && graph.step(rng, probSend, capturePreEventState, probDelay, maxDelayedCount);
 
       if(logLevel>2 || i==nextStats){
         fprintf(stderr, "Epoch %u : sends/device/epoch = %f (%g / %u), delayedMsgs/epoch = %g,  meanShear = %g, maxShear = %g\n\n", i,
