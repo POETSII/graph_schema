@@ -1,4 +1,5 @@
 .PRECIOUS : output/%.checked
+.PRECIOUS : obj/%.o obj/%.debug.o obj/%.release.o
 
 export PYTHONPATH = tools
 
@@ -45,8 +46,8 @@ endif
 endif
 
 # Default is moderately optimised with asserts
-# dwarf-4 sometimes produces better debug info (?)
-CPPFLAGS += -std=c++17 -O1 -gdwarf-4 
+# Split dwarf speeds up link, and is supported by ccache
+CPPFLAGS += -std=c++17 -O1 -gsplit-dwarf 
 
 # Try to help libubsan merge RTTI on imported classes
 # https://stackoverflow.com/a/57379835
@@ -56,7 +57,7 @@ CPPFLAGS += -rdynamic
 # including with no denormals. This (hopefully) convinces gcc not to
 # optimise past those things. 
 # Using SSE is generally a good things anyway
-CPPFLAGS+= -mfpmath=sse -msse2
+CPPFLAGS+=  -ffp-contract=off -mfpmath=sse -msse2
 # These may inhibit optimisations
 CPPFLAGS+= -frounding-math -fsignaling-nans
 
@@ -70,7 +71,11 @@ CPPFLAGS_DEBUG = $(CPPFLAGS) -O0 -fno-omit-frame-pointer -fsanitize=undefined -f
 # Release is max optimised with no asserts
 CPPFLAGS_RELEASE = $(CPPFLAGS) -O3 -DNDEBUG=1
 
+# Use gold to speed-up linking (especially useful with ccache)
+LDFLAGS += -fuse-ld=gold
 
+# Add an index section; for use with -gsplit-dwarf to make debugger load faster (?)
+LDFLAGS += -Wl,--gdb-index
 
 TRANG = external/trang-20091111/trang.jar
 JING = external/jing-20081028/bin/jing.jar

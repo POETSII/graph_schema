@@ -5,7 +5,7 @@ POETS_EXTERNAL_INTERFACE_SPEC ?= $(wildcard /POETS/external_interface_spec)
 
 ifeq ($(POETS_EXTERNAL_INTERFACE_SPEC),)
 	HAVE_POETS_EXTERNAL_INTERFACE_SPEC=0
-	CPPFLAGS += -I include/include_cache
+	CPPFLAGS += -I ${GRAPH_SCHEMA}/include/include_cache
 else
 	HAVE_POETS_EXTERNAL_INTERFACE_SPEC=1
 	CPPFLAGS += -I $(POETS_EXTERNAL_INTERFACE_SPEC)/include
@@ -16,7 +16,9 @@ CPPFLAGS += -std=c++17 -msse3 -mfpmath=sse -ffp-contract=off -fno-fast-math
 CPPFLAGS += -I $(GRAPH_SCHEMA)/external/robin_hood
 CPPFLAGS += -I $(GRAPH_SCHEMA)/include
 
-CPPFLAGS += -g -fmax-errors=5
+CPPFLAGS += -gsplit-dwarf -gz
+
+CPPFLAGS += -fmax-errors=5
 
 CPPFLAGS += -fsanitize=undefined
 CPPFLAGS += -fsanitize=address
@@ -31,9 +33,15 @@ CPPFLAGS += $(LIBXML_PKG_CONFIG_CPPFLAGS)
 
 LDLIBS += $(LIBXML_PKG_CONFIG_LDLIBS)
 LDFLAGS += $(LIBXML_PKG_CONFIG_LDFLAGS)
+LDFLAGS += -fuse-ld=gold -Wl,--gdb-index
 
+PROVIDER_FLAGS=
 ifneq ($(RELEASE_WITH_ASSERTS),)
 CPPFLAGS += -O3
+PROVIDER_FLAGS += --release-with-asserts
+else ifneq ($(RELEASE_NO_ASSERTS),)
+CPPFLAGS += -O3 -DNDEBUG=1
+PROVIDER_FLAGS += --release-no-asserts
 endif
 
 #CPPFLAGS += -O3 -DNDEBUG=1
@@ -52,7 +60,7 @@ providers/SNN_$(1)_$(2)_graph_type.external.cpp : bin/create_graph_type graphs/S
 	bin/create_graph_type $(2) < graphs/SNN_$(1)_template.external.cpp > $$@
 
 providers/SNN_$(1)_$(2).graph.so : providers/SNN_$(1)_$(2)_graph_type.xml providers/SNN_$(1)_$(2)_graph_type.external.cpp
-	${GRAPH_SCHEMA}/tools/compile_graph_as_provider.sh -I include/neuron_models/ --working-dir providers $$< -o $$@
+	${GRAPH_SCHEMA}/tools/compile_graph_as_provider.sh $(PROVIDER_FLAGS) -I include/neuron_models/ --working-dir providers $$< -o $$@
 
 ALL_GRAPH_TYPES += providers/SNN_$(1)_$(2)_graph_type.xml 
 ALL_GRAPH_PROVIDERS += providers/SNN_$(1)_$(2).graph.so

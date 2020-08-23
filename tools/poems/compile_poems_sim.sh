@@ -76,7 +76,7 @@ CPPFLAGS+=" -I ${graph_schema_dir}/external/robin_hood"
 CPPFLAGS+=" -I ${sprovider_dir}"
 CPPFLAGS+=" -I ${poems_dir}"
 CPPFLAGS+=" -DRAPIDJSON_HAS_STDSTRING=1"
-CPPFLAGS+=" -g"
+CPPFLAGS+=" -gsplit-dwarf"
 #CPPFLAGS+=" -DNDEBUG=1"
 if [[ $optimise -eq 1 ]] ; then
     CPPFLAGS+=" -O3 -fwhole-program"
@@ -86,7 +86,7 @@ if [[ $asserts -eq 0 ]] ; then
 fi
 
 LDLIBS+="${LIBXML_PKG_CONFIG_LDLIBS} -ltbb -lmetis -ldl"
-LDFLAGS+="${LIBXML_PKG_CONFIG_LDFLAGS} -pthread"
+LDFLAGS+="${LIBXML_PKG_CONFIG_LDFLAGS} -pthread  -fuse-ld=gold -Wl,--gdb-index"
 
 g++ -c ${working_dir}/poems_sim.cpp -DSPROVIDER_MAX_LOG_LEVEL=${max_log_level} -o ${working_dir}/poems_sim.o ${CPPFLAGS} || exit 1
 g++ ${working_dir}/poems_sim.o -o ${output_file} ${CPPFLAGS} ${LDFLAGS} ${LDLIBS} || exit 1

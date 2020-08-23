@@ -62,7 +62,7 @@ Vagrant.configure(2) do |config|
   vb.cpus = vcpu
   
    # Customize the amount of memory on the VM:
-   vb.memory = 3000     
+   vb.memory = 6000     
   
    # If clock drifts more than 500ms, then force it (instead of smooth adjust)
    vb.customize ["guestproperty","set", :id, "/VirtualBox/GuestAdd/VBoxService/--timesync-set-threshold", "500"]
@@ -76,6 +76,6 @@ Vagrant.configure(2) do |config|
   # Enable provisioning with a shell script. Additional provisioners such as
   # Puppet, Chef, Ansible, Salt, and Docker are also available. Please see the
   # documentation for more information about their specific syntax and use.
-  config.vm.provision "shell", path: "provision_ubuntu18.sh"
+  #config.vm.provision "shell", path: "provision_ubuntu18.sh"
 
 end

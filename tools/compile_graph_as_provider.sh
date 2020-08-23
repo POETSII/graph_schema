@@ -34,9 +34,12 @@ while [[ $# -gt 0 ]] ; do
         CPPFLAGS="$CPPFLAGS -I $2"
         shift 2
         ;;
-    --release)
-        # Go for reasonably optimal
-        CPPFLAGS="$CPPFLAGS  -O2 -DNDEBUG=1"
+    --release|--release-no-asserts)
+        CPPFLAGS="$CPPFLAGS  -O3 -DNDEBUG=1"
+        shift
+        ;;
+    --release-with-asserts)
+        CPPFLAGS="$CPPFLAGS  -O3"
         shift
         ;;
     *)
@@ -81,21 +84,21 @@ fi
 
 export PYTHONPATH=${graph_schema_dir}/tools
 
-CPPFLAGS+=" -g -I ${graph_schema_dir}/include -W -Wall -Wno-unused-parameter -Wno-unused-variable"
+CPPFLAGS+=" -gsplit-dwarf -I ${graph_schema_dir}/include -W -Wall -Wno-unused-parameter -Wno-unused-variable"
 CPPFLAGS+=" -I ${graph_schema_dir}/external/robin_hood"
 CPPFLAGS+=" -DPOETS_COMPILING_AS_PROVIDER=1"
 
 CPPFLAGS+=" $(pkg-config --cflags libxml++-2.6)"
 CPPFLAGS+=" -Wno-unused-local-typedefs -Wno-unused-but-set-variable"
 
-CPPFLAGS+=" -mfpmath=sse -msse2"
+CPPFLAGS+="  -ffp-contract=off -mfpmath=sse -msse2"
 CPPFLAGS+=" -frounding-math -fsignaling-nans"
 
 LDLIBS="$(pkg-config --libs-only-l libxml++-2.6)"
 LDFLAGS+="$(pkg-config --libs-only-L --libs-only-other libxml++-2.6)"
 
 SO_CPPFLAGS+=" -shared -fPIC"
-LDFLAGS+=" -pthread"
+LDFLAGS+=" -pthread -fuse-ld=gold -Wl,--gdb-index"
 LDLIBS+=" -ldl -fPIC"
 
 if [[ "${POETS_EXTERNAL_INTERFACE_SPEC}" == "" ]] ; then
@@ -117,7 +120,7 @@ if grep "https://poets-project.org/schemas/virtual-graph-schema-v3" $input_file 
     java -jar ${JING} -c ${graph_schema_dir}/master/virtual-graph-schema-v3.rnc ${input_file} || exit 1
 fi
 
-python3 ${graph_schema_dir}/tools/render_graph_as_cpp.py ${input_file} ${working_dir}/${name}.graph.cpp || exit 1
+python3 ${graph_schema_dir}/tools/render_graph_as_cpp.py ${input_file} ${working_dir}/${name}.graph.devices.cpp || exit 1
 
 python3 ${graph_schema_dir}/tools/render_graph_as_cpp.py --header < ${input_file} > ${working_dir}/${name}.graph.hpp || exit 1
 
@@ -131,15 +134,15 @@ if [[ -f "${search}" ]] ; then
 
     CPPFLAGS+=" -DPOETS_HAVE_IN_PROC_EXTERNAL_MAIN=1"
 
-    g++ -c ${CPPFLAGS} ${SO_CPPFLAGS} ${inproc_external_path} -o ${working_dir}/${name}.external.o || exit 1
-     OBJS+=" ${working_dir}/${name}.external.o"
+    g++ -c ${CPPFLAGS} ${SO_CPPFLAGS} ${inproc_external_path} -o ${working_dir}/${name}.external.inproc.o || exit 1
+     OBJS+=" ${working_dir}/${name}.external.inproc.o"
 fi
 
 2>&1 echo "Compiling provider ${name} devices"
-X="g++ -c ${CPPFLAGS} ${SO_CPPFLAGS} ${working_dir}/${name}.graph.cpp -o ${working_dir}/${name}.graph.o"
+X="g++ -c ${CPPFLAGS} ${SO_CPPFLAGS} ${working_dir}/${name}.graph.devices.cpp -o ${working_dir}/${name}.graph.devices.o"
 2>&1 echo "  $X"
 $X || exit 1
-OBJS+=" ${working_dir}/${name}.graph.o"
+OBJS+=" ${working_dir}/${name}.graph.devices.o"
 
 2>&1 echo "Linking provider ${name}"
 g++ ${CPPFLAGS} ${SO_CPPFLAGS} ${OBJS} -o ${output_file} ${LDFLAGS} ${LDLIBS} || exit 1
