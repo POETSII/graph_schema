@@ -368,6 +368,10 @@ struct EpochSim
   // Used to maximise sharing of default messages
   std::unordered_map<OutputPinPtr,TypedDataPtr> m_defaultMessages;
 
+  size_t m_maxMessageSizeBytes;
+  size_t m_messageAllocSizeBytes;
+  std::vector<TypedDataPtr> m_messagePool;
+
   std::function<void (const char*,bool,int,const char *)> m_onCheckpoint;
 
   int m_checkpointLevel=0;
@@ -396,11 +400,48 @@ struct EpochSim
     return ++m_unq;
   }
 
+  TypedDataPtr alloc_message(unsigned payloadSize)
+  {
+    if(m_messagePool.empty()){
+      auto res=TypedDataPtr::create(m_maxMessageSizeBytes);
+      res->_total_size_bytes=sizeof(typed_data_t)+payloadSize;
+      assert(res->_total_size_bytes <= res->_alloc_size_bytes);
+      assert(res->_alloc_size_bytes >= m_messageAllocSizeBytes);
+      return res;
+    }else{
+      m_statsReusedMessages++;
+      TypedDataPtr res(std::move(m_messagePool.back()));
+      m_messagePool.resize(m_messagePool.size()-1);
+      res->_total_size_bytes=sizeof(typed_data_t)+payloadSize;
+      assert(res->_total_size_bytes <= res->_alloc_size_bytes);
+      return res;
+    }
+  }
+
+  void release_message(TypedDataPtr &&p)
+  {
+    if(!p.empty() && p.is_unique() && p->_alloc_size_bytes >= m_messageAllocSizeBytes){
+      m_messagePool.emplace_back(std::move(p));
+    }
+  }
+
   virtual uint64_t onBeginGraphInstance(const GraphTypePtr &graphType, const std::string &id, const TypedDataPtr &graphProperties, rapidjson::Document &&) override
   {
     m_graphType=graphType;
     m_id=id;
     m_graphProperties=graphProperties;
+
+    m_maxMessageSizeBytes=0;
+    for(const auto &d : graphType->getDeviceTypes()){
+      for(const auto &ip : d->getInputs()){
+        m_maxMessageSizeBytes=std::max(m_maxMessageSizeBytes, ip->getMessageType()->getMessageSpec()->payloadSize());
+      }
+      for(const auto &op : d->getOutputs()){
+        m_maxMessageSizeBytes=std::max(m_maxMessageSizeBytes, op->getMessageType()->getMessageSpec()->payloadSize());
+      }
+    }
+    m_messageAllocSizeBytes=TypedDataPtr::create(m_maxMessageSizeBytes)->_alloc_size_bytes;
+
     return 0;
   }
 
@@ -602,6 +643,7 @@ struct EpochSim
   double m_statsShearSum=0;
   double m_statsShearSumSqr=0;
   double m_statsShearMax=0;
+  unsigned m_statsReusedMessages=0;
   unsigned m_epoch=0;
 
 //Generate either a zero initialised message, or a random message based on
@@ -621,7 +663,8 @@ struct EpochSim
       r = seed>>31;
     }
 
-    TypedDataPtr res=m.clone();
+    TypedDataPtr res=alloc_message(m.payloadSize());
+    assert(res->payloadSize() == m->payloadSize());
 
     if (messageInit || r) {//Zero initialised message
       uint8_t *begin=(uint8_t*)res.payloadPtr();
@@ -696,7 +739,7 @@ struct EpochSim
 
   
 
-    auto do_recv=[&](const output &out, const TypedDataPtr &message, const std::string &idSend, unsigned srcEpoch)
+    auto do_recv=[&](const output &out, TypedDataPtr &&message, const std::string &idSend, unsigned srcEpoch)
     {
       auto &dst=m_devices[out.dstDevice];
       auto &in=dst.inputs[out.dstPinIndex];
@@ -767,6 +810,8 @@ struct EpochSim
           idSend.c_str()
         );
       }
+
+      release_message(std::move(message));
     };
     
 
@@ -835,7 +880,7 @@ struct EpochSim
       for(unsigned i=0; i<n; i++){
         unsigned sel=rng() % m_delayed.size();
         auto &m=m_delayed.at(sel);
-        do_recv(*m.out, m.payload, m.idSend, m.src_epoch);
+        do_recv(*m.out, std::move(m.payload), m.idSend, m.src_epoch);
         std::swap(m_delayed[sel], m_delayed.back());
         m_delayed.resize(m_delayed.size()-1);
       }
@@ -1051,7 +1096,8 @@ struct EpochSim
           continue;
         }
         
-        do_recv(out, message, idSend, m_epoch);
+        TypedDataPtr tmp(message);
+        do_recv(out, std::move(tmp), idSend, m_epoch);
 
         anyReady = anyReady || dst.anyReady();
       }
@@ -1522,11 +1568,12 @@ int main(int argc, char *argv[])
       bool running =  !graph.m_deviceExitCalled && graph.step(rng, probSend, capturePreEventState, probDelay, maxDelayedCount);
 
       if(logLevel>2 || i==nextStats){
-        fprintf(stderr, "Epoch %u : sends/device/epoch = %f (%g / %u), delayedMsgs/epoch = %g,  meanShear = %g, maxShear = %g\n\n", i,
+        fprintf(stderr, "Epoch %u : sends/device/epoch = %f (%g / %u), delayedMsgs/epoch = %g,  meanShear = %g, maxShear = %g, reused = %u\n\n", i,
           graph.m_statsSends / graph.m_devices.size() / statsDelta, graph.m_statsSends/statsDelta, (unsigned)graph.m_devices.size(),
           graph.m_statsDelays / (double)statsDelta,
           graph.m_statsShearSum / graph.m_statsShearCount,
-          graph.m_statsShearMax
+          graph.m_statsShearMax,
+          graph.m_statsReusedMessages
         );
       }
       if(i==nextStats){
@@ -1537,6 +1584,7 @@ int main(int argc, char *argv[])
         graph.m_statsShearSum=0;
         graph.m_statsShearSumSqr=0;
         graph.m_statsShearMax=0;
+        graph.m_statsReusedMessages=0;
       }
 
       if(snapshotWriter && i==nextSnapshot){

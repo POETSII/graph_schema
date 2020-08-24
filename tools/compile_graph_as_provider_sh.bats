@@ -11,7 +11,7 @@ load bats_helpers
     (cd $WD && ${GS}/tools/compile_graph_as_provider.sh --working-dir working ising_spin_graph_type.xml)
     [ -f $WD/ising_spin.graph.so ]
     [ -d $WD/working ]
-    [ -f $WD/working/ising_spin.graph.cpp ]
+    [ -f $WD/working/ising_spin.graph.devices.cpp ]
     [ -f $WD/working/ising_spin.graph.hpp ]
 }
 
