@@ -34,7 +34,7 @@ protected:
   int m_minorFormatVersion=0;
   
   xmlTextWriterPtr m_dst;
-  bool m_parseMetaData;
+  bool m_parseMetaData = true;
 
   State m_state;
 

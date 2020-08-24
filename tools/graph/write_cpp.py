@@ -525,9 +525,12 @@ def render_typed_data_as_spec(proto,name,elt_name,dst,asHeader=False):
     dst.write("  size_t totalSize() const override {{ return sizeof({}); }}\n".format(name))
     dst.write("  TypedDataPtr create() const override {\n")
     if proto:
-        dst.write("    {} *res=({}*)malloc(sizeof({}));\n".format(name,name,name))
+        dst.write(f"    const size_t ALLOC_SIZE=(sizeof({name})+TypedDataPtr::ALLOC_ROUND_OFFSET)&TypedDataPtr::ALLOC_ROUND_MASK;\n")
+        dst.write("    {} *res=({}*)malloc(ALLOC_SIZE);\n".format(name,name))
         dst.write("    res->_ref_count=0;\n")
         dst.write("    res->_total_size_bytes=sizeof({});\n".format(name))
+        dst.write("    res->_alloc_size_bytes=ALLOC_SIZE;\n")
+        dst.write("    assert(res->_alloc_size_bytes >= res->_total_size_bytes);\n")
         #for elt in proto.elements_by_index:
         #    render_typed_data_init(elt, dst, "    res->");
         dst.write("    if(!m_default.empty()){\n")
@@ -552,9 +555,12 @@ def render_typed_data_as_spec(proto,name,elt_name,dst,asHeader=False):
         dst.write("    xmlpp::Node::PrefixNsMap ns;\n")
 
         dst.write('    ns["g"]="TODO/POETS/virtual-graph-schema-v1";\n')
-        dst.write("    {} *res=({}*)malloc(sizeof({}));\n".format(name,name,name))
+        dst.write(f"    const size_t ALLOC_SIZE=(sizeof({name})+TypedDataPtr::ALLOC_ROUND_OFFSET)&TypedDataPtr::ALLOC_ROUND_MASK;\n")
+        dst.write("    {} *res=({}*)malloc(ALLOC_SIZE);\n".format(name,name))
         dst.write("    res->_ref_count=0;\n")
         dst.write("    res->_total_size_bytes=sizeof({});\n".format(name))
+        dst.write("    res->_alloc_size_bytes=ALLOC_SIZE;\n")
+        dst.write("    assert(res->_alloc_size_bytes >= res->_total_size_bytes);\n")
         for elt in proto.elements_by_index:
             render_typed_data_init(elt,dst,"    res->")
         dst.write("    if(elt){\n")
@@ -749,7 +755,7 @@ public:
     auto deviceProperties=cast_typed_properties<{devicePropertiesStructName}>(gDeviceProperties);
     auto deviceState=cast_typed_data<{deviceStateStructName}>(gDeviceState);
     auto edgeProperties=cast_typed_properties<{pinPropertiesStructName}>(gEdgeProperties);
-    auto edgeState=cast_typed_data<{pinPropertiesStructName}>(gEdgeState);
+    auto edgeState=cast_typed_data<{pinStateStructName}>(gEdgeState);
     auto message=cast_typed_properties<{messageStructName}>(gMessage);
     HandlerLogImpl handler_log(orchestrator);
     auto handler_exit=[&](int code) -> void {{ orchestrator->application_exit(code); }};

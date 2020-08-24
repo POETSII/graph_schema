@@ -3,7 +3,9 @@
 
 #include <stdexcept>
 
+#ifndef __GNUC__
 #pragma STDC FENV_ACCESS ON
+#endif
 
 #include <xmmintrin.h>	// SSE instructions
 #include <pmmintrin.h>	// SSE instructions

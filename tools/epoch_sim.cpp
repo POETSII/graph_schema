@@ -26,6 +26,8 @@
 #include <cstdlib>
 #include <cstdarg>
 
+#include "robin_hood.hpp"
+
 static unsigned logLevel=2;
 static unsigned messageInit;
 
@@ -285,12 +287,23 @@ struct EpochSim
     int sendIndex;
   };
 
+  struct output_pin
+  {
+    const char *name;
+    OutputPinPtr pin; // mild perf improvement from caching output 
+    TypedDataPtr defaultMessage; // avoids another cross-shared-object call
+    std::vector<output> outputs;
+    bool isIndexed;  // yet another cache to avoid cross-shared-object
+  };
+
   struct input
   {
     TypedDataPtr properties;
     TypedDataPtr state;
     unsigned firings;
     const char *id;
+    // Calling deviceType->getInput() in a shared object takes noticeable time, so we cache it here
+    InputPinPtr pin; 
   };
 
   struct device
@@ -303,15 +316,15 @@ struct EpochSim
     TypedDataPtr properties;
     TypedDataPtr state;
 
-    unsigned outputCount;
     uint32_t readyToSend;
 
-    std::vector<const char *> outputNames; // interned names
-
-    std::vector<std::vector<output> > outputs;
+    std::vector<output_pin> outputs;
     std::vector<std::vector<input> > inputs;
 
     std::queue<std::tuple<unsigned,TypedDataPtr,int>> ext2int; // (port,message,sendIndex)
+
+    unsigned getOutputCount() const
+    { return outputs.size(); }
 
     void post_message(unsigned port, TypedDataPtr payload, int sendIndex)
     {
@@ -352,6 +365,9 @@ struct EpochSim
   int m_haltDeviceIndex=-1;
   TypedDataPtr m_haltMessage;
 
+  // Used to maximise sharing of default messages
+  std::unordered_map<OutputPinPtr,TypedDataPtr> m_defaultMessages;
+
   std::function<void (const char*,bool,int,const char *)> m_onCheckpoint;
 
   int m_checkpointLevel=0;
@@ -366,7 +382,7 @@ struct EpochSim
   struct delayed_message_t
   {
     std::string idSend;
-    output *out;
+    const output *out;
     TypedDataPtr payload;
     unsigned src_epoch;
   };
@@ -406,11 +422,22 @@ struct EpochSim
     d.properties=deviceProperties;
     d.state=deviceState;
     d.readyToSend=0;
-    d.outputCount=dt->getOutputCount();
-    d.outputs.resize(dt->getOutputCount());
+    d.outputs.reserve(dt->getOutputCount());
     for(unsigned i=0;i<dt->getOutputCount();i++){
-      d.outputNames.push_back(intern(dt->getOutput(i)->getName()));
+      output_pin op;
+      op.pin=dt->getOutput(i);
+
+      auto it=m_defaultMessages.find(op.pin);
+      if(it==m_defaultMessages.end()){
+        it=m_defaultMessages.insert({op.pin, op.pin->getMessageType()->getMessageSpec()->create()}).first;
+      }
+
+      op.defaultMessage=it->second;
+      op.isIndexed=op.pin->isIndexedSend();
+      op.name=intern(dt->getOutput(i)->getName());
+      d.outputs.push_back(std::move(op));
     }
+
     d.inputs.resize(dt->getInputCount());
     m_devices.push_back(d);
     m_deviceIdToIndex[d.name]=d.index;
@@ -433,6 +460,7 @@ struct EpochSim
     i.state=state;
     i.firings=0;
     i.id=intern( m_devices.at(dstDevIndex).id + ":" + dstInput->getName() + "-" + m_devices.at(srcDevIndex).id+":"+srcOutput->getName() );
+    i.pin=dstInput;
     auto &slots=m_devices.at(dstDevIndex).inputs.at(dstInput->getIndex());
     unsigned dstPinSlot=slots.size();
     slots.push_back(i);
@@ -444,16 +472,16 @@ struct EpochSim
     o.dstDeviceId=m_devices.at(dstDevIndex).name;
     o.dstInputName=intern(dstInput->getName());
     o.sendIndex=sendIndex;
-    m_devices.at(srcDevIndex).outputs.at(srcOutput->getIndex()).push_back(o);
-
+    auto &op = m_devices.at(srcDevIndex).outputs.at(srcOutput->getIndex());
+    op.outputs.push_back(o);
   }
 
   void onEndEdgeInstances(uint64_t ) override
   {
     for(auto &d : m_devices){
-      for(auto &op : d.type->getOutputs()){
-        if(op->isIndexedSend()){
-          auto &ov = d.outputs.at(op->getIndex());
+      for(auto &op : d.outputs){
+        if(op.isIndexed){
+          auto &ov = op.outputs;
           bool anyIndexed=false;
           bool anyNonIndexed=false;
           for(auto x : ov){
@@ -465,7 +493,7 @@ struct EpochSim
           }
           if(anyIndexed && anyNonIndexed){
             std::stringstream tmp;
-            tmp<<"Output "<<d.name<<":"<<op->getName()<<" has both explict and non explicit send indices.";
+            tmp<<"Output "<<d.name<<":"<<op.name<<" has both explict and non explicit send indices.";
             throw std::runtime_error(tmp.str());
           }
 
@@ -578,30 +606,30 @@ struct EpochSim
 
 //Generate either a zero initialised message, or a random message based on
 //messageInit, set as an argument.
-  TypedDataPtr getMessage(MessageTypePtr m)
+  TypedDataPtr getMessage(const TypedDataPtr &m, uint32_t &seed)
   {
-    TypedDataPtr res;
-    unsigned r = 2;//Init at 2 incase the message is not to be randomly zero or random.
-    if (messageInit == 2)
-    {// If the initialisation is to be randomly zero or random, generate a random value for this.
-      r = rand() % 2;
+    if(m.empty()){
+      return TypedDataPtr{};
     }
 
-    if (messageInit == 0 || r == 0)
-    {//Zero initialised message
-      res = m->getMessageSpec()->create();
-    } else if (messageInit == 1 || r == 1)
-    {//Random message
-      auto empty = m->getMessageSpec()->create();
-      unsigned int size = ((int*) empty.get())[1];
+    unsigned r = 2;//Init at 2 incase the message is not to be randomly zero or random.
 
-      typed_data_t *p=(typed_data_t*)malloc(size);
-      p->_ref_count=0;
-      p->_total_size_bytes=size;
+    if (messageInit == 2)
+    {
+      // If the initialisation is to be randomly zero or random, generate a random value for this.
+      seed = seed*1664525+1013904223UL;
+      r = seed>>31;
+    }
 
-      auto tup = m->getMessageSpec()->getTupleElement();
-      tup->createBinaryRandom(((char*)p)+sizeof(typed_data_t), size-8);
-      res = TypedDataPtr(p);
+    TypedDataPtr res=m.clone();
+
+    if (messageInit || r) {//Zero initialised message
+      uint8_t *begin=(uint8_t*)res.payloadPtr();
+     uint8_t *end=begin+res.payloadSize();
+      while(begin < end){
+        seed = seed*1664525+1013904223UL;
+        *begin++ = seed>>24;
+      }
     }
 
     return res;
@@ -615,9 +643,11 @@ struct EpochSim
     if(logLevel>1){
       fprintf(stderr, "onHardwareIdle\n");
     }
+    ReceiveOrchestratorServicesImpl services{logLevel, stderr, "Device", "Idle handler", m_onDeviceExit, m_onCheckpoint  };
+        
     for(auto &d : m_devices){
       if(!d.isExternal){
-        ReceiveOrchestratorServicesImpl services{logLevel, stderr, d.name, "Idle handler", m_onDeviceExit, m_onCheckpoint  };
+        services.setDevice(d.name, "Idle handler");
         d.type->onHardwareIdle(&services, m_graphProperties.get(), d.properties.get(), d.state.get()  );
         d.readyToSend = d.type->calcReadyToSend(&services, m_graphProperties.get(), d.properties.get(), d.state.get());
 
@@ -644,8 +674,7 @@ struct EpochSim
     }
   }
 
-  template<class TRng>
-  bool step(TRng &rng, double probSend,bool capturePreEventState, double probDelay, unsigned maxDelayedCount)
+  bool step(std::mt19937_64 &rng, double probSend,bool capturePreEventState, double probDelay, unsigned maxDelayedCount)
   {
 
     // Within each step every object gets the chance to send a message with probability probSend
@@ -667,7 +696,7 @@ struct EpochSim
 
   
 
-    auto do_recv=[&](output &out, const TypedDataPtr &message, const std::string &idSend, unsigned srcEpoch)
+    auto do_recv=[&](const output &out, const TypedDataPtr &message, const std::string &idSend, unsigned srcEpoch)
     {
       auto &dst=m_devices[out.dstDevice];
       auto &in=dst.inputs[out.dstPinIndex];
@@ -696,7 +725,9 @@ struct EpochSim
         }
         receiveServices.setDevice(out.dstDeviceId, out.dstInputName);
         try{
-          pin->onReceive(&receiveServices, m_graphProperties.get(), dst.properties.get(), dst.state.get(), slot.properties.get(), slot.state.get(), message.get());
+          //pin->onReceive(&receiveServices, m_graphProperties.get(), dst.properties.get(), dst.state.get(), slot.properties.get(), slot.state.get(), message.get());
+          assert(slot.pin);
+          slot.pin->onReceive(&receiveServices, m_graphProperties.get(), dst.properties.get(), dst.state.get(), slot.properties.get(), slot.state.get(), message.get());
         }catch(provider_assertion_error &e){
           fprintf(stderr, "Caught handler exception during Receive. devId=%s, dstDevType=%s, dstPin=%s.\n", dst.name, dst.type->getId().c_str(), pin->getName().c_str());
           fprintf(stderr, "  %s\n", e.what());
@@ -762,7 +793,7 @@ struct EpochSim
           if(!dev.isExternal){
             throw std::runtime_error("External connection sent message from an address that is not an external.");
           }
-          if(portIndex >= dev.outputCount){
+          if(portIndex >= dev.getOutputCount()){
             throw std::runtime_error("External connection sent message from an invalid output port address.");
           }
           auto port=dev.type->getOutput(portIndex);
@@ -801,7 +832,7 @@ struct EpochSim
       assert(n <= m_delayed.size());
       n+=mustGo;
 
-      for(int i=0; i<n; i++){
+      for(unsigned i=0; i<n; i++){
         unsigned sel=rng() % m_delayed.size();
         auto &m=m_delayed.at(sel);
         do_recv(*m.out, m.payload, m.idSend, m.src_epoch);
@@ -820,7 +851,7 @@ struct EpochSim
       auto &src=m_devices[i];
 
       // Pick a random message
-      sendSel[i]=pick_bit(src.outputCount, src.readyToSend, rotA+i);
+      sendSel[i]=pick_bit(src.getOutputCount(), src.readyToSend, rotA+i);
     }
 
     // If accurateAssertionInfo, then we capture full state before each send/recv
@@ -862,7 +893,7 @@ struct EpochSim
       }
 
       if(!((src.readyToSend>>sel)&1)){
-        anyReady=true; // We don't know if it turned any others on
+        anyReady=src.readyToSend!=0;
         continue;
       }
 
@@ -872,8 +903,10 @@ struct EpochSim
 
       m_statsSends++;
 
-      const OutputPinPtr &output=src.type->getOutput(sel);
-      TypedDataPtr message(getMessage(output->getMessageType()));
+      const output_pin &op = src.outputs[sel];
+
+      const OutputPinPtr &output=op.pin;
+      TypedDataPtr message(getMessage(op.defaultMessage, threshRng));
 
       std::string idSend;
 
@@ -892,7 +925,7 @@ struct EpochSim
         }
         #endif
 
-        if(output->isIndexedSend()){
+        if(op.isIndexed){
           sendIndex=&sendIndexStg;
         }
 
@@ -900,7 +933,7 @@ struct EpochSim
           if(capturePreEventState){
             prevState=src.state.clone();
           }
-          sendServices.setDevice(src.name, src.outputNames[sel]);
+          sendServices.setDevice(src.name, op.name);
           try{
             // Do the actual send handler
             output->onSend(&sendServices, m_graphProperties.get(), src.properties.get(), src.state.get(), message.get(), &doSend, sendIndex);
@@ -915,7 +948,7 @@ struct EpochSim
             throw;
           }
 
-          if(sendIndex && sendIndexStg >= src.outputs[sel].size()){
+          if(sendIndex && sendIndexStg >= op.outputs.size()){
             fprintf(stderr, "Application tried to specify sendIndex of %u, but out degree is %u\n", sendIndexStg, (unsigned)src.outputs.size());
             exit(1);
           }
@@ -976,7 +1009,7 @@ struct EpochSim
       sent=true;
 
       // Try to support both indexed sends and broadcast, though indexed are less efficient
-      auto *pOutputVec=&src.outputs[sel];
+      auto *pOutputVec=&op.outputs;
       std::vector<EpochSim::output> indexedOutputBuffer;
       if(sendIndex){
         // This is quite inefficient
@@ -1330,12 +1363,13 @@ int main(int argc, char *argv[])
           throw std::runtime_error("Device address is invalid.");
         }
         auto &dev=graph.m_devices.at(getEndpointDevice(address).value);
-        if(getEndpointPin(address).value >= dev.outputCount){
+        if(getEndpointPin(address).value >= dev.getOutputCount()){
           throw std::runtime_error("Device pin index is invalid.");
         }
-        auto &f = dev.outputs[getEndpointPin(address).value];
+        EpochSim::output_pin &op = dev.outputs[getEndpointPin(address).value];
+        std::vector<EpochSim::output> &f=op.outputs;
         
-        if(dev.type->getOutput(getEndpointPin(address).value)->isIndexedSend()){
+        if(op.isIndexed){
           fanout.resize(f.size());
           for(unsigned i=0; i<f.size(); i++){
             const auto &d=f[i];
@@ -1458,6 +1492,7 @@ int main(int argc, char *argv[])
         for(auto &x : externalArgs){
           fargv.push_back( x.c_str() );
         }
+        assert(graph.m_pExternalBuffer);
         pProc(*graph.m_pExternalBuffer, fargv.size(), &fargv[0]);
       });
 

@@ -79,11 +79,17 @@ inline bool get_attribute_optional_bool(xmlpp::Element *eParent, const char *nam
 
 template<class T>
 const T *cast_typed_properties(const typed_data_t *properties)
-{  return static_cast<const T *>(properties); }
+{
+  assert(properties==nullptr || properties->_total_size_bytes == sizeof(T));
+  return static_cast<const T *>(properties);
+}
 
 template<class T>
 T *cast_typed_data(typed_data_t *data)
-{  return static_cast<T *>(data); }
+{
+  assert(data==nullptr || data->_total_size_bytes == sizeof(T));
+  return static_cast<T *>(data);
+}
 
 
 
@@ -116,6 +122,7 @@ private:
   TypedDataSpecElementTuplePtr m_type;
   unsigned m_payloadSize;
   unsigned m_totalSize;
+  unsigned m_allocSize;
 
   std::vector<char> m_default;
   mutable TypedDataPtr m_defaultShared;
@@ -124,6 +131,7 @@ public:
     : m_type(elt)
     , m_payloadSize(elt->getPayloadSize())
     , m_totalSize(elt->getPayloadSize()+sizeof(typed_data_t))
+    , m_allocSize((m_totalSize+TypedDataPtr::ALLOC_ROUND_OFFSET)&TypedDataPtr::ALLOC_ROUND_MASK)
   {
     m_default.resize(m_payloadSize);
     m_type->createBinaryDefault(m_default.empty() ? nullptr : &m_default[0], m_payloadSize);
@@ -184,15 +192,7 @@ public:
       return TypedDataPtr();
     }
 
-    typed_data_t *p=(typed_data_t*)malloc(m_totalSize);
-    p->_ref_count=0;
-    p->_total_size_bytes=m_totalSize;
-
-    if(m_default.size()>0){
-      memcpy(((char*)p)+sizeof(typed_data_t), &m_default[0], m_payloadSize);
-    } 
-
-    return TypedDataPtr(p);
+    return TypedDataPtr(m_default);
   }
 
   virtual bool is_default(const TypedDataPtr &v) const override
@@ -713,6 +713,7 @@ protected:
   GraphTypeImpl(std::string id, TypedDataSpecPtr propertiesSpec)
     : m_id(id)
     , m_propertiesSpec(propertiesSpec)
+    , m_in_proc_external_main(nullptr)
   {
     m_metadata.SetObject();
   }

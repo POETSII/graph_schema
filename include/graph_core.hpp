@@ -59,11 +59,9 @@
 struct typed_data_t
 {
   // This is opaque data, and should be a POD
-  std::atomic<unsigned> _ref_count; // This is exposed in order to allow cross-module optimisations
-  union{
-    uint32_t _total_size_bytes;  // All typed data instances must be a POD, and this is the total size, including header
-    uint32_t _pad_; // Force alignment to 8 bytes for later member alignment
-  };
+  std::atomic<uint32_t> _ref_count; // This is exposed in order to allow cross-module optimisations
+  uint32_t _total_size_bytes;  // All typed data instances must be a POD, and this is the total size, including header
+  uint32_t _alloc_size_bytes; // Added to make re-used of type_data_t easier.
 
   size_t payloadSize() const
   { return this->_total_size_bytes - sizeof(typed_data_t); }
@@ -76,14 +74,20 @@ struct typed_data_t
 };
 #pragma pack(pop)
 
+static_assert(sizeof(typed_data_t)==12, "Expected core typed_data_t size to be 12 bytes.");
+
 template<class T>
 class DataPtr
 {
+public:
   template<class TO>
   friend class DataPtr;
 
   static_assert(std::is_base_of<typed_data_t,T>::value, "This class only handles things derived from typed_data_t");
 
+  static const unsigned ALLOC_ROUND_BITS=4;
+  static const unsigned ALLOC_ROUND_OFFSET=(1<<ALLOC_ROUND_BITS)-1;
+  static const unsigned ALLOC_ROUND_MASK=(~0u)-ALLOC_ROUND_OFFSET;
 private:
   T *m_p;
 public:
@@ -97,6 +101,7 @@ public:
     if(p){
       assert(p->_ref_count==0);
       assert(p->_total_size_bytes >= sizeof(T) );
+      assert(p->_alloc_size_bytes >= p->_total_size_bytes);
       p->_ref_count=1;
     }
   }
@@ -109,6 +114,7 @@ public:
       assert(p->_ref_count==0);
       assert(p->_total_size_bytes >= sizeof(T) );
       assert(p->_total_size_bytes >= sizeof(TO) );
+      assert(p->_alloc_size_bytes >= p->_total_size_bytes);
       p->_ref_count=1;
     }
   }
@@ -174,12 +180,34 @@ public:
   {
     if(!payload.empty()){
       unsigned totalSize=sizeof(typed_data_t)+payload.size();
-      m_p=(typed_data_t*)malloc(totalSize);
+      
+      unsigned allocSize=(totalSize+ALLOC_ROUND_OFFSET)&ALLOC_ROUND_MASK;
+      m_p=(typed_data_t*)malloc(allocSize);
       m_p->_ref_count=1;
       m_p->_total_size_bytes=totalSize;
+      m_p->_alloc_size_bytes=allocSize;
+      assert(m_p->_alloc_size_bytes >= m_p->_total_size_bytes);
 
       memcpy(((char*)m_p)+sizeof(typed_data_t), &payload[0], payload.size());
     }
+  }
+
+  static DataPtr create()
+  {
+    const unsigned payload_bytes=sizeof(T) - sizeof(typed_data_t);
+    if(payload_bytes==0){
+      return DataPtr();
+    }
+
+    unsigned totalSize=sizeof(T);
+    unsigned allocSize=(totalSize+ALLOC_ROUND_OFFSET)&ALLOC_ROUND_MASK;
+    auto *p=(typed_data_t*)malloc(allocSize);
+    p->_ref_count=0;
+    p->_total_size_bytes=totalSize;
+    p->_alloc_size_bytes=allocSize;
+    assert(p->_alloc_size_bytes >= p->_total_size_bytes);
+    
+    return DataPtr(p);
   }
 
   bool empty() const
@@ -241,9 +269,9 @@ public:
 
   DataPtr clone() const
   {
-    if(!m_p)
+    if(empty())
       return DataPtr();
-    typed_data_t *p=(typed_data_t*)malloc(m_p->_total_size_bytes);
+    typed_data_t *p=(typed_data_t*)malloc(m_p->_alloc_size_bytes);
     memcpy((void*)p, (void*)m_p, m_p->_total_size_bytes);
     p->_ref_count=0;
     return DataPtr((T*)p);
@@ -253,6 +281,7 @@ public:
   {
     assert(m_p &&dst);
     assert(dst->_total_size_bytes==m_p->_total_size_bytes);
+    assert(dst->_alloc_size_bytes >= dst->_total_size_bytes);
     memcpy(dst+1, payloadPtr(), payloadSize());
   }
 
@@ -344,10 +373,7 @@ namespace std
 template<class T>
 DataPtr<T> make_data_ptr()
 {
-  auto p=(T*)malloc(sizeof(T));
-  p->_ref_count=0;
-  p->_total_size_bytes=sizeof(T);
-  return DataPtr<T>(p);
+  return DataPtr<T>::create();
 }
 
 typedef DataPtr<typed_data_t> TypedDataPtr;
@@ -355,8 +381,9 @@ typedef DataPtr<typed_data_t> TypedDataPtr;
 inline TypedDataPtr clone(const typed_data_t *p)
 {
   TypedDataPtr res;
-  if(p){
-    typed_data_t *pc=(typed_data_t*)malloc(p->_total_size_bytes);
+  if(p && p->_total_size_bytes>=sizeof(typed_data_t)){
+    assert(p->_alloc_size_bytes >= p->_total_size_bytes);
+    typed_data_t *pc=(typed_data_t*)malloc(p->_alloc_size_bytes);
     memcpy((void*)pc, (void*)p, p->_total_size_bytes);
     pc->_ref_count=0;
     res.attach(pc);
@@ -418,10 +445,13 @@ public:
       if(p.is_unique()){
         res=p;
         p.reset();
+      }else{
+        res=p.clone();
       }
     }else if(payloadSize()){
       res=create();
     }
+    assert(res.is_unique());
     return res;
   }
 
