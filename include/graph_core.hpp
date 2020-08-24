@@ -127,6 +127,12 @@ public:
     }
   }
 
+  DataPtr(DataPtr &&o)
+    : m_p(o.m_p)
+  {
+    o.m_p=nullptr;
+  }
+
   template<class TO>
   DataPtr(const DataPtr<TO> &o)
     : m_p(o.m_p)
@@ -162,12 +168,6 @@ public:
     return *this;
   }
 
-  DataPtr(DataPtr &&o)
-    : m_p(o.m_p)
-  {
-    o.m_p=0;
-  }
-
   template<class TO>
   DataPtr(DataPtr<TO> &&o)
     : m_p((T*)o.m_p)
@@ -192,18 +192,34 @@ public:
     }
   }
 
-  static DataPtr create()
+  static DataPtr create(size_t payload_bytes)
   {
-    const unsigned payload_bytes=sizeof(T) - sizeof(typed_data_t);
     if(payload_bytes==0){
       return DataPtr();
     }
 
-    unsigned totalSize=sizeof(T);
+    unsigned totalSize=payload_bytes+sizeof(typed_data_t);
     unsigned allocSize=(totalSize+ALLOC_ROUND_OFFSET)&ALLOC_ROUND_MASK;
     auto *p=(typed_data_t*)malloc(allocSize);
     p->_ref_count=0;
     p->_total_size_bytes=totalSize;
+    p->_alloc_size_bytes=allocSize;
+    assert(p->_alloc_size_bytes >= p->_total_size_bytes);
+    
+    return DataPtr(p);
+  }
+
+  static DataPtr create()
+  {
+    return create(sizeof(T) - sizeof(typed_data_t));
+  }
+
+  static DataPtr create_by_alloc_size(size_t allocSize)
+  {
+    allocSize=(allocSize+ALLOC_ROUND_OFFSET)&ALLOC_ROUND_MASK;
+    auto *p=(typed_data_t*)malloc(allocSize);
+    p->_ref_count=0;
+    p->_total_size_bytes=0;
     p->_alloc_size_bytes=allocSize;
     assert(p->_alloc_size_bytes >= p->_total_size_bytes);
     
