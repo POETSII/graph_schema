@@ -35,6 +35,7 @@ struct neuron_hash_message_t
     uint32_t hash;
     uint32_t total_firings;
     uint64_t sum_square_firing_gaps;
+    uint32_t hashes_sent;
 };
 #pragma pack(pop)
 
@@ -101,13 +102,29 @@ extern "C" void poets_in_proc_external_main(
         return it->second;
     };
 
+    struct neuron_info
+    {
+        unsigned latest_hash=0;
+        unsigned hashes_sent=0;
+        unsigned hashes_recv=0;
+        unsigned spikes_recv=0;
+        unsigned spikes_sent=0;
+
+        bool complete(unsigned max_steps) const
+        {
+            return latest_hash==max_steps && hashes_sent==hashes_recv && spikes_sent==spikes_recv;
+        }
+    };
+    std::vector<neuron_info> neurons;
+    neurons.resize(gp.total_neurons);
+
     uint32_t final_hashes_received=0;
     bool send_halt=false;
 
     std::vector<uint8_t> msgG;
     while(1){
         if(send_halt && services.can_send()){
-            services.external_log(0, "Received all final hashes. Quiting");
+            services.external_log(0, "Received all final hashes and all spikes. Quiting");
 
             msgG.resize(sizeof(halt_message_type));
             auto &msg=*(halt_message_type*)&msgG[0];
@@ -142,29 +159,56 @@ extern "C" void poets_in_proc_external_main(
         poets_pin_index_t dest_pin=get_dest_pin(source);
 
         if(dest_pin==poets_pin_index_t{0}){
+
             if(msgG.size()!=sizeof(spike_message_t)){
                  throw std::runtime_error("Received invalid size message.");
             }
 
             auto msg=(const spike_message_t*)&msgG[0];
 
+            if(msg->t > gp.max_steps){
+                throw std::runtime_error("Received spike from after max_steps.");
+            }
+            neuron_info &ni=neurons.at(msg->nid);
+            assert(!ni.complete(gp.max_steps));
+            ni.spikes_recv++;
+
             fprintf(stdout, "%u,%u,S,%08x\n", msg->t, msg->nid, msg->hash);
+
+            if(ni.complete(gp.max_steps)){
+                final_hashes_received++;
+            }
         }else if(dest_pin==poets_pin_index_t{1}){
             if(msgG.size()!=sizeof(neuron_hash_message_t)){
                  throw std::runtime_error("Received invalid size message.");
             }
             auto msg=(const neuron_hash_message_t*)&msgG[0];
 
-            fprintf(stdout, "%u,%u,H,%08x,%u,%llu\n", msg->t, msg->nid, msg->hash, msg->total_firings, (unsigned long long)msg->sum_square_firing_gaps);
-            if(msg->t==gp.max_steps){
-                final_hashes_received++;
+            if(msg->t > gp.max_steps){
+                throw std::runtime_error("Received spike from after max_steps.");
             }
 
-            if(final_hashes_received==gp.total_neurons){
-                send_halt=true;
+            fprintf(stdout, "%u,%u,H,%08x,%u,%llu\n", msg->t, msg->nid, msg->hash, msg->total_firings, (unsigned long long)msg->sum_square_firing_gaps);
+
+            neuron_info &ni=neurons.at(msg->nid);
+            assert(!ni.complete(gp.max_steps));
+
+            ni.hashes_recv++;
+            if(msg->t > ni.latest_hash){
+                ni.hashes_sent=msg->hashes_sent;
+                ni.spikes_sent=msg->total_firings;
+                ni.latest_hash=msg->t;
+            }
+
+            if(ni.complete(gp.max_steps)){
+                final_hashes_received++;
             }
         }else{
             throw std::runtime_error("External received message from unknown source.");
+        }
+
+        if(final_hashes_received==gp.total_neurons){
+            send_halt=true;
         }
     }
 

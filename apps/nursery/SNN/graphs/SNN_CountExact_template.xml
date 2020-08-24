@@ -117,6 +117,7 @@
             uint32_t hash;
             uint32_t stats_total_firings;
             uint64_t stats_sum_square_firing_gaps;
+            uint32_t stats_hashes_sent;
             ]]></Message>
         </MessageType>
 

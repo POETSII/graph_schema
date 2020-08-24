@@ -379,7 +379,7 @@ void stats_acc_walk(TS &s, TCB &cb)
     cb("stats_last_firing", uint32_t(), s.stats_last_firing);
     cb("stats_total_firings", uint32_t(), s.stats_total_firings);
     cb("stats_export_countdown", uint32_t(), s.stats_export_countdown);
-    cb("_pad_stats_", uint32_t(), s._pad_stats_);
+    cb("stats_hashes_sent", uint32_t(), s.stats_hashes_sent);
 }
 
 struct stats_acc_t
@@ -388,7 +388,7 @@ struct stats_acc_t
     uint32_t stats_last_firing;
     uint32_t stats_total_firings;
     uint32_t stats_export_countdown;
-    uint32_t _pad_stats_;
+    uint32_t stats_hashes_sent;
 
     template<class TCB>
     void walk(TCB &cb)
@@ -401,6 +401,7 @@ struct stats_msg_t
 {
     uint64_t stats_sum_square_firing_gaps;
     uint32_t stats_total_firings;
+    uint32_t stats_hashes_sent;
 };
 
 
@@ -412,6 +413,7 @@ bool neuron_stats_acc_init(const TConfig &config, TAcc &acc)
     acc.stats_total_firings=0;
     acc.stats_sum_square_firing_gaps=0;
     acc.stats_export_countdown=config.stats_export_interval;
+    acc.stats_hashes_sent=0;
     return config.stats_export_interval==1;
 }
 
@@ -462,8 +464,10 @@ struct handler_log_dump
 };
 
 template<class TAcc,class TMsg>
-void neuron_stats_acc_export(const TAcc &acc, TMsg &msg)
+void neuron_stats_acc_export(TAcc &acc, TMsg &msg)
 {
+    acc.stats_hashes_sent++;
+    msg.stats_hashes_sent=acc.stats_hashes_sent;
     msg.stats_total_firings=acc.stats_total_firings;
     msg.stats_sum_square_firing_gaps=acc.stats_sum_square_firing_gaps;
     //fprintf(stderr, "stats_countdown=%u\n", acc.stats_export_countdown);

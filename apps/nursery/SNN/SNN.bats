@@ -40,7 +40,7 @@ function setup_file
 @test "create_izhikevich_instance_and_simulate." {
     WD=$(make_test_wd)
     (cd ${BATS_TEST_DIRNAME} &&
-        bin/generate_izhikevich_sparse  |
+        bin/generate_izhikevich_sparse 400 100 200 0.0005 1000 |
             tee >(gzip - > ${WD}/net.txt.gz ) |
             bin/create_graph_instance_v2 > ${WD}/net.xml.gz
     )
@@ -51,7 +51,7 @@ function setup_file
 @test "run_generate_CUBA_sparse_and_check." {
     WD=$(make_test_wd)
     ( cd $BATS_TEST_DIRNAME &&
-        bin/generate_CUBA  |
+        bin/generate_CUBA 80 100  |
         tee >(gzip - > ${WD}/net.txt.gz ) |
          bin/test_sink_snn > /dev/null
     )
@@ -80,7 +80,7 @@ function setup_file
     >&3 echo "BATS_TEST_DIRNAME=${BATS_TEST_DIRNAME}"
     WD=$(make_test_wd)
     (cd ${BATS_TEST_DIRNAME} && {
-            ${BATS_TEST_DIRNAME}/bin/generate_CUBA 1000  |
+            ${BATS_TEST_DIRNAME}/bin/generate_CUBA 300 300  |
             tee >(gzip - > ${WD}/net.txt.gz ) |
             ${BATS_TEST_DIRNAME}/bin/create_graph_instance_v2 | gzip - > ${WD}/net.xml.gz
         }
@@ -92,11 +92,29 @@ function setup_file
 
 
 @test "create_iz_and_compare_epoch_vs_ref." {
-    skip "TODO"
     WD=$(make_test_wd)
     GS=$(get_graph_schema_dir)
 
     (cd $BATS_TEST_DIRNAME &&
-        tests/create_iz_and_compare_epoch_vs_ref.sh "${WD}" "${GS}"
+        POETS_PROVIDER_PATH=${BATS_TEST_DIRNAME}/providers  tests/create_iz_and_compare_epoch_vs_ref.sh "${WD}" "${GS}"
+    )
+}
+
+@test "create_cuba_and_compare_epoch_vs_ref." {
+    WD=$(make_test_wd)
+    GS=$(get_graph_schema_dir)
+
+    (cd $BATS_TEST_DIRNAME &&
+        POETS_PROVIDER_PATH=${BATS_TEST_DIRNAME}/providers  tests/create_cuba_and_compare_epoch_vs_ref.sh "${WD}" "${GS}"
+    )
+}
+
+
+@test "create_poisson_and_compare_epoch_vs_ref." {
+    WD=$(make_test_wd)
+    GS=$(get_graph_schema_dir)
+
+    (cd $BATS_TEST_DIRNAME &&
+        POETS_PROVIDER_PATH=${BATS_TEST_DIRNAME}/providers tests/create_poisson_and_compare_epoch_vs_ref.sh "${WD}" "${GS}"
     )
 }

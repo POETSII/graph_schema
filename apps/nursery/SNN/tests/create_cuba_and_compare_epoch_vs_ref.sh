@@ -12,11 +12,11 @@ fi
 
 set -eou pipefail
 
-bin/generate_CUBA 200 |
+bin/generate_CUBA 200 200 |
     tee >(gzip - > ${WD}/net.txt.gz ) |
-    tee >(bin/create_graph_instance_v2 GALSExact | gzip - > net.GALSExact.xml.gz) |
-    tee >(bin/create_graph_instance_v2 HwIdle | gzip - > net.HwIdle.xml.gz) |
-    tee >(bin/create_graph_instance_v2 CountExact | gzip - > net.CountExact.xml.gz) |
+    tee >(bin/create_graph_instance_v2 GALSExact | gzip - > ${WD}/net.GALSExact.xml.gz) |
+    tee >(bin/create_graph_instance_v2 HwIdle | gzip - > ${WD}/net.HwIdle.xml.gz) |
+    tee >(bin/create_graph_instance_v2 CountExact | gzip - > ${WD}/net.CountExact.xml.gz) |
     cat > /dev/null
 
 SORT="sort -t, -k1n,1 -k2n,2 -k3,3 -k4,4 -k5n,5  -k5n,5 "
