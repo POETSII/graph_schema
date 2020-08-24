@@ -5,10 +5,12 @@ __pycache__/
 # Objects, shared objects
 *.o
 *.so
+*.dwo
 
 # Emacs
 *~
 
+/demo
 /demos
 /bin
 /providers
@@ -57,10 +59,15 @@ out.bin
 out.tmp
 out.txt
 poems_sim
-apps/nursery/SNN/cuba.*
-apps/nursery/SNN/iz.*
-apps/nursery/SNN/net.*
-apps/nursery/SNN/out_*
-apps/nursery/SNN/small.*
-apps/nursery/SNN/tiny.*
-apps/nursery/SNN/tmp.*
+/apps/nursery/SNN/cuba.*
+/apps/nursery/SNN/iz.*
+/apps/nursery/SNN/net.*
+/apps/nursery/SNN/out_*
+/apps/nursery/SNN/small.*
+/apps/nursery/SNN/tiny.*
+/apps/nursery/SNN/tmp.*
+/apps/nursery/SNN/providers/
+callgrind.*
+
+/benchmarks/small/*.gz
+/benchmarks/small/*.out
