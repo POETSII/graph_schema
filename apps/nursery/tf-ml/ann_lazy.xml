@@ -1,0 +1,206 @@
+<?xml version="1.0"?>
+<Graphs xmlns="https://poets-project.org/schemas/virtual-graph-schema-v4">
+    <GraphType id="ann_lazy">
+<Properties><![CDATA[
+    int32_t output_eps;
+]]></Properties>
+
+<SharedCode>
+<![CDATA[
+#include <algorithm>
+]]>
+</SharedCode>
+
+<MessageTypes>
+<MessageType id="value">
+    <Message>
+    <![CDATA[
+        int32_t value;
+        int32_t delta;
+    ]]>
+    </Message>
+</MessageType>
+</MessageTypes>
+
+<DeviceTypes>
+<DeviceType id="n_sum">
+    <Properties><![CDATA[
+    float bias;
+    uint8_t act;
+    ]]></Properties>
+
+    <State><![CDATA[
+        int32_t weightedInput;
+        int32_t trueOutput;
+        int32_t lastOutput;
+
+        uint32_t readyToSend;
+    ]]></State>
+
+    <SharedCode><![CDATA[
+
+    int32_t fix_exp(int32_t x)
+    {
+        bool flip=false;
+        if(x<0){
+            flip=true;
+            x=-x;
+        }
+
+        // Input is in 16.16 fixed-point
+        assert(x>=0);
+        unsigned x_i=x>>16;
+        unsigned x_i=x&0xFFFF;
+
+    }
+
+    int32_t activation(int32_t x, uint8_t act)
+    {
+        // RelU activation
+        switch(act){
+        default:
+            assert(0);
+        case 0: // relu activation
+            if(x<0){
+                x=0;
+            }
+            [[fallthrough]]
+        case 1: // linear activation
+            return x;
+        case 2: // exponential activation (for soft-max)
+            x=x>>16; // Numbers use 16 fractional bits
+            return fix_exp(x);
+        }
+    };
+
+    void update_output(const GRAPH_PROPERTIES_T *graphProperties, DEVICE_STATE_T *deviceState)
+    {
+        deviceState->trueOutput = activation(deviceState->weightedInput);
+        if( abs(deviceState->trueOutput - deviceState->lastOutput) > graphProperties->output_eps){
+            deviceState->readyToSend = RTS_FLAG_vout;
+        }else{
+            deviceState->readyToSend = 0;
+        }
+    }
+    ]]></SharedCode>
+
+    <ReadyToSend><![CDATA[
+    *readyToSend=deviceState->readyToSend;
+    ]]></ReadyToSend>
+
+    <OnInit><![CDATA[
+    deviceState->weightedInput = deviceProperties->bias;
+    update_output(graphProperties, deviceState);
+    ]]></OnInit>
+
+    <OnHardwareIdle />
+    <OnDeviceIdle />
+
+    <OutputPin name="vout" messageTypeId="value">
+        <OnSend><![CDATA[
+        message->value = deviceState->trueOutput;
+        message->delta = deviceState->trueOutput - deviceState->lastOutput;
+        deviceState->lastOutput=deviceState->trueOutput;
+        deviceState->readyToSend=0;
+        ]]></OnSend>
+    </OutputPin>
+
+    <InputPin name="vin" messageTypeId="value">
+     <Properties><![CDATA[
+     float w;
+     ]]></Properties>
+     <State/>
+        <OnReceive><![CDATA[
+        deviceState->weightedInput += edgeProperties->w * message->delta;
+        update_output(graphProperties, deviceState);
+        ]]></OnReceive>
+    </InputPin>
+</DeviceType>
+
+<DeviceType id="n_max_d4">
+    <Properties/>
+
+    <State><![CDATA[
+        int32_t values[4];
+        int32_t trueOutput;
+        int32_t lastOutput;
+
+        uint32_t readyToSend;
+    ]]></State>
+
+    <SharedCode><![CDATA[
+
+    void update_output(const GRAPH_PROPERTIES_T *graphProperties, DEVICE_STATE_T *deviceState, unsigned idx, int32_t value)
+    {
+        if(value >= deviceState->trueOutput){
+            deviceState->trueOutput=value;
+        }else{
+            // value < deviceState->trueOutput 
+            int prev=deviceState->values[idx];
+            deviceState->values[idx]=value;
+            if(prev==deviceState->trueOutput){
+                int m=-0x80000000;
+                for(unsigned i=0; i<4; i++){
+                    m = std::max(m, deviceState->values[i]);
+                }
+                deviceState->trueOutput=m;
+            }
+        }
+
+        if( abs(deviceState->trueOutput - deviceState->lastOutput) > graphProperties->output_eps){
+            deviceState->readyToSend = RTS_FLAG_vout;
+        }else{
+            deviceState->readyToSend = 0;
+        }
+    }
+    ]]></SharedCode>
+
+    <ReadyToSend><![CDATA[
+    *readyToSend=deviceState->readyToSend;
+    ]]></ReadyToSend>
+
+    <OnHardwareIdle />
+    <OnDeviceIdle />
+
+    <OnInit><![CDATA[
+    for(int i=0; i<4; i++){
+        deviceState->values[i]=0;
+    }
+    update_output(graphProperties, deviceState, 0, 0);
+    ]]></OnInit>
+
+    <OutputPin name="vout" messageTypeId="value">
+        <OnSend><![CDATA[
+        message->value = deviceState->trueOutput;
+        message->delta = deviceState->trueOutput - deviceState->lastOutput;
+        deviceState->lastOutput=deviceState->trueOutput;
+        deviceState->readyToSend=0;
+        ]]></OnSend>
+    </OutputPin>
+
+    <InputPin name="vin" messageTypeId="value">
+        <Properties>
+            <![CDATA[
+            uint8_t idx;
+            ]]>
+        </Properties>
+        <State/>
+        <OnReceive><![CDATA[
+        update_output(graphProperties, deviceState, edgeProperties->idx, message->value);
+        ]]></OnReceive>
+    </InputPin>
+</DeviceType>
+
+<ExternalType id="n_input">
+    <Properties><![CDATA[
+    uint16_t x;
+    uint16_t y;
+    ]]></Properties>
+
+    <OutputPin name="v" messageTypeId="value" />
+
+</ExternalType>
+
+</DeviceTypes>
+</GraphType>
+</Graphs>

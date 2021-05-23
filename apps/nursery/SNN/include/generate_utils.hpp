@@ -5,6 +5,7 @@
 
 #include <random>
 #include <algorithm>
+#include <iostream>
 
 #include "robin_hood.hpp"
 
@@ -53,5 +54,49 @@ void sample_by_prob(
         }*/
     }
 }
+
+template<class TCont, class F>
+void sample_exactly_k(
+    unsigned k,
+    const TCont &c,
+    const F &f,
+    std::mt19937_64 &rng,
+    robin_hood::unordered_flat_set<unsigned> &working
+){
+    unsigned n=c.size();
+    assert(k<=n);
+
+    if(k==nan){
+        for(unsigned i=0; i<k; i++){
+            f(c[i]);
+        }
+    }else if(k < (n*3)/4){
+        working.clear();
+        unsigned done=0;
+        while(done<k){
+            unsigned i=rng()%n;
+            if(working.insert(i).second){
+                f(c[i]);
+                done++;
+            }
+        }
+    }else{
+        working.clear();
+        unsigned done=0;
+        while(done<n-k){
+            unsigned i=rng()%n;
+            if(working.insert(i).second){
+                done++;
+            }
+        }
+        for(unsigned i=0; i<n; i++){
+            if(working.find(i)==working.end()){
+                f(c[i]);
+            }
+        }
+    }
+}
+
+
 
 #endif
