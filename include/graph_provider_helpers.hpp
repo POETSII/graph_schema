@@ -237,18 +237,18 @@ public:
     throw std::runtime_error("addDataHash - Not implemented for dynamic types yet.");
   }
 
-  std::string toXmlV4ValueSpec(const TypedDataPtr &data, int minorFormatVersion=0) const override
+  std::string toXmlV4ValueSpec(const TypedDataPtr &data, int formatMinorVersion=0) const override
   {
     std::stringstream acc;
-    m_type->binaryToXmlV4Value((const char *)data.payloadPtr(), data.payloadSize(), acc, minorFormatVersion);
+    m_type->binaryToXmlV4Value((const char *)data.payloadPtr(), data.payloadSize(), acc, formatMinorVersion);
     return acc.str();
   }
 
-  TypedDataPtr loadXmlV4ValueSpec(const std::string &value, int minorFormatVersion=0) const override
+  TypedDataPtr loadXmlV4ValueSpec(const std::string &value, int formatMinorVersion=0) const override
   {
     std::stringstream src(value);
     TypedDataPtr res=create();
-    m_type->xmlV4ValueToBinary(src, (char *)res.payloadPtr(), res.payloadSize(), true, minorFormatVersion);
+    m_type->xmlV4ValueToBinary(src, (char *)res.payloadPtr(), res.payloadSize(), true, formatMinorVersion);
     return res;
   }
 

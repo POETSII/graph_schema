@@ -64,3 +64,8 @@ apps/nursery/SNN/out_*
 apps/nursery/SNN/small.*
 apps/nursery/SNN/tiny.*
 apps/nursery/SNN/tmp.*
+apps/nursery/tf-ml/training/logs
+benchmarks/small
+
+callgrind.*
+*.dwo

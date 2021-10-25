@@ -589,18 +589,18 @@ def render_typed_data_as_spec(proto,name,elt_name,dst,asHeader=False):
     dst.write('  }\n')
     dst.write("""
 
-    std::string toXmlV4ValueSpec(const TypedDataPtr &data, int minorFormatVersion=0) const override
+    std::string toXmlV4ValueSpec(const TypedDataPtr &data, int formatMinorVersion=0) const override
     {
         std::stringstream acc;
-        m_tupleElt->binaryToXmlV4Value((const char *)data.payloadPtr(), data.payloadSize(), acc, minorFormatVersion);
+        m_tupleElt->binaryToXmlV4Value((const char *)data.payloadPtr(), data.payloadSize(), acc, formatMinorVersion);
         return acc.str();
     }
 
-    TypedDataPtr loadXmlV4ValueSpec(const std::string &value, int minorFormatVersion=0) const override
+    TypedDataPtr loadXmlV4ValueSpec(const std::string &value, int formatMinorVersion=0) const override
     {
         std::stringstream src(value);
         TypedDataPtr res=create();
-        m_tupleElt->xmlV4ValueToBinary(src, (char *)res.payloadPtr(), res.payloadSize(), true, minorFormatVersion);
+        m_tupleElt->xmlV4ValueToBinary(src, (char *)res.payloadPtr(), res.payloadSize(), true, formatMinorVersion);
         return res;
     }
 

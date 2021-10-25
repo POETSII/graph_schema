@@ -38,14 +38,15 @@ function setup_file
 }
 
 @test "create_izhikevich_instance_and_simulate." {
+    >&2 echo "????"
     WD=$(make_test_wd)
     (cd ${BATS_TEST_DIRNAME} &&
-        bin/generate_izhikevich_sparse  |
+        bin/generate_izhikevich_sparse 200 50 100 |
             tee >(gzip - > ${WD}/net.txt.gz ) |
-            bin/create_graph_instance_v2 > ${WD}/net.xml.gz
+            bin/create_graph_instance_v2 > ${WD}/net.xml
     )
-    >&3 echo "pwd=$(pwd)"
-    POETS_PROVIDER_PATH=${BATS_TEST_DIRNAME}/providers $(get_graph_schema_dir)/bin/epoch_sim --max-contiguous-idle-steps 1000000 ${WD}/net.xml.gz --external PROVIDER > ${WD}/out.txt
+    >&2 echo "pwd=$(pwd)"
+    POETS_PROVIDER_PATH=${BATS_TEST_DIRNAME}/providers $(get_graph_schema_dir)/bin/epoch_sim --max-contiguous-idle-steps 1000000 ${WD}/net.xml --external PROVIDER > ${WD}/out.txt
 }
 
 @test "run_generate_CUBA_sparse_and_check." {

@@ -1,0 +1,187 @@
+<?xml version='1.0' encoding='ASCII'?>
+<Graphs xmlns="https://poets-project.org/schemas/virtual-graph-schema-v4" formatMinorVersion="0">
+  <GraphType id="pressure_sync">
+    <Properties><![CDATA[
+    uint32_t max_time;
+    ]]></Properties>
+
+    <SharedCode><![CDATA[
+
+        #ifdef POETS_LEGACY_HAS_HANDLER_EXIT
+        #define _do_handler_exit(code) handler_exit(code)
+        #else
+        #define _do_handler_exit(code) ((void)0)
+        #endif
+
+        #define fake_handler_exit(code) \
+        { \
+            if((code)==0){ \
+                handler_log(0, "_HANDLER_EXIT_SUCCESS_9be65737_"); \
+            }else{ \
+                handler_log(0, "_HANDLER_EXIT_FAIL_9be65737_"); \
+            } \
+            _do_handler_exit(code); \
+        }
+
+
+    #define NUM_NEIGHBOURS 26
+
+    enum Action{
+        SHARE = 0,
+        MOVE=1
+    };
+
+    // Each neighbour has a differen direction
+    typedef uint16_t Dir;
+
+    // Given a direction, return the opposite direction
+    inline Dir opposite(Dir dir) {
+    Dir newDir = (dir + NUM_NEIGHBOURS/2);
+    if (newDir >= NUM_NEIGHBOURS) newDir -= NUM_NEIGHBOURS;
+    return newDir;
+    }
+
+    // Random number generator
+    inline float rand(uint32_t* seed) {
+    *seed = (*seed * 1103515245 + 12345) & 0x7fffffff;
+    return ((float) *seed) / ((float) 0x7fffffff);
+    }
+
+    inline uint32_t xorshift32(uint32_t x)
+    {
+        x ^= x << 13;
+        x ^= x >> 17;
+        x ^= x << 5;
+        return x;
+    }
+
+    inline uint32_t splitmix32(uint32_t z)
+    {
+        z ^= z >> 15;
+        z *= 0x85ebca6b;
+        z ^= z >> 13;
+        z *= 0xc2b2ae35;
+        z ^= z >> 16;
+        return z;
+    }
+
+    inline uint32_t mul_hi(uint32_t x, uint32_t y)
+    {
+        uint64_t prod=x * (uint64_t)y;
+        return prod>>32;
+    }
+    ]]></SharedCode>
+
+    <MessageTypes>
+        <MessageType id="message">
+            <Message><![CDATA[
+            int32_t pressure;
+            uint32_t move;
+            uint32_t prng;
+            ]]></Message>
+        </MessageType>
+    </MessageTypes>
+
+    <DeviceTypes>
+        <DeviceType id="cell">
+            <Properties><![CDATA[
+            uint32_t seed;
+            int8_t isRoot;
+            ]]></Properties>
+            <State><![CDATA[
+            int32_t numSteps;
+            int32_t pressure;
+            int32_t newPressure;
+            uint32_t move;
+            uint32_t prng;
+
+            int32_t minPressure;
+            int32_t maxPressure;
+
+            uint32_t rts;
+
+            uint8_t mode;
+            ]]></State>
+            
+            <SharedCode/>
+
+            <OnHardwareIdle><![CDATA[
+                auto s=deviceState;
+                if (s->numSteps > 0) {
+                    s->pressure = s->newPressure;
+                    s->minPressure = std::min(s->minPressure, s->pressure);
+                    s->maxPressure = std::max(s->maxPressure, s->pressure);
+                    s->mode = s->mode == SHARE ? MOVE : SHARE;
+                    if (s->mode == SHARE){
+                        s->move = 0;
+                    }
+                    s->prng = xorshift32( s->prng );
+                    deviceState->rts = RTS_FLAG_out;
+                    s->numSteps--;
+                }
+                else {
+                    handler_log(2, "p=%d, range=[%d,%d]\n", s->pressure, s->minPressure, s->maxPressure);
+                    if(deviceProperties->isRoot){
+                        handler_exit(0);
+                    }
+                    deviceState->rts=0;
+                }
+            ]]>
+            </OnHardwareIdle>
+
+            <OnDeviceIdle/>
+
+            <ReadyToSend><![CDATA[
+                *readyToSend=deviceState->rts;
+            ]]></ReadyToSend>
+
+            <OnInit><![CDATA[
+            deviceState->prng = deviceProperties->seed;
+            deviceState->mode = SHARE;
+            deviceState->newPressure = deviceState->pressure;
+            deviceState->minPressure = deviceState->pressure;
+            deviceState->maxPressure = deviceState->pressure;
+            deviceState->rts = RTS_FLAG_out;
+            ]]></OnInit>        
+
+            <InputPin name="in" messageTypeId="message">
+                <Properties><![CDATA[
+                uint16_t dir;
+                ]]></Properties>
+                <State/>
+                <OnReceive><![CDATA[
+                    auto s = deviceState;
+                    auto dir = edgeProperties->dir;
+                    if (s->mode == SHARE) {
+                        int32_t diff = s->newPressure - message->pressure;
+                        if (diff > 0) {
+                            //const uint32_t INV_NUM_NEIGHBOURS = 0xFFFFFFFFu/NUM_NEIGHBOURS;
+                            if (rand(&s->prng) < float(diff)/float(NUM_NEIGHBOURS)) {
+                            //uint32_t u=xorshift32(s->prng + message->prng);
+                            //if(u < mul_hi(diff, INV_NUM_NEIGHBOURS) ){
+                            
+                                assert(0== (s->move & (1<<opposite(dir))));
+                                s->move |= 1 << opposite(dir);
+                                s->newPressure--;
+                            }
+                        }
+                    }
+                    else if (message->move & (1 << dir)) {
+                        s->newPressure++;
+                    }
+                ]]></OnReceive>
+            </InputPin>
+
+            <OutputPin name="out" messageTypeId="message">
+                <OnSend><![CDATA[
+                message->pressure = deviceState->pressure;
+                message->move = deviceState->move;
+                message->prng = deviceState->prng;
+                deviceState->rts = 0;
+                ]]></OnSend>
+            </OutputPin>
+
+        </DeviceType>
+    </DeviceTypes>
+</GraphType>
+</Graphs>

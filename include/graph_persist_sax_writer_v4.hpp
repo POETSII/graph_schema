@@ -31,7 +31,7 @@ protected:
   
   const xmlChar *m_ns=(const xmlChar *)"https://poets-project.org/schemas/virtual-graph-schema-v4";
 
-  int m_minorFormatVersion=0;
+  int m_formatMinorVersion=0;
   
   xmlTextWriterPtr m_dst;
   bool m_parseMetaData;
@@ -92,7 +92,7 @@ protected:
       if(is_zero(data.payloadSize(), data.payloadPtr()) && spec->is_default(data)){
         // safe to omit. Things are complicated with V4/V3 conversions and defaults.
       }else{
-        std::string value=spec->toXmlV4ValueSpec(data, m_minorFormatVersion);
+        std::string value=spec->toXmlV4ValueSpec(data, m_formatMinorVersion);
 
         xmlTextWriterWriteAttribute(m_dst, (const xmlChar*)name, (const xmlChar*)value.c_str());
       }

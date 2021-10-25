@@ -300,6 +300,7 @@ include apps/nursery/barrier_izhikevich_clustered/barrier_izhikevich_clustered.i
 include apps/nursery/pulsed_izhikevich/pulsed_izhikevich.inc
 include apps/nursery/self_clocked_izhikevich/self_clocked_izhikevich.inc
 include apps/nursery/ising_spin_fix_ext/ising_spin_fix_ext.inc
+include apps/nursery/pressure_sync/pressure_sync.inc
 
 #TODO : Defunct?
 include tools/partitioner.inc

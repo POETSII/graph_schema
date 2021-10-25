@@ -62,7 +62,7 @@ struct typed_data_t
   std::atomic<unsigned> _ref_count; // This is exposed in order to allow cross-module optimisations
   union{
     uint32_t _total_size_bytes;  // All typed data instances must be a POD, and this is the total size, including header
-    uint32_t _pad_; // Force alignment to 8 bytes for later member alignment
+    uint64_t _pad_; // Force alignment to 8 bytes for later member alignment
   };
 
   size_t payloadSize() const
@@ -237,6 +237,14 @@ public:
   ~DataPtr()
   {
     release();
+  }
+
+  static DataPtr create_zero_filled()
+  {
+    T *p=(T*)malloc(sizeof(T));
+    p->_total_size_bytes=sizeof(T);
+    p->_ref_count=0;
+    return DataPtr(p);
   }
 
   DataPtr clone() const
@@ -451,18 +459,18 @@ public:
 
   //! Convert to an XML V4 C-style initialiser
   /*!
-    minorFormatVersion : The level of support in the XML, with later versions possibly allowing more complex specs.
+    formatMinorVersion : The level of support in the XML, with later versions possibly allowing more complex specs.
   */
-  virtual std::string toXmlV4ValueSpec(const TypedDataPtr &data, int minorFormatVersion=0) const
+  virtual std::string toXmlV4ValueSpec(const TypedDataPtr &data, int formatMinorVersion=0) const
   {
     throw std::runtime_error("toXmlV4ValueSpec - Not implemented.");
   }
 
   //! Convert an XML V4 C-style initialiser to a binary value
   /*!
-    minorFormatVersion : The level of support in the XML, with later versions possibly allowing more complex specs.
+    formatMinorVersion : The level of support in the XML, with later versions possibly allowing more complex specs.
   */
-  virtual TypedDataPtr loadXmlV4ValueSpec(const std::string &value, int minorFormatVersion=0) const
+  virtual TypedDataPtr loadXmlV4ValueSpec(const std::string &value, int formatMinorVersion=0) const
   {
     throw std::runtime_error("loadXmlV4ValueSpec - Not implemented.");
   }

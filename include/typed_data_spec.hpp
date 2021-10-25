@@ -167,9 +167,9 @@ public:
   virtual bool isUnion() const
   { return false; }
 
-  virtual void binaryToXmlV4Value(const char *pBinary, unsigned cbBinary, std::ostream &dst, int minorFormatVersion) const=0;
+  virtual void binaryToXmlV4Value(const char *pBinary, unsigned cbBinary, std::ostream &dst, int formatMinorVersion) const=0;
 
-  virtual void xmlV4ValueToBinary(std::istream &src, char *pBinary, unsigned cbBinary, bool alreadyDefaulted, int minorFormatVersion) const=0;
+  virtual void xmlV4ValueToBinary(std::istream &src, char *pBinary, unsigned cbBinary, bool alreadyDefaulted, int formatMinorVersion) const=0;
 
     virtual bool check_is_equivalent(TypedDataSpecElement *other, bool throw_on_error, const std::string &error_prefix) const =0;
 
@@ -437,10 +437,10 @@ public:
         }
     }
 
-    virtual void binaryToXmlV4Value(const char *pBinary, unsigned cbBinary, std::ostream &dst, int minorFormatVersion) const
+    virtual void binaryToXmlV4Value(const char *pBinary, unsigned cbBinary, std::ostream &dst, int formatMinorVersion) const
     {
-        if(minorFormatVersion!=0){
-            throw std::runtime_error("binaryToXmlV4Value - Only minorFormatVersion==0 supported by this program.");
+        if(formatMinorVersion!=0){
+            throw std::runtime_error("binaryToXmlV4Value - Only formatMinorVersion==0 supported by this program.");
         }
         if(cbBinary!=scalarTypeWidthBytes(m_type)){
             throw std::runtime_error("binaryToXmlV4Value - Wrong binary size for element.");
@@ -467,10 +467,10 @@ public:
         }
     }
 
-    virtual void xmlV4ValueToBinary(std::istream &src, char *pBinary, unsigned cbBinary, bool alreadyDefaulted, int minorFormatVersion) const
+    virtual void xmlV4ValueToBinary(std::istream &src, char *pBinary, unsigned cbBinary, bool alreadyDefaulted, int formatMinorVersion) const
     {
-        if(minorFormatVersion!=0){
-            throw std::runtime_error("xmlV4ValueToBinary - Only minorFormatVersion==0 supported by this program.");
+        if(formatMinorVersion!=0){
+            throw std::runtime_error("xmlV4ValueToBinary - Only formatMinorVersion==0 supported by this program.");
         }
         if(cbBinary!=scalarTypeWidthBytes(m_type)){
             throw std::runtime_error("xmlV4ValueToBinary - Wrong binary size for element.");
@@ -649,10 +649,10 @@ public:
         return m_elementsByIndex.at(i);
     }
 
-    virtual void binaryToXmlV4Value(const char *pBinary, unsigned cbBinary, std::ostream &dst, int minorFormatVersion) const
+    virtual void binaryToXmlV4Value(const char *pBinary, unsigned cbBinary, std::ostream &dst, int formatMinorVersion) const
     {
-        if(minorFormatVersion!=0){
-            throw std::runtime_error("minorFormatVersion!=0");
+        if(formatMinorVersion!=0){
+            throw std::runtime_error("formatMinorVersion!=0");
         }
 
         dst<<'{';
@@ -664,17 +664,17 @@ public:
                 dst<<',';
             }
 
-            e->binaryToXmlV4Value(pBinary+off, e->getPayloadSize(), dst, minorFormatVersion);
+            e->binaryToXmlV4Value(pBinary+off, e->getPayloadSize(), dst, formatMinorVersion);
             off += e->getPayloadSize();
         }
 
         dst<<'}';
     }
 
-    virtual void xmlV4ValueToBinary(std::istream &src, char *pBinary, unsigned cbBinary, bool alreadyDefaulted, int minorFormatVersion) const
+    virtual void xmlV4ValueToBinary(std::istream &src, char *pBinary, unsigned cbBinary, bool alreadyDefaulted, int formatMinorVersion) const
     {
-        if(minorFormatVersion!=0){
-            throw std::runtime_error("minorFormatVersion!=0");
+        if(formatMinorVersion!=0){
+            throw std::runtime_error("formatMinorVersion!=0");
         }
 
         auto expect=[&](char value)
@@ -698,7 +698,7 @@ public:
                 expect(',');
             }
 
-            e->xmlV4ValueToBinary(src, pBinary+off, e->getPayloadSize(), alreadyDefaulted, minorFormatVersion);
+            e->xmlV4ValueToBinary(src, pBinary+off, e->getPayloadSize(), alreadyDefaulted, formatMinorVersion);
             off += e->getPayloadSize();
         }
 
@@ -866,13 +866,13 @@ public:
     { return m_eltType; }
 
 
-    virtual void binaryToXmlV4Value(const char *pBinary, unsigned cbBinary, std::ostream &dst, int minorFormatVersion) const
+    virtual void binaryToXmlV4Value(const char *pBinary, unsigned cbBinary, std::ostream &dst, int formatMinorVersion) const
     {
         if(cbBinary != getPayloadSize() ){
             throw std::runtime_error("binaryToXmlV4Value - Invalid binary size.");
         }
-        if(minorFormatVersion!=0){
-            throw std::runtime_error("minorFormatVersion!=0");
+        if(formatMinorVersion!=0){
+            throw std::runtime_error("formatMinorVersion!=0");
         }
 
         dst<<'{';
@@ -884,20 +884,20 @@ public:
             if(off!=0){
                 dst<<',';
             }
-            m_eltType->binaryToXmlV4Value(pBinary+off, cb, dst, minorFormatVersion);
+            m_eltType->binaryToXmlV4Value(pBinary+off, cb, dst, formatMinorVersion);
             off += cb;
         }
 
         dst<<'}';
     }
 
-    virtual void xmlV4ValueToBinary(std::istream &src, char *pBinary, unsigned cbBinary, bool alreadyDefaulted, int minorFormatVersion) const
+    virtual void xmlV4ValueToBinary(std::istream &src, char *pBinary, unsigned cbBinary, bool alreadyDefaulted, int formatMinorVersion) const
     {
         if(cbBinary != getPayloadSize() ){
             throw std::runtime_error("binaryToXmlV4Value - Invalid binary size.");
         }
-        if(minorFormatVersion!=0){
-            throw std::runtime_error("minorFormatVersion!=0");
+        if(formatMinorVersion!=0){
+            throw std::runtime_error("formatMinorVersion!=0");
         }
 
         auto expect=[&](char value)
@@ -920,7 +920,7 @@ public:
                 expect(',');
             }
 
-            m_eltType->xmlV4ValueToBinary(src, pBinary+off, m_eltType->getPayloadSize(), alreadyDefaulted, minorFormatVersion);
+            m_eltType->xmlV4ValueToBinary(src, pBinary+off, m_eltType->getPayloadSize(), alreadyDefaulted, formatMinorVersion);
             off += cb;
         }
 

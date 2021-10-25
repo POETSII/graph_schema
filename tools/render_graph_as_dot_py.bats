@@ -1,4 +1,4 @@
-load bats_helpers.bash
+load bats_helpers
 
 @test "check tools/render_graph_as_dot.py exists" {
     [ -f tools/render_graph_as_dot.py ]
