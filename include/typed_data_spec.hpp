@@ -270,7 +270,12 @@ private:
     rapidjson::Value binaryToJSONImpl(const char *pBinary, unsigned cbBinary) const
     {
         assert(cbBinary == scalarTypeWidthBytes(m_type));
-        assert( (intptr_t(pBinary )%sizeof(T))==0 );
+        // Tinsel requires 4-byte alignment, but not 8-byte
+        if(sizeof(T)<4){
+            assert( (intptr_t(pBinary )%sizeof(T))==0 );
+        }else{
+            assert( (intptr_t(pBinary )%4)==0 );
+        }
         T val=*(const T*)pBinary;
         return rapidjson::Value(val);
     }
