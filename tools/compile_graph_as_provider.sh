@@ -5,11 +5,12 @@ graph_schema_dir="${script_dir}/.."
 
 input_file=""
 output_file=""
+output_dir=""
 CPPFLAGS=""
 
 function error {
     >&2 echo "$1"
-    exit
+    exit 1
 }
 
 
@@ -21,6 +22,12 @@ while [[ $# -gt 0 ]] ; do
         [[ "$output_file" == "" ]] || error "Duplicate output file option" 
         [[ $# -gt 1 ]] || error "Missing output file value"
         output_file="$2"
+        shift 2
+        ;;
+    --output-dir)
+        [[ "$output_dir" == "" ]] || error "Duplicate output dir option"
+        [[ $# -gt 1 ]] || error "Missing output dir value"
+        output_dir="$2"
         shift 2
         ;;
     --working-dir)
@@ -39,6 +46,10 @@ while [[ $# -gt 0 ]] ; do
         CPPFLAGS="$CPPFLAGS  -O2 -DNDEBUG=1"
         shift
         ;;
+    -std=c++17)
+        CPPFLAGS="$CPPFLAGS  -std=c++17"
+        shift
+        ;;
     *)
         [[ "$input_file" == "" ]] || error "More than one input file"
         input_file="$1"
@@ -51,10 +62,12 @@ done
 [[ "$input_file" != "" ]] || error "Input file not specified." 
 [[ -f "$input_file" ]] || error "Input file $input_file does not exist." 
 
+
 input_file_base=${input_file%.gz}
 input_file_base=${input_file_base%.xml}
 
 # TODO: This has to parse the entire graph, so is inefficient when dealing with large graphs
+>&2 echo "Getting graph type id"
 name=$(${graph_schema_dir}/tools/print_graph_type_id.py ${input_file}) || error "Couldn't get graph type id" 
 
 if [[ "$working_dir" == "" ]] ; then
@@ -63,6 +76,11 @@ else
     mkdir -p $working_dir
 fi
 
+[[ "" != "$output_dir" ]] && [[ "" != "$output_file" ]] && error "Both --output-dir and -o were given. At most one can be used."
+if [[ "$output_dir" != "" ]] ; then
+    [[ -d "${output_dir}" ]] || error "--output-dir ${output_dir} : directory does not exist."
+    output_file="${output_dir}/${name}.graph.so"
+fi
 if [[ "$output_file" == "" ]] ; then
     output_file="${name}.graph.so"
 fi
@@ -89,7 +107,7 @@ CPPFLAGS+=" $(pkg-config --cflags libxml++-2.6)"
 CPPFLAGS+=" -Wno-unused-local-typedefs -Wno-unused-but-set-variable"
 
 CPPFLAGS+=" -mfpmath=sse -msse2"
-CPPFLAGS+=" -frounding-math -fsignaling-nans"
+CPPFLAGS+=" -frounding-math -fsignaling-nans -fmax-errors=1"
 
 LDLIBS="$(pkg-config --libs-only-l libxml++-2.6)"
 LDFLAGS+="$(pkg-config --libs-only-L --libs-only-other libxml++-2.6)"

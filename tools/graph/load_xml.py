@@ -8,7 +8,7 @@ import warnings
 from graph.load_xml_v4 import v4_namespace_uri, v4_load_graph_types_and_instances
 from graph.load_xml_v3 import v3_namespace_uri, v3_load_graph_types_and_instances
 
-def load_graph(src : Union[str, io.TextIOBase, lxml.etree.Element], src_path : Optional[str] = None ) -> (GraphType, Optional[GraphInstance]):
+def load_graph(src : Union[str, io.TextIOBase, lxml.etree.Element], src_path : Optional[str] = None, skip_instance:Optional[bool]=False ) -> (GraphType, Optional[GraphInstance]):
     """
     src is a string, stream, or XML Element to load from.
     If it is a string, that string is a path, _not_ direct XML.
@@ -28,14 +28,14 @@ def load_graph(src : Union[str, io.TextIOBase, lxml.etree.Element], src_path : O
         raise RuntimeError(f"Didn't know how to load from src of type {type(src)}")
 
     if graph.tag==f"{{{v4_namespace_uri}}}Graphs":
-        return v4_load_graph_types_and_instances(graph, src_path)
+        return v4_load_graph_types_and_instances(graph, src_path, skip_instance=skip_instance)
     elif graph.tag==f"{{{v3_namespace_uri}}}Graphs":
-        return v3_load_graph_types_and_instances(graph, src_path)
+        return v3_load_graph_types_and_instances(graph, src_path, skip_instance=skip_instance)
     else:
         raise RuntimeError(f"Didn't know how to deal with root element of type {graph.tag}")
 
 def load_graph_type(src : Union[str, io.TextIOBase, lxml.etree.Element], src_path : Optional[str] ) -> GraphType:
-    (gt,gi)=load_graph(src, src_path)
+    (gt,gi)=load_graph(src, src_path, skip_instance=True)
     return gt
 
 def load_graph_instance(src : Union[str, io.TextIOBase, lxml.etree.Element], src_path : Optional[str] ) -> GraphInstance:

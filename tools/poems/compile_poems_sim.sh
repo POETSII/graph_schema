@@ -16,6 +16,8 @@ function usage ()
 "
 }
 
+CPPFLAGS=""
+
 output_file=poems_sim
 input_file=""
 working_dir=$(mktemp -d)
@@ -27,6 +29,7 @@ while true; do
     --help ) usage ; exit 1 ;;
     -o | --output ) output_file=$2 ; shift 2 ;;
     --working-dir ) working_dir=$2 ; shift 2 ;;
+    -I ) CPPFLAGS="$CPPFLAGS -I $2" ; shift 2 ;;
     --release ) optimise=1 ; asserts=0 ; shift ;;
     --release-with-asserts ) optimise=1 ; asserts=1 ; shift ;;
     --debug ) optimise=0 ; asserts=1 ; shift ;;
@@ -65,7 +68,7 @@ LIBXML_PKG_CONFIG_CPPFLAGS="$(pkg-config --cflags libxml++-2.6)"
 LIBXML_PKG_CONFIG_LDLIBS="$(pkg-config --libs-only-l libxml++-2.6)"
 LIBXML_PKG_CONFIG_LDFLAGS="$(pkg-config --libs-only-L --libs-only-other libxml++-2.6)"
 
-CPPFLAGS=" -std=c++17"
+CPPFLAGS+=" -std=c++17"
 CPPFLAGS+=" -I include -W -Wall -Wno-unused-parameter -Wno-unused-variable"
 CPPFLAGS+=" -I include/include_cache"
 CPPFLAGS+=" ${LIBXML_PKG_CONFIG_CPPFLAGS}"
@@ -83,6 +86,19 @@ if [[ $optimise -eq 1 ]] ; then
 fi
 if [[ $asserts -eq 0 ]] ; then
     CPPFLAGS+=" -DNDEBUG=1"
+fi
+
+if [[ "${POETS_EXTERNAL_INTERFACE_SPEC}" == "" ]] ; then
+    if [[ -d "${graph_schema_dir}/../external_interface_spec" ]] ; then
+        POETS_EXTERNAL_INTERFACE_SPEC="${graph_schema_dir}/../external_interface_spec"
+    fi
+fi
+if [[ "${POETS_EXTERNAL_INTERFACE_SPEC}" == "" ]] ; then
+	HAVE_POETS_EXTERNAL_INTERFACE_SPEC=0
+	CPPFLAGS+=" -I ${graph_schema_dir}/include/include_cache"
+else
+	HAVE_POETS_EXTERNAL_INTERFACE_SPEC=1
+	CPPFLAGS+=" -I ${POETS_EXTERNAL_INTERFACE_SPEC}/include"
 fi
 
 LDLIBS+="${LIBXML_PKG_CONFIG_LDLIBS} -ltbb -lmetis -ldl"

@@ -3,6 +3,8 @@ from graph.core import *
 import xml.etree.ElementTree as ET
 from lxml import etree
 
+from typing import *
+
 import re
 import os
 import sys
@@ -699,7 +701,7 @@ def load_graph_instance(graphTypes, graphNode, namespace=None, loadDocumentation
     return graph
 
 
-def load_graph_types_and_instances(src,basePath,namespace=None,loadDocumentation=False):
+def load_graph_types_and_instances(src,basePath,namespace=None,loadDocumentation=False,skip_instance:Optional[bool]=False):
     if namespace==None:
         namespace=ns
 
@@ -724,10 +726,11 @@ def load_graph_types_and_instances(src,basePath,namespace=None,loadDocumentation
             gt=load_graph_type_reference(gtRefNode, basePath, namespace)
             graphTypes[gt.id]=gt
 
-        for giNode in graphsNode.findall("p:GraphInstance",namespace):
-            #sys.stderr.write("Loading graph\n")
-            g=load_graph_instance(graphTypes, giNode, namespace, loadDocumentation)
-            graphs[g.id]=g
+        if not skip_instance:
+            for giNode in graphsNode.findall("p:GraphInstance",namespace):
+                #sys.stderr.write("Loading graph\n")
+                g=load_graph_instance(graphTypes, giNode, namespace, loadDocumentation)
+                graphs[g.id]=g
 
         return (graphTypes,graphs)
 
@@ -737,8 +740,8 @@ def load_graph_types_and_instances(src,basePath,namespace=None,loadDocumentation
             sys.stderr.write(etree.tostring(e.node, pretty_print = True, encoding='utf-8').decode("utf-8")+"\n")
         raise e
 
-def v3_load_graph_types_and_instances(src,basePath):
-    (graphTypes,graphInstances)=load_graph_types_and_instances(src,basePath)
+def v3_load_graph_types_and_instances(src,basePath, skip_instance:Optional[bool]=False):
+    (graphTypes,graphInstances)=load_graph_types_and_instances(src,basePath, skip_instance=skip_instance)
     if len(graphInstances)==0:
         if len(graphTypes)==1:
             for x in graphTypes.values():

@@ -796,7 +796,7 @@ struct EpochSim
       unsigned n=dist(rng);
       assert(n <= m_delayed.size());
 
-      for(int i=0; i<n; i++){
+      for(int i=0; i<(int)n; i++){
         unsigned sel=rng() % m_delayed.size();
         auto &m=m_delayed.at(sel);
         do_recv(*m.out, m.payload, m.idSend, m.src_epoch);
@@ -879,7 +879,7 @@ struct EpochSim
         #ifndef NDEBUG
         if(src.isExternal){
           assert(!src.ext2int.empty());
-          assert(std::get<0>(src.ext2int.front())==sel);
+          assert(std::get<0>(src.ext2int.front())==(int)sel);
         }else{
           uint32_t check=src.type->calcReadyToSend(&sendServices, m_graphProperties.get(), src.properties.get(), src.state.get());
           assert(check);

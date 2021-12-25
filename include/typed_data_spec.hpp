@@ -129,6 +129,20 @@ public:
     }
   }
 
+  bool isBinaryDefault(const char *pBinary, unsigned cbBinary) const
+  {
+    if(cbBinary!=m_binaryDefault.size()){
+
+        std::stringstream tmp;
+        tmp<<"createBinaryDefault - incorrect binary size of "<<cbBinary<<", expected "<<m_binaryDefault.size();
+        throw std::runtime_error(tmp.str());
+    }
+    if(m_binaryDefault.empty()){
+        return true;
+    }
+    return !std::memcmp(pBinary, &m_binaryDefault[0], m_binaryDefault.size());
+  }
+
   void createBinaryRandom(char *pBinary, unsigned cbBinary) const
   {//Generates random numbers for every byte of the payload, and add this to the message.
     if (cbBinary!=m_binaryDefault.size()){
@@ -631,8 +645,10 @@ public:
         unsigned off=0;
         for(const auto &e : m_elementsByIndex)
         {
-            auto val=e->binaryToJSON(pBinary+off, e->getPayloadSize(), alloc);
-            res.AddMember(e->getNameValue(), val, alloc);
+            if(!e->isBinaryDefault(pBinary+off, e->getPayloadSize())){
+                auto val=e->binaryToJSON(pBinary+off, e->getPayloadSize(), alloc);
+                res.AddMember(e->getNameValue(), val, alloc);
+            }
 
             off += e->getPayloadSize();
         }
@@ -851,9 +867,19 @@ public:
         rapidjson::Value res(rapidjson::kArrayType);
         res.Reserve(m_eltCount, alloc);
 
-        unsigned off=0;
         unsigned cb=m_eltType->getPayloadSize();
-        for(unsigned i=0; i<m_eltCount; i++)
+
+        unsigned lastNonDefault=m_eltCount;
+        while(0 < lastNonDefault){
+            if(!m_eltType->isBinaryDefault(pBinary+((lastNonDefault-1)*cb), cb)){
+                break;
+            }
+            lastNonDefault--;
+        }
+
+        unsigned off=0;
+        
+        for(unsigned i=0; i<lastNonDefault; i++)
         {
             auto val=m_eltType->binaryToJSON(pBinary+off, cb, alloc);
             res.PushBack(val, alloc);

@@ -45,6 +45,8 @@ def load_struct_instance(spec, elt, attr):
     if val==None:
         return None
     init=parse_struct_init_string(val)
+    if init==None:
+        return None
     value=spec.convert_v4_init(init)
     assert(spec.is_refinement_compatible(value))
     return spec.expand(value)
@@ -303,7 +305,7 @@ def load_graph_instance(graphTypes, graphNode):
     return graph
 
 
-def v4_load_graph_types_and_instances(doc : etree.Element , basePath:str) -> (GraphType, Optional[GraphInstance]):
+def v4_load_graph_types_and_instances(doc : etree.Element , basePath:str, skip_instance:Optional[bool]=False) -> (GraphType, Optional[GraphInstance]):
     graphsNode = doc
 
     graphType=None
@@ -319,10 +321,11 @@ def v4_load_graph_types_and_instances(doc : etree.Element , basePath:str) -> (Gr
 
         graphTypes={graphType.id : graphType}
 
-        for giNode in graphsNode.findall("p:GraphInstance",ns):
-            sys.stderr.write("Loading graph instance\n")
-            assert graphInst is None
-            graphInst=load_graph_instance(graphTypes, giNode)
+        if not skip_instance:
+            for giNode in graphsNode.findall("p:GraphInstance",ns):
+                sys.stderr.write("Loading graph instance\n")
+                assert graphInst is None
+                graphInst=load_graph_instance(graphTypes, giNode)
             
         return (graphType,graphInst)
 

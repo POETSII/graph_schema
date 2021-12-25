@@ -633,6 +633,28 @@ class DeviceType(object):
         p.index=index
 
 
+class SupervisorType(object):
+    def __init__(self,parent,id,propertiesCode:str,stateCode:str,sharedCode:str,onInitCode:str,onSupervisorIdleCode:str,onStopCode:str):
+        self.id=id
+        self.parent=parent
+        self.state_code=stateCode
+        self.properties_code=propertiesCode
+        self.inputs_by_index=[]
+        self.shared_code=sharedCode
+        self.init_handler=onInitCode
+        self.on_supervisor_idle_handler=onSupervisorIdleCode
+        self.on_stop_handler=onStopCode
+
+    def add_supervisor_input(self,message_type,receive_handler):
+        if len(self.inputs_by_index)>0:
+            raise GraphDescriptionError(f"More than one supervisor pin on supervisor type {self.id}")
+        if message_type.id not in self.parent.message_types:
+            raise GraphDescriptionError("Unregistered message type {} on pin {} of supervisor type {}".format(message_type.id,name,self.id))
+        if message_type != self.parent.message_types[message_type.id]:
+            raise GraphDescriptionError("Incorrect message type object {} on pin {} of supervisor type {}".format(message_type.id,name,self.id))
+        index=len(self.inputs_by_index)
+        self.inputs_by_index.append( (index, message_type, receive_handler) )
+
 class GraphType(object):
     def __init__(self,id,properties,metadata=None,shared_code=[],documentation=None):
         self.id=id
@@ -642,6 +664,7 @@ class GraphType(object):
         self.metadata=metadata
         self.shared_code=shared_code
         self.device_types=collections.OrderedDict()
+        self.supervisor_types=collections.OrderedDict()
         self.typedefs_by_index=[]
         self.typedefs={}
         self.message_types=collections.OrderedDict()
@@ -679,6 +702,14 @@ class GraphType(object):
             raise GraphDescriptionError("Device type '{}' already exists.".format(device_type.id))
         self.device_types[device_type.id]=device_type
         return device_type
+
+    def add_supervisor_type(self,supervisor_type) -> SupervisorType:
+        if len(self.supervisor_types)>0:
+            raise GraphDescriptionError("There is more than one supervisor type.")
+        if supervisor_type.id in self.supervisor_types:
+            raise GraphDescriptionError("Supervisor type '{}' already exists.".format(supervisor_type.id))
+        self.supervisor_types[device_type.id]=supervisor_type
+        return supervisor_type
 
 class GraphTypeReference(object):
     def __init__(self,id,src=None):

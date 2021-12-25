@@ -159,7 +159,6 @@ class ScalarDef(Def):
 class TokenSrc:
     def __init__(self, source:str):
         self.tokens=list(to_token_stream(source))
-        sys.stderr.write(f"{self.tokens}\n")
         self.pos=0
         self._last=None
 
@@ -250,6 +249,9 @@ def parse_struct_init_string_impl(input:str, pos:int=0) -> Tuple[List[any],int]:
     while pos<n and input[pos].isspace():
         pos+=1
 
+    if pos==n:
+        return (None,pos) # Empty string
+
     if input[pos]!='{':
         raise RuntimeError(f"Missing opening brace")
     lcurly=pos
@@ -264,6 +266,7 @@ def parse_struct_init_string_impl(input:str, pos:int=0) -> Tuple[List[any],int]:
         delim=input[end]
         if delim=='{':
             (val,pos)=parse_struct_init_string_impl(input, end)
+            assert val!=None # Can only have empty string at top-level
             res.append(val)
         else:
             assert delim==',' or delim=='}'
@@ -285,7 +288,13 @@ def parse_struct_init_string_impl(input:str, pos:int=0) -> Tuple[List[any],int]:
 
 def parse_struct_init_string(input:str) -> List[any]:
     try:
-        (res,pos)=parse_struct_init_string_impl(input, 0)
+        stripped=""
+        for line in input.splitlines():
+            ii=line.find("//")
+            if ii!=-1:
+                line=line[0:ii]
+            stripped += line+"\n"
+        (res,pos)=parse_struct_init_string_impl(stripped, 0)
     except:
         sys.stderr.write(f"Input struct = '{input}'")
         raise

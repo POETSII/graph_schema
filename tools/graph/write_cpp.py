@@ -2,6 +2,11 @@ from graph.core import *
 
 import sys
 
+import inspect
+
+def lineno():
+    return inspect.currentframe().f_back.f_lineno
+
 registrationStatements=[]
 
 def render_typed_data_as_decl(proto,dst,indent="",arrayIndex=""):
@@ -109,16 +114,17 @@ def render_typed_data_init(proto,dst,prefix,indent="    ",arrayIndex="",indexNum
                 return
 
             else:
-                dst.write("{}for (int i{} = 0; i{} < {}; i{}++) {{\n".format(indent,indexNum, indexNum, proto.length, indexNum))
+                dst.write(f"{indent}for (int i{indexNum} = 0; i{indexNum} < {proto.length}; i{indexNum}++) {{ //Line {lineno()}\n")
+                dst.write(f"{indent}   // prefix={prefix}, indexNum={indexNum}, arrayIndex={arrayIndex}\n")
                 if proto.type.default is not None:
                     d = proto.type.default
                 else:
                     d = 0
 
                 if isTypedef or not arrayIndex=="":
-                    dst.write('{}{}{}[i{}] = {};\n'.format(indent,prefix,arrayIndex,indexNum,d))
+                    dst.write(f'{indent}{prefix}{arrayIndex}[i{indexNum}] = {d};\n')
                 else:
-                    dst.write('{}{}{}[i{}] = {};\n'.format(indent,prefix,proto.name,indexNum,d))
+                    dst.write(f'{indent}{prefix}{proto.name}[i{indexNum}] = {d};\n')
 
         elif isinstance(proto.type,Typedef):
             if value is not None:
@@ -129,7 +135,7 @@ def render_typed_data_init(proto,dst,prefix,indent="    ",arrayIndex="",indexNum
                         render_typed_data_init(proto.type.type, dst, prefix+proto.name+arrayIndex+"["+str(i)+"]",indent+"  ","["+str(i)+"]",indexNum+1,True,value[i])
                 return
             else:
-                dst.write("{}for (int i{} = 0; i{} < {}; i{}++) {{\n".format(indent,indexNum, indexNum, proto.length, indexNum))
+                dst.write(f"{indent}for (int i{indexNum} = 0; i{indexNum} < {proto.length}; i{indexNum}++) {{  //Line {linenum()}\n")
                 if isTypedef or not arrayIndex=="":
                     render_typed_data_init(proto.type.type, dst, prefix+arrayIndex+"[i"+str(indexNum)+"]",indent+"  ",arrayIndex+"[i"+str(indexNum)+"]",indexNum+1,True)
                 else:
@@ -144,13 +150,19 @@ def render_typed_data_init(proto,dst,prefix,indent="    ",arrayIndex="",indexNum
                         else:
                             render_typed_data_init(elt, dst, prefix+proto.name+"["+str(i)+"]."+elt.name,indent+"  ","["+str(i)+"]."+elt.name,indexNum+1,True,value[i][elt.name])
                 return
-            dst.write("{}for (int i{} = 0; i{} < {}; i{}++) {{\n".format(indent,indexNum, indexNum, proto.length, indexNum))
+            dst.write(f"{indent}for (int i{indexNum} = 0; i{indexNum} < {proto.length}; i{indexNum}++) {{ //Line {lineno()}\n")
             tup = proto.type
             for elt in tup.elements_by_index:
+                dst.write(f"{indent}   // name={elt.name}, arrayIndex={arrayIndex}\n")
                 if isTypedef or not arrayIndex=="":
-                    render_typed_data_init(elt, dst, prefix+arrayIndex+"[i"+str(indexNum)+"]."+elt.name,indent+"  ",arrayIndex+"[i"+str(indexNum)+"]."+elt.name,indexNum+1)
+                    dst.write(f"{indent}    // Line {lineno()}\n")
+                    render_typed_data_init(elt, dst, prefix+arrayIndex+"[i"+str(indexNum)+"]."+elt.name,indent+"  ",arrayIndex+"[i"+str(indexNum)+"].",indexNum+1)
                 else:
-                    render_typed_data_init(elt, dst, prefix+proto.name+"[i"+str(indexNum)+"]."+elt.name,indent+"  ","[i"+str(indexNum)+"]."+elt.name,indexNum+1)
+                    dst.write(f"{indent}    // Line {lineno()}\n")
+                    render_typed_data_init(elt, dst, prefix=prefix+proto.name+"[i"+str(indexNum)+"].",
+                        indent=indent+"  ",
+                        arrayIndex="", #[i"+str(indexNum)+"]."+elt.name,
+                        indexNum=indexNum+1)
 
         elif isinstance(proto.type,ArrayTypedDataSpec):
             if value is not None:
@@ -161,7 +173,7 @@ def render_typed_data_init(proto,dst,prefix,indent="    ",arrayIndex="",indexNum
                         render_typed_data_init(proto.type, dst, prefix+proto.name+arrayIndex+"["+str(i)+"]",indent+"  ","["+str(i)+"]",indexNum+1,True,value[i])
                 return
             else:
-                dst.write("{}for (int i{} = 0; i{} < {}; i{}++) {{\n".format(indent,indexNum, indexNum, proto.length, indexNum))
+                dst.write(f"{prefix}for (int i{indexNum} = 0; i{indexNum} < {proto.length}; i{indexNum}++) {{ //Line {lineno()}\n")
                 if isTypedef or not arrayIndex=="":
                     render_typed_data_init(proto.type,dst,prefix,indent+"  ",arrayIndex+"[i"+str(indexNum)+"]",indexNum+1)
                 else:
@@ -530,9 +542,10 @@ def render_typed_data_as_spec(proto,name,elt_name,dst,asHeader=False):
         dst.write("    res->_total_size_bytes=sizeof({});\n".format(name))
         #for elt in proto.elements_by_index:
         #    render_typed_data_init(elt, dst, "    res->");
-        dst.write("    if(!m_default.empty()){\n")
-        dst.write("        memcpy( ((char*)res)+sizeof(typed_data_t), &m_default[0], m_default.size() );")
-        dst.write("    }\n")
+        if( proto.size_in_bytes() > 0):
+            dst.write("    if(!m_default.empty()){\n")
+            dst.write("        memcpy( ((char*)res)+sizeof(typed_data_t), &m_default[0], m_default.size() );")
+            dst.write("    }\n")
         dst.write("    return TypedDataPtr(res);\n")
     else:
         dst.write("    return TypedDataPtr();\n")

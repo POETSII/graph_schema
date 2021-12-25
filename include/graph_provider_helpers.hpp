@@ -617,6 +617,78 @@ public:
 };
 typedef std::shared_ptr<DeviceType> DeviceTypePtr;
 
+class SupervisorTypeImpl
+  : public SupervisorType
+{
+private:
+  std::string m_id;
+
+  std::string m_properties;
+  std::string m_state;
+
+  std::string m_onInitCode;
+  std::string m_onSupervisorIdleCode;
+  std::string m_onStopCode;
+  std::string m_sharedCode;
+
+  std::vector<InputPinInfo> m_inputsByIndex;
+
+  rapidjson::Document m_metadata;
+
+protected:
+  SupervisorTypeImpl(const std::string &id,
+      std::string properties, std::string state,
+      const std::vector<InputPinInfo> &inputs,
+      std::string sharedCode=std::string(),
+      std::string onInitCode=std::string(),
+      std::string onSupervisorIdleCode=std::string(),
+      std::string onStopCode=std::string()
+  )
+    : m_id(id)
+    , m_properties(properties)
+    , m_state(state)
+    , m_onInitCode(onInitCode)
+    , m_onSupervisorIdleCode(onSupervisorIdleCode)
+    , m_onStopCode(onStopCode)
+    , m_sharedCode(sharedCode)
+    , m_inputsByIndex(inputs)
+  {
+  }
+
+public:
+  virtual const std::string &getId() const override
+  { return m_id; }
+
+  virtual const std::string &getPropertiesCode() const override
+  { return m_properties; }
+
+  virtual const std::string &getStateCode() const override
+  { return m_state; }
+
+  virtual const std::string &getOnInitCode() const override
+  { return m_onInitCode; }
+
+  virtual const std::string &getOnSupervisorIdleCode() const override
+  { return m_onSupervisorIdleCode; }
+
+  virtual const std::string &getOnStopCode() const override
+  { return m_onStopCode; }
+
+
+  virtual const std::string &getSharedCode() const override
+  { return m_sharedCode; }
+
+  virtual unsigned getInputCount() const override
+  { return m_inputsByIndex.size(); }
+
+  virtual const InputPinInfo &getInput(unsigned index) const override
+  { return m_inputsByIndex.at(index); }
+
+  virtual const std::vector<InputPinInfo> &getInputs() const override
+  { return m_inputsByIndex; }
+};
+typedef std::shared_ptr<SupervisorType> SupervisorTypePtr;
+
 
 class DeviceTypeDelegate
   : public DeviceType
@@ -702,6 +774,9 @@ private:
   std::vector<DeviceTypePtr> m_deviceTypesByIndex;
   std::unordered_map<std::string,DeviceTypePtr> m_deviceTypesById;
 
+  std::vector<SupervisorTypePtr> m_supervisorTypesByIndex;
+  std::unordered_map<std::string,SupervisorTypePtr> m_supervisorTypesById;
+
   std::string m_sharedCode;
 
   rapidjson::Document m_metadata;
@@ -743,6 +818,15 @@ protected:
     m_deviceTypesById[et->getId()]=et;
   }
 
+  void addSupervisorType(SupervisorTypePtr et)
+  {
+    if(m_supervisorTypesById.find(et->getId())!=m_supervisorTypesById.end()){
+      throw std::runtime_error("Duplicate supervisor type '"+et->getId()+"'");
+    }
+    m_supervisorTypesByIndex.push_back(et);
+    m_supervisorTypesById[et->getId()]=et;
+  }
+
 public:
   const std::string &getId() const override
   { return m_id; }
@@ -766,6 +850,23 @@ public:
 
   virtual const std::vector<DeviceTypePtr> &getDeviceTypes() const override
   { return m_deviceTypesByIndex; }
+
+  virtual unsigned getSupervisorTypeCount() const override
+  { return m_supervisorTypesByIndex.size(); }
+
+  virtual const SupervisorTypePtr &getSupervisorType(unsigned index) const override
+  { return m_supervisorTypesByIndex.at(index); }
+
+  virtual const SupervisorTypePtr &getSupervisorType(const std::string &name) const override
+  {
+    auto it=m_supervisorTypesById.find(name);
+    if(it==m_supervisorTypesById.end())
+      throw std::runtime_error("Couldn't find supervisor type called '"+name+"' in graph type '"+m_id+"'");
+    return it->second;
+  }
+
+  virtual const std::vector<SupervisorTypePtr> &getSupervisorTypes() const override
+  { return m_supervisorTypesByIndex; }
 
   virtual unsigned getMessageTypeCount() const override
   { return m_messageTypesByIndex.size(); }

@@ -583,7 +583,7 @@ struct POEMS
                 if(!active){
                     // Yes! We have reach idle: all messages sent have been received, and no cluster is active
                     uint64_t totalMessages=totalNonLocalSent+totalLocalMessages;
-                    fprintf(stderr, "Idle: nonLocal=%llu, local=%llu, total=%llu\n", (unsigned long long)totalNonLocalSent, (unsigned long long)totalLocalMessages, (unsigned long long)totalMessages);
+                    //fprintf(stderr, "Idle: nonLocal=%llu, local=%llu, total=%llu\n", (unsigned long long)totalNonLocalSent, (unsigned long long)totalLocalMessages, (unsigned long long)totalMessages);
 
                     if(m_lastCheckpointTotalMessageCount!=totalMessages){
                         m_nonMessageRoundCount=0;

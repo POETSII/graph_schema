@@ -43,7 +43,7 @@ if ia < len(sys.argv):
 (types,instances)=load_graph_types_and_instances(source, sourcePath)
 
 if len(types)!=1:
-    raise RuntimeError("File did not contain exactly one graph type.")
+    raise RuntimeError("File did not contain exactly one graph type.", skip_instances=True)
 
 graph=None
 for g in types.values():

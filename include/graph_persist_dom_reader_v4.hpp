@@ -238,6 +238,33 @@ using xml_v3::InternalDeviceTypeDynamic;
 using xml_v3::GraphTypeDynamic;
 using xml_v3::readTextContent;
 
+class SupervisorTypeDynamic
+  : public SupervisorTypeImpl
+{
+public:
+  SupervisorTypeDynamic(const std::string &id,
+    std::string properties, std::string state,
+    const std::vector<SupervisorType::InputPinInfo> &inputs,
+    std::string sharedCode,
+    std::string onInitCode,
+      std::string onSupervisorIdleCode,
+      std::string onStopCode
+  )
+    : SupervisorTypeImpl(id, properties, state, inputs, sharedCode, onInitCode, onSupervisorIdleCode, onStopCode)
+  {
+  }
+
+  virtual bool isCloneable() const override
+  {
+    return false;
+  }
+
+  virtual std::shared_ptr<SupervisorInstance> create() const override
+  {
+    throw std::runtime_error("SupervisorType::create - not supported with dynamic provider.");
+  }
+};
+
 inline std::string load_code_fragment(xmlpp::Element *eParent, const std::string &name)
 {
   xmlpp::Node::PrefixNsMap ns;
@@ -404,6 +431,58 @@ inline DeviceTypePtr loadDeviceTypeElement(
 
   // Lazily fill in the thing that delayedSrc points to
   *futureSrc=res;
+
+  return res;
+}
+
+inline SupervisorTypePtr loadSupervisorTypeElement(
+  const std::map<std::string,MessageTypePtr> &messageTypes,
+  xmlpp::Element *eSupervisorType
+)
+{
+  if(eSupervisorType->get_name()!="SupervisorType"){
+    throw std::runtime_error("Unexpected element name "+eSupervisorType->get_name());
+  }
+
+  xmlpp::Node::PrefixNsMap ns;
+  ns["g"]="https://poets-project.org/schemas/virtual-graph-schema-v4";
+
+  std::string id=get_attribute_required(eSupervisorType, "id");
+
+  std::string onInitCode=load_code_fragment(eSupervisorType, "./g:OnInit");
+  std::string onSupervisorIdleCode=load_code_fragment(eSupervisorType, "./g:OnSupervisorIdle");
+  std::string onStopCode=load_code_fragment(eSupervisorType, "./g:OnStop");
+  std::string sharedCode=load_code_fragment(eSupervisorType, "./g:Code");
+
+  std::string properties=load_code_fragment(eSupervisorType, "./g:Properties");
+  std::string state=load_code_fragment(eSupervisorType, "./g:State");
+
+  std::vector<SupervisorType::InputPinInfo> inputs;
+
+  for(auto *n : eSupervisorType->find("./g:InputPin",ns)){
+    auto *e=(xmlpp::Element*)n;
+
+    std::string name=get_attribute_required(e, "name");
+    std::string messageTypeId=get_attribute_required(e, "messageTypeId");
+
+    if(messageTypes.find(messageTypeId)==messageTypes.end()){
+      throw std::runtime_error("Unknown messageTypeId '"+messageTypeId+"'");
+    }
+    auto messageType=messageTypes.at(messageTypeId);
+
+    std::string onReceive=onReceive=load_code_fragment(e, "./g:OnReceive");
+
+    inputs.push_back({
+      (unsigned)inputs.size(),
+      messageType,
+      onReceive
+    });
+  }
+
+
+  SupervisorTypePtr res=std::make_shared<SupervisorTypeDynamic>(
+    id, properties, state, inputs, sharedCode, onInitCode, onSupervisorIdleCode, onStopCode
+  );
 
   return res;
 }

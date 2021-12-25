@@ -493,7 +493,6 @@ public:
   }
 };
 
-
 class MessageType
 {
 public:
@@ -678,6 +677,82 @@ public:
   virtual rapidjson::Document &getMetadata() =0;
 };
 
+/*
+Supervisors may have non-POD and non-copyable structs, so they
+are abstracted into an opaque class that contains the properties
+and state.
+*/
+class SupervisorInstance
+{
+public:
+  virtual ~SupervisorInstance()
+  {}
+
+  // Only valid if the supervisor type is cloneable
+  virtual std::shared_ptr<SupervisorInstance> clone() =0;
+
+  virtual void onInit(
+          OrchestratorServices *orchestrator,
+          const typed_data_t *graphProperties
+          ) const=0;
+
+  virtual void onSupervisorIdle(
+          OrchestratorServices *orchestrator,
+          const typed_data_t *graphProperties
+          ) const=0;
+
+  virtual void onStop(
+          OrchestratorServices *orchestrator,
+          const typed_data_t *graphProperties
+          ) const=0;
+
+  virtual void onRecv(
+          OrchestratorServices *orchestrator,
+          const typed_data_t *graphProperties,
+          const typed_data_t *message,
+          typed_data_t *reply,
+          typed_data_t *broadcast,
+          bool &rtsReply,
+          bool &rtsBcast
+          ) const=0;
+};
+typedef std::shared_ptr<SupervisorInstance> SupervisorInstancePtr;
+
+class SupervisorType
+{
+public:
+  virtual ~SupervisorType()
+  {}
+
+  virtual const std::string &getId() const=0;
+
+  virtual const std::string &getPropertiesCode() const=0;
+  virtual const std::string &getStateCode() const=0;
+
+  // Return true if supervisor can be meaningfully cloned
+  virtual bool isCloneable() const=0;
+
+  virtual const std::string &getSharedCode() const=0;
+  virtual const std::string &getOnInitCode() const=0;
+  virtual const std::string &getOnSupervisorIdleCode() const=0;
+  virtual const std::string &getOnStopCode() const=0;
+
+
+  struct InputPinInfo
+  {
+    unsigned index;
+    MessageTypePtr messageType;
+    std::string handler;
+  };
+
+  virtual unsigned getInputCount() const=0;
+  virtual const InputPinInfo &getInput(unsigned index) const=0;
+  virtual const std::vector<InputPinInfo> &getInputs() const=0;
+
+  virtual std::shared_ptr<SupervisorInstance> create() const=0;
+};
+typedef std::shared_ptr<SupervisorType> SupervisorTypePtr;
+
 class GraphType
 {
 public:
@@ -694,6 +769,11 @@ public:
   virtual const DeviceTypePtr &getDeviceType(unsigned index) const=0;
   virtual const DeviceTypePtr &getDeviceType(const std::string &name) const=0;
   virtual const std::vector<DeviceTypePtr> &getDeviceTypes() const=0;
+
+  virtual unsigned getSupervisorTypeCount() const=0;
+  virtual const SupervisorTypePtr &getSupervisorType(unsigned index) const=0;
+  virtual const SupervisorTypePtr &getSupervisorType(const std::string &name) const=0;
+  virtual const std::vector<SupervisorTypePtr> &getSupervisorTypes() const=0;
 
   virtual unsigned getMessageTypeCount() const=0;
   virtual const MessageTypePtr &getMessageType(unsigned index) const=0;
