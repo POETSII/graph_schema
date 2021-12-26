@@ -273,6 +273,14 @@ def parse_struct_init_string_impl(input:str, pos:int=0) -> Tuple[List[any],int]:
             valstr=input[pos:end].strip()
             if valstr!="":
                 try:
+                    # Deal with explicit C type annotations. Just strip them
+                    if valstr.endswith("u"):
+                        valstr=valstr[:-1]
+                    elif valstr.endswith("ll") or valstr.endswith("ul"):
+                        valstr=valstr[:-2]
+                    elif valstr.endswith("ull"):
+                        valstr=valstr[:-3]
+                    
                     val=int(valstr)
                 except ValueError:
                     try:

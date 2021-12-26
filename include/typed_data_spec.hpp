@@ -326,6 +326,12 @@ private:
         memcpy(&val, pBinary, sizeof(T));
         O tmp=val;
         dst<<tmp;
+        if(std::is_same<T,uint64_t>::value && tmp!=0){
+            dst<<"ull";
+        }
+        if(std::is_same<T,int64_t>::value && tmp!=0){
+            dst<<"ll";
+        }
     }
 
     void binaryToXmlV4ValueImplFloat(const char *pBinary, unsigned cbBinary, std::ostream &dst) const
@@ -365,15 +371,35 @@ private:
     {
         assert(cbBinary == scalarTypeWidthBytes(m_type));
         assert(cbBinary == sizeof(T));
-        int64_t val;
-        if( ! (src>>val) ){
-            throw std::runtime_error("Couldn't parse scalar while extracting xmlV4Value.");
+        T tval;
+        if(!std::is_same<T,uint64_t>::value){
+            int64_t val;
+            if( ! (src>>val) ){
+                throw std::runtime_error("Couldn't parse scalar while extracting xmlV4Value.");
+            }
+            if(val < std::numeric_limits<T>::min() || std::numeric_limits<T>::max() < val){
+                throw std::runtime_error("Value out of range.");
+            }
+            tval=(T)val;
+        }else{
+            uint64_t val;
+            if( ! (src>>val) ){
+                throw std::runtime_error("Couldn't parse scalar while extracting xmlV4Value.");
+            }
+            tval=(T)val;
         }
-        if(val < std::numeric_limits<T>::min() || std::numeric_limits<T>::max() < val){
-            throw std::runtime_error("Value out of range.");
-        }
-        T tval=(T)val;
         memcpy(pBinary, &tval, sizeof(T));
+
+        // consume a C type suffix
+        if(src.peek()=='u'){
+            src.get();
+        }
+        if(src.peek()=='l'){
+            src.get();
+        }
+        if(src.peek()=='l'){
+            src.get();
+        }
     }
 
 public:
@@ -716,6 +742,9 @@ public:
         unsigned off=0;
         for(const auto &e : m_elementsByIndex){
             if(off!=0){
+                if(src.peek()=='u'){
+                    src.get();
+                }
                 expect(',');
             }
 

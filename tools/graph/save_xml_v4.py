@@ -60,7 +60,12 @@ def save_typed_struct_spec(node,childTagNameWithNS,tuple):
 def convert_json_init_to_c_init(t,v):
     if isinstance(v,(int,float)):
         assert isinstance(t,ScalarTypedDataSpec)
-        return str(v)
+        if t.type=="uint64_t":
+            return str(v)+"ull"
+        elif t.type=="int64_t":
+            return str(v)+"ll"
+        else:
+            return str(v)
     elif isinstance(v,bool):
         assert isinstance(t,ScalarTypedDataSpec)
         return str("1" if v else "0" )
