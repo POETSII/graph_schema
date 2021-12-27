@@ -726,6 +726,17 @@ public:
 
         auto expect=[&](char value)
         {
+            // HACK : for suffices on C integer constants
+            if(src.peek()=='u'){
+                src.get();
+            }
+            if(src.peek()=='l'){
+                src.get();
+            }
+            if(src.peek()=='l'){
+                src.get();
+            }
+
             char got;
             if(!(src>>got)){
                 throw std::runtime_error("xmlV4ValueToBinary - Couldn't read char while parsing tuple value.");
@@ -742,9 +753,6 @@ public:
         unsigned off=0;
         for(const auto &e : m_elementsByIndex){
             if(off!=0){
-                if(src.peek()=='u'){
-                    src.get();
-                }
                 expect(',');
             }
 

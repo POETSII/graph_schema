@@ -271,22 +271,23 @@ def parse_struct_init_string_impl(input:str, pos:int=0) -> Tuple[List[any],int]:
         else:
             assert delim==',' or delim=='}'
             valstr=input[pos:end].strip()
+            orig=valstr
             if valstr!="":
                 try:
                     # Deal with explicit C type annotations. Just strip them
+                    if valstr.endswith("ull"):
+                        valstr=valstr[:-3]
+                    if valstr.endswith("ll") or valstr.endswith("ul"):
+                        valstr=valstr[:-2]
                     if valstr.endswith("u"):
                         valstr=valstr[:-1]
-                    elif valstr.endswith("ll") or valstr.endswith("ul"):
-                        valstr=valstr[:-2]
-                    elif valstr.endswith("ull"):
-                        valstr=valstr[:-3]
                     
                     val=int(valstr)
                 except ValueError:
                     try:
                         val=float(valstr)
                     except ValueError:
-                        raise RuntimeError(f"Couldn't parse {valstr} as an int or a float")
+                        raise RuntimeError(f"Couldn't parse {valstr} as an int or a float, orig={orig}")
                 res.append(val)
             pos=end+1
             if delim=='}':
