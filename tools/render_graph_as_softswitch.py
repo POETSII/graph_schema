@@ -549,7 +549,10 @@ def render_rts_handler_as_softswitch(dev,dst,devProps):
       uint32_t *readyToSend=&rts;
       // Begin device code
       {DEVICE_TYPE_RTS_HANDLER_SOURCE_LOCATION}
-      {DEVICE_TYPE_RTS_HANDLER}
+    """.format(**devProps))
+    if devProps["DEVICE_TYPE_RTS_HANDLER"] != "" and devProps["DEVICE_TYPE_RTS_HANDLER"] is not None:
+        dst.write("{DEVICE_TYPE_RTS_HANDLER}".format(**devProps))
+    dst.write("""
       __POETS_REVERT_PREPROC_DETOUR__
       // End device code
       return rts;
@@ -573,10 +576,8 @@ def render_init_handler_as_softswitch(dev,dst,devProps):
       // Begin initialisation code
       {DEVICE_TYPE_INIT_HANDLER_SOURCE_LOCATION}
     """.format(**devProps))
-    if devProps["DEVICE_TYPE_INIT_HANDLER"] != "":
+    if devProps["DEVICE_TYPE_INIT_HANDLER"] != "" and devProps["DEVICE_TYPE_INIT_HANDLER"] is not None:
         dst.write("{DEVICE_TYPE_INIT_HANDLER}".format(**devProps))
-    else:
-        dst.write("return;")
     dst.write("""
       __POETS_REVERT_PREPROC_DETOUR__
       // End initialisation code
@@ -631,12 +632,29 @@ bool {OUTPUT_PORT_FULL_ID}_send_handler(
 """.format(**pinProps))
 
 def render_device_type_as_softswitch_defs(dt,dst,dtProps):
+    dst.write(f"namespace ns_{dt.id}{{\n")
+
+    if dt.shared_code:
+        for c in dt.shared_code:
+            dst.write(c)
+
     render_init_handler_as_softswitch(dt,dst,dtProps)
     render_rts_handler_as_softswitch(dt,dst,dtProps)
     for ip in dt.inputs_by_index:
         render_receive_handler_as_softswitch(ip,dst,make_input_pin_properties(ip))
     for op in dt.outputs_by_index:
         render_send_handler_as_softswitch(op,dst,make_output_pin_properties(op))
+
+    dst.write(f"}}; // namespace ns_{dt.id}\n")
+
+    dst.write("""
+    using ns_{DEVICE_TYPE_ID}::{GRAPH_TYPE_ID}_{DEVICE_TYPE_ID}_ready_to_send_handler;
+    using ns_{DEVICE_TYPE_ID}::{GRAPH_TYPE_ID}_{DEVICE_TYPE_ID}_init_handler;
+    """.format(**dtProps))
+    for ip in dt.inputs_by_index:
+        dst.write("using ns_{DEVICE_TYPE_ID}::{INPUT_PORT_FULL_ID}_receive_handler;\n".format(**make_input_pin_properties(ip)))
+    for op in dt.outputs_by_index:
+        dst.write("using ns_{DEVICE_TYPE_ID}::{OUTPUT_PORT_FULL_ID}_send_handler;\n".format(**make_output_pin_properties(op)))
 
     dst.write("InputPinVTable INPUT_VTABLES_{DEVICE_TYPE_FULL_ID}[INPUT_COUNT_{DEVICE_TYPE_FULL_ID}_V]={{\n".format(**dtProps))
     i=0
