@@ -106,6 +106,8 @@ CPPFLAGS+=" -DPOETS_COMPILING_AS_PROVIDER=1"
 CPPFLAGS+=" $(pkg-config --cflags libxml++-2.6)"
 CPPFLAGS+=" -Wno-unused-local-typedefs -Wno-unused-but-set-variable"
 
+CPPFLAGS+=" -I ~/local/include"
+
 CPPFLAGS+=" -mfpmath=sse -msse2"
 CPPFLAGS+=" -frounding-math -fsignaling-nans -fmax-errors=1"
 

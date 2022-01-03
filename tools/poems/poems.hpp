@@ -17,7 +17,7 @@
 #include <functional>
 
 #include <metis.h>
-#include <tbb/concurrent_queue.h>
+#include "tbb/concurrent_queue.h"
 
 #include "shared_pool.hpp"
 

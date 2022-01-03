@@ -83,7 +83,7 @@ namespace mini_printf
 
 }; // mini_printf
 
-char *mini_vsprintf(char *dst, const char *fmt, va_list args)
+inline char *mini_vsprintf(char *dst, const char *fmt, va_list args)
 {
     char ch=1;
     while(ch){
@@ -129,7 +129,7 @@ char *mini_vsprintf(char *dst, const char *fmt, va_list args)
     return dst;
 }
 
-char *mini_sprintf(char *dst, const char *fmt, ...)
+inline char *mini_sprintf(char *dst, const char *fmt, ...)
 {
     va_list args;
     va_start(args, fmt);
@@ -143,7 +143,7 @@ char *mini_sprintf(char *dst, const char *fmt, ...)
 
     #define handler_log_orig handler_log
 
-    char *handler_log_orch_workaround_impl(int level, uint32_t src, const char *fmt, ...)
+    inline char *handler_log_orch_workaround_impl(int level, uint32_t src, const char *fmt, ...)
     {
         char buffer[256]; // TODO : a bit fragile, but stack goes down...?
         va_list args;

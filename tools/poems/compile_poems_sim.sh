@@ -71,6 +71,7 @@ LIBXML_PKG_CONFIG_LDFLAGS="$(pkg-config --libs-only-L --libs-only-other libxml++
 CPPFLAGS+=" -std=c++17"
 CPPFLAGS+=" -I include -W -Wall -Wno-unused-parameter -Wno-unused-variable"
 CPPFLAGS+=" -I include/include_cache"
+CPPFLAGS+=" -I ~/local/include"
 CPPFLAGS+=" ${LIBXML_PKG_CONFIG_CPPFLAGS}"
 CPPFLAGS+=" -Wno-unused-local-typedefs"
 CPPFLAGS+=" -Wno-unused-function"
