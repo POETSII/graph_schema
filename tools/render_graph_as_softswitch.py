@@ -503,6 +503,7 @@ def render_graph_type_as_softswitch_decls(gt,dst):
     for mt in gt.message_types.values():
         mtProps=make_message_type_properties(mt)
         render_typed_data_as_struct(mt.message, dst,mtProps["MESSAGE_TYPE_T"])
+        dst.write("static_assert(sizeof(packet_header_t) + sizeof({MESSAGE_TYPE_T}) <= (TinselMaxFlitsPerMsg << TinselLogBytesPerFlit));".format(**mtProps))
 
     for dt in gt.device_types.values():
         dtProps=make_device_type_properties(dt)
@@ -717,7 +718,7 @@ def render_device_type_as_softswitch_defs(dt,dst,dtProps):
         dst.write("""
             {{
                 (receive_handler_t){INPUT_PORT_FULL_ID}_receive_handler,
-                sizeof(packet_t)+sizeof({INPUT_PORT_MESSAGE_T}),
+                sizeof(packet_header_t)+sizeof({INPUT_PORT_MESSAGE_T}),
                 {ACTUAL_PROPERTIES_SIZE}, //sizeof({INPUT_PORT_PROPERTIES_T}),
                 {ACTUAL_STATE_SIZE}, //sizeof({INPUT_PORT_STATE_T}),
                 "{INPUT_PORT_NAME}",
@@ -735,7 +736,7 @@ def render_device_type_as_softswitch_defs(dt,dst,dtProps):
         dst.write("""
             {{
                 (send_handler_t){OUTPUT_PORT_FULL_ID}_send_handler,
-                sizeof(packet_t)+sizeof({OUTPUT_PORT_MESSAGE_T}),
+                sizeof(packet_header_t)+sizeof({OUTPUT_PORT_MESSAGE_T}),
                 "{OUTPUT_PORT_NAME}",
                 false,
                 {MESSAGETYPE_NUMID}
