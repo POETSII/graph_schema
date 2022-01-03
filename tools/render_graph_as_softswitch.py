@@ -41,10 +41,10 @@ from config import p
 
 def print_statistics(dst, baseName, unit, data):
     print("{}Count, -, {}, {}\n".format(baseName, len(data), unit), file=measure_file)
-    print("{}Min, -, {}, {}\n".format(baseName, min(data), unit), file=measure_file)
-    print("{}Max, -, {}, {}\n".format(baseName, max(data), unit), file=measure_file)
 
     if len(data)>0:
+        print("{}Min, -, {}, {}\n".format(baseName, min(data), unit), file=measure_file)
+        print("{}Max, -, {}, {}\n".format(baseName, max(data), unit), file=measure_file)
         print("{}Median, -, {}, {}\n".format(baseName, statistics.median(data), unit), file=measure_file)
         mean=statistics.mean(data)
         print("{}Mean, -, {}, {}\n".format(baseName, mean, unit), file=measure_file)
@@ -450,6 +450,19 @@ def render_typedef_decl(td,dst,arrayIndex="",name=None):
     else:
         raise RuntimeError("Unrecognised type \"{}\" in TypeDef declarations".format(td))
 
+def gt_has_hardware_idle(gt):
+    if not hasattr(gt,"_has_hardware_idle"):
+        has_hardware_idle=False
+        for dt in gt.device_types.values():
+            handler=dt.on_hardware_idle_handler
+            if handler is None:
+                handler=""
+            handler=handler.strip()
+            if handler!="":
+                has_hardware_idle=True 
+        gt._has_hardware_idle=has_hardware_idle
+    return gt._has_hardware_idle
+
 def render_graph_type_as_softswitch_decls(gt,dst):
     gtProps=make_graph_type_properties(gt)
     dst.write("""
@@ -549,7 +562,10 @@ def render_rts_handler_as_softswitch(dev,dst,devProps):
       uint32_t *readyToSend=&rts;
       // Begin device code
       {DEVICE_TYPE_RTS_HANDLER_SOURCE_LOCATION}
-      {DEVICE_TYPE_RTS_HANDLER}
+    """.format(**devProps))
+    if devProps["DEVICE_TYPE_RTS_HANDLER"] != "" and devProps["DEVICE_TYPE_RTS_HANDLER"] is not None:
+        dst.write("{DEVICE_TYPE_RTS_HANDLER}".format(**devProps))
+    dst.write("""
       __POETS_REVERT_PREPROC_DETOUR__
       // End device code
       return rts;
@@ -573,15 +589,43 @@ def render_init_handler_as_softswitch(dev,dst,devProps):
       // Begin initialisation code
       {DEVICE_TYPE_INIT_HANDLER_SOURCE_LOCATION}
     """.format(**devProps))
-    if devProps["DEVICE_TYPE_INIT_HANDLER"] != "":
+    if devProps["DEVICE_TYPE_INIT_HANDLER"] != "" and devProps["DEVICE_TYPE_INIT_HANDLER"] is not None:
         dst.write("{DEVICE_TYPE_INIT_HANDLER}".format(**devProps))
-    else:
-        dst.write("return;")
     dst.write("""
       __POETS_REVERT_PREPROC_DETOUR__
       // End initialisation code
     }
     """)
+
+def render_on_hardware_idle_handler_as_softswitch(dev,dst,devProps):
+    devProps=devProps or make_device_type_properties(dev)
+    devProps=add_props(devProps, {
+        "DEVICE_TYPE_C_LOCAL_CONSTANTS" : calc_device_type_c_locals(dev,devProps)
+    })
+
+    if devProps["DEVICE_TYPE_ON_HARDWARE_IDLE_HANDLER"] != "" and devProps["DEVICE_TYPE_ON_HARDWARE_IDLE_HANDLER"] is not None:
+        dst.write("""
+        void {GRAPH_TYPE_ID}_{DEVICE_TYPE_ID}_on_hardware_idle_handler(
+            const {GRAPH_TYPE_PROPERTIES_T} *graphProperties,
+            const {DEVICE_TYPE_PROPERTIES_T} *deviceProperties,
+            {DEVICE_TYPE_STATE_T} *deviceState
+        ){{
+        {DEVICE_TYPE_C_LOCAL_CONSTANTS}
+
+        // Begin hardware idle code
+        {DEVICE_TYPE_INIT_HANDLER_SOURCE_LOCATION}
+        """.format(**devProps))
+        dst.write("{DEVICE_TYPE_ON_HARDWARE_IDLE_HANDLER}".format(**devProps))
+        dst.write("""
+        __POETS_REVERT_PREPROC_DETOUR__
+        // End hardware idle code
+        }
+        """)
+    else:
+        dst.write("""
+        on_hardware_idle_handler_t {GRAPH_TYPE_ID}_{DEVICE_TYPE_ID}_on_hardware_idle_handler = 0;
+        """.format(**devProps)
+        )
 
 def render_receive_handler_as_softswitch(pin, dst, pinProps):
     pinProps = pinProps or make_input_pin_properties(pinProps)
@@ -598,6 +642,7 @@ def render_receive_handler_as_softswitch(pin, dst, pinProps):
         const {INPUT_PORT_MESSAGE_T} *message
     ){{
       {DEVICE_TYPE_C_LOCAL_CONSTANTS}
+      using MESSAGE_T = {INPUT_PORT_MESSAGE_T};
 
       // Begin custom handler
       {INPUT_PORT_RECEIVE_HANDLER_SOURCE_LOCATION}
@@ -619,6 +664,9 @@ bool {OUTPUT_PORT_FULL_ID}_send_handler(
     {DEVICE_TYPE_STATE_T} *deviceState,
     {OUTPUT_PORT_MESSAGE_T} *message
 ){{
+    {DEVICE_TYPE_C_LOCAL_CONSTANTS}
+    using MESSAGE_T = {OUTPUT_PORT_MESSAGE_T};
+
   bool _doSend=true;
   bool *doSend=&_doSend;
   // Begin custom handler
@@ -631,12 +679,31 @@ bool {OUTPUT_PORT_FULL_ID}_send_handler(
 """.format(**pinProps))
 
 def render_device_type_as_softswitch_defs(dt,dst,dtProps):
+    dst.write(f"namespace ns_{dt.id}{{\n")
+
+    if dt.shared_code:
+        for c in dt.shared_code:
+            dst.write(c)
+
     render_init_handler_as_softswitch(dt,dst,dtProps)
     render_rts_handler_as_softswitch(dt,dst,dtProps)
+    render_on_hardware_idle_handler_as_softswitch(dt,dst,dtProps)
     for ip in dt.inputs_by_index:
         render_receive_handler_as_softswitch(ip,dst,make_input_pin_properties(ip))
     for op in dt.outputs_by_index:
         render_send_handler_as_softswitch(op,dst,make_output_pin_properties(op))
+
+    dst.write(f"}}; // namespace ns_{dt.id}\n")
+
+    dst.write("""
+    using ns_{DEVICE_TYPE_ID}::{GRAPH_TYPE_ID}_{DEVICE_TYPE_ID}_ready_to_send_handler;
+    using ns_{DEVICE_TYPE_ID}::{GRAPH_TYPE_ID}_{DEVICE_TYPE_ID}_init_handler;
+    using ns_{DEVICE_TYPE_ID}::{GRAPH_TYPE_ID}_{DEVICE_TYPE_ID}_on_hardware_idle_handler;
+    """.format(**dtProps))
+    for ip in dt.inputs_by_index:
+        dst.write("using ns_{DEVICE_TYPE_ID}::{INPUT_PORT_FULL_ID}_receive_handler;\n".format(**make_input_pin_properties(ip)))
+    for op in dt.outputs_by_index:
+        dst.write("using ns_{DEVICE_TYPE_ID}::{OUTPUT_PORT_FULL_ID}_send_handler;\n".format(**make_output_pin_properties(op)))
 
     dst.write("InputPinVTable INPUT_VTABLES_{DEVICE_TYPE_FULL_ID}[INPUT_COUNT_{DEVICE_TYPE_FULL_ID}_V]={{\n".format(**dtProps))
     i=0
@@ -683,7 +750,7 @@ def render_graph_type_as_softswitch_defs(gt,dst):
 
     dst.write(calc_graph_type_c_globals(gt))
 
-    dst.write("#define POETS_LEGACY_HAS_HANDLER_EXIT")
+    dst.write("#define POETS_LEGACY_HAS_HANDLER_EXIT\n")
 
     if gt.shared_code:
         for c in gt.shared_code:
@@ -712,7 +779,8 @@ def render_graph_type_as_softswitch_defs(gt,dst):
             INPUT_COUNT_{DEVICE_TYPE_FULL_ID}_V,
             INPUT_VTABLES_{DEVICE_TYPE_FULL_ID},
             (compute_handler_t)0, // No compute handler
-            "{DEVICE_TYPE_FULL_ID}"
+            "{DEVICE_TYPE_FULL_ID}",
+            (on_hardware_idle_handler_t){GRAPH_TYPE_ID}_{DEVICE_TYPE_ID}_on_hardware_idle_handler,
         }}
         """.format(**make_device_type_properties(dt)))
     dst.write("};\n")
@@ -827,7 +895,6 @@ def render_graph_instance_as_thread_context(
             {DEVICE_INSTANCE_ID}_sources, // source list for inputs
             "{DEVICE_INSTANCE_ID}", // id
             0, // rtsFlags
-            false, // rtc
             0,  // prev
             0,   // next
             {DEVICE_INSTANCE_IS_EXTERNAL} // is it an external device?

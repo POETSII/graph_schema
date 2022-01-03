@@ -37,6 +37,8 @@ def calc_device_type_c_locals(dt,dtProps):
     const char *DEVICE_TYPE_ID="{DEVICE_TYPE_ID}";
     typedef {DEVICE_TYPE_PROPERTIES_T} DEVICE_TYPE_PROPERTIES_T;
     typedef {DEVICE_TYPE_STATE_T} DEVICE_TYPE_STATE_T;
+    typedef {DEVICE_TYPE_PROPERTIES_T} DEVICE_PROPERTIES_T;
+    typedef {DEVICE_TYPE_STATE_T} DEVICE_STATE_T;
     """.format(**dtProps)
     for op in dt.outputs_by_index:
         opProps=make_output_pin_properties(op)
