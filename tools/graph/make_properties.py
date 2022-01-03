@@ -23,6 +23,10 @@ def make_device_type_properties(dt):
         initPreProc = '#line {} "{}"\n'.format(dt.init_source_line-1,dt.init_source_file)
     else:
         initPreProc = "// No line/file information for init handler"
+    if dt.on_hardware_idle_source_line and dt.on_hardware_idle_source_file:
+        onHardwareIdlePreProc = '#line {} "{}"\n'.format(dt.on_hardware_idle_source_line-1,dt.on_hardware_idle_source_file)
+    else:
+        onHardwareIdlePreProc = "// No line/file information for init handler"
 
     return add_properties(make_graph_type_properties(dt.parent),{
         "DEVICE_TYPE_ID" : dt.id,
@@ -36,7 +40,9 @@ def make_device_type_properties(dt):
         "DEVICE_TYPE_INIT_HANDLER_SOURCE_LOCATION" : initPreProc,
         "DEVICE_TYPE_RTS_HANDLER" : dt.ready_to_send_handler,
         "DEVICE_TYPE_RTS_HANDLER_SOURCE_LOCATION" : rtsPreProc,
-        "DEVICE_TYPE_IS_EXTERNAL" : 1 if dt.isExternal else 0
+        "DEVICE_TYPE_IS_EXTERNAL" : 1 if dt.isExternal else 0,
+        "DEVICE_TYPE_ON_HARDWARE_IDLE_HANDLER" : dt.on_hardware_idle_handler,
+        "DEVICE_TYPE_ON_HARDWARE_IDLE_HANDLER_SOURCE_LOCATION" : initPreProc
 
     })
 

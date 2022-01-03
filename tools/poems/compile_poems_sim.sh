@@ -12,11 +12,13 @@ function usage ()
     --release : Attempt to create fastest possible executable with no safety (default).
     --release-with-asserts : Attempt to create fastest possible executable, but keep run-time checks.
     --debug : Debuggable executable with all run-time checks.
+    --run : If the simulation compiles, then run it immediately
     input-file the XML graph type or graph instance to compile.
 "
 }
 
 CPPFLAGS=""
+LDFLAGS=""
 
 output_file=poems_sim
 input_file=""
@@ -24,15 +26,18 @@ working_dir=$(mktemp -d)
 optimise=1
 asserts=0
 max_log_level=
+run=0
 while true; do
     case "$1" in
     --help ) usage ; exit 1 ;;
     -o | --output ) output_file=$2 ; shift 2 ;;
     --working-dir ) working_dir=$2 ; shift 2 ;;
     -I ) CPPFLAGS="$CPPFLAGS -I $2" ; shift 2 ;;
+    -L ) CPPFLAGS="$LDFLAGS -L $2" ; shift 2 ;;
     --release ) optimise=1 ; asserts=0 ; shift ;;
     --release-with-asserts ) optimise=1 ; asserts=1 ; shift ;;
     --debug ) optimise=0 ; asserts=1 ; shift ;;
+    --run ) run=1 ; shift ;;
     --max-log-level ) max_log_level=$2 ; shift 2 ;;
     -* ) >&2 echo "Unknown option $1" ; exit 1 ;;
     "" ) break ;;
@@ -101,8 +106,12 @@ else
 	CPPFLAGS+=" -I ${POETS_EXTERNAL_INTERFACE_SPEC}/include"
 fi
 
-LDLIBS+="${LIBXML_PKG_CONFIG_LDLIBS} -ltbb -lmetis -ldl"
-LDFLAGS+="${LIBXML_PKG_CONFIG_LDFLAGS} -pthread"
+LDLIBS+=" ${LIBXML_PKG_CONFIG_LDLIBS} -ltbb -lmetis -ldl"
+LDFLAGS+=" ${LIBXML_PKG_CONFIG_LDFLAGS} -pthread"
 
 g++ -c ${working_dir}/poems_sim.cpp -DSPROVIDER_MAX_LOG_LEVEL=${max_log_level} -o ${working_dir}/poems_sim.o ${CPPFLAGS} || exit 1
 g++ ${working_dir}/poems_sim.o -o ${output_file} ${CPPFLAGS} ${LDFLAGS} ${LDLIBS} || exit 1
+
+if [[ $run -eq 1 ]] ; then
+    $(realpath ${output_file}) "${input_file}"
+fi
