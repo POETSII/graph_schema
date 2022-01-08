@@ -33,7 +33,7 @@ while true; do
     -o | --output ) output_file=$2 ; shift 2 ;;
     --working-dir ) working_dir=$2 ; shift 2 ;;
     -I ) CPPFLAGS="$CPPFLAGS -I $2" ; shift 2 ;;
-    -L ) CPPFLAGS="$LDFLAGS -L $2" ; shift 2 ;;
+    -L ) LDFLAGS="$LDFLAGS -L $2" ; shift 2 ;;
     --release ) optimise=1 ; asserts=0 ; shift ;;
     --release-with-asserts ) optimise=1 ; asserts=1 ; shift ;;
     --debug ) optimise=0 ; asserts=1 ; shift ;;
@@ -64,7 +64,10 @@ if [[ "$input_file" == "" ]] ; then
     exit 1
 fi
 
+>&2 echo "Rendering provider as sprovider"
 ${sprovider_dir}/render_graph_as_sprovider.py "${input_file}" > ${working_dir}/sprovider_impl.hpp || exit 1
+
+>&2 echo "Compiling poems sim"
 
 echo '#include "sprovider_impl.hpp"' > ${working_dir}/poems_sim.cpp
 cat ${poems_dir}/generic_poems_loader.cpp >> ${working_dir}/poems_sim.cpp
@@ -109,6 +112,8 @@ fi
 
 LDLIBS+=" ${LIBXML_PKG_CONFIG_LDLIBS} -ltbb -lmetis -ldl"
 LDFLAGS+=" ${LIBXML_PKG_CONFIG_LDFLAGS} -pthread"
+
+>&2 echo "CPPFLAGS=${CPPFLAGS}"
 
 g++ -c ${working_dir}/poems_sim.cpp -DSPROVIDER_MAX_LOG_LEVEL=${max_log_level} -o ${working_dir}/poems_sim.o ${CPPFLAGS} || exit 1
 g++ ${working_dir}/poems_sim.o -o ${output_file} ${CPPFLAGS} ${LDFLAGS} ${LDLIBS} || exit 1
