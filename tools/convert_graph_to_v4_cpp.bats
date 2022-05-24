@@ -30,21 +30,21 @@ load bats_helpers
 }
 
 @test "BinConvert ising spin instance and checking using PIP0020 v4 native validator" {
-    find_PIP0020_DIR
+    find_PIP0020_DIR || skip "No PIP0020 dir"
     WD=$(make_test_wd)
     bin/convert_graph_to_v4 apps/ising_spin/ising_spin_8x8.xml.gz $WD/graph.xml
     $PIP0020_DIR/tools/pyparser/validator.py < $WD/graph.xml
 }
 
 @test "BinConvert ising spin graph type and checking using PIP0020 v4 native validator" {
-    find_PIP0020_DIR
+    find_PIP0020_DIR || skip "No PIP0020 dir"
     WD=$(make_test_wd)
     bin/convert_graph_to_v4 apps/ising_spin/ising_spin_graph_type.xml $WD/graph.xml
     $PIP0020_DIR/tools/pyparser/validator.py < $WD/graph.xml
 }
 
 @test "BinRound-tripping ising spin from v3 to v4 then back to v3 and then simulating" {
-    find_PIP0020_DIR
+    find_PIP0020_DIR || skip "No PIP0020 dir"
     [ -x tools/convert_v4_graph_to_v3.py ]
     WD=$(make_test_wd)
     bin/convert_graph_to_v4 apps/ising_spin/ising_spin_8x8.xml $WD/graph.v4.xml
@@ -54,7 +54,7 @@ load bats_helpers
 
 
 @test "BinRound-tripping just a graph type from v3 to v4 then back to v3 and the compiling as provider" {
-    find_PIP0020_DIR
+    find_PIP0020_DIR || skip "No PIP0020 dir"
     [ -x tools/convert_v4_graph_to_v3.py ]
     WD=$(make_test_wd)
     GS=$(get_graph_schema_dir)

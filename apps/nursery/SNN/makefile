@@ -5,8 +5,9 @@ POETS_EXTERNAL_INTERFACE_SPEC ?= $(wildcard /POETS/external_interface_spec)
 
 ifeq ($(POETS_EXTERNAL_INTERFACE_SPEC),)
 	HAVE_POETS_EXTERNAL_INTERFACE_SPEC=0
-	CPPFLAGS += -I include/include_cache
+	CPPFLAGS += -I ${GRAPH_SCHEMA}/include/include_cache
 else
+$(info External  interface spec)
 	HAVE_POETS_EXTERNAL_INTERFACE_SPEC=1
 	CPPFLAGS += -I $(POETS_EXTERNAL_INTERFACE_SPEC)/include
 endif

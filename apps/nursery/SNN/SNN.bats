@@ -81,7 +81,7 @@ function setup_file
     >&3 echo "BATS_TEST_DIRNAME=${BATS_TEST_DIRNAME}"
     WD=$(make_test_wd)
     (cd ${BATS_TEST_DIRNAME} && {
-            ${BATS_TEST_DIRNAME}/bin/generate_CUBA 1000  |
+            ${BATS_TEST_DIRNAME}/bin/generate_CUBA 1000 100 |
             tee >(gzip - > ${WD}/net.txt.gz ) |
             ${BATS_TEST_DIRNAME}/bin/create_graph_instance_v2 | gzip - > ${WD}/net.xml.gz
         }

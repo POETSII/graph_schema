@@ -173,7 +173,7 @@ def render_typed_data_init(proto,dst,prefix,indent="    ",arrayIndex="",indexNum
                         render_typed_data_init(proto.type, dst, prefix+proto.name+arrayIndex+"["+str(i)+"]",indent+"  ","["+str(i)+"]",indexNum+1,True,value[i])
                 return
             else:
-                dst.write(f"{prefix}for (int i{indexNum} = 0; i{indexNum} < {proto.length}; i{indexNum}++) {{ //Line {lineno()}\n")
+                dst.write(f"{indent}for (int i{indexNum} = 0; i{indexNum} < {proto.length}; i{indexNum}++) {{ //Line {lineno()}\n")
                 if isTypedef or not arrayIndex=="":
                     render_typed_data_init(proto.type,dst,prefix,indent+"  ",arrayIndex+"[i"+str(indexNum)+"]",indexNum+1)
                 else:

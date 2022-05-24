@@ -33,7 +33,7 @@ load bats_helpers
 }
 
 @test "BinRound-tripping ising spin from v3 to base85 then back to v3 and then simulating" {
-    find_PIP0020_DIR
+    find_PIP0020_DIR || skip "No PIP0020 dir"
     WD=$(make_test_wd)
     bin/convert_graph_to_base85 apps/ising_spin/ising_spin_8x8.xml $WD/graph.base85.xml
     bin/convert_graph_to_v3 $WD/graph.base85.xml  $WD/graph.v3.xml
@@ -42,7 +42,7 @@ load bats_helpers
 
 
 @test "BinRound-tripping just a graph type from v3 to base85 then back to v3 and the compiling as provider" {
-    find_PIP0020_DIR
+    find_PIP0020_DIR || skip "No PIP0020 dir"
     WD=$(make_test_wd)
     GS=$(get_graph_schema_dir)
     bin/convert_graph_to_base85 apps/ising_spin/ising_spin_graph_type.xml $WD/ising_spin_graph_type.base85.xml
