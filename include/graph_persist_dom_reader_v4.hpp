@@ -24,26 +24,62 @@ inline void split_path(const std::string &src, std::string &dstDevice, std::stri
   srcPin=src.substr(colon2+1);
 }
 
-inline std::vector<std::string> tokenise_c_def(const std::string &src)
+inline std::vector<std::string> tokenise_c_def(std::string src)
 {
   std::regex re(R"X(^[;{}\[\]]|[1-9][0-9]*|[a-zA-Z_][a-zA-Z_0-9]*)X");
 
-  std::vector<std::string> res;
   unsigned pos=0;
+  while(pos+1<src.size()){
+    if(src[pos]=='/'){
+      if(pos+1<src.size() && src[pos+1]=='*'){
+        pos+=2;
+
+        while(1){
+          if(pos==src.size()){
+            throw std::runtime_error("Couldn't parse struct, missing closing C-style comment");
+          }
+          if(src[pos]=='*'){
+            if(pos+1<src.size() && src[pos+1]=='/'){
+              pos+=2;
+              break;
+            }
+          }
+          pos++;
+        }
+      }
+    }
+  }
+
+  std::vector<std::string> res;
+  pos=0;
   while(pos<src.size()){
     char c=src[pos];
     if(std::isspace(c)){
       pos++;
       continue;
     }
+    // Handle C++ line comments
+    if(c=='/'){
+      if(pos+1<src.size()){
+        if(src[pos+1]=='/'){
+          pos+=2;
+          while(pos < src.size() && src[pos]!='\n'){
+            pos++;
+          }
+        }
+      }
+    }
+    // actual token stuff
+    const std::string &srcc=src;
     std::smatch match;
-    if(std::regex_search(src.begin()+pos, src.end(), match, re)){
+    if(std::regex_search(srcc.begin()+pos, srcc.end(), match, re)){
       res.push_back(match.str());
       pos+=res.back().size();
     }else{
       throw std::runtime_error("Couldn't parse struct, error at '"+src.substr(pos)+"'");
     }
   }
+
   return res;
 }
 
@@ -470,7 +506,7 @@ inline SupervisorTypePtr loadSupervisorTypeElement(
     }
     auto messageType=messageTypes.at(messageTypeId);
 
-    std::string onReceive=onReceive=load_code_fragment(e, "./g:OnReceive");
+    std::string onReceive=load_code_fragment(e, "./g:OnReceive");
 
     inputs.push_back({
       (unsigned)inputs.size(),
