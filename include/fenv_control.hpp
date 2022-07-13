@@ -3,7 +3,10 @@
 
 #include <stdexcept>
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunknown-pragmas"
 #pragma STDC FENV_ACCESS ON
+#pragma GCC diagnostic pop
 
 #include <xmmintrin.h>	// SSE instructions
 #include <pmmintrin.h>	// SSE instructions

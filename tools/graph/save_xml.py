@@ -350,6 +350,8 @@ def save_graph_type(parent, graph):
     gn = etree.SubElement(parent,toNS("p:GraphType"))
     gn.attrib["id"]=graph.id
 
+    assert len(graph.supervisor_types)==0, "v3 XML does not support supervisor types"
+
     if graph.documentation is not None:
         doc=etree.Element(toNS("p:Documentation"))
         doc.text = graph.documentation

@@ -44,9 +44,11 @@ class Token(NamedTuple):
     col : int
 
 def to_token_stream(input:str):
+    sys.stderr.write(f"input={input}")
     pos=0
     col=1
     line=0
+    in_c_comment=False
     while pos<len(input):
         ch=input[pos]
         if ch=='\n':
@@ -55,9 +57,27 @@ def to_token_stream(input:str):
             line+=1
             continue
 
+        if in_c_comment:
+            if len(input)-pos < 2:
+                raise RuntimeError("Unterminated C-style comment.")
+            if input[pos:pos+2]=="*/":
+                sys.stderr.write("Out of c comment\n")
+                in_c_comment=False
+                pos += 2
+                continue
+            else:
+                pos += 1
+                continue
+
         if ch.isspace():
             pos+=1
             col+=1
+            continue
+
+        if len(input)-pos >= 2 and input[pos:pos+2]=="/*":
+            sys.stderr.write("In c comment\n")
+            in_c_comment=True
+            pos += 2
             continue
 
         m=re_CPPCOMMENT.match(input, pos)
@@ -159,6 +179,7 @@ class ScalarDef(Def):
 class TokenSrc:
     def __init__(self, source:str):
         self.tokens=list(to_token_stream(source))
+        sys.stderr.write(f"Tokens={self.tokens}")
         self.pos=0
         self._last=None
 

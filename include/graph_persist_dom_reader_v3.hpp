@@ -150,9 +150,10 @@ public:
     MessageTypePtr messageType,
     TypedDataSpecPtr propertiesType,
     TypedDataSpecPtr stateType,
-    const std::string &code
+    const std::string &code,
+    bool isSupervisor=false
   )
-  : InputPinImpl(deviceTypeSrc, name, index, messageType, propertiesType, stateType, code)
+  : InputPinImpl(deviceTypeSrc, name, index, messageType, propertiesType, stateType, code, isSupervisor)
   {}
 
   virtual void onReceive(OrchestratorServices*, const typed_data_t*, const typed_data_t*, typed_data_t*, const typed_data_t*, typed_data_t*, const typed_data_t*) const override
@@ -171,9 +172,10 @@ public:
     unsigned index,
     MessageTypePtr messageType,
     const std::string &code,
-    bool isIndexedSend
+    bool isIndexedSend,
+    bool isSupervisor=false
   )
-  : OutputPinImpl(deviceTypeSrc, name, index, messageType, code, isIndexedSend)
+  : OutputPinImpl(deviceTypeSrc, name, index, messageType, code, isIndexedSend, isSupervisor)
   {}
 
   virtual void onSend(OrchestratorServices*, const typed_data_t*, const typed_data_t*, typed_data_t*, typed_data_t*, bool*, unsigned *) const override
@@ -445,7 +447,8 @@ public:
     const rapidjson::Document &metadata,
     const std::vector<std::string> &sharedCode,
     const std::vector<MessageTypePtr> &messageTypes,
-    const std::vector<DeviceTypePtr> &deviceTypes
+    const std::vector<DeviceTypePtr> &deviceTypes,
+    const std::vector<SupervisorTypePtr> &supervisorTypes={}
   )
     : GraphTypeImpl(id, properties)
   {
@@ -458,6 +461,9 @@ public:
     }
     for(auto dt : deviceTypes){
       addDeviceType(dt);
+    }
+    for(auto st : supervisorTypes){
+      addSupervisorType(st);
     }
   }
 };

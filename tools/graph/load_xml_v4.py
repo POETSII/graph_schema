@@ -9,6 +9,7 @@ from graph.load_xml_v3 import XMLSyntaxError, get_attrib, \
     get_attrib_defaulted, get_attrib_optional, get_attrib_optional_bool, \
     get_child_text
 
+
 from graph.parse_v4_structs import parse_struct_def_string, parse_struct_init_string, convert_def_to_typed_data_spec
 
 import re
@@ -32,11 +33,23 @@ _ns_brackets="{"+v4_namespace_uri+"}"
 def deNS(t):
     return t.replace(_ns_brackets,"p:")
 
+def get_optional_child_text(node,name,namespace=None) -> str:
+    if namespace==None:
+        namespace=ns
+    nn=node.findall(name,namespace)
+    if len(nn) == 0:
+        return None
+    res=""
+    for n in nn:
+        res += "\n" + n.text
+    return res
+
 def load_struct_spec(parentElt, eltName):
     n=parentElt.find(eltName, ns)
     if n==None:
         raise XMLSyntaxError(f"Missing struct spec node {eltName}", parentElt)
-    src=n.text
+    # This method collapses all text nodes down
+    src=etree.tostring(n, method="text",encoding=str)
     df=parse_struct_def_string(src)
     return convert_def_to_typed_data_spec(df)
 
@@ -47,6 +60,7 @@ def load_struct_instance(spec, elt, attr):
     init=parse_struct_init_string(val)
     if init==None:
         return None
+    sys.stderr.write(f"Spec={spec},Value={init}\n")
     value=spec.convert_v4_init(init)
     assert(spec.is_refinement_compatible(value))
     return spec.expand(value)
@@ -111,9 +125,9 @@ def load_device_type(graph,dtNode,sourceFile):
     id=get_attrib(dtNode,"id")
 
     try:
-
         properties=load_struct_spec(dtNode, "p:Properties")
         state=load_struct_spec(dtNode, "p:State")
+        sys.stderr.write(f"load_device_type({id}), properties={properties}\n")
 
         shared_code=[]
         tt=get_child_text(dtNode, "p:SharedCode", ns)[0]
@@ -139,7 +153,19 @@ def load_device_type(graph,dtNode,sourceFile):
             (handler,sourceLine)=get_child_text(p,"p:OnReceive",ns)
             dt.add_input(name,message_type,is_application,properties,state,pinMetadata, handler,sourceFile,sourceLine,documentation)
             #sys.stderr.write("      Added input {}\n".format(name))
-            
+
+        for p in dtNode.findall("p:SupervisorInPin",ns):
+            message_type_id=get_attrib(p,"messageTypeId")
+            if message_type_id not in graph.message_types:
+                raise XMLSyntaxError("Unknown messageTypeId {}".format(message_type_id),p)
+            message_type=graph.message_types[message_type_id]
+            properties=None
+            state=None
+            pinMetadata=None
+            documentation=None            
+            (handler,sourceLine)=get_child_text(p,"p:OnReceive",ns)
+            dt.add_supervisor_input("__SUP_IN__",message_type,properties,state,pinMetadata, handler,sourceFile,sourceLine,documentation)
+            #sys.stderr.write("      Added input {}\n".format(name))
 
         for p in dtNode.findall("p:OutputPin",ns):
             name=get_attrib(p,"name")
@@ -154,6 +180,18 @@ def load_device_type(graph,dtNode,sourceFile):
             documentation = None
             dt.add_output(name,message_type,is_application,pinMetadata,handler,sourceFile,sourceLine,documentation,is_indexed)
             #sys.stderr.write("      Added input {}\n".format(name))
+
+        for p in dtNode.findall("p:SupervisorOutPin",ns):
+            message_type_id=get_attrib(p,"messageTypeId")
+            if message_type_id not in graph.message_types:
+                raise XMLSyntaxError("Unknown messageTypeId {}".format(message_type_id),p)
+            message_type=graph.message_types[message_type_id]
+            pinMetadata=None
+            (handler,sourceLine)=get_child_text(p,"p:OnSend",ns)
+            documentation = None
+            dt.add_supervisor_output("__SUP_OUT__",message_type,pinMetadata,handler,sourceFile,sourceLine,documentation)
+            #sys.stderr.write("      Added input {}\n".format(name))
+
 
         (handler,sourceLine)=get_child_text(dtNode,"p:ReadyToSend",ns)
         dt.ready_to_send_handler=handler
@@ -180,9 +218,49 @@ def load_device_type(graph,dtNode,sourceFile):
         sys.stderr.write(f"Exception while loading device type {id}\n")
         raise
 
+def load_supervisor_type(graph,dtNode,sourceFile):
+    id=get_attrib(dtNode,"id")
+    if id=="":
+        id="__SUP__"
+
+    assert isinstance(id,str)
+
+    try:
+
+        properties=get_optional_child_text(dtNode, "p:Properties")
+        state=get_optional_child_text(dtNode, "p:State")
+
+        shared_code=get_optional_child_text(dtNode, "p:Code", ns)
+        assert isinstance(shared_code,str)
+        metadata=None
+        documentation=None
+
+        onInitCode=get_optional_child_text(dtNode,"p:OnInit",ns)
+        assert isinstance(onInitCode,str)
+        onSupervisorIdleCode=get_optional_child_text(dtNode,"p:OnSupervisorIdle",ns)
+        onStopCode=get_optional_child_text(dtNode,"p:OnStop",ns)
+
+        dt=SupervisorType(graph,id,properties,state,shared_code,onInitCode,onSupervisorIdleCode,onStopCode)
+
+        for p in dtNode.findall("p:SupervisorInPin",ns):
+            name=get_attrib(p,"id")
+            message_type_id=get_attrib(p,"messageTypeId")
+            if message_type_id not in graph.message_types:
+                raise XMLSyntaxError("Unknown messageTypeId {}".format(message_type_id),p)
+            message_type=graph.message_types[message_type_id]
+            
+            handler=get_child_text (p,"p:OnReceive",ns)[0]
+            dt.add_input(name,message_type,handler)
+
+        return dt
+    except:
+        sys.stderr.write(f"Exception while loading device type {id}\n")
+        raise
+
 def load_graph_type(graphNode, sourcePath):
     deviceTypeTag = "{{{}}}DeviceType".format(ns["p"])
     externalTypeTag = "{{{}}}ExternalType".format(ns["p"])
+    supervisorTypeTag = "{{{}}}SupervisorType".format(ns["p"])
 
     id=get_attrib(graphNode,"id")
     sys.stderr.write("  Loading graph type {}\n".format(id))
@@ -210,6 +288,10 @@ def load_graph_type(graphNode, sourcePath):
         elif dtNode.tag == externalTypeTag:
             et=load_external_type(graphType,dtNode,sourcePath)
             graphType.add_device_type(et)
+            #sys.stderr.write("    Added external device type {}\n".format(et.id))
+        elif dtNode.tag == supervisorTypeTag:
+            et=load_supervisor_type(graphType,dtNode,sourcePath)
+            graphType.add_supervisor_type(et)
             #sys.stderr.write("    Added external device type {}\n".format(et.id))
         else:
             raise RuntimeError(f"Unknown or unsupported element in DeviceTypes: {dtNode.tag}")
@@ -241,6 +323,7 @@ def load_device_instance(graph,diNode):
                 )
     device_type=graph.graph_type.device_types[device_type_id]
 
+    sys.stderr.write(f"id={id}, properties={device_type.properties}\n")
     properties=load_struct_instance(device_type.properties, diNode, "P")
     state=load_struct_instance(device_type.state, diNode, "S")
     state=None
@@ -335,3 +418,13 @@ def v4_load_graph_types_and_instances(doc : etree.Element , basePath:str, skip_i
             sys.stderr.write(etree.tostring(e.node, pretty_print = True, encoding='utf-8').decode("utf-8")+"\n")
         raise e
 
+
+if __name__=="__main__":
+    e=etree.fromstring(
+    f"""<?xml version="1.0"?>
+        <Wibble xmlns="{v4_namespace_uri}">
+        <Properties>uint8_t x;<!-- wibble --></Properties>
+        </Wibble>
+    """
+    )
+    print(f"e={load_struct_spec(e, 'p:Properties')}")

@@ -281,7 +281,8 @@ class TupleTypedDataSpec(TypedDataSpec):
         return True
 
     def convert_v4_init(self, v):
-        assert isinstance(v,list) and len(v)==len(self._elts_by_index)
+        assert isinstance(v,list)
+        assert len(v)==len(self._elts_by_index), f"v={v}, elts_by_index={self._elts_by_index}, self={self}"
         return { te.name:te.convert_v4_init(ve) for (te,ve) in zip(self._elts_by_index, v) }
 
     def size_in_bytes(self):
@@ -537,10 +538,12 @@ class Pin(object):
         self.source_file=source_file
         self.source_line=source_line
         self.documentation=documentation
+        self.is_supervisor_implicit_pin=False
         ## NOTE: application pins are supported _only_ for the pursposes of the 2to3 converter, and
         ## should be considered deprecated
         assert not is_application
         self.is_application=False
+
 
         self.index=None # Will be hooked up by the parent
 
@@ -591,6 +594,8 @@ class DeviceType(object):
         self.on_hardware_idle_source_line=None
         self.isExternal=isExternal
         self.documentation=documentation
+        self.supervisor_implicit_input_index=-1
+        self.supervisor_implicit_output_index=-1
 
     @property
     def is_external(self):
@@ -605,6 +610,7 @@ class DeviceType(object):
     def add_input(self,name,message_type,is_application,properties,state,metadata,receive_handler,source_file=None,source_line={},documentation=None):
         assert (state is None) or isinstance(state,TypedDataSpec)
         assert (properties is None) or isinstance(properties,TypedDataSpec)
+        assert self.supervisor_implicit_input_index==-1, "Normal input added after supervisor input"
         if name in self.pins:
             raise GraphDescriptionError("Duplicate pin {} on device type {}".format(name,self.id))
         if message_type.id not in self.parent.message_types:
@@ -618,7 +624,29 @@ class DeviceType(object):
         self.pins[name]=p
         p.index=index
 
+    def add_supervisor_input(self,name,message_type,properties,state,metadata,receive_handler,source_file=None,source_line={},documentation=None):
+        assert (state is None) or isinstance(state,TypedDataSpec)
+        assert (properties is None) or isinstance(properties,TypedDataSpec)
+        assert self.supervisor_implicit_input_index==-1, "Two supervisor inputs are added"
+        if name in self.pins:
+            raise GraphDescriptionError("Duplicate pin {} on device type {}".format(name,self.id))
+        if message_type.id not in self.parent.message_types:
+            raise GraphDescriptionError("Unregistered message type {} on pin {} of device type {}".format(message_type.id,name,self.id))
+        if message_type != self.parent.message_types[message_type.id]:
+            raise GraphDescriptionError("Incorrect message type object {} on pin {} of device type {}".format(message_type.id,name,self.id))
+        p=InputPin(self, name, self.parent.message_types[message_type.id], False, properties, state, metadata, receive_handler, source_file, source_line, documentation)
+        p.is_supervisor_implicit_pin=True
+        index=len(self.inputs_by_index)
+        self.inputs[name]=p
+        self.inputs_by_index.append(p)
+        self.pins[name]=p
+        p.index=index
+        self.supervisor_implicit_input_index=index
+
+        assert False, f"Added supervisor {p}"
+
     def add_output(self,name,message_type,is_application, metadata,send_handler,source_file=None,source_line=None,documentation=None, is_indexed=False):
+        assert self.supervisor_implicit_output_index==-1, "Normal output added after supervisor output"
         if name in self.pins:
             raise GraphDescriptionError("Duplicate pin {} on device type {}".format(name,self.id))
         if message_type.id not in self.parent.message_types:
@@ -632,9 +660,27 @@ class DeviceType(object):
         self.pins[name]=p
         p.index=index
 
+    def add_supervisor_output(self,name,message_type, metadata,send_handler,source_file=None,source_line=None,documentation=None):
+        assert self.supervisor_implicit_input_index==-1, "Two supervisor outputs are added"
+        if name in self.pins:
+            raise GraphDescriptionError("Duplicate pin {} on device type {}".format(name,self.id))
+        if message_type.id not in self.parent.message_types:
+            raise GraphDescriptionError("Unregistered message type {} on pin {} of device type {}".format(message_type.id,name,self.id))
+        if message_type != self.parent.message_types[message_type.id]:
+            raise GraphDescriptionError("Incorrect message type object {} on pin {} of device type {}".format(message_type.id,name,self.id))
+        p=OutputPin(self, name, self.parent.message_types[message_type.id], False, metadata, send_handler, source_file, source_line, documentation,False)
+        p.is_supervisor_implicit_pin=True
+        index=len(self.outputs_by_index)
+        self.outputs[name]=p
+        self.outputs_by_index.append(p)
+        self.pins[name]=p
+        p.index=index
+        self.supervisor_implicit_output_index=index
+
 
 class SupervisorType(object):
     def __init__(self,parent,id,propertiesCode:str,stateCode:str,sharedCode:str,onInitCode:str,onSupervisorIdleCode:str,onStopCode:str):
+        assert isinstance(id,str) and id!="", f"id={id}"
         self.id=id
         self.parent=parent
         self.state_code=stateCode
@@ -645,7 +691,8 @@ class SupervisorType(object):
         self.on_supervisor_idle_handler=onSupervisorIdleCode
         self.on_stop_handler=onStopCode
 
-    def add_supervisor_input(self,message_type,receive_handler):
+    def add_input(self,name,message_type,receive_handler):
+        assert isinstance(receive_handler,str), receive_handler
         if len(self.inputs_by_index)>0:
             raise GraphDescriptionError(f"More than one supervisor pin on supervisor type {self.id}")
         if message_type.id not in self.parent.message_types:
@@ -653,7 +700,7 @@ class SupervisorType(object):
         if message_type != self.parent.message_types[message_type.id]:
             raise GraphDescriptionError("Incorrect message type object {} on pin {} of supervisor type {}".format(message_type.id,name,self.id))
         index=len(self.inputs_by_index)
-        self.inputs_by_index.append( (index, message_type, receive_handler) )
+        self.inputs_by_index.append( (index, name, message_type, receive_handler) )
 
 class GraphType(object):
     def __init__(self,id,properties,metadata=None,shared_code=[],documentation=None):
@@ -708,7 +755,7 @@ class GraphType(object):
             raise GraphDescriptionError("There is more than one supervisor type.")
         if supervisor_type.id in self.supervisor_types:
             raise GraphDescriptionError("Supervisor type '{}' already exists.".format(supervisor_type.id))
-        self.supervisor_types[device_type.id]=supervisor_type
+        self.supervisor_types[supervisor_type.id]=supervisor_type
         return supervisor_type
 
 class GraphTypeReference(object):

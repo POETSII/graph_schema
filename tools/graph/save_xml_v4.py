@@ -225,7 +225,7 @@ def save_edge_instance(parent, ei):
     return n
 
 
-def save_graph_type(parent, graph):
+def save_graph_type(parent, graph:GraphType):
     gn = etree.SubElement(parent,toNS("p:GraphType"))
     gn.attrib["id"]=graph.id
 
@@ -253,6 +253,8 @@ def save_graph_type(parent, graph):
             save_external_type(dtn, dt)
         else:
             save_device_type(dtn,dt)
+
+    assert len(graph.supervisor_types)==0, "Code to save supervisor types not implemented yet"
 
     return gn
 

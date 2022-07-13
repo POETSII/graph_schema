@@ -248,7 +248,9 @@ private:
 
         TypedDataPtr edgeProperties;
         if(properties.empty()){
-            edgeProperties=ep->create();
+            if(ep){
+                edgeProperties=ep->create();
+            }
         }else{
             edgeProperties=ep->loadXmlV4ValueSpec(properties);
         }
@@ -257,7 +259,9 @@ private:
 
         TypedDataPtr edgeState;
         if(state.empty()){
-            edgeState=es->create();
+            if(es){
+                edgeState=es->create();
+            }
         }else{
             edgeState=es->loadXmlV4ValueSpec(state);
         }

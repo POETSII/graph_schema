@@ -75,7 +75,7 @@ def get_child_text(node,name,namespace=None):
     n=node.find(name,namespace)
     if n is None:
         raise XMLSyntaxError("No child text node called {}".format(name),node)
-    text=n.text
+    text=src=etree.tostring(n, method="text",encoding=str)
     line=n.sourceline
     return (text,line)
 

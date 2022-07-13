@@ -15,9 +15,16 @@ endif
 
 SHELL=/bin/bash
 
+# For some reason pkg-config stopped working on byron...
+ifeq ($(shell pkg-config libxml++-2.6 ; echo $?),0)
 LIBXML_PKG_CONFIG_CPPFLAGS := $(shell pkg-config --cflags libxml++-2.6)
 LIBXML_PKG_CONFIG_LDLIBS := $(shell pkg-config --libs-only-l libxml++-2.6)
 LIBXML_PKG_CONFIG_LDFLAGS := $(shell pkg-config --libs-only-L --libs-only-other libxml++-2.6)
+else
+LIBXML_PKG_CONFIG_CPPFLAGS := -I/usr/include/libxml++-2.6 -I/usr/lib/x86_64-linux-gnu/libxml++-2.6/include -I/usr/include/libxml2 -I/usr/include/glibmm-2.4 -I/usr/lib/x86_64-linux-gnu/glibmm-2.4/include -I/usr/include/glib-2.0 -I/usr/lib/x86_64-linux-gnu/glib-2.0/include -I/usr/include/sigc++-2.0 -I/usr/lib/x86_64-linux-gnu/sigc++-2.0/include
+LIBXML_PKG_CONFIG_LDLIBS := -lxml++-2.6 -lxml2 -lglibmm-2.4 -lgobject-2.0 -lglib-2.0 -lsigc-2.0
+LIBXML_PKG_CONFIG_LDFLAGS := 
+endif
 
 CPPFLAGS += -I include -W -Wall -Wno-unused-parameter -Wno-unused-variable
 CPPFLAGS += $(LIBXML_PKG_CONFIG_CPPFLAGS)
@@ -205,7 +212,6 @@ bin/%.o : tools/%.cpp
 	$(CXX) -c $(CPPFLAGS) $< -o $@
 
 bin/% : bin/%.o $(STANDARD_IMPL_OBJS)	
-
 	$(CXX) $(CPPFLAGS) $(STANDARD_IMPL_OBJS) $@.o  -o $@ $(LDFLAGS) $(LDLIBS)
 
 
@@ -335,6 +341,14 @@ tt :
 validate-virtual : $(foreach t,$(VIRTUAL_ALL_TESTS),validate-virtual/$(t) output/virtual/$(t).svg output/virtual/$(t).graph.cpp output/virtual/$(t).graph.so)
 
 .PHONY : test
+
+test_no_clean :
+	@>&2 echo "# Building tools"
+	@make -j 4 -k all_tools 2>/dev/null > /dev/null
+	@>&2 echo "# Building providers"
+	@make -j 4 -k all_providers 2>/dev/null > /dev/null
+	@>&2 echo "# Running bats"
+	@bats  -t -r .
 
 test :
 	@>&2 echo "# Cleaning directory"

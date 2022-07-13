@@ -625,7 +625,7 @@ def render_typed_data_as_spec(proto,name,elt_name,dst,asHeader=False):
     dst.write("  return singleton;\n")
     dst.write("}\n")
 
-def emit_device_global_constants(dt,subs,indent):
+def emit_device_global_constants(dt:DeviceType,subs,indent):
     res="""
 {indent}const unsigned INPUT_COUNT_{deviceTypeId} = {inputCount};
 {indent}const unsigned OUTPUT_COUNT_{deviceTypeId} = {outputCount};
@@ -651,6 +651,11 @@ def emit_device_global_constants(dt,subs,indent):
 {indent}const unsigned RTS_INDEX_{deviceTypeId}_{currPinName}={currPinIndex};
 {indent}const unsigned RTS_FLAG_{deviceTypeId}_{currPinName}=1ul<<{currPinIndex};
 """.format(currPinName=ip.name,currPinIndex=currPinIndex,**subs)
+        if ip.is_supervisor_implicit_pin:
+            assert currPinIndex==len(dt.outputs_by_index)-1, "Implicit output should always be last"
+            res=res+"""
+{indent}const unsigned RTS_SUPER_IMPLICIT_SEND_FLAG=RTS_FLAG_{deviceTypeId}_{currPinName};
+""" .format(currPinName=ip.name,currPinIndex=currPinIndex,**subs)         
         currPinIndex+=1
 
     return res
@@ -687,8 +692,22 @@ def emit_output_pin_local_constants(dt,subs,indent=""):
 """.format(**subs)
 
 
+_add_orchestrator_hack_macros= \
+"""
+// Add "quality of life" macros defined by orchestrator
+#define GRAPHPROPERTIES(a)  graphProperties->a
+#define DEVICEPROPERTIES(a) deviceProperties->a
+#define DEVICESTATE(a)      deviceState->a
+#define EDGEPROPERTIES(a)   edgeProperties->a
+#define EDGESTATE(a)        edgeState->a
+#define MSG(a)              message->a
+#define PKT(a)              message->a
+#define RTS(a)              *readyToSend |= RTS_FLAG_##a
+#define RTSSUP()            *readyToSend |= RTS_SUPER_IMPLICIT_SEND_FLAG
+"""
 
-def render_input_pin_as_cpp(ip,dst):
+
+def render_input_pin_as_cpp(ip:InputPin,dst):
     dt=ip.parent
     gt=dt.parent
     mt=ip.message_type
@@ -711,7 +730,8 @@ def render_input_pin_as_cpp(ip,dst):
         "handlerCode"                   : ip.receive_handler or "",
         "inputCount"                    : len(dt.inputs),
         "outputCount"                   : len(dt.outputs),
-        "indent"                        : "  "
+        "indent"                        : "  ",
+        "isSupervisor"                  : "true" if ip.is_supervisor_implicit_pin else "false"
     }
 
     if dt.is_external:
@@ -743,7 +763,8 @@ public:
         {messageTypeId}_Spec_get(),
         {pinPropertiesStructName}_Spec_get(),
         {pinStateStructName}_Spec_get(),
-        {deviceTypeId}_{pinName}_handler_code
+        {deviceTypeId}_{pinName}_handler_code,
+        {isSupervisor}
     ) {{}} \n
 
     virtual void onReceive(
@@ -785,7 +806,7 @@ InputPinPtr {deviceTypeId}_{pinName}_Spec_get(){{
     #    end of render_input_pin_as_cpp
     return None
 
-def render_output_pin_as_cpp(op,dst):
+def render_output_pin_as_cpp(op:OutputPin,dst):
     dt=op.parent
     graph=dt.parent
     for index in range(len(dt.outputs_by_index)):
@@ -809,7 +830,8 @@ def render_output_pin_as_cpp(op,dst):
         "handlerCode"                   : op.send_handler,
         "inputCount"                    : len(dt.inputs),
         "outputCount"                   : len(dt.outputs),
-        "indent"                        : "  "
+        "indent"                        : "  ",
+        "isSupervisor"                  : "true" if op.is_supervisor_implicit_pin else "false"
     }
 
     subs["pinLocalConstants"]=emit_output_pin_local_constants(dt,subs, "    ")
@@ -1114,6 +1136,99 @@ def render_device_type_as_cpp(dt,dst):
 
     registrationStatements.append('registry->registerDeviceType(ns_{}::{}_Spec_get());'.format(dt.id,dt.id,dt.id))
 
+
+def raw_cpp_str(x):
+    if x is None:
+        return '""'
+    else:
+        return f'R"XYZ({x})XYZ"'
+
+def render_supervisor_type_as_cpp(st:SupervisorType,dst):
+    R=raw_cpp_str
+
+    assert st.id!=""
+
+
+
+    inputs_str="{\n"
+    for (i,input) in enumerate(st.inputs_by_index):
+        dst.write(f"// Supervisor type {st.id} handler code for input pin {input[0]} {input[1]}\n")
+        dst.write(f"static const char *{st.id}_in_handler_{input[0]} = \n")
+        dst.write(R(input[3]))
+        dst.write(";\n")
+        
+        if(i!=0):
+            inputs_str+=",\n"
+        inputs_str+=f"""{{ {i}, "{input[1]}", {input[2].id}_Spec_get(), {st.id}_in_handler_{input[0]} }}"""
+
+    inputs_str+="}\n"
+
+
+    dst.write("namespace ns_{}{{\n".format(st.id));
+
+    dst.write(f"""
+static const char *{st.id}_properties =
+{R(st.properties_code)}
+;
+static const char *{st.id}_state =
+{R(st.state_code)}
+;
+static const char *{st.id}_shared_code =
+{R(st.shared_code)}
+;
+static const char *{st.id}_init_handler =
+{R(st.init_handler)}
+;
+static const char *{st.id}_on_stop_handler =
+{R(st.on_stop_handler)}
+;
+static const char *{st.id}_on_supervisor_idle_handler =
+{R(st.on_supervisor_idle_handler)}
+;
+
+""")
+    
+
+    dst.write(
+f"""
+class {st.id}_Spec : public SupervisorTypeImpl {{
+public:
+    {st.id}_Spec()
+        : SupervisorTypeImpl("{st.id}"
+            , {st.id}_properties
+            , {st.id}_state
+            , {inputs_str}
+            , {st.id}_shared_code
+            , {st.id}_init_handler
+            , {st.id}_on_supervisor_idle_handler
+            , {st.id}_on_stop_handler
+        )
+    {{}}
+
+    bool isCloneable() const override
+    {{ return false; }}
+
+    virtual std::shared_ptr<SupervisorInstance> create() const
+    {{
+        throw std::runtime_error("create - not implemented.");
+    }}
+}};
+""")
+
+    dst.write(f"""
+SupervisorTypePtr {st.id}_Spec_get(){{
+    static SupervisorTypePtr singleton(new {st.id}_Spec);
+    return singleton;
+}};
+""")
+
+    dst.write("}}; //namespace ns_{}\n\n".format(st.id));
+
+    # Not registering. It's unclear if this is needed.
+    # TODO : should devices and message types still be registered?
+    # registrationStatements.append(f'registry->registerSupervisorType(ns_{st.id}::{st.id}_Spec_get());')
+
+
 def render_typedef_decl(td,dst,arrayIndex="",name=""):
     if isinstance(td, TupleTypedDataSpec):
         if name=="":
@@ -1186,6 +1301,9 @@ def render_graph_as_cpp(graph,dst, destPath, asHeader=False):
     dst.write("#undef assert")
     dst.write("#define assert handler_assert\n")
 
+    dst.write(_add_orchestrator_hack_macros)
+    dst.write("\n")
+
     dst.write("/////////////////////////////////\n")
     dst.write("// FWD\n")
     for et in gt.message_types.values():
@@ -1216,12 +1334,17 @@ def render_graph_as_cpp(graph,dst, destPath, asHeader=False):
     for dt in gt.device_types.values():
         render_device_type_as_cpp(dt,dst)
 
+    for st in gt.supervisor_types.values():
+        render_supervisor_type_as_cpp(st,dst)
+
     dst.write("class {}_Spec : public GraphTypeImpl {{\n".format(gt.id))
     dst.write('  public: {}_Spec() : GraphTypeImpl("{}", {}_properties_t_Spec_get()) {{\n'.format(gt.id,gt.id,gt.id))
     for et in gt.message_types.values():
         dst.write('    addMessageType({}_Spec_get());\n'.format(et.id))
     for dt in gt.device_types.values():
         dst.write('    addDeviceType(ns_{}::{}_Spec_get());\n'.format(dt.id,dt.id))
+    for st in gt.supervisor_types.values():
+        dst.write('    addSupervisorType(ns_{}::{}_Spec_get());\n'.format(st.id,st.id))
     dst.write("""
     // This define will be specified when compiling the provider
     #ifdef POETS_HAVE_IN_PROC_EXTERNAL_MAIN

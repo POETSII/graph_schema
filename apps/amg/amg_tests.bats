@@ -5,23 +5,23 @@ function setup {
 }
 
 function test_graph {
-    run bin/epoch_sim $1
+    run bin/epoch_sim --log-level 1 $1
     [[ $status -eq 0 ]]
     echo $output | grep "exit_node:finished : _HANDLER_EXIT_SUCCESS_9be65737_"
 
-    run bin/epoch_sim --prob-send 0.5 --prob-delay 0.5 $1
+    run bin/epoch_sim --log-level 1 --prob-send 0.5 --prob-delay 0.5 $1
     [[ $status -eq 0 ]]
     echo $output | grep "exit_node:finished : _HANDLER_EXIT_SUCCESS_9be65737_"
     
-    run bin/graph_sim --strategy FIFO $1
+    run bin/graph_sim --log-level 1 --strategy FIFO $1
     [[ $status -eq 0 ]]
     echo $output | grep "exit_node : _HANDLER_EXIT_SUCCESS_9be65737_"
 
-    run bin/graph_sim --strategy LIFO $1
+    run bin/graph_sim --log-level 1 --strategy LIFO $1
     [[ $status -eq 0 ]]
     echo $output | grep "exit_node : _HANDLER_EXIT_SUCCESS_9be65737_"
 
-    run bin/graph_sim --strategy Random $1
+    run bin/graph_sim --log-level 1 --strategy Random $1
     [[ $status -eq 0 ]]
     echo $output | grep "exit_node : _HANDLER_EXIT_SUCCESS_9be65737_"
 }

@@ -26,11 +26,13 @@ inline void split_path(const std::string &src, std::string &dstDevice, std::stri
 
 inline std::vector<std::string> tokenise_c_def(std::string src)
 {
-  std::regex re(R"X(^[;{}\[\]]|[1-9][0-9]*|[a-zA-Z_][a-zA-Z_0-9]*)X");
+  std::regex re(R"X(^([;{}\[\]]|[1-9][0-9]*|[a-zA-Z_][a-zA-Z_0-9]*))X");
 
-  unsigned pos=0;
+  // This removes all C-style comments by replacing them with spaces
+  unsigned pos=0, start=0;
   while(pos+1<src.size()){
     if(src[pos]=='/'){
+      start=pos;
       if(pos+1<src.size() && src[pos+1]=='*'){
         pos+=2;
 
@@ -41,12 +43,17 @@ inline std::vector<std::string> tokenise_c_def(std::string src)
           if(src[pos]=='*'){
             if(pos+1<src.size() && src[pos+1]=='/'){
               pos+=2;
+              for(unsigned i=start; i<pos; i++){
+                src[i]=' ';
+              }
               break;
             }
           }
           pos++;
         }
       }
+    }else{
+      pos+=1;
     }
   }
 
@@ -73,6 +80,7 @@ inline std::vector<std::string> tokenise_c_def(std::string src)
     const std::string &srcc=src;
     std::smatch match;
     if(std::regex_search(srcc.begin()+pos, srcc.end(), match, re)){
+      std::cerr<<"pos="<<pos<<", match="<<match.str()<<"\n";
       res.push_back(match.str());
       pos+=res.back().size();
     }else{
@@ -252,6 +260,7 @@ inline TypedDataSpecPtr loadTypedDataSpec(xmlpp::Element *eParent, const std::st
 
     spec=std::make_shared<TypedDataSpecImpl>(elt);
   }
+
   return spec;
 }
 
@@ -309,6 +318,21 @@ inline std::string load_code_fragment(xmlpp::Element *eParent, const std::string
   auto *eCode=find_single(eParent, name, ns);
   if(!eCode){
     throw std::runtime_error("Required code element "+name+" is missing (v4 requires all elements).");
+  }
+  auto ch=xmlNodeGetContent(eCode->cobj());
+  std::string res=(char*)ch;
+  xmlFree(ch);
+  return res;
+}
+
+inline std::string load_optional_code_fragment(xmlpp::Element *eParent, const std::string &name)
+{
+  xmlpp::Node::PrefixNsMap ns;
+  ns["g"]="https://poets-project.org/schemas/virtual-graph-schema-v4";
+
+  auto *eCode=find_single(eParent, name, ns);
+  if(!eCode){
+    return "";
   }
   auto ch=xmlNodeGetContent(eCode->cobj());
   std::string res=(char*)ch;
@@ -425,6 +449,36 @@ inline DeviceTypePtr loadDeviceTypeElement(
     ));
   }
 
+  for(auto *n : eDeviceType->find("./g:SupervisorInPin",ns)){
+    auto *e=(xmlpp::Element*)n;
+    bool is_supervisor=e->get_name()=="SupervisorInPin";
+
+    std::string name="__SUP_IN__";
+    std::string messageTypeId=get_attribute_required(e, "messageTypeId");
+
+    if(messageTypes.find(messageTypeId)==messageTypes.end()){
+      throw std::runtime_error("Unknown messageTypeId '"+messageTypeId+"'");
+    }
+    auto messageType=messageTypes.at(messageTypeId);
+
+    TypedDataSpecPtr inputState, inputProperties;
+    inputProperties=std::make_shared<TypedDataSpecImpl>();
+    inputState=std::make_shared<TypedDataSpecImpl>();
+
+    std::string onReceive=load_code_fragment(e, "./g:OnReceive");
+
+    inputs.push_back(std::make_shared<InputPinDynamic>(
+      delayedSrc,
+      name,
+      inputs.size(),
+      messageType,
+      inputProperties,
+      inputState,
+      onReceive,
+      true //is_supervisor
+    ));
+  }
+
   std::vector<OutputPinPtr> outputs;
 
   for(auto *n : eDeviceType->find("./g:OutputPin",ns)){
@@ -451,6 +505,30 @@ inline DeviceTypePtr loadDeviceTypeElement(
       messageType,
       onSend,
       isIndexedSend
+    ));
+  }
+
+  for(auto *n : eDeviceType->find("./g:SupervisorOutPin",ns)){
+    auto *e=(xmlpp::Element*)n;
+
+    std::string name="__SUP_IN__";
+    std::string messageTypeId=get_attribute_required(e, "messageTypeId");
+
+    if(messageTypes.find(messageTypeId)==messageTypes.end()){
+      throw std::runtime_error("Unknown messageTypeId '"+messageTypeId+"'");
+    }
+    auto messageType=messageTypes.at(messageTypeId);
+
+    std::string onSend=load_code_fragment(e, "./g:OnSend");
+
+    outputs.push_back(std::make_shared<OutputPinDynamic>(
+      delayedSrc,
+      name,
+      outputs.size(),
+      messageType,
+      onSend,
+      false, //isIndexedSend,
+      true // is_supervisor
     ));
   }
 
@@ -485,21 +563,36 @@ inline SupervisorTypePtr loadSupervisorTypeElement(
 
   std::string id=get_attribute_required(eSupervisorType, "id");
 
-  std::string onInitCode=load_code_fragment(eSupervisorType, "./g:OnInit");
-  std::string onSupervisorIdleCode=load_code_fragment(eSupervisorType, "./g:OnSupervisorIdle");
-  std::string onStopCode=load_code_fragment(eSupervisorType, "./g:OnStop");
-  std::string sharedCode=load_code_fragment(eSupervisorType, "./g:Code");
+  std::string sharedCode=load_optional_code_fragment(eSupervisorType, "./g:Code");
+  std::string onInitCode=load_optional_code_fragment(eSupervisorType, "./g:OnInit");
+  std::string onSupervisorIdleCode=load_optional_code_fragment(eSupervisorType, "./g:OnSupervisorIdle");
+  std::string onStopCode=load_optional_code_fragment(eSupervisorType, "./g:OnStop");
 
-  std::string properties=load_code_fragment(eSupervisorType, "./g:Properties");
-  std::string state=load_code_fragment(eSupervisorType, "./g:State");
+  std::string onRTCLCode=load_optional_code_fragment(eSupervisorType, "./g:OnRTCL");
+  if(!onRTCLCode.empty()){
+    throw std::runtime_error("OnRTCL is Orchestrator-specific behaviour, and not supported by here (or as, as of writing, there).");
+  }
+  std::string onCTLCode=load_optional_code_fragment(eSupervisorType, "./g:OnCTL");
+  if(!onRTCLCode.empty()){
+    throw std::runtime_error("OnCTL is Orchestrator-specific behaviour, and not supported here (or, as of writing, there).");
+  }
+
+  std::string properties=load_optional_code_fragment(eSupervisorType, "./g:Properties");
+  std::string state=load_optional_code_fragment(eSupervisorType, "./g:State");
 
   std::vector<SupervisorType::InputPinInfo> inputs;
 
-  for(auto *n : eSupervisorType->find("./g:InputPin",ns)){
+  for(auto *n : eSupervisorType->find("./g:SupervisorInPin",ns)){
     auto *e=(xmlpp::Element*)n;
 
-    std::string name=get_attribute_required(e, "name");
+    std::string name=get_attribute_required(e, "id");
     std::string messageTypeId=get_attribute_required(e, "messageTypeId");
+
+    for(auto &prev : inputs){
+      if(prev.name==name){
+        throw std::runtime_error("Duplicate SupervisorInPin name.");
+      }
+    }
 
     if(messageTypes.find(messageTypeId)==messageTypes.end()){
       throw std::runtime_error("Unknown messageTypeId '"+messageTypeId+"'");
@@ -510,6 +603,7 @@ inline SupervisorTypePtr loadSupervisorTypeElement(
 
     inputs.push_back({
       (unsigned)inputs.size(),
+      name,
       messageType,
       onReceive
     });
@@ -537,6 +631,7 @@ inline GraphTypePtr loadGraphTypeElement(const filepath &srcPath, xmlpp::Element
   std::map<std::string,MessageTypePtr> messageTypesById;
   std::vector<MessageTypePtr> messageTypes;
   std::vector<DeviceTypePtr> deviceTypes;
+  std::vector<SupervisorTypePtr> supervisorTypes;
 
   auto *eMessageTypes=find_single(eGraphType, "./g:MessageTypes", ns);
   for(auto *nMessageType : eMessageTypes->find("./g:MessageType", ns)){
@@ -548,9 +643,14 @@ inline GraphTypePtr loadGraphTypeElement(const filepath &srcPath, xmlpp::Element
   }
 
   auto *eDeviceTypes=find_single(eGraphType, "./g:DeviceTypes", ns);
-  for(auto *nDeviceType : eDeviceTypes->find("./g:DeviceType|./g:ExternalType", ns)){
-    auto dt=loadDeviceTypeElement(messageTypesById, (xmlpp::Element*)nDeviceType);
-    deviceTypes.push_back( dt );
+  for(auto *nDeviceType : eDeviceTypes->find("./g:DeviceType|./g:ExternalType|./g:SupervisorType", ns)){
+    if(nDeviceType->get_name()=="SupervisorType"){
+      auto dt=loadSupervisorTypeElement(messageTypesById, (xmlpp::Element*)nDeviceType);
+      supervisorTypes.push_back( dt );
+    }else{
+      auto dt=loadDeviceTypeElement(messageTypesById, (xmlpp::Element*)nDeviceType);
+      deviceTypes.push_back( dt );
+    }
   }
 
   auto res=std::make_shared<GraphTypeDynamic>(
@@ -560,7 +660,8 @@ inline GraphTypePtr loadGraphTypeElement(const filepath &srcPath, xmlpp::Element
     rapidjson::Document(),
     std::vector<std::string>{sharedCode},
     messageTypes,
-    deviceTypes
+    deviceTypes,
+    supervisorTypes
     );
 
   if(events){

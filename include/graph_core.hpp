@@ -523,6 +523,10 @@ public:
   virtual const MessageTypePtr &getMessageType() const=0;
 
   virtual rapidjson::Document &getMetadata() =0;
+
+  // This pin is either connected into or out of the supervisor,
+  // so it was declared with <SupervisorInPin> or <SupervisorOutPin>
+  virtual bool isSupervisorImplicitPin() const =0;
 };
 typedef std::shared_ptr<Pin> PinPtr;
 
@@ -675,6 +679,13 @@ public:
            ) const=0;
 
   virtual rapidjson::Document &getMetadata() =0;
+
+  // If non-zero, then these give the index in the list of the
+  // implicit input and output. Because of the requires on RTS_FLAG ordering
+  // for normal pins, these will effectively always be last
+  virtual int getSupervisorImplicitInput() const=0;
+  virtual int getSupervisorImplicitOutput() const=0;
+
 };
 
 /*
@@ -709,11 +720,12 @@ public:
   virtual void onRecv(
           OrchestratorServices *orchestrator,
           const typed_data_t *graphProperties,
+          unsigned pin_index, // Currently always 0
           const typed_data_t *message,
           typed_data_t *reply,
           typed_data_t *broadcast,
-          bool &rtsReply,
-          bool &rtsBcast
+          bool &rtsReply,   // Set to true to cause reply to be sent to originator
+          bool &rtsBcast    // Set to true to cause broadcast to be sent to all devices
           ) const=0;
 };
 typedef std::shared_ptr<SupervisorInstance> SupervisorInstancePtr;
@@ -741,6 +753,7 @@ public:
   struct InputPinInfo
   {
     unsigned index;
+    std::string name;
     MessageTypePtr messageType;
     std::string handler;
   };

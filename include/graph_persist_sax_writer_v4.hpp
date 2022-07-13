@@ -118,6 +118,21 @@ protected:
     xmlTextWriterEndElement(m_dst);
   }
 
+  void writeInputPin(const SupervisorType::InputPinInfo &ip)
+  {
+
+    xmlTextWriterStartElement(m_dst, (const xmlChar *)"SupervisorInPin");
+
+    xmlTextWriterWriteAttribute(m_dst, (const xmlChar *)"id", (const xmlChar *)ip.name.c_str() );
+    xmlTextWriterWriteAttribute(m_dst, (const xmlChar *)"messageTypeId", (const xmlChar *)ip.messageType->getId().c_str() );
+
+    xmlTextWriterStartElement(m_dst, (const xmlChar *)"OnReceive");
+    xmlTextWriterWriteCDATA(m_dst, (const xmlChar *)ip.handler.c_str());
+    xmlTextWriterEndElement(m_dst);
+
+    xmlTextWriterEndElement(m_dst);
+  }
+
   void writeOutputPin(OutputPinPtr op)
   {
     xmlTextWriterStartElement(m_dst, (const xmlChar *)"OutputPin");
@@ -182,6 +197,44 @@ protected:
 
       
     }
+
+    xmlTextWriterEndElement(m_dst);
+  }
+
+  void writeSupervisorType(SupervisorTypePtr supType)
+  {
+    xmlTextWriterStartElement(m_dst, (const xmlChar *)"SupervisorType");
+
+    xmlTextWriterWriteAttribute(m_dst, (const xmlChar *)"id", (const xmlChar *)supType->getId().c_str() );
+
+    xmlTextWriterStartElement(m_dst, (const xmlChar *)"Properties" );
+    xmlTextWriterWriteCDATA(m_dst, (const xmlChar *)supType->getPropertiesCode().c_str());
+    xmlTextWriterEndElement(m_dst);
+
+    xmlTextWriterStartElement(m_dst, (const xmlChar *)"State" );
+    xmlTextWriterWriteCDATA(m_dst, (const xmlChar *)supType->getStateCode().c_str());
+    xmlTextWriterEndElement(m_dst);
+
+    auto sharedCode=supType->getSharedCode();
+    xmlTextWriterStartElement(m_dst, (const xmlChar *)"Code");
+    xmlTextWriterWriteCDATA(m_dst, (const xmlChar *)sharedCode.c_str());
+    xmlTextWriterEndElement(m_dst);
+
+    for(auto ip : supType->getInputs()){
+      writeInputPin(ip);
+    }
+
+    xmlTextWriterStartElement(m_dst, (const xmlChar *)"OnInit");
+    xmlTextWriterWriteCDATA(m_dst, (const xmlChar *)supType->getOnInitCode().c_str());
+    xmlTextWriterEndElement(m_dst);
+
+    xmlTextWriterStartElement(m_dst, (const xmlChar *)"OnSupervisorIdle");
+    xmlTextWriterWriteCDATA(m_dst, (const xmlChar *)supType->getOnSupervisorIdleCode().c_str());
+    xmlTextWriterEndElement(m_dst);
+
+    xmlTextWriterStartElement(m_dst, (const xmlChar *)"OnStopCode");
+    xmlTextWriterWriteCDATA(m_dst, (const xmlChar *)supType->getOnStopCode().c_str());
+    xmlTextWriterEndElement(m_dst);
 
     xmlTextWriterEndElement(m_dst);
   }
@@ -308,6 +361,9 @@ protected:
     xmlTextWriterEndElement(m_dst);
 
     xmlTextWriterStartElement(m_dst, (const xmlChar *)"DeviceTypes");
+    for(unsigned i=0; i<graphType->getSupervisorTypeCount(); i++){
+      writeSupervisorType(graphType->getSupervisorType(i));
+    }
     for(unsigned i=0; i<graphType->getDeviceTypeCount(); i++){
       writeDeviceType(graphType->getDeviceType(i));
     }

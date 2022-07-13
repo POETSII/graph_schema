@@ -266,6 +266,7 @@ private:
   TypedDataSpecPtr m_propertiesType;
   TypedDataSpecPtr m_stateType;
   std::string m_code;
+  bool m_is_supervisor=false;
 
   rapidjson::Document m_metadata;
 protected:
@@ -276,7 +277,8 @@ protected:
     MessageTypePtr messageType,
     TypedDataSpecPtr propertiesType,
     TypedDataSpecPtr stateType,
-    const std::string &code
+    const std::string &code,
+    bool is_supervisor
   )
     : m_deviceTypeSrc(deviceTypeSrc)
     , m_name(name)
@@ -285,6 +287,7 @@ protected:
     , m_propertiesType(propertiesType)
     , m_stateType(stateType)
     , m_code(code)
+    , m_is_supervisor(is_supervisor)
   {
     m_metadata.SetObject();
   }
@@ -320,6 +323,9 @@ public:
 
   virtual rapidjson::Document &getMetadata() override
   { return m_metadata; }
+
+  virtual bool isSupervisorImplicitPin() const override
+  { return m_is_supervisor; }
 };
 
 
@@ -375,17 +381,18 @@ private:
   MessageTypePtr m_messageType;
   std::string m_code;
   bool m_isIndexedSend;
-  
+  bool m_isSupervisor;
 
   rapidjson::Document m_metadata;
 protected:
-  OutputPinImpl(std::function<DeviceTypePtr ()> deviceTypeSrc, const std::string &name, unsigned index, MessageTypePtr messageType, const std::string &code, bool isIndexedSend)
+  OutputPinImpl(std::function<DeviceTypePtr ()> deviceTypeSrc, const std::string &name, unsigned index, MessageTypePtr messageType, const std::string &code, bool isIndexedSend, bool isSupervisor=false)
     : m_deviceTypeSrc(deviceTypeSrc)
     , m_name(name)
     , m_index(index)
     , m_messageType(messageType)
     , m_code(code)
     , m_isIndexedSend(isIndexedSend)
+    , m_isSupervisor(isSupervisor)
   {
     m_metadata.SetObject();
   }
@@ -417,6 +424,9 @@ public:
 
   virtual bool isIndexedSend() const override
   { return m_isIndexedSend; }
+
+  virtual bool isSupervisorImplicitPin() const override
+  { return m_isSupervisor; }
 };
 
 class OutputPinDelegate
@@ -507,6 +517,9 @@ private:
 
   rapidjson::Document m_metadata;
 
+  int m_supervisorImplicitInput = -1;
+  int m_supervisorImplicitOutput = -1;
+
 protected:
   DeviceTypeImpl(const std::string &id,
       TypedDataSpecPtr properties, TypedDataSpecPtr state,
@@ -533,9 +546,31 @@ protected:
     m_metadata.SetObject();
     for(auto &i : inputs){
       m_inputsByName.insert(std::make_pair(i->getName(), i));
+      if(i->isSupervisorImplicitPin()){
+        if(m_supervisorImplicitInput!=-1){
+          throw std::runtime_error("DeviceType has two supervisor implicit inputs.");
+        }
+        m_supervisorImplicitInput=i->getIndex();
+      }
+    }
+    if(m_supervisorImplicitInput!=-1){
+      if(m_supervisorImplicitInput != (int)m_inputsByIndex.size()-1){
+        throw std::runtime_error("Supervisor implicit input is not the last pin.");
+      }
     }
     for(auto &o : outputs){
       m_outputsByName.insert(std::make_pair(o->getName(), o));
+      if(o->isSupervisorImplicitPin()){
+        if(m_supervisorImplicitOutput!=-1){
+          throw std::runtime_error("DeviceType has two supervisor implicit outputs.");
+        }
+        m_supervisorImplicitOutput=o->getIndex();
+      }
+    }
+    if(m_supervisorImplicitOutput!=-1){
+      if(m_supervisorImplicitOutput != (int)m_outputsByIndex.size()-1){
+        throw std::runtime_error("Supervisor implicit output is not the last pin.");
+      }
     }
   }
 
@@ -614,6 +649,13 @@ public:
 
   virtual rapidjson::Document &getMetadata() override
   { return m_metadata; }
+
+  virtual int getSupervisorImplicitInput() const override
+  { return m_supervisorImplicitInput; }
+
+  virtual int getSupervisorImplicitOutput() const override
+  { return m_supervisorImplicitOutput; }
+
 };
 typedef std::shared_ptr<DeviceType> DeviceTypePtr;
 

@@ -103,16 +103,22 @@ CPPFLAGS+=" -g -I ${graph_schema_dir}/include -W -Wall -Wno-unused-parameter -Wn
 CPPFLAGS+=" -I ${graph_schema_dir}/external/robin_hood"
 CPPFLAGS+=" -DPOETS_COMPILING_AS_PROVIDER=1"
 
-CPPFLAGS+=" $(pkg-config --cflags libxml++-2.6)"
+# For some reason pkg-config stopped working on byron...
+if pkg-config libxml++-2.6 ; then
+CPPFLAGS="$CPPFLAGS $(shell pkg-config --cflags libxml++-2.6)"
+LDLIBS="$LDLIBS $(shell pkg-config --libs-only-l libxml++-2.6)"
+LDFLAGS+="$LDFLAGS $(shell pkg-config --libs-only-L --libs-only-other libxml++-2.6)"
+else
+CPPFLAGS="$CPPFLAGS -I/usr/include/libxml++-2.6 -I/usr/lib/x86_64-linux-gnu/libxml++-2.6/include -I/usr/include/libxml2 -I/usr/include/glibmm-2.4 -I/usr/lib/x86_64-linux-gnu/glibmm-2.4/include -I/usr/include/glib-2.0 -I/usr/lib/x86_64-linux-gnu/glib-2.0/include -I/usr/include/sigc++-2.0 -I/usr/lib/x86_64-linux-gnu/sigc++-2.0/include"
+LDLIBS="$LDLIBS -lxml++-2.6 -lxml2 -lglibmm-2.4 -lgobject-2.0 -lglib-2.0 -lsigc-2.0"
+fi
+
 CPPFLAGS+=" -Wno-unused-local-typedefs -Wno-unused-but-set-variable"
 
 CPPFLAGS+=" -I ~/local/include"
 
 CPPFLAGS+=" -mfpmath=sse -msse2"
 CPPFLAGS+=" -frounding-math -fsignaling-nans -fmax-errors=1"
-
-LDLIBS="$(pkg-config --libs-only-l libxml++-2.6)"
-LDFLAGS+="$(pkg-config --libs-only-L --libs-only-other libxml++-2.6)"
 
 SO_CPPFLAGS+=" -shared -fPIC"
 LDFLAGS+=" -pthread"

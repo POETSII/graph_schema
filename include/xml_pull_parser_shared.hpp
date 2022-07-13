@@ -136,7 +136,7 @@ void parseElement(TextReader *reader, ElementBindings *bindings)
             switch(reader->get_node_type()){
             case TextReader::CDATA:
                 isCDATA=true;
-                 [[fallthrough]]
+                 [[fallthrough]];
             case TextReader::Text:
             case TextReader::SignificantWhitespace:
             case TextReader::Whitespace:
@@ -176,12 +176,13 @@ void parseDocumentViaElementBindings(const char *path, ElementBindings *bindings
         case TextReader::XmlDeclaration:
         case TextReader::DocumentType:
         case TextReader::ProcessingInstruction:
+        case TextReader::Comment:
             continue;
         case TextReader::Element:
             parseElement(&reader, bindings);
             break;
         default:
-            throw std::runtime_error("Unexpected root node.");
+            throw std::runtime_error("Unexpected root node, node type="+std::to_string(reader.get_node_type()));
         }
     }
 }

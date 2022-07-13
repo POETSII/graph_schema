@@ -23,9 +23,16 @@ CPPFLAGS += -fsanitize=undefined
 CPPFLAGS += -fsanitize=address
 CPPFLAGS += -fsanitize-undefined-trap-on-error
 
+# For some reason pkg-config stopped working on byron...
+ifeq ($(shell pkg-config libxml++-2.6 ; echo $?),0)
 LIBXML_PKG_CONFIG_CPPFLAGS := $(shell pkg-config --cflags libxml++-2.6)
 LIBXML_PKG_CONFIG_LDLIBS := $(shell pkg-config --libs-only-l libxml++-2.6)
 LIBXML_PKG_CONFIG_LDFLAGS := $(shell pkg-config --libs-only-L --libs-only-other libxml++-2.6)
+else
+LIBXML_PKG_CONFIG_CPPFLAGS := -I/usr/include/libxml++-2.6 -I/usr/lib/x86_64-linux-gnu/libxml++-2.6/include -I/usr/include/libxml2 -I/usr/include/glibmm-2.4 -I/usr/lib/x86_64-linux-gnu/glibmm-2.4/include -I/usr/include/glib-2.0 -I/usr/lib/x86_64-linux-gnu/glib-2.0/include -I/usr/include/sigc++-2.0 -I/usr/lib/x86_64-linux-gnu/sigc++-2.0/include
+LIBXML_PKG_CONFIG_LDLIBS := -lxml++-2.6 -lxml2 -lglibmm-2.4 -lgobject-2.0 -lglib-2.0 -lsigc-2.0
+LIBXML_PKG_CONFIG_LDFLAGS := 
+endif
 
 CPPFLAGS += -I include -W -Wall -Wno-unused-parameter -Wno-unused-variable
 CPPFLAGS += $(LIBXML_PKG_CONFIG_CPPFLAGS)
