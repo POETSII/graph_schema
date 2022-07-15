@@ -1,0 +1,73 @@
+<?xml version="1.0" ?>
+<Graphs xmlns="https://poets-project.org/schemas/virtual-graph-schema-v4">
+  <GraphType id="test_supervisor_1dev_to_sup_pulse_gt">
+    <SharedCode />
+
+    <Properties/>
+    <MessageTypes>
+      <MessageType id="pulse">
+        <Message><![CDATA[
+        ]]></Message>
+      </MessageType>
+    </MessageTypes>
+
+    <DeviceTypes>
+      <DeviceType id="dev">
+        <SharedCode />
+        <Properties />
+        <State>
+            <![CDATA[
+            uint32_t ready;
+            ]]>
+        </State>
+
+        <SupervisorOutPin messageTypeId="pulse">
+          <OnSend><![CDATA[
+            deviceState->ready = 0;
+          ]]></OnSend>
+        </SupervisorOutPin>
+        <ReadyToSend><![CDATA[
+        *readyToSend=0;
+        if(deviceState->ready){
+          *readyToSend |= RTS_SUPER_IMPLICIT_SEND_FLAG;
+        }
+        ]]></ReadyToSend>
+        <OnInit>
+        <![CDATA[
+        deviceState->ready=1;
+        ]]></OnInit>
+
+        <OnHardwareIdle/>
+        <OnDeviceIdle/>
+      </DeviceType>
+
+      <SupervisorType id="sup">
+        <Code />
+        <Properties />
+        <State><![CDATA[
+        uint32_t seen;
+        ]]></State>
+        <OnInit><![CDATA[
+          Super::post("SupervisorType::OnInit");
+        ]]></OnInit>
+        <SupervisorInPin id="" messageTypeId="pulse">
+          <OnReceive><![CDATA[
+          Super::post("SupervisorType::OnReceive");
+          supervisorState->seen += 1;
+          Super::post("_HANDLER_EXIT_SUCCESS_9be65737_");
+          Super::stop_application();
+          ]]></OnReceive>
+        </SupervisorInPin>
+        <OnStop><![CDATA[
+        ]]></OnStop>
+      </SupervisorType>
+    </DeviceTypes>
+  </GraphType>
+  <GraphInstance id="test_supervisor_1dev_to_sup_pulse_gi" graphTypeId="test_supervisor_1dev_to_sup_pulse_gt" P="{}">
+    <DeviceInstances>
+      <DevI id="d0" type="dev" />
+    </DeviceInstances>
+    <EdgeInstances>
+    </EdgeInstances>
+  </GraphInstance>
+</Graphs>
