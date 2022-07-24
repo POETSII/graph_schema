@@ -1,9 +1,14 @@
 <?xml version="1.0" ?>
 <Graphs xmlns="https://poets-project.org/schemas/virtual-graph-schema-v4">
-  <GraphType id="test_supervisor_1dev_to_sup_pulse_gt">
+  <GraphType id="test_supervisor_Ndev_to_sup_pulse_gt">
     <SharedCode />
 
-    <Properties/>
+    <Properties>
+      <![CDATA[
+      uint32_t n;
+      uint32_t reps;
+      ]]>
+    </Properties>
     <MessageTypes>
       <MessageType id="pulse">
         <Message><![CDATA[
@@ -17,24 +22,24 @@
         <Properties />
         <State>
             <![CDATA[
-            uint32_t ready;
+            uint32_t todo;
             ]]>
         </State>
 
         <SupervisorOutPin messageTypeId="pulse">
           <OnSend><![CDATA[
-            deviceState->ready = 0;
+            deviceState->todo -= 1;
           ]]></OnSend>
         </SupervisorOutPin>
         <ReadyToSend><![CDATA[
         *readyToSend=0;
-        if(deviceState->ready){
+        if(deviceState->todo){
           *readyToSend |= RTS_SUPER_IMPLICIT_SEND_FLAG;
         }
         ]]></ReadyToSend>
         <OnInit>
         <![CDATA[
-        deviceState->ready=1;
+        deviceState->todo=graphProperties->reps;
         ]]></OnInit>
 
         <OnHardwareIdle/>
@@ -49,13 +54,17 @@
         ]]></State>
         <OnInit><![CDATA[
           Super::post("SupervisorType::OnInit");
+          supervisorState->seen = 0;
         ]]></OnInit>
         <SupervisorInPin id="" messageTypeId="pulse">
           <OnReceive><![CDATA[
-          Super::post("SupervisorType::OnReceive");
+          //Super::post("SupervisorType::OnReceive " + std::to_string(supervisorState->seen));
           supervisorState->seen += 1;
-          Super::post("_HANDLER_EXIT_SUCCESS_9be65737_");
-          Super::stop_application();
+          uint32_t target=graphProperties->n * graphProperties->reps;
+          if(supervisorState->seen==target){
+            Super::post("_HANDLER_EXIT_SUCCESS_9be65737_");
+            Super::stop_application();
+          }
           ]]></OnReceive>
         </SupervisorInPin>
         <OnStop><![CDATA[
@@ -63,11 +72,4 @@
       </SupervisorType>
     </DeviceTypes>
   </GraphType>
-  <GraphInstance id="test_supervisor_1dev_to_sup_pulse_gi" graphTypeId="test_supervisor_1dev_to_sup_pulse_gt" P="{}">
-    <DeviceInstances>
-      <DevI id="d0" type="dev" />
-    </DeviceInstances>
-    <EdgeInstances>
-    </EdgeInstances>
-  </GraphInstance>
 </Graphs>

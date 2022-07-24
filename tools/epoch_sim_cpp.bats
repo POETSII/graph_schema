@@ -1,5 +1,11 @@
 load bats_helpers
 
+function test_in_epoch_sim (){
+    # $1 = path to xml
+    run bin/epoch_sim --max-steps 10000 --log-level 0 $1
+    echo $output | grep _HANDLER_EXIT_SUCCESS_9be65737_
+}
+
 setup() {
     make_target bin/epoch_sim ising_spin_provider
 }
@@ -23,4 +29,10 @@ setup() {
     cat $WD/out.snap | grep '</Graph>'
 }
 
-
+@test "epoch_sim test test_supervisor_Ndev_to_sup_pulse" {
+    for i in demos/tests/supervisors/*.xml ; do
+        >&3 echo "# $i"
+        run bin/epoch_sim --max-steps 10000 --log-level 0 $i
+        echo $output | grep _HANDLER_EXIT_SUCCESS_9be65737_
+    done
+}

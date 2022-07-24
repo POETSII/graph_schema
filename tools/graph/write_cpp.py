@@ -704,6 +704,8 @@ _add_orchestrator_hack_macros= \
 #define PKT(a)              message->a
 #define RTS(a)              *readyToSend |= RTS_FLAG_##a
 #define RTSSUP()            *readyToSend |= RTS_SUPER_IMPLICIT_SEND_FLAG
+#define RTSBCAST()          __rtsBcast = true
+#define RTSREPLY()          __rtsReply = true
 """
 
 
@@ -850,8 +852,9 @@ def render_output_pin_as_cpp(op:OutputPin,dst):
     dst.write('static const char *{}_{}_handler_code=R"CDATA({})CDATA";\n'.format(dt.id, op.name, op.send_handler))
 
     dst.write("class {}_{}_Spec : public OutputPinImpl {{\n".format(dt.id,op.name))
-    dst.write('  public: {}_{}_Spec() : OutputPinImpl({}_Spec_get, "{}", {}, {}_Spec_get(), {}_{}_handler_code, {}) {{}} \n'.format(
-            dt.id,op.name, dt.id, op.name, index, op.message_type.id,  dt.id, op.name, 1 if op.is_indexed else 0
+    dst.write('  public: {}_{}_Spec() : OutputPinImpl({}_Spec_get, "{}", {}, {}_Spec_get(), {}_{}_handler_code, {}, {}) {{}} \n'.format(
+            dt.id,op.name, dt.id, op.name, index, op.message_type.id,  dt.id, op.name,
+            1 if op.is_indexed else 0, 1 if op.is_supervisor_implicit_pin else 0
     ))
     dst.write("""    virtual void onSend(
                       OrchestratorServices *orchestrator,
@@ -916,7 +919,7 @@ def render_device_type_as_cpp_fwd(dt,dst, asHeader):
         render_typed_data_as_spec(ip.properties, "{}_{}_properties_t".format(dt.id,ip.name), "pp:Properties", dst)
         render_typed_data_as_spec(ip.state, "{}_{}_state_t".format(dt.id,ip.name), "pp:State", dst)
 
-def render_device_type_as_cpp(dt,dst):
+def render_device_type_as_cpp(dt:DeviceType,dst):
     subs={
         "indent"                        : "    ",
         "graphPropertiesStructName"     : "{}_properties_t".format(dt.parent.id),
@@ -983,6 +986,13 @@ def render_device_type_as_cpp(dt,dst):
         dst.write('{}_{}_Spec_get()'.format(dt.id,o.name))
     dst.write(f'}}), {int(dt.is_external)})\n')
     dst.write("  {}\n")
+    
+    dst.write(f"""
+      
+      int getSupervisorImplicitInput() const override {{ return {dt.supervisor_implicit_input_index};  }}
+      int getSupervisorImplicitOutput() const override {{ return {dt.supervisor_implicit_output_index}; }}
+      
+""")
 
     dst.write(
 """
@@ -1145,10 +1155,9 @@ def raw_cpp_str(x):
 
 def render_supervisor_type_as_cpp(st:SupervisorType,dst):
     R=raw_cpp_str
+    S=lambda x: x if x is not None else ""
 
     assert st.id!=""
-
-
 
     inputs_str="{\n"
     for (i,input) in enumerate(st.inputs_by_index):
@@ -1162,7 +1171,10 @@ def render_supervisor_type_as_cpp(st:SupervisorType,dst):
         inputs_str+=f"""{{ {i}, "{input[1]}", {input[2].id}_Spec_get(), {st.id}_in_handler_{input[0]} }}"""
 
     inputs_str+="}\n"
+    
+    assert len(st.inputs_by_index)==1, "Don't know how to render a supervisor type that doesn't have exactly one SupervisorInPin"
 
+    messageTypeId=st.inputs_by_index[0][2].id
 
     dst.write("namespace ns_{}{{\n".format(st.id));
 
@@ -1187,8 +1199,159 @@ static const char *{st.id}_on_supervisor_idle_handler =
 ;
 
 """)
+
+    # Write out the supervisor instance class. This contains the handlers
+    dst.write(
+f"""
+
+struct Super
+{{
+    OrchestratorServices *curr_services;
+    
+    void post(const std::string &msg)
+    {{
+        curr_services->log(0, msg.c_str());
+    }}
+    
+    void stop_application()
+    {{
+        curr_services->application_exit(0);
+    }}
+    
+    std::string get_output_directory(std::string suffix="")
+    {{
+        char *tmp=getenv("TMP");
+        if(tmp==0){{
+            post("Couldn't create supervisor directory.");
+            return {{}};
+        }}
+        std::string res=std::string(tmp)+"/supervisor_dir_XXXXXX";
+        
+        if(0==mkdtemp(&res[0])){{
+            post("Couldn't create supervisor directory.");
+            return "";
+        }}
+        return res;
+    }}
+}};
+
+class {st.id}_Instance
+    : public SupervisorInstance
+    , public Super
+{{
+private:
+    struct properties_t
+    {{
+{st.properties_code}
+    }} m_properties;
+
+    struct state_t
+    {{
+{st.state_code}
+    }} m_state;
+    
+    const properties_t * const supervisorProperties;
+    state_t * const supervisorState;
+    
+    void beginHandler(OrchestratorServices *services)
+    {{
+        Super::curr_services=services;  
+    }}
+    
+    void endHandler()
+    {{
+        Super::curr_services=0;
+    }}
+    
+public:
+
+    {st.id}_Instance()
+        : supervisorProperties(&m_properties)
+        , supervisorState(&m_state)
+    {{
+    }}
+
+    ~{st.id}_Instance()
+    {{}}
+
+  // Only valid if the supervisor type is cloneable
+  virtual std::shared_ptr<SupervisorInstance> clone()
+  {{
+        // TODO: Need more thought here
+        /*if const(std::is_copy_constructible<{st.id}_Instance>()){{
+            return std::make_shared<{st.id}_Instance>(*this);
+        }}else{{*/
+            throw std::runtime_error("The {st.id} supervisor does not appear to be cloneable.");
+        //}}
+  }}
+
+  virtual void onInit(
+          OrchestratorServices *orchestrator,
+          const typed_data_t *gGraphProperties
+          ) 
+    {{
+        auto graphProperties=cast_typed_properties<{st.parent.id}_properties_t>(gGraphProperties);
+        
+        beginHandler(orchestrator);
+{S(st.init_handler)}
+        endHandler();
+    }}
+
+  virtual void onSupervisorIdle(
+          OrchestratorServices *orchestrator,
+          const typed_data_t *gGraphProperties
+          )
+    {{
+        auto graphProperties=cast_typed_properties<{st.parent.id}_properties_t>(gGraphProperties);    
+    
+        beginHandler(orchestrator);
+{S(st.on_supervisor_idle_handler)}
+        endHandler();
+    }}
+
+  virtual void onStop(
+          OrchestratorServices *orchestrator,
+          const typed_data_t *gGraphProperties
+          )
+{{
+    auto graphProperties=cast_typed_properties<{st.parent.id}_properties_t>(gGraphProperties);
+    
+    beginHandler(orchestrator);
+{S(st.on_supervisor_idle_handler)}
+    endHandler();
+}}
+
+  virtual void onRecv(
+          OrchestratorServices *orchestrator,
+          const typed_data_t *gGraphProperties,
+          unsigned pin_index, // Currently always 0
+          const typed_data_t *gMessage,
+          typed_data_t *gReply,
+          typed_data_t *gBroadcast,
+          bool &rtsReply,   // Set to true to cause reply to be sent to originator
+          bool &rtsBcast    // Set to true to cause broadcast to be sent to all devices
+          )
+{{
+    auto graphProperties=cast_typed_properties<{st.parent.id}_properties_t>(gGraphProperties);
+    auto message=cast_typed_properties<{messageTypeId}_message_t>(gMessage);
+    auto reply=cast_typed_data<{messageTypeId}_message_t>(gReply);
+    auto bcast=cast_typed_data<{messageTypeId}_message_t>(gBroadcast);
+    
+    beginHandler(orchestrator);
+    auto &__rtsReply = rtsReply;
+    auto &__rtsBcast = rtsBcast;
+    
+{S(st.inputs_by_index[0][3])}
+    
+    endHandler();  
+}}
+}};
+
+"""
+)
     
 
+    # Write out the supervisor type class, which is just meta information plus a factory for instances
     dst.write(
 f"""
 class {st.id}_Spec : public SupervisorTypeImpl {{
@@ -1210,7 +1373,7 @@ public:
 
     virtual std::shared_ptr<SupervisorInstance> create() const
     {{
-        throw std::runtime_error("create - not implemented.");
+        return std::make_shared<{st.id}_Instance>();
     }}
 }};
 """)

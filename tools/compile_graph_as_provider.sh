@@ -105,9 +105,9 @@ CPPFLAGS+=" -DPOETS_COMPILING_AS_PROVIDER=1"
 
 # For some reason pkg-config stopped working on byron...
 if pkg-config libxml++-2.6 ; then
-CPPFLAGS="$CPPFLAGS $(shell pkg-config --cflags libxml++-2.6)"
-LDLIBS="$LDLIBS $(shell pkg-config --libs-only-l libxml++-2.6)"
-LDFLAGS+="$LDFLAGS $(shell pkg-config --libs-only-L --libs-only-other libxml++-2.6)"
+CPPFLAGS="$CPPFLAGS $(pkg-config --cflags libxml++-2.6)"
+LDLIBS="$LDLIBS $(pkg-config --libs-only-l libxml++-2.6)"
+LDFLAGS+="$LDFLAGS $(pkg-config --libs-only-L --libs-only-other libxml++-2.6)"
 else
 CPPFLAGS="$CPPFLAGS -I/usr/include/libxml++-2.6 -I/usr/lib/x86_64-linux-gnu/libxml++-2.6/include -I/usr/include/libxml2 -I/usr/include/glibmm-2.4 -I/usr/lib/x86_64-linux-gnu/glibmm-2.4/include -I/usr/include/glib-2.0 -I/usr/lib/x86_64-linux-gnu/glib-2.0/include -I/usr/include/sigc++-2.0 -I/usr/lib/x86_64-linux-gnu/sigc++-2.0/include"
 LDLIBS="$LDLIBS -lxml++-2.6 -lxml2 -lglibmm-2.4 -lgobject-2.0 -lglib-2.0 -lsigc-2.0"

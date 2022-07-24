@@ -278,7 +278,10 @@ struct EpochSim
   struct output
   {
     unsigned dstDevice;
-    unsigned dstPinIndex;
+    // THis is now allowed to be -1, which means "edge does not exist", and only occurs in the
+    // context of supervisors. Specifically, if a device type does not have a SupervisorInType
+    // but a SupervisorType exists.
+    int dstPinIndex;     
     unsigned dstPinSlot; // This is the actual landing zone within the destination, i.e. where the state is
     const char *dstDeviceId;
     const char *dstInputName;
@@ -352,16 +355,15 @@ struct EpochSim
   int m_haltDeviceIndex=-1;
   TypedDataPtr m_haltMessage;
 
-  std::function<void (const char*,bool,int,const char *)> m_onCheckpoint;
-
-  int m_checkpointLevel=0;
-  std::vector<std::pair<bool,std::string> > m_checkpointKeys;
-
   bool m_deviceExitCalled=false;
   bool m_deviceExitCode=0;
   std::function<void (const char*,int)> m_onDeviceExit;
 
   std::shared_ptr<InProcMessageBuffer> m_pExternalBuffer;
+
+  SupervisorTypePtr m_supervisorType;
+  std::shared_ptr<SupervisorInstance> m_supervisor;
+  std::vector<output> m_supervisorToDevOutputs;
 
   struct delayed_message_t
   {
@@ -385,6 +387,26 @@ struct EpochSim
     m_graphType=graphType;
     m_id=id;
     m_graphProperties=graphProperties;
+
+    SupervisorTypePtr supType;
+    if(graphType->getSupervisorTypeCount()>0){
+      for(auto devType : graphType->getDeviceTypes()){
+        if(devType->isExternal()){
+          // In principle these should be able to co-exist, but it requires more thought
+          // and testing.
+          throw std::runtime_error("Graph contains both Externals and Supervisors. Cowardly giving up.");
+        }
+      }
+
+      if(graphType->getSupervisorTypeCount()>1){
+        throw std::runtime_error("Graph contains more than one supervisor type.");
+      }
+      supType=graphType->getSupervisorType(0);
+
+      m_supervisorType=supType;
+      m_supervisor=supType->create();
+    }
+
     return 0;
   }
 
@@ -482,6 +504,46 @@ struct EpochSim
     }
   }
 
+  void onEndGraphInstance(uint64_t ) override
+  {
+    // We need to allocate outputs corresponding to the 
+    // supervisor->device edges
+    if(m_supervisor){
+      if(m_supervisorType->getInputCount()!=1){
+        throw std::runtime_error("Refusing to deal with supervisor that does not have exactly 1 SupervisorInPin");
+      }
+      std::string supInPin=m_supervisorType->getInput(0).name;
+
+      m_supervisorToDevOutputs.resize(m_devices.size());
+      for(unsigned i=0; i<m_devices.size(); i++){
+        const auto &devType=m_devices[i].type;
+        int impInput=devType->getSupervisorImplicitInput();
+        if(impInput==-1){
+          m_supervisorToDevOutputs[i].dstPinIndex=-1; // No input slot for this one.
+          continue;
+        }
+        const auto &inp=m_devices[i].type->getInput(impInput);
+
+        auto &dst=m_devices[i];
+
+        output o;
+        o.dstDevice=i;
+        o.dstDeviceId=m_devices[i].name;
+        o.dstInputName=intern(inp->getName());
+        o.dstPinIndex=inp->getIndex();
+        o.dstPinSlot=dst.inputs[o.dstPinIndex].size();
+        o.sendIndex=-1;
+        m_supervisorToDevOutputs[i]=o;
+
+        input slot;
+        slot.firings=0;
+        slot.id=intern( dst.id + ":" + inp->getName() + "-__supervisor__:"+supInPin );
+
+        dst.inputs.at(o.dstPinIndex).push_back(slot);
+      }
+    }
+  }
+
 
   unsigned pick_bit(unsigned n, uint32_t bits, unsigned rot)
   {
@@ -527,36 +589,26 @@ struct EpochSim
       fprintf(stderr, "  device '%s' called application_exit(%d)\n", id, code);
     };
 
-    if(!m_log){
-      m_onCheckpoint=[this](const char *id, bool preEvent, int level, const char *key)
-      {};
-    }else{
-      m_onCheckpoint=[this](const char *id, bool preEvent, int level, const char *key)
-      {
-        if(level<=m_checkpointLevel){
-          m_checkpointKeys.push_back(std::make_pair(preEvent,key));
-        }
-      };
+    if(m_supervisor){
+      ReceiveOrchestratorServicesImpl receiveServices{logLevel, stderr, "__supervisor__", "Init handler", m_onDeviceExit  };
+      m_supervisor->onInit(&receiveServices, m_graphProperties.get());
     }
 
     for(auto &dev : m_devices){
-      ReceiveOrchestratorServicesImpl receiveServices{logLevel, stderr, dev.name, "Init handler", m_onDeviceExit, m_onCheckpoint  };
+      ReceiveOrchestratorServicesImpl receiveServices{logLevel, stderr, dev.name, "Init handler", m_onDeviceExit  };
       if(!dev.isExternal){
         dev.type->init(&receiveServices, m_graphProperties.get(), dev.properties.get(), dev.state.get());
         dev.readyToSend = dev.type->calcReadyToSend(&receiveServices, m_graphProperties.get(), dev.properties.get(), dev.state.get());
       }
 
       if(m_log){
-        // Try to avoid allocation, while gauranteeing m_checkpointKeys is left in empty() state
-        std::vector<std::pair<bool,std::string> > tags;
-        std::swap(tags,m_checkpointKeys);
         auto id=nextSeqUnq();
         auto idStr=std::to_string(id);
         m_log->onInitEvent(
           idStr.c_str(),
           0.0,
           0.0,
-          std::move(tags),
+          {}, // Previous checkpoint keys. Now deprecated.
           dev.type,
           dev.name,
           dev.readyToSend,
@@ -617,7 +669,7 @@ struct EpochSim
     }
     for(auto &d : m_devices){
       if(!d.isExternal){
-        ReceiveOrchestratorServicesImpl services{logLevel, stderr, d.name, "Idle handler", m_onDeviceExit, m_onCheckpoint  };
+        ReceiveOrchestratorServicesImpl services{logLevel, stderr, d.name, "Idle handler", m_onDeviceExit  };
         d.type->onHardwareIdle(&services, m_graphProperties.get(), d.properties.get(), d.state.get()  );
         d.readyToSend = d.type->calcReadyToSend(&services, m_graphProperties.get(), d.properties.get(), d.state.get());
 
@@ -651,21 +703,19 @@ struct EpochSim
     // Within each step every object gets the chance to send a message with probability probSend
     std::uniform_real_distribution<> udist;
 
-    ReceiveOrchestratorServicesImpl receiveServices{logLevel, stderr, 0, 0, m_onDeviceExit, m_onCheckpoint};
+    ReceiveOrchestratorServicesImpl receiveServices{logLevel, stderr, 0, 0, m_onDeviceExit};
     {
       std::stringstream tmp;
       tmp<<"Epoch "<<m_epoch<<", Recv: ";
       receiveServices.setPrefix(tmp.str().c_str());
     }
 
-    SendOrchestratorServicesImpl sendServices{logLevel, stderr, 0, 0, m_onDeviceExit, m_onCheckpoint};
+    SendOrchestratorServicesImpl sendServices{logLevel, stderr, 0, 0, m_onDeviceExit};
     {
       std::stringstream tmp;
       tmp<<"Epoch "<<m_epoch<<", Send: ";
       sendServices.setPrefix(tmp.str().c_str());
     }
-
-  
 
     auto do_recv=[&](output &out, const TypedDataPtr &message, const std::string &idSend, unsigned srcEpoch)
     {
@@ -715,9 +765,6 @@ struct EpochSim
       }
 
       if(m_log){
-        std::vector<std::pair<bool,std::string> > tags;
-        std::swap(tags, m_checkpointKeys);
-
         auto id=nextSeqUnq();
         auto idStr=std::to_string(id);
 
@@ -725,7 +772,7 @@ struct EpochSim
           idStr.c_str(),
           m_epoch,
           0.0,
-          std::move(tags),
+          {}, // Previous checkpoint keys. Now deprecated.
           dst.type,
           dst.name,
           dst.readyToSend,
@@ -737,9 +784,6 @@ struct EpochSim
         );
       }
     };
-    
-
-   
 
     /// Drain any incoming external messages first;
     if(m_pExternalBuffer){
@@ -784,6 +828,15 @@ struct EpochSim
         // Also make sure that we don't have huge numbers of messages building
         // up that the client hasn't drained
         m_pExternalBuffer->wait_for_client_to_drain();
+    }
+
+    if(m_supervisor){
+      // Occasionally run on idle
+      double p=probSend*probSend*probSend;
+      if(udist(rng) < p){
+        receiveServices.setDevice("__supervisor__", "__idle__");
+        m_supervisor->onSupervisorIdle(&receiveServices, m_graphProperties.get()  );
+      }
     }
 
     ///////////////////////////////////////
@@ -932,10 +985,6 @@ struct EpochSim
         }
 
         if(m_log){
-          // Try to avoid allocation, while gauranteeing m_checkpointKeys is left in empty() state
-          std::vector<std::pair<bool,std::string> > tags;
-          std::swap(tags, m_checkpointKeys);
-
           auto id=nextSeqUnq();
           auto idStr=std::to_string(id);
           idSend=idStr;
@@ -944,7 +993,7 @@ struct EpochSim
             idStr.c_str(),
             m_epoch,
             0.0,
-            std::move(tags),
+            {}, // Previous checkpoint keys. Now deprecated.
             src.type,
             src.name,
             src.readyToSend,
@@ -969,6 +1018,65 @@ struct EpochSim
       }
 
       sent=true;
+
+      // Special case the supervisor implicit-output
+      if(output->isSupervisorImplicitPin()){
+        receiveServices.setDevice("__supervisor__", m_supervisorType->getInput(0).name.c_str());
+        
+        assert(m_supervisorType->getInputCount()==1);
+
+        // Reply and response must be of the same type...
+        TypedDataPtr msgReply=message.clone_uninit();
+        TypedDataPtr msgBcast=message.clone_uninit(); 
+        bool rtsReply=false, rtsBcast=false;
+        m_supervisor->onRecv(
+          &receiveServices, m_graphProperties.get(),
+          0, // Currently this is always pin 0, as we don't support more than one supervisor pin
+          message.get(), 
+          msgReply.get(),
+          msgBcast.get(),
+          rtsReply,
+          rtsBcast
+        );
+
+        std::string idSupRecv;
+        if(m_log){
+          auto id=nextSeqUnq();
+          idSupRecv=std::to_string(id);
+
+          m_log->onRecvEvent(
+            idSupRecv.c_str(),
+            m_epoch,
+            0.0,
+            {}, // Previous checkpoint keys. Now deprecated.
+            {},
+            "__supervisor__",
+            0,
+            id,
+            std::vector<std::string>(),
+            {},
+            {},
+            idSend.c_str()
+          );
+        }
+
+        if(rtsReply){
+          if(m_supervisorToDevOutputs[src.index].dstPinIndex!=-1){
+            do_recv(m_supervisorToDevOutputs[src.index], message, idSupRecv, m_epoch);
+          }
+        }
+        if(rtsBcast){
+          for(unsigned i=0; i<m_supervisorToDevOutputs.size(); i++){
+            if(m_supervisorToDevOutputs[i].dstPinIndex != -1){
+                do_recv(m_supervisorToDevOutputs[i], message, idSupRecv, m_epoch);
+            }
+          }
+        }
+
+        anyReady = true;
+
+        continue;
+      }
 
       // Try to support both indexed sends and broadcast, though indexed are less efficient
       auto *pOutputVec=&src.outputs[sel];
@@ -1022,7 +1130,7 @@ struct EpochSim
         assert(m_pExternalBuffer);
         // At least one external device needs to receive this message
         auto payload=std::vector<uint8_t>( message.payloadPtr(), message.payloadPtr()+message.payloadSize() );
-        m_pExternalBuffer->post_message(makeEndpoint(poets_device_address_t{index}, poets_pin_index_t{sel}), payload, sendIndex ? *sendIndex : UINT_MAX);
+        m_pExternalBuffer->post_message(makeEndpoint(poets_device_address_t{index}, poets_pin_index_t{(unsigned)sel}), payload, sendIndex ? *sendIndex : UINT_MAX);
       }
     }
     ++m_epoch;
@@ -1098,8 +1206,6 @@ int main(int argc, char *argv[])
     unsigned snapshotDelta=0;
 
     std::string logSinkName;
-
-    std::string checkpointName;
 
     unsigned statsDelta=10;
 
@@ -1458,7 +1564,7 @@ int main(int argc, char *argv[])
     int snapshotSequenceNum=1;
     unsigned contiguous_hardware_idle_steps=0;
 
-    bool capturePreEventState=enableAccurateAssertions || !checkpointName.empty();
+    bool capturePreEventState=enableAccurateAssertions;
 
     for(int i=0; i<maxSteps; i++){
       if(graph.m_haltMessage){

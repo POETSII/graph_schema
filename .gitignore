@@ -69,3 +69,4 @@ benchmarks/small
 
 callgrind.*
 *.dwo
+tmp.txt

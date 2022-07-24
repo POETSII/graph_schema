@@ -1,0 +1,114 @@
+<?xml version="1.0" ?>
+<Graphs xmlns="https://poets-project.org/schemas/virtual-graph-schema-v4">
+  <GraphType id="test_supervisor_Ndev_to_sup_relay_bcast_gt">
+    <SharedCode />
+
+    <Properties>
+      <![CDATA[
+      uint32_t devs;
+      uint32_t reps;
+      uint32_t max_bcasts_pending; // Maximum number of un-acknowledged broadcast requests in flight
+      ]]>
+    </Properties>
+    <MessageTypes>
+      <MessageType id="bump">
+        <Message><![CDATA[
+        uint32_t source; // Originating device index
+        uint32_t request_bcast; // If dev->sup direction, this indicates if a broadcast is requested
+        uint32_t delta_seen;  // If dev->sup direction, this is the number of sup->dev messages seen since last dev->sup message
+        ]]></Message>
+      </MessageType>
+    </MessageTypes>
+
+    <DeviceTypes>
+      <DeviceType id="dev">
+        <SharedCode />
+        <Properties>
+          <![CDATA[
+          uint32_t id;
+          ]]>
+        </Properties>
+        <State>
+            <![CDATA[
+            uint32_t bcasts_todo; // Number of bcasts this device still has left to request
+            uint32_t bcasts_waiting;    // Number of bcasts originated by this device that have been requested but not seen
+            uint32_t delta_seen;  // Number of sup->dev messages received since sending last dev->sup message
+            ]]>
+        </State>
+
+        <SupervisorInPin messageTypeId="bump">
+          <OnReceive><![CDATA[
+          if(message->source==deviceProperties->id){
+            assert(deviceState->bcasts_waiting>0);
+            deviceState->bcasts_waiting -= 1;
+          }
+          deviceState->delta_seen += 1;
+          ]]></OnReceive>
+        </SupervisorInPin>
+        <SupervisorOutPin messageTypeId="bump">
+          <OnSend><![CDATA[
+            handler_log(1, "delta_seen=%d, bcasts_todo=%d, bcasts_waiting=%d", deviceState->delta_seen, deviceState->bcasts_todo, deviceState->bcasts_waiting);
+            message->source = deviceProperties->id;
+            message->request_bcast = 0;
+            message->delta_seen = deviceState->delta_seen;
+            if(deviceState->bcasts_todo>0){
+              message->request_bcast = 1;
+              deviceState->bcasts_todo -= 1;
+              deviceState->bcasts_waiting += 1;
+            }
+            deviceState->delta_seen=0;
+          ]]></OnSend>
+        </SupervisorOutPin>
+        <ReadyToSend><![CDATA[
+        *readyToSend=0;
+        if(deviceState->delta_seen){
+          *readyToSend |= RTS_SUPER_IMPLICIT_SEND_FLAG;
+        }else if(deviceState->bcasts_todo && deviceState->bcasts_waiting < graphProperties->max_bcasts_pending){
+          *readyToSend |= RTS_SUPER_IMPLICIT_SEND_FLAG;
+        }
+        ]]></ReadyToSend>
+        <OnInit>
+        <![CDATA[
+        deviceState->bcasts_todo=graphProperties->reps;
+        ]]></OnInit>
+
+        <OnHardwareIdle/>
+        <OnDeviceIdle/>
+      </DeviceType>
+
+      <SupervisorType id="sup">
+        <Code />
+        <Properties />
+        <State><![CDATA[
+        uint64_t seen;
+        ]]></State>
+        <OnInit><![CDATA[
+          Super::post("SupervisorType::OnInit");
+          supervisorState->seen=0;
+        ]]></OnInit>
+        <SupervisorInPin id="" messageTypeId="bump">
+          <OnReceive><![CDATA[
+          supervisorState->seen += message->delta_seen;
+
+          uint64_t target=graphProperties->devs;
+          target *= target;
+          target *= graphProperties->reps;
+          if(supervisorState->seen==target){
+            Super::post("_HANDLER_EXIT_SUCCESS_9be65737_");
+            Super::stop_application();
+          }
+
+          if(message->request_bcast){
+            RTSBCAST();
+            bcast->source=message->source;
+            bcast->request_bcast=0;
+            bcast->delta_seen=0;
+          }
+          ]]></OnReceive>
+        </SupervisorInPin>
+        <OnStop><![CDATA[
+        ]]></OnStop>
+      </SupervisorType>
+    </DeviceTypes>
+  </GraphType>
+</Graphs>

@@ -275,6 +275,16 @@ private:
       : OrchestratorServices(0)
     {}
 
+    virtual void log(unsigned level, const char *msg)
+    {
+      if(!strcmp(msg,"_HANDLER_EXIT_SUCCESS_9be65737_")){
+        exited=true;
+      }else if(!strcmp(msg, "_HANDLER_EXIT_FAIL_9be65737_")){
+        exited=true;
+        exitcode |= 1; // Make errors sticky
+      }
+    }
+
     // Log a handler message with the given log level
     virtual void vlog(unsigned level, const char *msg, va_list args)
     {

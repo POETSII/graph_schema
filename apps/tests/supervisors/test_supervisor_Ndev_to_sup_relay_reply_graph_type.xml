@@ -1,9 +1,14 @@
 <?xml version="1.0" ?>
 <Graphs xmlns="https://poets-project.org/schemas/virtual-graph-schema-v4">
-  <GraphType id="test_supervisor_1dev_to_sup_bcast_gt">
+  <GraphType id="test_supervisor_Ndev_to_sup_relay_reply_gt">
     <SharedCode />
 
-    <Properties/>
+    <Properties>
+      <![CDATA[
+      uint32_t devs;
+      uint32_t reps;
+      ]]>
+    </Properties>
     <MessageTypes>
       <MessageType id="bump">
         <Message><![CDATA[
@@ -26,6 +31,7 @@
         <SupervisorInPin messageTypeId="bump">
           <OnReceive><![CDATA[
           assert(deviceState->waiting);
+          assert(message->t == deviceState->todo);
             deviceState->todo -= 1;
             deviceState->waiting = 0;
           ]]></OnReceive>
@@ -33,6 +39,7 @@
         <SupervisorOutPin messageTypeId="bump">
           <OnSend><![CDATA[
             deviceState->waiting = 1;
+            message->t = deviceState->todo;
           ]]></OnSend>
         </SupervisorOutPin>
         <ReadyToSend><![CDATA[
@@ -43,7 +50,7 @@
         ]]></ReadyToSend>
         <OnInit>
         <![CDATA[
-        deviceState->todo=100;
+        deviceState->todo=graphProperties->reps;
         deviceState->waiting = 0;
         ]]></OnInit>
 
@@ -61,16 +68,16 @@
           Super::post("SupervisorType::OnInit");
           supervisorState->seen=0;
         ]]></OnInit>
-        <SupervisorInPin id="" messageTypeId="pulse">
+        <SupervisorInPin id="" messageTypeId="bump">
           <OnReceive><![CDATA[
-          Super::post("SupervisorType::OnReceive");
           supervisorState->seen += 1;
 
-          RTSBCAST();
-
-          if(supervisorState->seen==100){
+          if(supervisorState->seen==graphProperties->devs * graphProperties->reps){
             Super::post("_HANDLER_EXIT_SUCCESS_9be65737_");
             Super::stop_application();
+          }else{
+            RTSREPLY();
+            reply->t = message->t;
           }
           ]]></OnReceive>
         </SupervisorInPin>
@@ -79,11 +86,4 @@
       </SupervisorType>
     </DeviceTypes>
   </GraphType>
-  <GraphInstance id="test_supervisor_1dev_to_sup_bcast_gi" graphTypeId="test_supervisor_1dev_to_sup_bcast_gt" P="{}">
-    <DeviceInstances>
-      <DevI id="d0" type="dev" />
-    </DeviceInstances>
-    <EdgeInstances>
-    </EdgeInstances>
-  </GraphInstance>
 </Graphs>

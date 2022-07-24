@@ -1,5 +1,7 @@
 import sys
 import collections
+from typing import *
+
 class GraphDescriptionError(Exception):
     def __init__(self,msg):
         Exception.__init__(self,msg)
@@ -643,7 +645,6 @@ class DeviceType(object):
         p.index=index
         self.supervisor_implicit_input_index=index
 
-        assert False, f"Added supervisor {p}"
 
     def add_output(self,name,message_type,is_application, metadata,send_handler,source_file=None,source_line=None,documentation=None, is_indexed=False):
         assert self.supervisor_implicit_output_index==-1, "Normal output added after supervisor output"
@@ -661,7 +662,7 @@ class DeviceType(object):
         p.index=index
 
     def add_supervisor_output(self,name,message_type, metadata,send_handler,source_file=None,source_line=None,documentation=None):
-        assert self.supervisor_implicit_input_index==-1, "Two supervisor outputs are added"
+        assert self.supervisor_implicit_output_index==-1, "Two supervisor outputs are added"
         if name in self.pins:
             raise GraphDescriptionError("Duplicate pin {} on device type {}".format(name,self.id))
         if message_type.id not in self.parent.message_types:
@@ -685,7 +686,7 @@ class SupervisorType(object):
         self.parent=parent
         self.state_code=stateCode
         self.properties_code=propertiesCode
-        self.inputs_by_index=[]
+        self.inputs_by_index=[] # type: List[Tuple[int,str,MessageType,str]]
         self.shared_code=sharedCode
         self.init_handler=onInitCode
         self.on_supervisor_idle_handler=onSupervisorIdleCode
@@ -711,7 +712,7 @@ class GraphType(object):
         self.metadata=metadata
         self.shared_code=shared_code
         self.device_types=collections.OrderedDict()
-        self.supervisor_types=collections.OrderedDict()
+        self.supervisor_types=collections.OrderedDict() # type: Mapping[str,SupervisorType]
         self.typedefs_by_index=[]
         self.typedefs={}
         self.message_types=collections.OrderedDict()

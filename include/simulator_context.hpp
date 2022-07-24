@@ -576,6 +576,15 @@ private:
             , outputPinIndex(_outputPinIndex)
         {}
 
+        void log(unsigned level, const char *msg) override
+        {
+            if(level<engine->m_logLevel){
+                fprintf(stderr, "%s : %s", ((const std::string &)device->name).c_str());
+            }
+            check_for_exit(msg);
+        }
+
+
         void vlog(unsigned level, const char *msg, va_list args) override
         {
             if(level<engine->m_logLevel){
@@ -598,6 +607,15 @@ private:
             , device(_device)
         {}
 
+        void log(unsigned level, const char *msg) override
+        {
+            if(level<engine->m_logLevel){
+                fprintf(stderr, "%s : %s\n", ((const std::string &)device->name).c_str());
+            }
+            check_for_exit(msg);
+        }
+
+
         void vlog(unsigned level, const char *msg, va_list args) override
         {
             if(level<engine->m_logLevel){
@@ -619,6 +637,14 @@ private:
             , device(_device)
         {}
 
+        virtual void log(unsigned level, const char *msg)
+        {
+            if(level<engine->m_logLevel){
+                fprintf(stderr, "%s : %s\n", ((const std::string &)device->name).c_str());
+            }
+            check_for_exit(msg);
+        }
+
         virtual void vlog(unsigned level, const char *msg, va_list args)
         {
             if(level<engine->m_logLevel){
@@ -639,6 +665,15 @@ private:
             : OrchestratorServicesBase(_engine)
             , edge(_edge)
         {}
+
+        void log(unsigned level, const char *msg) override
+        {
+            if(level < engine->m_logLevel){
+                device_t *device=&engine->m_devices.at(edge->route.destDeviceAddress);
+                fprintf(stderr, "%s : %s\n", ((const std::string &)device->name).c_str());
+            }
+            check_for_exit(msg);
+        }
 
         void vlog(unsigned level, const char *msg, va_list args) override
         {

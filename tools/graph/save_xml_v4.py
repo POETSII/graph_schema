@@ -178,6 +178,25 @@ def save_external_type(parent,dt):
 
     return n
 
+def save_supervisor_type(parent:etree.Element, st:SupervisorType):
+    n=etree.SubElement(parent,toNS("p:SupervisorType"))
+
+    n.attrib["id"]=st.id
+    
+    add_code_element(n, "p:Properties", st.properties_code)
+    add_code_element(n, "p:State", st.state_code)
+    add_code_element(n, "p:Code", st.shared_code)
+    add_code_element(n, "p:OnInit", st.init_handler)
+    add_code_element(n, "p:OnSupervisorIdle", st.on_supervisor_idle_handler)
+    add_code_element(n, "p:OnStop", st.on_stop_handler)
+    for input in st.inputs_by_index:
+        ni=etree.SubElement(n, toNS("p:SupervisorInPin"))
+        ni.attrib["id"]=input[1]
+        ni.attrib["messageTypeId"]=input[2].id
+        add_code_element(ni, "p:OnReceive", input[3])
+
+    return n
+
 _device_instance_tag_type=toNS("p:DevI")
 
 _external_instance_tag_type=toNS("p:ExtI")
@@ -253,8 +272,8 @@ def save_graph_type(parent, graph:GraphType):
             save_external_type(dtn, dt)
         else:
             save_device_type(dtn,dt)
-
-    assert len(graph.supervisor_types)==0, "Code to save supervisor types not implemented yet"
+    for st in graph.supervisor_types.values():
+        save_supervisor_type(dtn,st)
 
     return gn
 

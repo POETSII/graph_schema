@@ -296,6 +296,7 @@ include apps/gals_heat_float/makefile.inc
 include apps/gals_heat_protocol_only/makefile.inc
 
 include apps/tests/externals/tests_externals.inc
+include apps/tests/supervisors/tests_supervisors.inc
 
 
 # Non-default

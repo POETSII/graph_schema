@@ -257,6 +257,17 @@ public:
     return DataPtr((T*)p);
   }
 
+  // Clone the message,but not the payload
+  DataPtr clone_uninit() const
+  {
+    if(!m_p)
+      return DataPtr();
+    typed_data_t *p=(typed_data_t*)malloc(m_p->_total_size_bytes);
+    memset((void*)p, 0xFE, m_p->_total_size_bytes);
+    p->_ref_count=0;
+    return DataPtr((T*)p);
+  }
+
   void copy_to(typed_data_t *dst) const
   {
     assert(m_p &&dst);
@@ -559,6 +570,9 @@ public:
   { return m_logLevel; }
 
   // Log a handler message with the given log level
+  virtual void log(unsigned level, const char *msg) =0;
+
+  // Log a handler message with the given log level, with printf style substitution
   virtual void vlog(unsigned level, const char *msg, va_list args) =0;
 
   /*! Log the state of the currently sending/receiving device the
@@ -705,17 +719,17 @@ public:
   virtual void onInit(
           OrchestratorServices *orchestrator,
           const typed_data_t *graphProperties
-          ) const=0;
+          ) =0;
 
   virtual void onSupervisorIdle(
           OrchestratorServices *orchestrator,
           const typed_data_t *graphProperties
-          ) const=0;
+          ) =0;
 
   virtual void onStop(
           OrchestratorServices *orchestrator,
           const typed_data_t *graphProperties
-          ) const=0;
+          )=0;
 
   virtual void onRecv(
           OrchestratorServices *orchestrator,
@@ -726,7 +740,7 @@ public:
           typed_data_t *broadcast,
           bool &rtsReply,   // Set to true to cause reply to be sent to originator
           bool &rtsBcast    // Set to true to cause broadcast to be sent to all devices
-          ) const=0;
+          )=0;
 };
 typedef std::shared_ptr<SupervisorInstance> SupervisorInstancePtr;
 

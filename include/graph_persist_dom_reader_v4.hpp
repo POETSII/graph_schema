@@ -30,30 +30,25 @@ inline std::vector<std::string> tokenise_c_def(std::string src)
 
   // This removes all C-style comments by replacing them with spaces
   unsigned pos=0, start=0;
-  while(pos+1<src.size()){
-    if(src[pos]=='/'){
-      start=pos;
-      if(pos+1<src.size() && src[pos+1]=='*'){
-        pos+=2;
+  while(pos+2<src.size() && src[pos]=='/' && src[pos+1]=='*'){
+    
+    // Begin a C-style comment
+    start=pos;
+    pos+=2;
 
-        while(1){
-          if(pos==src.size()){
-            throw std::runtime_error("Couldn't parse struct, missing closing C-style comment");
-          }
-          if(src[pos]=='*'){
-            if(pos+1<src.size() && src[pos+1]=='/'){
-              pos+=2;
-              for(unsigned i=start; i<pos; i++){
-                src[i]=' ';
-              }
-              break;
-            }
-          }
-          pos++;
-        }
+    while(1){
+      if(pos+1==src.size()){
+        throw std::runtime_error("Couldn't parse struct, missing closing C-style comment");
       }
-    }else{
-      pos+=1;
+      if(src[pos]=='*' && src[pos+1]=='/'){
+        // Finish a C-style comment
+        pos+=2;
+        for(unsigned i=start; i<pos; i++){
+          src[i]=' ';
+        }
+        break;
+      }
+      pos++;
     }
   }
 
@@ -66,21 +61,17 @@ inline std::vector<std::string> tokenise_c_def(std::string src)
       continue;
     }
     // Handle C++ line comments
-    if(c=='/'){
-      if(pos+1<src.size()){
-        if(src[pos+1]=='/'){
-          pos+=2;
-          while(pos < src.size() && src[pos]!='\n'){
-            pos++;
-          }
-        }
+    if(pos+1<src.size() && src[pos]=='/' && src[pos+1]=='/'){
+      pos+=2;
+      while(pos < src.size() && src[pos]!='\n'){
+        pos++;
       }
+      continue;
     }
     // actual token stuff
     const std::string &srcc=src;
     std::smatch match;
     if(std::regex_search(srcc.begin()+pos, srcc.end(), match, re)){
-      std::cerr<<"pos="<<pos<<", match="<<match.str()<<"\n";
       res.push_back(match.str());
       pos+=res.back().size();
     }else{

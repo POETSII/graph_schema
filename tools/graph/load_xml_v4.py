@@ -41,7 +41,9 @@ def get_optional_child_text(node,name,namespace=None) -> str:
         return None
     res=""
     for n in nn:
-        res += "\n" + n.text
+        text=etree.tostring(n, method="text",encoding=str)
+        sys.stderr.write(f"n={n}, text={text}\n")
+        res += "\n" + text
     return res
 
 def load_struct_spec(parentElt, eltName):

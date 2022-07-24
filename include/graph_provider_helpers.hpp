@@ -981,6 +981,19 @@ public:
     m_input=input;
   }
 
+  virtual void log(unsigned level, const char *msg) override
+  {
+    if(m_logLevel >= level){
+      fprintf(m_dst, "%s%s:%s : %s\n", m_prefix.c_str(), m_device, m_input, msg);
+    }
+    if(!strcmp("_HANDLER_EXIT_FAIL_9be65737_", msg)){
+      m_onApplicationExit("handler_exit(1)", 1);
+    }
+    if(!strcmp("_HANDLER_EXIT_SUCCESS_9be65737_", msg)){
+      m_onApplicationExit("handler_exit(0)", 0);
+    }
+  }
+
   virtual void vlog(unsigned level, const char *msg, va_list args) override
   {
     if(m_logLevel >= level){
