@@ -12,6 +12,7 @@ function usage ()
     --release : Attempt to create fastest possible executable with no safety (default).
     --release-with-asserts : Attempt to create fastest possible executable, but keep run-time checks.
     --debug : Debuggable executable with all run-time checks.
+    --sanitizers : Add thread and undefined sanitisers
     --run : If the simulation compiles, then run it immediately
     input-file the XML graph type or graph instance to compile.
 "
@@ -25,6 +26,7 @@ input_file=""
 working_dir=$(mktemp -d)
 optimise=1
 asserts=0
+sanitizers=0
 max_log_level=
 run=0
 while true; do
@@ -37,6 +39,7 @@ while true; do
     --release ) optimise=1 ; asserts=0 ; shift ;;
     --release-with-asserts ) optimise=1 ; asserts=1 ; shift ;;
     --debug ) optimise=0 ; asserts=1 ; shift ;;
+    --sanitizers ) sanitizers=1 ; shift ;;
     --run ) run=1 ; shift ;;
     --max-log-level ) max_log_level=$2 ; shift 2 ;;
     -* ) >&2 echo "Unknown option $1" ; exit 1 ;;
@@ -103,6 +106,9 @@ if [[ $optimise -eq 1 ]] ; then
 fi
 if [[ $asserts -eq 0 ]] ; then
     CPPFLAGS+=" -DNDEBUG=1"
+fi
+if [[ $sanitizers -eq 1 ]] ; then
+    CPPFLAGS+=" -fsanitize=thread -fsanitize=undefined"
 fi
 
 if [[ "${POETS_EXTERNAL_INTERFACE_SPEC}" == "" ]] ; then

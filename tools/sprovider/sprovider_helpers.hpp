@@ -78,8 +78,14 @@ SPROVIDER_ALWAYS_INLINE void copy_P_S(void *dst, const TypedDataPtr &p, const Ty
     assert(s ? 0==VALGRIND_CHECK_MEM_IS_DEFINED(s.payloadPtr(), s.payloadSize()) : 1);
 #endif
 
-    memcpy(dst, p.payloadPtr(), calc_TDS_size(p));
-    memcpy(((char*)dst)+calc_TDS_size_padded(p), s.payloadPtr(), calc_TDS_size(s));
+    size_t size_p=calc_TDS_size(p);
+    if(size_p){
+        memcpy(dst, p.payloadPtr(), size_p);
+    }
+    size_t size_s=calc_TDS_size(s);
+    if(size_s){
+        memcpy(((char*)dst)+calc_TDS_size_padded(p), s.payloadPtr(), size_s);
+    }
 }
 
 const void *alloc_copy_P(const TypedDataPtr &p)

@@ -9,6 +9,7 @@
 #include <thread>
 #include <random>
 #include <algorithm>
+#include <queue>
 #include <new>
 #include <unordered_map>
 #include <unordered_set>
@@ -32,14 +33,18 @@
 
 static unsigned sprovider_handler_log_level = SPROVIDER_MAX_LOG_LEVEL;
 
+static std::mutex g_handler_log_mutex;
+
 void sprovider_handler_log(int level, const char *msg, ...)
 {
-    if(level<=sprovider_handler_log_level){
+    if(level<=(int)sprovider_handler_log_level){
         char buffer[256]={0};
         va_list args;
         va_start(args, msg);
         vsnprintf(buffer, sizeof(buffer)-1, msg, args);
         va_end(args);
+
+        std::unique_lock lk{g_handler_log_mutex};
         fputs(buffer, stderr);
         fputc('\n', stderr);
     }
@@ -63,8 +68,40 @@ void set_now_start()
 
 double now()
 {
-    return (std::chrono::high_resolution_clock::now()-g_now_start).count();
+    std::chrono::duration<double> d=std::chrono::high_resolution_clock::now()-g_now_start;
+    return d.count();
 }
+
+template<class T>
+class TrivialConcurrentQueue
+{
+private:
+    std::mutex mutex;
+    std::deque<T> impl;
+public:
+
+    bool try_pop(T &x)
+    {
+        std::unique_lock lk(mutex);
+        if(!impl.empty()){
+            x=impl.front();
+            impl.pop_front();
+            return true;
+        }else{
+            return false;
+        }
+    }
+
+    void push(const T &x)
+    {
+        std::unique_lock lk(mutex);
+        impl.push_back(x);
+    }
+};
+
+template<class T>
+//using concurrent_queue_impl = TrivialConcurrentQueue<T>;
+using concurrent_queue_impl = tbb::concurrent_queue<T>;
 
 
 struct POEMS
@@ -94,6 +131,7 @@ struct POEMS
             int32_t send_index; // Used during loading
             uint32_t dest_device_offset_in_cluster; // Used after loading
         };
+        uint32_t dest_cluster_index; // Sigh. Bad design, as can't be recovered from dest_cluster without indirect lookup
         uint16_t is_local;       // Both devices are within the same local cluster (i.e. the same thread)
         uint16_t pin_index;  // combines device type and pin index
     };
@@ -164,8 +202,13 @@ struct POEMS
         char _padding_[128-sizeof(std::atomic<message*>)];
 
         /////////////////////////
+        // Read-only shared
+        unsigned cluster_index;
+
+        /////////////////////////
         // Private to thread
 
+        
         std::vector<device*> devices;
         std::vector<uint64_t> devices_active_mask;
 
@@ -175,13 +218,16 @@ struct POEMS
         uint64_t nonLocalMessagesSent=0;
         uint64_t nonLocalMessagesReceived=0;
         uint64_t localMessagesSentAndReceived=0;
-
+        
         uint64_t numClusterSteps=0;
         uint64_t numNoSendClusterSteps=0;
         uint64_t numNoActivityClusterSteps=0;
 
-        device_cluster()
+        std::atomic<uint64_t> localMessagesSentAndReceivedSync;
+
+        device_cluster(unsigned id)
             : incoming_queue(0)
+            , cluster_index(id)
         {}
 
         void sanity(const void *gp)
@@ -222,15 +268,23 @@ struct POEMS
             }
         }
 
-        void push(message * &msg)
+        // Post a message from within this cluster
+        void post_message(message *&msg)
+        {
+            assert(msg->p_edge->dest_cluster!=this);
+            msg->p_edge->dest_cluster->push_message(msg);
+        }
+
+        // Push a message to the destination cluster
+        void push_message(message * &msg)
         {
             assert(msg);
+            assert(msg->next==0);
             assert(msg->p_edge);
+            assert(msg->p_edge->dest_cluster==this);
 
             message *working=msg;
             msg=0;
-
-            assert(working->p_edge->dest_cluster==this);
 
             working->next=incoming_queue.load(std::memory_order_relaxed);
             do{
@@ -238,9 +292,21 @@ struct POEMS
             }while(!incoming_queue.compare_exchange_strong(working->next, working, std::memory_order_release, std::memory_order_relaxed));
         }
 
-        message *pop()
+        message *pop_list()
         {
             return incoming_queue.exchange(nullptr, std::memory_order_acquire);
+        }
+
+        template<class CB>
+        void pop_list_and_process(shared_pool<message>::local_pool &pool, CB &&cb)
+        {
+            message *head=pop_list();
+            while(head){
+                cb(head);
+                auto curr=head;
+                head=head->next;
+                pool.free(curr);
+            }
         }
     };
 
@@ -309,33 +375,31 @@ struct POEMS
                 m->next=0;
                 m->p_edge=&edge;
                 memcpy(m->payload, payload_buffer, size);
-                edge.dest_cluster->push(m);
+                cluster->post_message(m);
                 nonLocalMessagesSent++;
             }
         }
         return true;
     }
 
-    bool try_recv(shared_pool<message>::local_pool &pool, device_cluster *cluster, const void *gp, message *head, int &nonLocalMessagesReceived)
+    bool try_recv(shared_pool<message>::local_pool &pool, device_cluster *cluster, const void *gp, int &nonLocalMessagesReceived)
     {
         bool anyActive=false;
-        while(head){
-            const auto *pedge=head->p_edge;
+
+        cluster->pop_list_and_process(pool, [&](message *m) {
+            const auto *pedge=m->p_edge;
             assert(pedge);
             auto *dev=pedge->dest_device;
             assert(pedge->dest_cluster==dev->cluster);
             assert(pedge->dest_cluster==cluster);
             assert(dev->cluster==cluster);
             assert(cluster->devices[dev->offset_in_cluster]==dev);
-            bool active=sprovider_do_recv(nullptr, dev->device_type_index, pedge->pin_index, gp, dev->properties_then_state, pedge->properties_then_state, head->payload);
+            bool active=sprovider_do_recv(nullptr, dev->device_type_index, pedge->pin_index, gp, dev->properties_then_state, pedge->properties_then_state, m->payload);
             cluster->set_device_active(dev->offset_in_cluster, active); // Any messages mean we need to check rts at some point
             anyActive = anyActive || active;
-            auto curr=head;
-            head=head->next;
-            pool.free(curr);
             nonLocalMessagesReceived++;
             assert(nonLocalMessagesReceived < 1000000);
-        }
+        } );
         return anyActive;
     }
 
@@ -393,8 +457,7 @@ struct POEMS
         int localMessagesSentAndReceivedDelta=0;
         
         // Receiving might set interior dev->active high
-        auto *head=cluster.pop();
-        bool anyActiveFromReceive=try_recv(pool, &cluster, gp, head, nonLocalMessagesReceivedDelta);
+        bool anyActiveFromReceive=try_recv(pool, &cluster, gp, nonLocalMessagesReceivedDelta);
 
         bool anyActive=false;
         if(!throttleSend && (cluster.active || anyActiveFromReceive))
@@ -438,6 +501,9 @@ struct POEMS
         cluster.nonLocalMessagesSent+=nonLocalMessagesSentDelta;
         cluster.nonLocalMessagesReceived+=nonLocalMessagesReceivedDelta;
         cluster.localMessagesSentAndReceived+= localMessagesSentAndReceivedDelta;
+        // Also store a relaxed synchronised version to avoid warnings with -fsanitize=thread
+        cluster.localMessagesSentAndReceivedSync.store(cluster.localMessagesSentAndReceived, std::memory_order_relaxed);
+
         cluster.numClusterSteps++;
         cluster.numNoSendClusterSteps += (nonLocalMessagesSentDelta==0) && (localMessagesSentAndReceivedDelta==0);
         cluster.numNoActivityClusterSteps += (nonLocalMessagesSentDelta==0) && (localMessagesSentAndReceivedDelta==0) && (nonLocalMessagesReceivedDelta==0);
@@ -461,7 +527,7 @@ struct POEMS
     const void *m_gp;
     std::vector<device*> m_devices;
     std::vector<device_cluster*> m_clusters;
-    tbb::concurrent_queue<device_cluster*> m_cluster_queue;
+    concurrent_queue_impl<device_cluster*> m_cluster_queue;
     //moodycamel::ConcurrentQueue<device_cluster*> m_cluster_queue;
 
     uint64_t total_received_messages_approx()
@@ -469,7 +535,9 @@ struct POEMS
         uint64_t received=m_globalNonLocalReceives.load();
         for(auto *c : m_clusters){
             // Warning: this is _not_ synchronised
-            received += c->localMessagesSentAndReceived;
+            //received += c->localMessagesSentAndReceived;
+            // Now changed to relaxed atomic to avoid errors in -fsanitize=thread
+            received += c->localMessagesSentAndReceivedSync.load(std::memory_order_relaxed);
         }
         return received;
     }
@@ -544,11 +612,10 @@ struct POEMS
         if(waiters<nThreads){
             // Either we went to sleep erroneously, or there was an idle. Either way we don't care
             // and just leave when the inactive clusters drops below the threshold
-            while(m_globalInactiveClusters.load() >= m_idleDetectionInactiveThreshold){
-                m_idleDetectionCond.wait(lk);
-            }
+            m_idleDetectionCond.wait(lk);
         }else{
             // We are the final thread.
+            std::cerr<<"Q";
 
             // Have to capture once more, to get the definitive final version
             uint64_t totalNonLocalSent=m_globalNonLocalSends.load();
@@ -683,17 +750,42 @@ struct POEMS
         std::vector<std::thread> threads;
 
         threads.push_back(std::thread([&]{
+            unsigned delay=1000;
+
+            double t0=now();
+
             std::unique_lock<std::mutex> lk(quitMutex);
             while(!quit.load()){
-                quitCond.wait_for(lk, std::chrono::milliseconds(500));
+                quitCond.wait_for(lk, std::chrono::milliseconds(delay));
 
-                fprintf(stderr, "nlInFlight=%lld, nlRecvs=%llu, allRecvs=%llu, inactiveClustes=%llu, allocBytes = %f MBytes\n",
-                     (long long)((int64_t)m_globalNonLocalSends.load()-m_globalNonLocalReceives.load()),
-                     (unsigned long long)m_globalNonLocalReceives.load(),
-                     (unsigned long long)total_received_messages_approx(),
-                    (unsigned long long)m_globalInactiveClusters.load(),
-                    gpool.get_alloced_bytes()/(1024.0*1024.0)
+                if(quit.load(std::memory_order_relaxed)){
+                    break;
+                }
+
+                double t1=now();
+                double dt=t1-t0;
+
+                // This is only an approximation
+                unsigned numEmpty=0;
+                for(const auto &c : m_clusters){
+                    const auto &q=c->incoming_queue;
+                    numEmpty += ( nullptr != q.load(std::memory_order_relaxed) );
+                }
+
+                unsigned long long totalRecvs=(unsigned long long)total_received_messages_approx();
+
+                bool throttleSend = IN_FLIGHT_THROTTLE < ((int64_t)m_globalNonLocalSends.load(std::memory_order_relaxed)-m_globalNonLocalReceives.load(std::memory_order_relaxed));
+                fprintf(stderr, "nlInFlight=%lld, nlRecvs=%llu, allRecvs=%llu, %g MRecv/Sec, inactiveClustes=%llu, allocBytes = %f MBytes, throttle=%d, numWorking=%d/%d\n",
+                     (long long)((int64_t)m_globalNonLocalSends.load(std::memory_order_relaxed)-m_globalNonLocalReceives.load(std::memory_order_relaxed)),
+                     (unsigned long long)m_globalNonLocalReceives.load(std::memory_order_relaxed),
+                     totalRecvs, (totalRecvs/(t1-t0))/1000000.0,
+                    (unsigned long long)m_globalInactiveClusters.load(std::memory_order_relaxed),
+                    gpool.get_alloced_bytes()/(1024.0*1024.0),
+                    throttleSend,
+                    numEmpty, (int)m_clusters.size()
                 );
+
+                delay=std::min<unsigned>(delay*1.5, 60000);
             }
         }));
 
@@ -712,6 +804,9 @@ struct POEMS
                 m_cluster_queue.push(cluster);
                 check_for_idle(nThreads, active, sent, received);
             }
+        /*
+        // The logic for this seems wrong. It fails, and I can't work out how
+        // it was originally supposed to deal with races.
         }else if(nThreads==m_clusters.size()){
             for(unsigned i=0; i<nThreads; i++){
                 threads.emplace_back( std::thread([&, i](){
@@ -724,7 +819,7 @@ struct POEMS
                         check_for_idle(nThreads, m_clusters[i]->active, sent, received);
                     }
                 }));
-            }
+            }*/
         }else{
             for(unsigned i=0; i<nThreads; i++){
                 threads.emplace_back( std::thread([&](){
@@ -1082,7 +1177,7 @@ void assign_clusters_metis(std::vector<device*> &devices, std::vector<device_clu
                 }else{
                     std::sort(edges.begin(), edges.end(), [](const edge &a, const edge &b){ return a.send_index < b.send_index;  });
                     for(unsigned i=0; i<edges.size(); i++){
-                        if(edges[i].send_index!=i){
+                        if(edges[i].send_index!=(int)i){
                             throw std::runtime_error("Send indices are either not contiguous, or there is a mix of explicit and implicit.");
                         }
                     }
@@ -1107,7 +1202,7 @@ void assign_clusters_metis(std::vector<device*> &devices, std::vector<device_clu
       assert(m_target.m_clusters.empty());
       m_target.m_clusters.reserve(nClusters);
       for(unsigned i=0; i<nClusters; i++){
-          m_target.m_clusters.push_back(new device_cluster());
+          m_target.m_clusters.push_back(new device_cluster(i));
       }
 
       if(m_target.use_metis && nClusters>1){
@@ -1147,6 +1242,7 @@ void assign_clusters_metis(std::vector<device*> &devices, std::vector<device_clu
                             nonLocals++;
                         }
                         e.dest_cluster=dc;
+                        e.dest_cluster_index=dc->cluster_index;
                         e.dest_device_offset_in_cluster=e.dest_device->offset_in_cluster;
                     }
                 }

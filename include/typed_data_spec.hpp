@@ -298,8 +298,11 @@ private:
     void JSONToBinaryImpl(const rapidjson::Value &value, char *pBinary, unsigned cbBinary) const
     {
         assert(cbBinary == scalarTypeWidthBytes(m_type));
-        double v = value.GetDouble();
-        *((T*)pBinary) = v;
+        // TODO: Check this round-trips?
+        T v = (T)value.GetDouble();
+        // This is upsets -fsanitize=memory due to unaligned accesses. Fair play.
+        //*((T*)pBinary) = v;
+        memcpy(pBinary, &v, sizeof(T));
     }
 
     void JSONToBinaryImplU64(const rapidjson::Value &value, char *pBinary, unsigned cbBinary) const
