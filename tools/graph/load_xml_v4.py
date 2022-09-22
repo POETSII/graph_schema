@@ -7,7 +7,7 @@ v4_namespace_uri = "https://poets-project.org/schemas/virtual-graph-schema-v4"
 
 from graph.load_xml_v3 import XMLSyntaxError, get_attrib, \
     get_attrib_defaulted, get_attrib_optional, get_attrib_optional_bool, \
-    get_child_text
+    get_child_text, get_child_text_optional
 
 
 from graph.parse_v4_structs import parse_struct_def_string, parse_struct_init_string, convert_def_to_typed_data_spec
@@ -46,11 +46,19 @@ def get_optional_child_text(node,name,namespace=None) -> str:
         res += "\n" + text
     return res
 
+def load_struct_spec_optional(parentElt, eltName):
+    n=parentElt.find(eltName, ns)
+    if n==None:
+        src=""
+    else:# This method collapses all text nodes down
+        src=etree.tostring(n, method="text",encoding=str)
+    df=parse_struct_def_string(src)
+    return convert_def_to_typed_data_spec(df)
+
 def load_struct_spec(parentElt, eltName):
     n=parentElt.find(eltName, ns)
     if n==None:
         raise XMLSyntaxError(f"Missing struct spec node {eltName}", parentElt)
-    # This method collapses all text nodes down
     src=etree.tostring(n, method="text",encoding=str)
     df=parse_struct_def_string(src)
     return convert_def_to_typed_data_spec(df)
@@ -81,7 +89,7 @@ def load_message_type(parent,mtElt):
 def load_external_type(graph,dtNode,sourceFile):
     id=get_attrib(dtNode,"id")
     state=None
-    properties=load_struct_spec(dtNode, "p:Properties")
+    properties=load_struct_spec_optional(dtNode, "p:Properties")
     shared_code=[]
     metadata=None
     documentation=None
@@ -127,12 +135,12 @@ def load_device_type(graph,dtNode,sourceFile):
     id=get_attrib(dtNode,"id")
 
     try:
-        properties=load_struct_spec(dtNode, "p:Properties")
-        state=load_struct_spec(dtNode, "p:State")
+        properties=load_struct_spec_optional(dtNode, "p:Properties")
+        state=load_struct_spec_optional(dtNode, "p:State")
         sys.stderr.write(f"load_device_type({id}), properties={properties}\n")
 
         shared_code=[]
-        tt=get_child_text(dtNode, "p:SharedCode", ns)[0]
+        (tt,_)=get_child_text_optional(dtNode, "p:SharedCode", ns)
         if tt is not None:
             shared_code.append(tt)
         metadata=None
@@ -147,8 +155,8 @@ def load_device_type(graph,dtNode,sourceFile):
             message_type=graph.message_types[message_type_id]
             # NOTE: application pin support needed for as long as 2to3 is relevant.
             is_application=get_attrib_optional_bool(p,"application") # TODO: REMOVE APPLICATION PIN
-            properties=load_struct_spec(p, "p:Properties")
-            state=load_struct_spec(p, "p:State")
+            properties=load_struct_spec_optional(p, "p:Properties")
+            state=load_struct_spec_optional(p, "p:State")
             pinMetadata=None
             documentation=None
             
@@ -200,20 +208,23 @@ def load_device_type(graph,dtNode,sourceFile):
         dt.ready_to_send_source_line=sourceLine
         dt.ready_to_send_source_file=sourceFile
 
-        (handler,sourceLine)=get_child_text(dtNode,"p:OnInit", ns)
-        dt.init_handler=handler
-        dt.init_source_line=sourceLine
-        dt.init_source_file=sourceFile
+        (handler,sourceLine)=get_child_text_optional(dtNode,"p:OnInit", ns)
+        if handler:
+            dt.init_handler=handler
+            dt.init_source_line=sourceLine
+            dt.init_source_file=sourceFile
 
-        (handler,sourceLine)=get_child_text(dtNode,"p:OnHardwareIdle",ns)
-        dt.on_hardware_idle_handler=handler
-        dt.on_hardware_idle_source_line=sourceLine
-        dt.on_hardware_idle_source_file=sourceFile
+        (handler,sourceLine)=get_child_text_optional(dtNode,"p:OnHardwareIdle",ns)
+        if handler:
+            dt.on_hardware_idle_handler=handler
+            dt.on_hardware_idle_source_line=sourceLine
+            dt.on_hardware_idle_source_file=sourceFile
 
-        (handler,sourceLine)=get_child_text(dtNode,"p:OnDeviceIdle",ns)
-        dt.on_device_idle_handler=handler
-        dt.on_device_idle_source_line=sourceLine
-        dt.on_device_idle_source_file=sourceFile
+        (handler,sourceLine)=get_child_text_optional(dtNode,"p:OnDeviceIdle",ns)
+        if handler:
+            dt.on_device_idle_handler=handler
+            dt.on_device_idle_source_line=sourceLine
+            dt.on_device_idle_source_file=sourceFile
 
         return dt
     except:
@@ -230,6 +241,7 @@ def load_supervisor_type(graph,dtNode,sourceFile):
     try:
 
         properties=get_optional_child_text(dtNode, "p:Properties")
+        properties=properties or ""
         state=get_optional_child_text(dtNode, "p:State")
 
         shared_code=get_optional_child_text(dtNode, "p:Code", ns)
@@ -238,7 +250,7 @@ def load_supervisor_type(graph,dtNode,sourceFile):
         documentation=None
 
         onInitCode=get_optional_child_text(dtNode,"p:OnInit",ns)
-        assert isinstance(onInitCode,str)
+        assert onInitCode==None or isinstance(onInitCode,str)
         onSupervisorIdleCode=get_optional_child_text(dtNode,"p:OnSupervisorIdle",ns)
         onStopCode=get_optional_child_text(dtNode,"p:OnStop",ns)
 
@@ -272,7 +284,7 @@ def load_graph_type(graphNode, sourcePath):
     documentation=None
 
     shared_code=[]
-    tt=get_child_text(graphNode, "p:SharedCode", ns)[0]
+    (tt,_)=get_child_text_optional(graphNode, "p:SharedCode", ns)
     if tt is not None:
         shared_code.append(tt)
     graphType=GraphType(id,properties,metadata,shared_code,documentation)
@@ -372,13 +384,14 @@ def load_graph_instance(graphTypes, graphNode):
     disNode=graphNode.findall("p:DeviceInstances",ns)
     assert(len(disNode)==1)
     for diNode in disNode[0]:
-        assert (diNode.tag==devITag) or (diNode.tag==extITag)
         if diNode.tag==devITag:
             di=load_device_instance(graph,diNode)
             graph.add_device_instance(di)
         elif diNode.tag==extITag:
             ei=load_external_instance(graph,diNode)
             graph.add_device_instance(ei)
+        else:
+            assert diNode.tag==etree.Comment
 
     eisNode=graphNode.findall("p:EdgeInstances",ns)
     assert(len(eisNode)==1)

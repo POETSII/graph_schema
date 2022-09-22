@@ -1,0 +1,157 @@
+<?xml version="1.0"?>
+<!--
+This test-case comes from Orchestrator_examples
+https://github.com/POETSII/Orchestrator_examples/blob/development/ping_pong_timer.xml
+Latest commit 6d7e7ad 
+
+Fixes that have been applied:
+- Added xmlns so we know which dialect of XML it is
+- Converted bounces initialiser from:
+    uint32_t bounces = int(1e6);
+  to
+    uint32_t bounces;
+  with value put into graph properties
+- Removed redundant zero initialiser:
+    uint8_t originator = 0;  /* False */
+  Device states must be zero initialied according to spec, unless initialise in DevI properties
+
+
+
+This XML times how long it takes to send:
+ - One packet from the supervisor to a normal device.
+ - `bounces` * 2 packets (where `bounces`>>1) from one normal device to
+   another.
+ - One packet from a normal device to the supervisor.
+The time taken is written to the file "ping_pong_timer.txt".
+The intention is that you can place the two normal devices on varying points
+across the fabric (like probes on a multimeter), and use this application to
+make a rough estimate of "communication cost".
+How it works:
+ - The application contains three devices: One supervisor device (which starts
+   quiescent), one normal device (N1) that also starts quiescent, and one normal
+   device (N0) that is marked as the `originator`.
+ - N0 sends a packet to the supervisor. The supervisor, on receipt, starts a
+   timer, and sends a reply packet back to N0.
+ - On receipt of this reply packet, N0 then increments a counter
+   (`bouncesSoFar`), then sends a packet to the other normal device (N1), which
+   bounces it back to N0 again. This step is also triggered when a packet is
+   received by N0 from N1. N1 doesn't track the number of bounces.
+ - Once `bouncesSoFar` exceeds `bounces`, N0 sends a packet back to the
+   supervisor, who stops the timer, and writes the time taken to a file, and
+   stops the application.
+-->
+<Graphs xmlns="https://poets-project.org/schemas/virtual-graph-schema-v4" appname="orchestrator_examples_ping_pong_timer">
+  <GraphType id="ping_pong_timer_type">
+    <Properties><![CDATA[
+uint32_t bounces ;
+    ]]></Properties>
+    <MessageTypes>
+      <MessageType id="poulpe_vide">
+        <Message><![CDATA[
+        /* French */
+        ]]></Message>
+      </MessageType>
+    </MessageTypes>
+    <DeviceTypes>
+      <DeviceType id="pinger">
+        <Properties><![CDATA[
+uint8_t originator;  /* False */
+        ]]></Properties>
+        <State><![CDATA[
+uint32_t bouncesSoFar;  /* Actually a number, this one. */
+uint8_t originatorMessageSent;  /* False */
+uint8_t finalMessageSent;  /* False */
+uint8_t sendNow;  /* False */
+        ]]></State>
+        <ReadyToSend><![CDATA[
+if ((DEVICESTATE(bouncesSoFar) > GRAPHPROPERTIES(bounces) and
+     DEVICESTATE(finalMessageSent) == 0)
+    or
+    (DEVICEPROPERTIES(originator) == 1 and
+     DEVICESTATE(originatorMessageSent) == 0)) RTSSUP();
+else if (DEVICESTATE(sendNow) == 1) RTS(byebye);
+        ]]></ReadyToSend>
+        <OnInit><![CDATA[
+/* If we are the originator, enter ReadyToSend. */
+return DEVICEPROPERTIES(originator);
+        ]]></OnInit>
+        <InputPin name="elloello" messageTypeId="poulpe_vide">
+          <OnReceive><![CDATA[
+DEVICESTATE(sendNow) = 1;  /* Gotta bounce it back, probably. */
+          ]]></OnReceive>
+        </InputPin>
+        <OutputPin name="byebye" messageTypeId="poulpe_vide">
+          <OnSend><![CDATA[
+/* Only increment bouncesSoFar if we're the originator. */
+(DEVICESTATE(bouncesSoFar)) += DEVICEPROPERTIES(originator);
+DEVICESTATE(sendNow) = 0;  /* Only send once for each input packet. */
+          ]]></OnSend>
+        </OutputPin>
+        <SupervisorOutPin messageTypeId="poulpe_vide">
+          <OnSend><![CDATA[
+/* Don't send multiple finalising packets. */
+DEVICESTATE(finalMessageSent) = DEVICESTATE(originatorMessageSent);
+/* Don't send multiple origination packets. */
+DEVICESTATE(originatorMessageSent) = 1;
+          ]]></OnSend>
+        </SupervisorOutPin>
+        <SupervisorInPin messageTypeId="poulpe_vide">
+          <OnReceive><![CDATA[
+/* Only send if we're an originator device. */
+DEVICESTATE(sendNow) = DEVICEPROPERTIES(originator);
+          ]]></OnReceive>
+        </SupervisorInPin>
+      </DeviceType>
+      <SupervisorType id="supervisor">
+        <Code><![CDATA[
+#include <chrono>
+#include <fstream>
+#include <iostream>
+#include <sstream>
+        ]]></Code>
+        <State><![CDATA[
+bool started = false;
+std::chrono::steady_clock::time_point startTime;
+        ]]></State>
+        <SupervisorInPin id="clock" messageTypeId="poulpe_vide">
+          <OnReceive><![CDATA[
+/* Our first incoming message - start the timer and start the bouncing. */
+if (!(SUPSTATE(started)))
+{
+    SUPSTATE(started) = true;
+    SUPSTATE(startTime) = std::chrono::steady_clock::now();
+    RTSREPLY();
+}
+/* Our second incoming message - clock the timer, write it out, and stop the
+ * application. */
+else
+{
+    std::ofstream oFile;
+    std::chrono::duration<float> duration;
+    duration = std::chrono::steady_clock::now() - SUPSTATE(startTime);
+    oFile.open("ping_pong_timer.txt");
+    oFile << "Sending " << GRAPHPROPERTIES(bounces) << " packets between two "
+          << "devices (along with two packets to the supervisor) took "
+          << std::chrono::duration_cast<std::chrono::milliseconds>(duration).count()
+          << " milliseconds." << std::endl;
+    oFile.close();
+    Super::stop_application();
+}
+          ]]></OnReceive>
+        </SupervisorInPin>
+      </SupervisorType>
+    </DeviceTypes>
+  </GraphType>
+  <GraphInstance id="ping_pong_timer_instance"
+                 graphTypeId="ping_pong_timer_type"
+                 P="{1000000}">
+    <DeviceInstances>
+      <DevI id="N0" type="pinger" P="{1}"/>  <!-- Originator -->
+      <DevI id="N1" type="pinger"/>
+    </DeviceInstances>
+    <EdgeInstances>
+      <EdgeI path="N0:elloello-N1:byebye"/>
+      <EdgeI path="N1:elloello-N0:byebye"/>
+    </EdgeInstances>
+  </GraphInstance>
+</Graphs>

@@ -79,6 +79,16 @@ def get_child_text(node,name,namespace=None):
     line=n.sourceline
     return (text,line)
 
+def get_child_text_optional(node,name,namespace=None):
+    if namespace==None:
+        namespace=ns
+    n=node.find(name,namespace)
+    if n is None:
+        return ("",None)
+    text=src=etree.tostring(n, method="text",encoding=str)
+    line=n.sourceline
+    return (text,line)
+
 def load_documentation_of_typed_data(node, member, namespace=None):
     if namespace == None:
         namespace = ns

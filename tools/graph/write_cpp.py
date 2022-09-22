@@ -706,6 +706,8 @@ _add_orchestrator_hack_macros= \
 #define RTSSUP()            *readyToSend |= RTS_SUPER_IMPLICIT_SEND_FLAG
 #define RTSBCAST()          __rtsBcast = true
 #define RTSREPLY()          __rtsReply = true
+// TODO: Do these ones have a canonical definition?
+#define SUPSTATE(a)         (m_state.a)
 """
 
 
@@ -1053,7 +1055,11 @@ def render_device_type_as_cpp(dt:DeviceType,dst):
 
         // Begin custom handler
         {preInitProcLinePragma}
-        {initCode}
+        // Gets around calling return in OnInit
+        auto init_wrapper=[&]() {{
+            {initCode}
+        }};
+        init_wrapper();
         __POETS_REVERT_PREPROC_DETOUR__
         // End custom handler
       }}
@@ -1176,6 +1182,11 @@ def render_supervisor_type_as_cpp(st:SupervisorType,dst):
 
     messageTypeId=st.inputs_by_index[0][2].id
 
+    # Render this in global namespace, as #include seems common
+    if st.shared_code is not None:
+        assert isinstance(st.shared_code,str)
+        dst.write(st.shared_code)
+
     dst.write("namespace ns_{}{{\n".format(st.id));
 
     dst.write(f"""
@@ -1285,15 +1296,21 @@ public:
         //}}
   }}
 
+    auto OnInitWrapper(
+    OrchestratorServices *orchestrator,
+    const typed_data_t *gGraphProperties
+  ){{
+    auto graphProperties=cast_typed_properties<{st.parent.id}_properties_t>(gGraphProperties);
+{S(st.init_handler)}
+  }}
+
   virtual void onInit(
           OrchestratorServices *orchestrator,
           const typed_data_t *gGraphProperties
           ) 
     {{
-        auto graphProperties=cast_typed_properties<{st.parent.id}_properties_t>(gGraphProperties);
-        
         beginHandler(orchestrator);
-{S(st.init_handler)}
+        OnInitWrapper(orchestrator, gGraphProperties);
         endHandler();
     }}
 

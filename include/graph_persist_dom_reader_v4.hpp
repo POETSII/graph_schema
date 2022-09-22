@@ -30,24 +30,27 @@ inline std::vector<std::string> tokenise_c_def(std::string src)
 
   // This removes all C-style comments by replacing them with spaces
   unsigned pos=0, start=0;
-  while(pos+2<src.size() && src[pos]=='/' && src[pos+1]=='*'){
-    
-    // Begin a C-style comment
-    start=pos;
-    pos+=2;
+  while(pos+1<src.size()){
+    if(src[pos]=='/' && src[pos+1]=='*'){
+      // Begin a C-style comment
+      start=pos;
+      pos+=2;
 
-    while(1){
-      if(pos+1==src.size()){
-        throw std::runtime_error("Couldn't parse struct, missing closing C-style comment");
-      }
-      if(src[pos]=='*' && src[pos+1]=='/'){
-        // Finish a C-style comment
-        pos+=2;
-        for(unsigned i=start; i<pos; i++){
-          src[i]=' ';
+      while(1){
+        if(pos+1==src.size()){
+          throw std::runtime_error("Couldn't parse struct, missing closing C-style comment");
         }
-        break;
+        if(src[pos]=='*' && src[pos+1]=='/'){
+          // Finish a C-style comment
+          pos+=2;
+          for(unsigned i=start; i<pos; i++){
+            src[i]=' ';
+          }
+          break;
+        }
+        pos++;
       }
+    }else{
       pos++;
     }
   }
@@ -389,10 +392,10 @@ inline DeviceTypePtr loadDeviceTypeElement(
 
   if(!isExternal){
     readyToSendCode=load_code_fragment(eDeviceType, "./g:ReadyToSend");
-    onInitCode=load_code_fragment(eDeviceType, "./g:OnInit");
-    onHardwareIdleCode=load_code_fragment(eDeviceType, "./g:OnHardwareIdle");
-    onDeviceIdleCode=load_code_fragment(eDeviceType, "./g:OnDeviceIdle");
-    sharedCode=load_code_fragment(eDeviceType, "./g:SharedCode");
+    onInitCode=load_optional_code_fragment(eDeviceType, "./g:OnInit");
+    onHardwareIdleCode=load_optional_code_fragment(eDeviceType, "./g:OnHardwareIdle");
+    onDeviceIdleCode=load_optional_code_fragment(eDeviceType, "./g:OnDeviceIdle");
+    sharedCode=load_optional_code_fragment(eDeviceType, "./g:SharedCode");
   }
 
   properties=loadTypedDataSpec(eDeviceType, "./g:Properties");
@@ -617,7 +620,7 @@ inline GraphTypePtr loadGraphTypeElement(const filepath &srcPath, xmlpp::Element
   std::string id=get_attribute_required(eGraphType, "id");
 
   TypedDataSpecPtr properties=loadTypedDataSpec(eGraphType, "./g:Properties");
-  std::string sharedCode=load_code_fragment(eGraphType, "./g:SharedCode");
+  std::string sharedCode=load_optional_code_fragment(eGraphType, "./g:SharedCode");
 
   std::map<std::string,MessageTypePtr> messageTypesById;
   std::vector<MessageTypePtr> messageTypes;

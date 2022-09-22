@@ -29,7 +29,7 @@ setup() {
     cat $WD/out.snap | grep '</Graph>'
 }
 
-@test "epoch_sim test test_supervisor_Ndev_to_sup_pulse" {
+@test "epoch_sim test_supervisor" {
     for i in demos/tests/supervisors/*.xml ; do
         >&3 echo "# $i"
         run bin/epoch_sim --max-steps 10000 --log-level 0 $i

@@ -1,0 +1,236 @@
+<?xml version="1.0"?>
+<!--
+This test-case comes from Orchestrator_examples
+https://github.com/POETSII/Orchestrator_examples/blob/development/ping_pong_timer.xml
+Latest commit 3a3658b  
+- Fixes:
+    - Added xmlns so the parser knows it is v4 xml
+    - Moved initialiser into graph instances: uint8_t maxLaps = 9;  /* Zero-based indexing */
+    - Added braces around initialisers for device instance properties
+    - RTS is made non-sticky: devices have to consistently say they want to send
+    - Supervisor calls stop_application
+    
+    A series of five devices connected in a directional ring. When a device
+receives a message, it sends two messages: one to the next normal device in the
+ring, and one to its supervisor device.
+A message holds the "lap" it's on. Device zero increments the lap counter of a
+message on receipt, and stops the packet after its tenth lap. Device zero is
+also responsible for sending the initial packet.
+The supervisor device records all received packets (including their sender and
+the lap), and writes "1" to the output file ("ring_test_output") once the
+packet has completed ten laps. If an inappropriate packet is received, the
+supervisor device writes "0", and ignores all new packets.
+-->
+<Graphs xmlns="https://poets-project.org/schemas/virtual-graph-schema-v4" appname="ring_test">
+  <GraphType id="ring_test_type">
+    <Properties><![CDATA[
+uint8_t numDevices;   /* Defined in the graph instance section, used by the
+                       * supervisor */
+uint8_t maxLaps;  /* Zero-based indexing */
+    ]]></Properties>
+    <MessageTypes>
+      <!-- Communications between normal devices use this message type. -->
+      <MessageType id="ring_propagate">
+        <Message><![CDATA[
+uint8_t lap;
+        ]]></Message>
+      </MessageType>
+      <!-- Communications from normal devices to supervisor devices use this
+           message type.
+       -->
+      <MessageType id="exfiltration">
+        <Message><![CDATA[
+uint8_t sourceId;
+uint8_t lap;
+        ]]></Message>
+      </MessageType>
+    </MessageTypes>
+
+    <DeviceTypes>
+      <DeviceType id="ring_element">
+        <!-- This device type defines the behaviour of all elements in the
+             ring.
+        -->
+        <Properties>
+          <!-- Properties remain constant throughout application execution, and
+               are set in the DeviceInstances section.
+          -->
+          <![CDATA[
+/* An identifier for this device, useful for supervisor communications. */
+uint8_t id;
+          ]]>
+        </Properties>
+        <State>
+          <!-- State can change throughout application execution, and is
+               initialised here (though it can be initialised in the
+               DeviceInstances section).
+          -->
+            <![CDATA[
+/* Holds the lap for the most recently-received message. Is used to define the
+ * lap for outgoing messages. */
+uint8_t lap;
+/* When a message is received, this field is populated either with one (true)
+ * or zero (false). This has priority over sendMessage */
+uint8_t sendMessageSup;
+/* When a message is received, this field is populated either with one (true)
+ * or zero (false). */
+uint8_t sendMessage;
+            ]]>
+        </State>
+
+        <SupervisorOutPin messageTypeId="exfiltration">
+          <OnSend><![CDATA[
+assert(DEVICESTATE(sendMessageSup)==1);
+assert(DEVICESTATE(sendMessage)==0);
+
+handler_log(2, "lap=%d", DEVICESTATE(lap));
+
+/* Define the fields in the message. */
+PKT(sourceId) = DEVICEPROPERTIES(id);
+PKT(lap) = DEVICESTATE(lap);
+/* Now we send the normal message */
+DEVICESTATE(sendMessageSup) = 0;
+DEVICESTATE(sendMessage) = 1;
+          ]]></OnSend>
+        </SupervisorOutPin>
+
+        <InputPin name="receiver" messageTypeId="ring_propagate">
+          <OnReceive><![CDATA[
+assert(DEVICESTATE(sendMessageSup)==0);
+assert(DEVICESTATE(sendMessage)==0);
+
+/* Only device zero increments the lap counter. Remember - this field in the
+ * state is later propagated into the message. */
+DEVICESTATE(lap) = PKT(lap);
+if (DEVICEPROPERTIES(id) == 0) DEVICESTATE(lap) += 1;
+/* Don't send a message if the incoming message has completed its tenth lap. */
+if (DEVICESTATE(lap) <= GRAPHPROPERTIES(maxLaps)) DEVICESTATE(sendMessageSup) = 1;
+else DEVICESTATE(sendMessage) = 0;
+          ]]></OnReceive>
+        </InputPin>
+
+        <OutputPin name="sender" messageTypeId="ring_propagate">
+          <OnSend><![CDATA[
+assert(DEVICESTATE(sendMessageSup)==0);
+assert(DEVICESTATE(sendMessage)==1);
+handler_log(2, "lap=%d", DEVICESTATE(lap));
+
+/* Define the fields in the message. */
+PKT(lap) = DEVICESTATE(lap);
+/* Since we're sending a message, reset this field so that we don't send
+ * another one. */
+DEVICESTATE(sendMessage) = 0;
+          ]]></OnSend>
+        </OutputPin>
+        <!-- This handler is invoked after a message is received, and after
+             OnInit (if it returns nonzero).
+        -->
+        <ReadyToSend><![CDATA[
+/* If the input handler determined that we should send a message, do so to the
+ * next normal device in the ring, and to our supervisor device. */
+if(DEVICESTATE(sendMessageSup))
+{
+    RTSSUP();
+}
+if (DEVICESTATE(sendMessage))
+{
+    RTS(sender);
+}
+
+        ]]></ReadyToSend>
+        <!-- Initialisation logic. -->
+        <OnInit><![CDATA[
+/* Device zero starts things off by telling the ReadyToSend handler to send a
+ * message. No other device does this. */
+if (DEVICEPROPERTIES(id) == 0) DEVICESTATE(sendMessageSup) = 1;
+        ]]></OnInit>
+      </DeviceType>
+
+      <SupervisorType id="">
+        <!-- There is one supervisor device type in a given application. This
+             particular supervisor is written assuming there is only one
+             instance for simplicity.
+        -->
+        <Code><![CDATA[
+#include <stdio.h>  /* For writing an output file */
+#include <vector>  /* Defines the type for `messagesPerDevice` */
+        ]]></Code>
+        <State><![CDATA[
+/* Holds state information to ensure each ring member has seen the packet an
+ * appropriate number of times. */
+std::vector<uint8_t> messagesPerDevice;
+/* Ominous. */
+bool failed = false;
+bool finished = false;
+/* Output file. */
+FILE* resultFile;
+        ]]></State>
+        <OnInit><![CDATA[
+SUPSTATE(messagesPerDevice) = \
+    std::vector<uint8_t>(GRAPHPROPERTIES(numDevices), 0);
+SUPSTATE(resultFile) = fopen("ring_test_output", "w");
+        ]]></OnInit>
+        <SupervisorInPin id="" messageTypeId="exfiltration">
+          <OnReceive><![CDATA[
+/* If the application has failed, don't act on any more messages. */
+if (!SUPSTATE(failed))
+{
+    /* Failure condition: once we've finished, we fail if we receive any more
+     * messages. Also, fail if we receive a message that has done too many
+     * laps. Note that this does not fail if the messages are received out of
+     * order - POETS guarantees delivery, not ordering. */
+    if (PKT(lap) > GRAPHPROPERTIES(maxLaps) or SUPSTATE(finished))
+    {
+        SUPSTATE(failed) = true;
+        fprintf(SUPSTATE(resultFile), "0");
+    }
+    /* If we've not failed, track the message, and check the finishing
+     * condition. */
+    else
+    {
+        SUPSTATE(messagesPerDevice.at(PKT(sourceId))) += 1;
+        /* Check the finishing condition. */
+        SUPSTATE(finished) = true;
+        for (std::vector<uint8_t>::size_type index = 0;
+             index < GRAPHPROPERTIES(numDevices); index++)
+        {
+            if (SUPSTATE(messagesPerDevice.at(index)) !=
+                GRAPHPROPERTIES(maxLaps) + 1)
+            {
+                SUPSTATE(finished) = false;
+                break;
+            }
+        }
+        /* Check the finish condition. */
+        if (SUPSTATE(finished))
+        {
+            fprintf(SUPSTATE(resultFile), "1");
+            stop_application();
+        }
+    }
+}
+          ]]></OnReceive>
+        </SupervisorInPin>
+        <OnStop><![CDATA[
+fclose(SUPSTATE(resultFile));
+        ]]></OnStop>
+      </SupervisorType>
+    </DeviceTypes>
+  </GraphType>
+  <GraphInstance id="ring_test_instance" graphTypeId="ring_test_type" P="{5,9}">
+    <DeviceInstances>
+      <DevI id="0" type="ring_element" P="{0}"/>
+      <DevI id="1" type="ring_element" P="{1}"/>
+      <DevI id="2" type="ring_element" P="{2}"/>
+      <DevI id="3" type="ring_element" P="{3}"/>
+      <DevI id="4" type="ring_element" P="{4}"/>
+    </DeviceInstances>
+    <EdgeInstances>
+      <EdgeI path="1:receiver-0:sender"/>
+      <EdgeI path="2:receiver-1:sender"/>
+      <EdgeI path="3:receiver-2:sender"/>
+      <EdgeI path="4:receiver-3:sender"/>
+      <EdgeI path="0:receiver-4:sender"/>
+    </EdgeInstances>
+  </GraphInstance>
+</Graphs>
