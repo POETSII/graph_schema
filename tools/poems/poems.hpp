@@ -45,8 +45,8 @@ void sprovider_handler_log(int level, const char *msg, ...)
         va_end(args);
 
         std::unique_lock lk{g_handler_log_mutex};
-        fputs(buffer, stderr);
-        fputc('\n', stderr);
+        fputs(buffer, stdout);
+        fputc('\n', stdout);
     }
 
     if(level==0){
@@ -144,11 +144,26 @@ struct POEMS
 
     struct message
     {
-        message *next;
         const edge *p_edge;
         // Payload immediately follows for locality
         // All messages are sized to hold the largest possible message
-        uint8_t payload[SPROVIDER_MAX_PAYLOAD_SIZE]; 
+        std::array<uint8_t,SPROVIDER_MAX_PAYLOAD_SIZE> payload; 
+    };
+
+    struct message_list
+    {
+        message_list *next;
+        message msg;
+    };
+
+    static_assert(sizeof(message) <= 1024 );
+    static const unsigned MAX_MESSAGES_PER_BUNDLE = (4096 - 2*sizeof(void*) - 4) / sizeof(message);
+    struct message_bundle
+    {
+        message_bundle *next;
+        message_bundle *prev;
+        uint32_t n;
+        std::array<message,MAX_MESSAGES_PER_BUNDLE> msgs;
     };
 
     struct device
@@ -192,14 +207,49 @@ struct POEMS
         }
     };
 
+    static const bool USE_POSTBOXES = false;
+    static const unsigned POSTBOX_FLUSH_THRESHOLD = 32;
+
+    static const bool USE_BUNDLES = true;
+
+    static_assert( !(USE_POSTBOXES&&USE_BUNDLES) );
+
+    // One entry per destination cluster
+    struct PostBox
+    {
+        message_list *head=0;
+        message_list *tail=0;
+        uint32_t count=0;
+
+        PostBox *next_non_full=0;
+        PostBox *prev_non_full=0;
+
+        void sanity()
+        {
+            if(head){
+                assert(count>0);
+                assert(tail);
+                message_list *curr=head;
+                while(curr->next){
+                    curr=curr->next;
+                }
+                assert(curr==tail);
+            }else{
+                assert(tail==0);
+                assert(count==0);
+            }
+        }
+    };
+
     struct device_cluster
     {
         /////////////////////////
         // Shared amongst threads
 
         // Assume the start of struct is nicely aligned
-        std::atomic<message *> incoming_queue;
-        char _padding_[128-sizeof(std::atomic<message*>)];
+        std::atomic<message_list *> incoming_queue;
+        std::atomic<message_bundle *> incoming_bundle_queue;
+        char _padding_[128-2*sizeof(std::atomic<message_list*>)];
 
         /////////////////////////
         // Read-only shared
@@ -222,16 +272,29 @@ struct POEMS
         uint64_t numClusterSteps=0;
         uint64_t numNoSendClusterSteps=0;
         uint64_t numNoActivityClusterSteps=0;
+        uint64_t numNonLocalFlushes=0;
 
         std::atomic<uint64_t> localMessagesSentAndReceivedSync;
 
+        // One entry per destination cluster
+        std::vector<PostBox> postBoxes;
+        PostBox *postBoxesReadyHead=0;
+        PostBox *postBoxesReadyTail=0;
+
+        // One entry per destination cluster
+        std::vector<message_bundle*> postBundles;
+        message_bundle *postBundlesHead=0;
+        message_bundle *postBundlesTail=0;
+
         device_cluster(unsigned id)
             : incoming_queue(0)
+            , incoming_bundle_queue(0)
             , cluster_index(id)
         {}
 
-        void sanity(const void *gp)
+        void sanity(const void *gp=0)
         {
+#ifndef NDEBUG
             for(unsigned i=0; i<devices.size();i++){
                 auto *dev=devices[i];
 
@@ -239,14 +302,47 @@ struct POEMS
                 assert(devices[i]->offset_in_cluster==i);
                 devices[i]->sanity();
 
-                uint32_t rts=0;
-                bool rtc=0;
-                bool active=sprovider_calc_rts(nullptr, dev->device_type_index, gp, dev->properties_then_state, &rts, &rtc);
-                if(rtc!=0 || rts!=0){
-                    assert(is_device_active(dev->offset_in_cluster));
+                if(gp){
+                    uint32_t rts=0;
+                    bool rtc=0;
+                    bool active=sprovider_calc_rts(nullptr, dev->device_type_index, gp, dev->properties_then_state, &rts, &rtc);
+                    if(rtc!=0 || rts!=0){
+                        assert(is_device_active(dev->offset_in_cluster));
+                    }
+                    assert(active ? 1 : (rtc==0 && rts==0));
                 }
-                assert(active ? 1 : (rtc==0 && rts==0));
             }
+
+            if(USE_POSTBOXES){
+                unsigned len=0;
+                if(postBoxesReadyHead){
+                    PostBox *prev=0;
+                    auto *curr=postBoxesReadyHead;
+                    assert(curr->head);
+                    len=1;
+                    assert( &postBoxes[0] <= curr && curr < &postBoxes[postBoxes.size()] );
+                    while(curr->next_non_full){
+                        len += 1;
+                        assert(curr->head);
+                        assert(curr->prev_non_full==prev);
+                        prev=curr;
+                        curr=curr->next_non_full;
+                        assert( &postBoxes[0] <= curr && curr < &postBoxes[postBoxes.size()] );
+                    }
+                    assert(curr==postBoxesReadyTail);
+                }else{
+                    assert(postBoxesReadyTail==0);
+                }
+
+                unsigned on=0;
+                for(auto &p : postBoxes){
+                    p.sanity();
+                    on += p.count>0;
+                }
+                
+                assert(len==on);
+            }
+#endif
         }
 
         /////////////////////////////////////////
@@ -269,48 +365,182 @@ struct POEMS
         }
 
         // Post a message from within this cluster
-        void post_message(message *&msg)
+        void post_message_list(message_list *&msg)
         {
-            assert(msg->p_edge->dest_cluster!=this);
-            msg->p_edge->dest_cluster->push_message(msg);
+            assert(msg->msg.p_edge->dest_cluster!=this);
+            if(USE_POSTBOXES){
+                sanity();
+
+                unsigned dest_index=msg->msg.p_edge->dest_cluster_index;
+                assert(dest_index < postBoxes.size());
+                PostBox &pb=postBoxes[dest_index];
+
+                assert(msg->next==0);                
+                msg->next=pb.tail;
+                pb.count += 1;
+
+                if(pb.head==0){
+                    assert(pb.next_non_full==0);
+                    assert(pb.prev_non_full==0);
+
+                    pb.head=msg;
+                    pb.tail=msg;
+
+                    assert( (postBoxesReadyHead==0) == (postBoxesReadyTail==0) );
+
+                    // Add to end of ready list
+                    assert(pb.next_non_full==0 && pb.prev_non_full==0);
+                    pb.prev_non_full=postBoxesReadyTail;
+                    postBoxesReadyTail=&pb;
+
+                    if(postBoxesReadyHead==0){
+                        postBoxesReadyHead=&pb;
+                    }else{
+                        pb.prev_non_full->next_non_full=&pb;
+                    }
+
+                    assert( (postBoxesReadyHead==0) == (postBoxesReadyTail==0) );
+                }else{
+                    msg->next=pb.head;
+                    pb.head=msg;
+                }
+
+                sanity();
+                
+                if(pb.count >= POSTBOX_FLUSH_THRESHOLD){
+                    flush_postbox(*this, pb);
+                }
+
+                sanity();
+
+            }else{
+                assert(msg->next==0);
+                msg->msg.p_edge->dest_cluster->push_message_list_singleton(msg);
+            }
+        }
+
+        void post_message_to_bundle(shared_pool<message_bundle>::local_pool &pool, const edge &e, const void *msg, unsigned size)
+        {
+            assert(USE_BUNDLES);
+
+            auto &slot=postBundles[e.dest_cluster_index];
+            if(!slot){
+                slot=pool.alloc();
+                slot->prev=postBundlesTail;
+                slot->next=0;
+                slot->n=0;
+                if(postBundlesTail){
+                    postBundlesTail->next=slot;
+                }else{
+                    postBundlesHead=slot;
+                }
+                postBundlesTail=slot;
+            }
+
+            auto &m=slot->msgs[slot->n];
+            m.p_edge=&e;
+            memcpy(&m.payload[0], msg, size);
+            slot->n++;
+
+            if(slot->n==MAX_MESSAGES_PER_BUNDLE){
+                flush_bundle(*this, slot);
+            }
         }
 
         // Push a message to the destination cluster
-        void push_message(message * &msg)
+        void push_message_list_singleton(message_list *list)
         {
-            assert(msg);
-            assert(msg->next==0);
-            assert(msg->p_edge);
-            assert(msg->p_edge->dest_cluster==this);
+            assert(list);
+            assert(list->next==0);
+            assert(list->msg.p_edge);
+            assert(list->msg.p_edge->dest_cluster==this);
 
-            message *working=msg;
-            msg=0;
-
-            working->next=incoming_queue.load(std::memory_order_relaxed);
+            list->next=incoming_queue.load(std::memory_order_relaxed);
             do{
-                assert(working->p_edge->dest_cluster==this);
-            }while(!incoming_queue.compare_exchange_strong(working->next, working, std::memory_order_release, std::memory_order_relaxed));
+                assert(list->msg.p_edge->dest_cluster==this);
+            }while(!incoming_queue.compare_exchange_strong(list->next, list, std::memory_order_release, std::memory_order_relaxed));
         }
 
-        message *pop_list()
+        void push_postbox(PostBox &pb)
+        {
+            assert(pb.head);
+            assert(pb.tail);
+            assert(pb.count>0);
+
+            message_list *head=pb.head;
+            message_list *tail=pb.tail;        
+
+            pb.count=0;
+            pb.head=0;
+            pb.tail=0;
+
+            if(head==tail){
+                push_message_list_singleton(head);
+            }else{
+                /*while(head){
+                    message_list *next=head->next;
+                    push_message_list_singleton(head);
+                    head=next;
+                }*/
+
+                
+                tail->next=incoming_queue.load(std::memory_order_relaxed);
+                do{
+                }while(!incoming_queue.compare_exchange_strong(tail->next, head, std::memory_order_release, std::memory_order_relaxed));
+                
+            }
+        }
+
+        void push_bundle(message_bundle *bundle)
+        {
+            assert(bundle);
+            assert(bundle->next==0);
+            assert(bundle->prev==0);
+            assert(0 < bundle->n && bundle->n <= MAX_MESSAGES_PER_BUNDLE );
+            assert(bundle->msgs[0].p_edge->dest_cluster == this);
+
+            bundle->next=incoming_bundle_queue.load(std::memory_order_relaxed);
+            do{
+            }while(!incoming_bundle_queue.compare_exchange_strong(bundle->next, bundle, std::memory_order_release, std::memory_order_relaxed));
+        }
+
+        message_list *pop_list()
         {
             return incoming_queue.exchange(nullptr, std::memory_order_acquire);
         }
 
-        template<class CB>
-        void pop_list_and_process(shared_pool<message>::local_pool &pool, CB &&cb)
+        message_bundle *pop_bundle()
         {
-            message *head=pop_list();
-            while(head){
-                cb(head);
-                auto curr=head;
-                head=head->next;
-                pool.free(curr);
+            return incoming_bundle_queue.exchange(nullptr, std::memory_order_acquire);
+        }
+
+        template<class CB>
+        void pop_and_process_messages(shared_pool<message_list>::local_pool &pool, shared_pool<message_bundle>::local_pool &bundle_pool, CB &&cb)
+        {
+            if(USE_BUNDLES){
+                message_bundle *head=pop_bundle();
+                while(head){
+                    assert(0 < head->n && head->n <= MAX_MESSAGES_PER_BUNDLE);
+                    for(unsigned i=0; i<head->n; i++){
+                        cb(head->msgs[i]);
+                    }
+                    auto curr=head;
+                    head=head->next;
+                    bundle_pool.free(curr);
+                }
+            }else{
+                message_list *head=pop_list();
+                while(head){
+                    cb(head->msg);
+                    auto curr=head;
+                    head=head->next;
+                    pool.free(curr);
+                }
             }
         }
     };
 
-    bool try_send(shared_pool<message>::local_pool &pool, device_cluster *cluster, const void *gp, device *dev, int &nonLocalMessagesSent, int &localMessagesSent)
+    bool try_send(shared_pool<message_list>::local_pool &pool, shared_pool<message_bundle>::local_pool &bundle_pool, device_cluster *cluster, const void *gp, device *dev, int &nonLocalMessagesSent, int &localMessagesSent)
     {
 #ifndef NDEBUG
         //fprintf(stderr, "try_send device %s\n", dev->id);
@@ -370,31 +600,35 @@ struct POEMS
 #endif
                 localMessagesSent++;
             }else{
-                message *m=pool.alloc();
-                assert(m);
-                m->next=0;
-                m->p_edge=&edge;
-                memcpy(m->payload, payload_buffer, size);
-                cluster->post_message(m);
+                if(USE_BUNDLES){
+                    cluster->post_message_to_bundle(bundle_pool, edge, payload_buffer, size);
+                }else{
+                    message_list *m=pool.alloc();
+                    assert(m);
+                    m->next=0;
+                    m->msg.p_edge=&edge;
+                    memcpy(&m->msg.payload[0], payload_buffer, size);
+                    cluster->post_message_list(m);
+                }
                 nonLocalMessagesSent++;
             }
         }
         return true;
     }
 
-    bool try_recv(shared_pool<message>::local_pool &pool, device_cluster *cluster, const void *gp, int &nonLocalMessagesReceived)
+    bool try_recv(shared_pool<message_list>::local_pool &pool, shared_pool<message_bundle>::local_pool &bundle_pool, device_cluster *cluster, const void *gp, int &nonLocalMessagesReceived)
     {
         bool anyActive=false;
 
-        cluster->pop_list_and_process(pool, [&](message *m) {
-            const auto *pedge=m->p_edge;
+        cluster->pop_and_process_messages(pool, bundle_pool, [&](message &m) {
+            const auto *pedge=m.p_edge;
             assert(pedge);
             auto *dev=pedge->dest_device;
             assert(pedge->dest_cluster==dev->cluster);
             assert(pedge->dest_cluster==cluster);
             assert(dev->cluster==cluster);
             assert(cluster->devices[dev->offset_in_cluster]==dev);
-            bool active=sprovider_do_recv(nullptr, dev->device_type_index, pedge->pin_index, gp, dev->properties_then_state, pedge->properties_then_state, m->payload);
+            bool active=sprovider_do_recv(nullptr, dev->device_type_index, pedge->pin_index, gp, dev->properties_then_state, pedge->properties_then_state, &m.payload[0]);
             cluster->set_device_active(dev->offset_in_cluster, active); // Any messages mean we need to check rts at some point
             anyActive = anyActive || active;
             nonLocalMessagesReceived++;
@@ -403,7 +637,86 @@ struct POEMS
         return anyActive;
     }
 
+    static void flush_postbox(device_cluster &cluster, PostBox &pb)
+    {
+        cluster.sanity();
 
+        assert( &cluster.postBoxes[0] <= &pb && &pb < &cluster.postBoxes[cluster.postBoxes.size()]  );
+        assert( (cluster.postBoxesReadyHead==0) == (cluster.postBoxesReadyTail==0) );
+        assert(pb.prev_non_full!=0 || cluster.postBoxesReadyHead==&pb);
+        assert(pb.next_non_full!=0 || cluster.postBoxesReadyTail==&pb);
+
+        cluster.numNonLocalFlushes += 1;
+
+        pb.head->msg.p_edge->dest_cluster->push_postbox(pb);
+        assert(pb.count==0);
+        assert(pb.head==0);
+        assert(pb.tail==0);
+        assert( (cluster.postBoxesReadyHead==0) == (cluster.postBoxesReadyTail==0) );
+
+        if(pb.prev_non_full){
+            pb.prev_non_full->next_non_full=pb.next_non_full;
+        }else{
+            assert(cluster.postBoxesReadyHead==&pb);
+            cluster.postBoxesReadyHead=pb.next_non_full;
+        }
+        if(pb.next_non_full){
+            pb.next_non_full->prev_non_full=pb.prev_non_full;
+        }else{
+            assert(cluster.postBoxesReadyTail==&pb);
+            cluster.postBoxesReadyTail=pb.prev_non_full;
+        }
+        assert( (cluster.postBoxesReadyHead==0) == (cluster.postBoxesReadyTail==0) );
+    
+        pb.next_non_full=0;
+        pb.prev_non_full=0;
+
+        cluster.sanity();
+    }
+
+    static void flush_bundle(device_cluster &cluster, message_bundle *slot)
+    {
+        assert(USE_BUNDLES);
+
+        if(slot->prev){
+            slot->prev->next = slot->next;
+        }else{
+            cluster.postBundlesHead = slot->next;
+        }
+        if(slot->next){
+            slot->next->prev = slot->prev;
+        }else{
+            cluster.postBundlesTail = slot->prev;
+        }
+
+        cluster.numNonLocalFlushes += 1;
+
+        assert(slot->n>0);
+        slot->next=0;
+        slot->prev=0;
+
+        unsigned dest_cluster_index=slot->msgs[0].p_edge->dest_cluster_index;
+        assert(slot==cluster.postBundles[dest_cluster_index]);
+        cluster.postBundles[dest_cluster_index] = 0;
+
+        device_cluster *dest_cluster=slot->msgs[0].p_edge->dest_cluster;
+        dest_cluster->push_bundle(slot);
+    }
+
+    bool flush_head(device_cluster &cluster)
+    {
+        sanity();
+
+        if(USE_POSTBOXES && cluster.postBoxesReadyHead){
+            flush_postbox(cluster, *cluster.postBoxesReadyHead);
+            return true;
+        }else if(USE_BUNDLES && cluster.postBundlesHead){
+            flush_bundle(cluster, cluster.postBundlesHead);
+            return true;
+        }else{
+            return false;
+        }
+    }
 
     /*
         A key principle is when processing clusters we always check if there are
@@ -412,7 +725,8 @@ struct POEMS
         we will always find outstanding messages.
      */
     void step_cluster(
-        shared_pool<message>::local_pool &pool,
+        shared_pool<message_list>::local_pool &pool,
+        shared_pool<message_bundle>::local_pool &bundle_pool,
         const void *gp,
         device_cluster &cluster,
         bool throttleSend,
@@ -457,7 +771,7 @@ struct POEMS
         int localMessagesSentAndReceivedDelta=0;
         
         // Receiving might set interior dev->active high
-        bool anyActiveFromReceive=try_recv(pool, &cluster, gp, nonLocalMessagesReceivedDelta);
+        bool anyActiveFromReceive=try_recv(pool, bundle_pool, &cluster, gp, nonLocalMessagesReceivedDelta);
 
         bool anyActive=false;
         if(!throttleSend && (cluster.active || anyActiveFromReceive))
@@ -480,7 +794,7 @@ struct POEMS
                 unsigned i=i_base*64;
                 while(m){
                     if(m&1){
-                        bool active=try_send(pool, &cluster, gp, cluster.devices[i], nonLocalMessagesSentDelta, localMessagesSentAndReceivedDelta);
+                        bool active=try_send(pool, bundle_pool, &cluster, gp, cluster.devices[i], nonLocalMessagesSentDelta, localMessagesSentAndReceivedDelta);
                         anyActive=anyActive or active;
                     }
                     m>>=1;
@@ -492,6 +806,11 @@ struct POEMS
 #ifndef NDEBUG
         cluster.sanity(gp);
 #endif
+
+        if(!anyActive){
+            anyActive=flush_head(cluster);
+        }
+        //while(flush_head(cluster));
 
         cluster.active=anyActive || throttleSend;
 
@@ -544,6 +863,7 @@ struct POEMS
 
     void sanity()
     {
+#ifndef NDEBUG
         std::unordered_set<device_cluster*> clusters(m_clusters.begin(), m_clusters.end());
         assert(clusters.size()==m_clusters.size());
 
@@ -554,6 +874,7 @@ struct POEMS
         for(auto *c : m_clusters){
             c->sanity(m_gp);
         }
+#endif
     }
 
     /* Idle detection.
@@ -615,7 +936,6 @@ struct POEMS
             m_idleDetectionCond.wait(lk);
         }else{
             // We are the final thread.
-            std::cerr<<"Q";
 
             // Have to capture once more, to get the definitive final version
             uint64_t totalNonLocalSent=m_globalNonLocalSends.load();
@@ -696,9 +1016,9 @@ struct POEMS
 
         if(clusterActive){
             // Cancel anyone attempting to idle detect for now. 
-            m_globalInactiveClusters.store(0);
+            m_globalInactiveClusters.store(0, std::memory_order_relaxed);
             // Stop anyone else who is trying. This condition should be unlikely unless we are approaching idle
-            if(m_idleDetectionWaiters.load() > 0){
+            if(m_idleDetectionWaiters.load(std::memory_order_relaxed) > 0){
                 m_idleDetectionCond.notify_all(); // Wake up everyone that went to sleep by mistake
             }
         }else{
@@ -727,7 +1047,8 @@ struct POEMS
 
     void run(unsigned nThreads)
     {
-        shared_pool<message> gpool(sizeof(message)+SPROVIDER_MAX_PAYLOAD_SIZE);
+        shared_pool<message_list> gpool(sizeof(message_list));
+        shared_pool<message_bundle> gbundlepool(sizeof(message_bundle));
 
         std::atomic<bool> quit;
         quit.store(false);
@@ -767,22 +1088,24 @@ struct POEMS
 
                 // This is only an approximation
                 unsigned numEmpty=0;
+                unsigned numFlushes=0;
                 for(const auto &c : m_clusters){
                     const auto &q=c->incoming_queue;
                     numEmpty += ( nullptr != q.load(std::memory_order_relaxed) );
+                    numFlushes += c->numNonLocalFlushes;
                 }
 
                 unsigned long long totalRecvs=(unsigned long long)total_received_messages_approx();
 
                 bool throttleSend = IN_FLIGHT_THROTTLE < ((int64_t)m_globalNonLocalSends.load(std::memory_order_relaxed)-m_globalNonLocalReceives.load(std::memory_order_relaxed));
-                fprintf(stderr, "nlInFlight=%lld, nlRecvs=%llu, allRecvs=%llu, %g MRecv/Sec, inactiveClustes=%llu, allocBytes = %f MBytes, throttle=%d, numWorking=%d/%d\n",
+                fprintf(stderr, "nlInFl=%lld, nlRcvs=%llu, allRecvs=%llu, %g MRecv/Sec, inactive=%d/%d, allocBytes = %f MBytes, throttle=%d, msg/Flush=%f\n",
                      (long long)((int64_t)m_globalNonLocalSends.load(std::memory_order_relaxed)-m_globalNonLocalReceives.load(std::memory_order_relaxed)),
                      (unsigned long long)m_globalNonLocalReceives.load(std::memory_order_relaxed),
                      totalRecvs, (totalRecvs/(t1-t0))/1000000.0,
-                    (unsigned long long)m_globalInactiveClusters.load(std::memory_order_relaxed),
+                    (int)m_globalInactiveClusters.load(std::memory_order_relaxed), (int)m_clusters.size(),
                     gpool.get_alloced_bytes()/(1024.0*1024.0),
                     throttleSend,
-                    numEmpty, (int)m_clusters.size()
+                    m_globalNonLocalSends.load(std::memory_order_relaxed) / (double)numFlushes
                 );
 
                 delay=std::min<unsigned>(delay*1.5, 60000);
@@ -791,6 +1114,7 @@ struct POEMS
 
         if(nThreads==1){
             auto lpool=gpool.create_local_pool();
+            auto lbundlepool=gbundlepool.create_local_pool();
             while(!quit.load(std::memory_order_relaxed)){
                 device_cluster *cluster=0;
                 if(!m_cluster_queue.try_pop(cluster)){
@@ -799,7 +1123,7 @@ struct POEMS
                 }
                 unsigned sent=0, received=0;
                 bool throttleSend = IN_FLIGHT_THROTTLE < ((int64_t)m_globalNonLocalSends.load(std::memory_order_relaxed)-m_globalNonLocalReceives.load(std::memory_order_relaxed));
-                step_cluster(lpool, m_gp, *cluster, throttleSend, sent, received);
+                step_cluster(lpool, lbundlepool, m_gp, *cluster, throttleSend, sent, received);
                 bool active=cluster->active;
                 m_cluster_queue.push(cluster);
                 check_for_idle(nThreads, active, sent, received);
@@ -824,6 +1148,7 @@ struct POEMS
             for(unsigned i=0; i<nThreads; i++){
                 threads.emplace_back( std::thread([&](){
                     auto lpool=gpool.create_local_pool();
+                    auto lbundlepool=gbundlepool.create_local_pool();
 
                     while(!quit.load(std::memory_order_relaxed)){
                         device_cluster *cluster=0;
@@ -834,7 +1159,7 @@ struct POEMS
                         std::atomic_thread_fence(std::memory_order_seq_cst);
                         unsigned sent=0, received=0;
                         bool throttleSend = IN_FLIGHT_THROTTLE < ((int64_t)m_globalNonLocalSends.load(std::memory_order_relaxed)-m_globalNonLocalReceives.load(std::memory_order_relaxed));
-                        step_cluster(lpool, m_gp, *cluster, throttleSend, sent, received);
+                        step_cluster(lpool, lbundlepool, m_gp, *cluster, throttleSend, sent, received);
                         std::atomic_thread_fence(std::memory_order_seq_cst);
                         bool active=cluster->active;
                         m_cluster_queue.push(cluster);
@@ -1203,6 +1528,12 @@ void assign_clusters_metis(std::vector<device*> &devices, std::vector<device_clu
       m_target.m_clusters.reserve(nClusters);
       for(unsigned i=0; i<nClusters; i++){
           m_target.m_clusters.push_back(new device_cluster(i));
+          if(POEMS::USE_POSTBOXES){
+            m_target.m_clusters.back()->postBoxes.resize( nClusters );
+          }
+          if(POEMS::USE_BUNDLES){
+            m_target.m_clusters.back()->postBundles.resize( nClusters, 0 );
+          }
       }
 
       if(m_target.use_metis && nClusters>1){

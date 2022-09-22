@@ -119,6 +119,7 @@
           <Scalar name="fineSeen" type="int32_t"/>
           <Scalar name="fineAcc" type="float"/>
           <Scalar name="fineMaxResidual" type="float"/>
+          <Scalar name="steps" type="int32_t" />
         </State>
         <InputPin name="fine_up" messageTypeId="fine_to_coarse">
           <Properties>
@@ -143,9 +144,13 @@
             handler_log(3, "msg.maxMaxResidual=%g", deviceState->fineMaxResidual);
             assert(message->max_r>=0);
 
+            handler_log(1, "steps=%d, msg.maxMaxResidual=%g", deviceState->steps, deviceState->fineMaxResidual);
+
             deviceState->fineSeen=0;
             deviceState->fineAcc=0;
             deviceState->fineMaxResidual=0;
+            deviceState->steps += 1;
+
             ]]></OnSend>
         </OutputPin>
         <ReadyToSend><![CDATA[

@@ -94,6 +94,8 @@ CPPFLAGS+=" -I ~/local/include"
 CPPFLAGS+=" ${LIBXML_PKG_CONFIG_CPPFLAGS}"
 CPPFLAGS+=" -Wno-unused-local-typedefs"
 CPPFLAGS+=" -Wno-unused-function"
+# This is needed due to use of std::auto_ptr in libxml++
+CPPFLAGS+=" -Wno-deprecated-declarations"
 CPPFLAGS+=" -I ${graph_schema_dir}/include"
 CPPFLAGS+=" -I ${graph_schema_dir}/external/robin_hood"
 CPPFLAGS+=" -I ${sprovider_dir}"
@@ -108,7 +110,8 @@ if [[ $asserts -eq 0 ]] ; then
     CPPFLAGS+=" -DNDEBUG=1"
 fi
 if [[ $sanitizers -eq 1 ]] ; then
-    CPPFLAGS+=" -fsanitize=thread -fsanitize=undefined"
+    #CPPFLAGS+=" -fsanitize=thread -fsanitize=undefined"
+    CPPFLAGS+=" -fsanitize=address -fsanitize=undefined"
 fi
 
 if [[ "${POETS_EXTERNAL_INTERFACE_SPEC}" == "" ]] ; then
