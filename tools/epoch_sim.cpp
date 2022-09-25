@@ -587,6 +587,15 @@ struct EpochSim
       m_deviceExitCalled=true;
       m_deviceExitCode=code;
       fprintf(stderr, "  device '%s' called application_exit(%d)\n", id, code);
+      if(m_supervisor){
+        auto newOnStop = [](const char *iid, int ccode)
+        {
+          fprintf(stderr, "Error: Supervisor called stop_application within onStop\n");
+          exit(1);
+        };
+        ReceiveOrchestratorServicesImpl stopServices{logLevel, stderr, "__supervisor__", "onStep", newOnStop  };
+        m_supervisor->onStop(&stopServices, m_graphProperties.get());
+      }
     };
 
     if(m_supervisor){

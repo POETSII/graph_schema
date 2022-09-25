@@ -1,11 +1,5 @@
 # These are helper functions used when running bats tests.
 
-# This might be augmented in the future to work properly
-# if we do parallel builds
-make_target () {
-    make $1
-}
-
 function get_graph_schema_dir {
     local this_path=${BASH_SOURCE[0]}
     local graph_schema_dir="$(realpath $(dirname ${this_path})/..)"
@@ -13,6 +7,31 @@ function get_graph_schema_dir {
         exit 1;
     fi
     echo $graph_schema_dir
+}
+
+# This should be used from within bats test setups if you want
+# to ensure anything is built.
+# In principle this allows safe building of targets, as it only
+# allows one root instance of make at a time, even as parallel
+# tests continue
+make_target () {
+    local gsd=$(get_graph_schema_dir)
+    local lock_file=${gsd}/testing/make_lock
+    # Use a timeout of 1 minute. Nothing built within
+    # tests should take this long, as either;
+    # - We are in a full "make test", which does the full (slow) build up-front;
+    # - We are building something small within a test, which should be fast.
+    # - The makefile is running a make target as a test-case, which should be taking less than 1 minute even on a laptop
+    flock --timeout 60 ${lock_file} make -j4 $*
+}
+
+run_make_target_as_test () {
+    local gsd=$(get_graph_schema_dir)
+    local lock_file=${gsd}/testing/make_lock
+    # There should be exactly one target to make
+    (cd ${gsd} && flock --timeout 60 ${lock_file} make -j4 $1)
+    RES=$?
+    return $RES
 }
 
 # Sets up the providers path in case we change directory

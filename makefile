@@ -361,6 +361,16 @@ test :
 	@>&2 echo "# Running bats"
 	@bats  -t -r .
 
+test_parallel :
+	@>&2 echo "# Cleaning directory"
+	@make clean 2> /dev/null > /dev/null
+	@>&2 echo "# Building tools"
+	@make -j 4 -k all_tools 2>/dev/null > /dev/null
+	@>&2 echo "# Building providers"
+	@make -j 4 -k all_providers 2>/dev/null > /dev/null
+	@>&2 echo "# Running bats"
+	@bats -j 4 -t -r .
+
 softswitch : $(ALL_SOFTSWITCH)
 	echo $(ALL_SOFTSWITCH)
 

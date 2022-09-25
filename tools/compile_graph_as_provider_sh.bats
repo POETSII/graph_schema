@@ -37,8 +37,6 @@ load bats_helpers
     WD=$(make_test_wd)
     GS=$(get_graph_schema_dir)
     cp apps/ising_spin/ising_spin_8x8.xml $WD
-    run "( POETS_PROVIDER_PATH=$WD  cd $WD && ${GS}/bin/epoch_sim ising_spin_8x8.xml )"
-    [ $status -ne 0 ]
     (cd $WD && ${GS}/tools/compile_graph_as_provider.sh ising_spin_8x8.xml)
     ( POETS_PROVIDER_PATH=$WD  cd $WD && ${GS}/bin/epoch_sim ising_spin_8x8.xml)
 }

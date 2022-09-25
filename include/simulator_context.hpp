@@ -640,7 +640,7 @@ private:
         virtual void log(unsigned level, const char *msg)
         {
             if(level<engine->m_logLevel){
-                fprintf(stderr, "%s : %s\n", ((const std::string &)device->name).c_str());
+                fprintf(stderr, "%s : %s\n", ((const std::string &)device->name).c_str(), msg);
             }
             check_for_exit(msg);
         }
@@ -670,7 +670,7 @@ private:
         {
             if(level < engine->m_logLevel){
                 device_t *device=&engine->m_devices.at(edge->route.destDeviceAddress);
-                fprintf(stderr, "%s : %s\n", ((const std::string &)device->name).c_str());
+                fprintf(stderr, "%s : %s\n", ((const std::string &)device->name).c_str(), msg);
             }
             check_for_exit(msg);
         }
@@ -749,6 +749,10 @@ public:
             rapidjson::Document &&metadata
     ) override
     {
+        if(graph->getSupervisorTypeCount() > 0){
+            throw std::runtime_error("graph_sim does not currently support supervisors types. Use epoch_sim.");
+        }
+
         m_graphProperties=properties;
         return 1;
     }

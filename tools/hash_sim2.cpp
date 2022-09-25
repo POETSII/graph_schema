@@ -101,6 +101,10 @@ private:
     const TypedDataPtr &properties,
     rapidjson::Document &&metadata
   ) override {
+    if(graph->getSupervisorTypeCount()>0){
+      throw std::runtime_error("This graphtype contains a supervisor type, and so can't be model checked.");
+    }
+
     m_graph_properties=properties;
     return 0;
   }

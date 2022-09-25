@@ -534,6 +534,10 @@ def render_graph_type_handlers_as_sprovider(gt:GraphType, options:RenderOptions)
 
 
 def render_graph_type_as_sprovider(gt:GraphType, options:RenderOptions):
+    if(len(gt.supervisor_types)>0):
+        raise RuntimeError("POEMS cannot currently handle graphs with supervisors")
+        
+
     dst=options.dst
 
     dst.write(f"""

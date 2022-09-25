@@ -26,19 +26,35 @@ unless `make test` works.
 Current TODO list
 -----------------
 
+- Add supervisors to queue_sim
+- Add supervisors to POEMS
+- Add supervisors to graph_sim
 - Add externals to graph_sim
 - Correctly hook up __halt__ if it is present (then deprecate fake_handler_exit)
 
 Current BUG list
 ----------------
 
+Version 4.4 features
+--------------------
+
+* Python XML parsers have been made less strict, to support the Orchestrator's dialect of XML v4.
+   * Elements are made optional again: DeviceType::SharedCode, DeviceType::OnInit, DeviceType::OnHardwareIdle, DeviceType::OnDeviceIdle, DeviceType::Properties, DeviceType::InputPin::Properties, DeviceType::InputPin::State
+* Special case code added to allow OnInit to return a value to match Orchestrator dialect
+   * Note that the returned value is ignored, as ReadyToSend is treated as a pure function
+* C++ XML parsers have been made less strict, to support orchestrator dialect
+   * Elements are made optional again: DeviceType::SharedCode, DeviceType::OnInit, DeviceType::OnHardwareIdle, DeviceType::OnDeviceIdle
+* Testing has been optimised a bit to allow for parallel testing `make test_parallel`, as it was all getting too slow
+
 Version 4.3 features
+--------------------
 
 * epoch_sim supports externals and halt
 * epoch_sim can now do out of order messages, so can find more bugs
 * New high-density base85 coding for graphs (works, but experimental)
 * New tools for comparing topologies: `bin/topologically_compare_graph_instances` and `bin/topologically_diff_graph_instances`
 * Better support for v4 xml in C++ producers and consumers, with more uniform API
+* Batching of non-local messages in POEMS, resulting in 2-3x speed-up on a laptop
 
 Version 4.2 features
 --------------------
@@ -94,6 +110,12 @@ new version of the schema. Information on it's usage is included
 Requirements
 ============
 
+Vagrant
+-------
+
+_Note: you do not have to use vagrant. If you have an existing linux install or virtual machine_
+_you may be able to use that - see Manual Installation below._
+
 The recommended way of setting things up (especially under windows) is by
 using [vagrant](https://www.vagrantup.com/) in order to get a virtual machine
 that is configured with all the libraries. The file [Vagrantfile](Vagrantfile)
@@ -112,8 +134,19 @@ cd /vagrant   # Get into the repository
 make test     # Run the built-in self tests
 ````
 
+Manual installation
+-------------------
+
+The packages needed for ubuntu 18.04 are given in the provisioning
+script `provision_ubuntu18.sh`.
+
+This is currently believed to work in both Ubuntu 18 and 20.
+
 pypy
 ----
+
+_Note: this is completely optional. It only matters if you are working with very_
+_large graphs (e.g. millions of devices)._
 
 The python tools should all work under [pypy](https://pypy.org/), which is a JIT compiling
 version of python. Many of the graph_schema tools get a decent speed boost of around 2-3x,
@@ -156,14 +189,6 @@ $
 
 It's not a big deal if it doesn't work, as everything still works in standard python (i.e. cpython).
 
-Manual installation
--------------------
-
-The packages needed for ubuntu 18.04 are given in the provisioning
-script `provision_ubuntu18.sh`.
-
-Not officially tested on non Ubuntu 16 platforms, but it has worked
-in the past in both Cygwin and Linux.
 
 Schema
 ======
@@ -341,46 +366,62 @@ can occur with repeatability and floating-point are:
   are faithfully rounded (i.e. correct to 1-ulp) they are very likely to provide
   different roundings to software libraries.
 
+Providers
+=========
+
+There are a number of simulators included in graph_schema, all of which need to be able
+execute the C/C++ handlers specified in graph types. That means that at some time the
+graph types must be compiled by a C++ compiler to produce binary code, which is
+relatively fast (e.g. 10s of seconds), but may be much slower than the time taken
+to simulate a graph (e.g. when simulating 100s of small files during testing). The
+approach taken in graph_schema is to compile the graph type into a "provider",
+which is a shared-library that can be loaded by simulators. These usually have
+the extension `.graph.so`.
+
+Each provider exports a function "registerGraphTypes", so a simulator can `dlopen`
+a provider file, call `registerGraphTypes`, and the provider will register all
+of the graph types it knows how to support. The simulator can then create
+instances of `GraphType` (from `include/graph_core.hpp`) from a provider, which
+provides:
+- Structural information about all the MessageTypes and DeviceTypes that exist
+- The ability to work with (create,parse,read,write) instances of messages/state/properties.
+  This is done through `typed_data_t`, which provides a type-erased interface so that
+  simulators don't need to be compiled.
+- Hooks into (type-erased) handlers allowing simulators to call code (for example, see
+  `DeviceType::calcReadyToSend` (`include/graph_core.hpp`)).
+
+If a tool or simulator cannot find a compiled provider it will create a
+non executable provider using just the topological information in the
+GraphType of the source file. This allows tools/simulators to do everything _except_
+call handlers, so they can read and write graph instances, but won't be
+able to run them.
+
+If you see a message complaining that something was "not loaded from compiled provider",
+it means that a compiled provider for that graph was not found. Most tools will
+actually print the set of providers they are finding at start-up, and you'll probably
+find your graph is not on that list. The default search path is:
+- The current directory (non-recursive)
+- The current directory + "/providers" (recursive)
+If you want a different directory you can set the `POETS_PROVIDER_PATH` environment
+variable to override the search path.
+
+To compile a provider, use the tool `tools/compile_graph_as_provider.sh` (see
+below).
+
 Tools
 =====
 
-### tools/convert_v2_graph_to_v3.py
+Graph simulation
+----------------
 
-Takes an XML graph type or graph instance which is written using version 2.*
-of the schema, and converts this to version 3 of the schema. This converts
-any `__init__` input pins to `<OnInit>` handlers, and removes any application
-pin attributes.
+### tools/compile_graph_as_provider.sh
 
-Usage:
-```
-python tools/convert_v2_graph_to_v3.py <path-to-v2-XML> >> <path-to-new-XML-file>
-```
+This takes an input xml file containing a graph type, and compiles
+it into a "provider" (see earlier discussion on providers). By
+default it will produce a provider called `<graph_type_name>.graph.so`
+in the current directory.
 
-If no path to a new XML file is provided, the XML will be printed to the
-screen.
-
-### tools/convert_v3_graph_to_v4.py
-
-Takes an XML graph type or graph instance which is written using version 3
-of the schema, and converts this to version 4 of the schema. It attempts to
-preserve semantics, but currently documentation and meta-data are lost.
-
-Usage:
-```
-python tools/convert_v3_graph_to_v4.py <path-to-v3-XML> > <path-to-new-XML-file>
-```
-
-### tools/convert_v3_graph_to_v4.py
-
-Takes an XML graph type or graph instance which is written using version 4
-of the schema, and converts this to version 3 of the schema. It should
-convert all features of v4 correctly (correct as of the very first v4 spec).
-
-Usage:
-```
-python tools/convert_43_graph_to_v3.py <path-to-v4-XML> > <path-to-new-XML-file>
-```
-
+Use `--help` to see all available options.
 
 ### bin/epoch_sim
 
@@ -412,7 +453,7 @@ bin/epoch_sim apps/ising_spin/ising_spin_16x16.xml
 Environment variables:
 
 - `POETS_PROVIDER_PATH` : Root directory in which to search for providers matching `*.graph.so`. Default
-  is the current working directory.
+  is the current working directory and `providers` sub-dir.
 
 Parameters:
 
@@ -437,6 +478,7 @@ Parameters:
     exists due to the simulation going idle (i.e. no-one wants to send). Use this
     flag to indicate that this is the expected behaviour, and should not be treated
     as an error.
+
 
 ### bin/graph_sim
 
@@ -509,6 +551,9 @@ Limitations:
 
 - Currently graph_sim does not support externals of any type.
 
+
+Graph rendering and analysis
+----------------------------
 
 ### tools/render_graph_as_dot.py
 
@@ -687,6 +732,9 @@ print out a diff which highlights where the actually changes are.
 This is similar to `bin/topologically_compare_graph_instances`, but the
 ability to also print diffs means it might be slower for large graphs.
 
+Graph manipulation and conversion
+---------------------------------
+
 ### tools/preprocess_graph_type.py
 
 Some apps and graphs within graph_schema use pre-processing to embed
@@ -747,7 +795,45 @@ Note that this feature is not currently recursive, so if there is a `#include`
 in the file being embedded it won't get expanded.
 
 
-### tools/poems
+### tools/convert_v2_graph_to_v3.py
+
+Takes an XML graph type or graph instance which is written using version 2.*
+of the schema, and converts this to version 3 of the schema. This converts
+any `__init__` input pins to `<OnInit>` handlers, and removes any application
+pin attributes.
+
+Usage:
+```
+python tools/convert_v2_graph_to_v3.py <path-to-v2-XML> >> <path-to-new-XML-file>
+```
+
+If no path to a new XML file is provided, the XML will be printed to the
+screen.
+
+### tools/convert_v3_graph_to_v4.py
+
+Takes an XML graph type or graph instance which is written using version 3
+of the schema, and converts this to version 4 of the schema. It attempts to
+preserve semantics, but currently documentation and meta-data are lost.
+
+Usage:
+```
+python tools/convert_v3_graph_to_v4.py <path-to-v3-XML> > <path-to-new-XML-file>
+```
+
+### tools/convert_v3_graph_to_v4.py
+
+Takes an XML graph type or graph instance which is written using version 4
+of the schema, and converts this to version 3 of the schema. It should
+convert all features of v4 correctly (correct as of the very first v4 spec).
+
+Usage:
+```
+python tools/convert_43_graph_to_v3.py <path-to-v4-XML> > <path-to-new-XML-file>
+```
+
+tools/poems
+-----------
 
 POEMS is a tool which is supposed to exectute a graph instance as fast
 as possible across multiple cores. POEMS is a more advanced simulator
@@ -772,7 +858,7 @@ tools/poems/compile_poems_sim.sh apps/ising_spin/ising_spin_8x8.xml
 ./poems_sim apps/ising_spin/ising_spin_8x8.xml
 ```
 
-#### Simulation approach
+### Simulation approach
 
 POEMS is designed to scale across multiple threads of execution, and should have reasonably
 good weak scaling up to 64 or so cores - certainly on 8 cores you'll see a big benefit as
@@ -844,7 +930,7 @@ platform. Optimisations include:
   activity.
 
 
-#### Compiler options
+### Compiler options
 
 When compiling the poems simulator you can pass a number of options to control output
 and optimisation level:
@@ -856,7 +942,7 @@ and optimisation level:
   - `--release-with-asserts` : Attempt to create fastest possible executable, but keep run-time checks.
   - `--debug` : Debuggable executable with all run-time checks.
 
-#### Run-time options
+### Run-time options
 
 When you invoke the simulate you get a number of options to control how it executes:
 
@@ -879,9 +965,9 @@ When you invoke the simulate you get a number of options to control how it execu
   However, some wierd applications may be doing a lot of compute in the idle handler which means there are long gaps,
   so for those applications you'll need to increase this number.
 
-###
 
-## Suggestions on how to write and debug an application/graph
+Suggestions on how to write and debug an application/graph
+==========================================================
 
 Many of the tools and features in graph_schema are intended to
 make the development and debugging of graphs easier, as getting
@@ -897,7 +983,8 @@ a graph is correct by running it under many different execution
 patterns to look for failures. If we can the replay those
 failures it is possible to understand and debug them.
 
-### General approach for writing a graph
+General approach for writing a graph
+----------------------------------------
 
 While each application is different, a general flow for getting
 an application functionally correct is:
@@ -978,7 +1065,8 @@ an application functionally correct is:
 10 - Move to hardware! There is still a good chance it won't work it
      hardware, but at least any errors will be obscure and hard to find.
 
-### Debugging applications
+Debugging applications
+----------------------
 
 You have three main tools in your debugging tool-box:
 

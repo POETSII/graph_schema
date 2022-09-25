@@ -1142,7 +1142,7 @@ private:
 
   std::string m_soExtension;
 
-  void recurseLoad(std::string path)
+  void recurseLoad(std::string path, bool noRecurse=false)
   {
 
     std::shared_ptr<DIR> hDir(opendir(path.c_str()), closedir);
@@ -1150,38 +1150,38 @@ private:
       fprintf(stderr, "Warning: Couldn't open provider='%s'\n", path.c_str());
     }else{
 
-	struct dirent *de=0;
+      struct dirent *de=0;
 
-	while( (de=readdir(hDir.get())) ){
-	  std::string part=de->d_name;
-	  std::string fullPath=path+"/"+part;
+      while( (de=readdir(hDir.get())) ){
+        std::string part=de->d_name;
+        std::string fullPath=path+"/"+part;
 
-	  //fprintf(stderr, "%s\n", fullPath.c_str());
+        //fprintf(stderr, "%s\n", fullPath.c_str());
 
-	  if(m_soExtension.size() < part.size()){
-	    if(m_soExtension == part.substr(part.size()-m_soExtension.size())){
+        if(m_soExtension.size() < part.size()){
+          if(m_soExtension == part.substr(part.size()-m_soExtension.size())){
 
-	      loadProvider(fullPath);
-	      continue;
-	    }
-	  }
+            loadProvider(fullPath);
+            continue;
+          }
+        }
 
-	  if(part=="." || part=="..")
-	    continue;
+        if(part=="." || part=="..")
+          continue;
 
-	  if(part.size() >= 5){
-	    if(part.substr(part.size()-5)==".dSYM")
-	      continue;
-	  }
+        if(part.size() >= 5){
+          if(part.substr(part.size()-5)==".dSYM")
+            continue;
+        }
 
-	  struct stat ss;
-	  if(0!=stat(fullPath.c_str(), &ss))
-	    continue;
+        struct stat ss;
+        if(0!=stat(fullPath.c_str(), &ss))
+          continue;
 
-	  if(S_ISDIR(ss.st_mode)){
-	    recurseLoad(fullPath);
-	  }
-	}
+        if(!noRecurse && S_ISDIR(ss.st_mode)){
+          recurseLoad(fullPath);
+        }
+      }
     }
   }
 public:
@@ -1195,19 +1195,22 @@ public:
       }else{
         std::shared_ptr<char> cwd;
         cwd.reset(getcwd(0,0), free);
-          recurseLoad(cwd.get()+std::string("/providers"));
+        // Linear scan of cwd
+        recurseLoad(cwd.get(), true);
+        // Recursive scan of providers
+        recurseLoad(cwd.get()+std::string("/providers"));
       }
     }
   }
 
   void loadProvider(const std::string &path)
   {
-    fprintf(stderr, "Loading provider '%s'\n", path.c_str());
+    fprintf(stderr, "Loading provider from '%s'\n", path.c_str());
     void *lib=dlopen(path.c_str(), RTLD_NOW|RTLD_LOCAL);
     if(lib==0)
       throw std::runtime_error("Couldn't load provider '"+path+" + '"+dlerror()+"'");
 
-    // Mangled name of the export. TODO : A bit fragile.
+    // Mangled name of the export.
     void *entry=dlsym(lib, "registerGraphTypes");
     if(entry==0)
       throw std::runtime_error("Couldn't find registerGraphTypes entry point.");

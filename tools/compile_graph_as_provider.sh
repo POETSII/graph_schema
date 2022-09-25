@@ -13,6 +13,20 @@ function error {
     exit 1
 }
 
+function print_usage()
+{
+    >&2 echo "tools/compile_graph_as_provider.sh [options] input_file"
+    >&2 echo "  input_file : The xml file containing a graph type. Read twice, so must be a real file (not stream)."
+    >&2 echo "  -o filename : Specify filename of output provider. By default it is graph_type_name.graph.so in current directory"
+    >&2 echo "  --output-dir directory : Specifies where the output provider and any working files should go"
+    >&2 echo "  --working-dir directory : Override where to put temporaries. Default is to create using mktemp -d"
+    >&2 echo "  --I directory : Add extra include directories to use while compiling C++"
+    >&2 echo "  --release : Create fastest possible provider (default optimises for debuggability)"
+    >&2 echo "  --I directory : Add extra include directories to use while compiling C++"
+    >&2 echo ""
+    >&2 echo "  Note: -o and --output-dir are mutually exclusive"
+    exit 1   
+}
 
 
 while [[ $# -gt 0 ]] ; do    
@@ -49,6 +63,9 @@ while [[ $# -gt 0 ]] ; do
     -std=c++17)
         CPPFLAGS="$CPPFLAGS  -std=c++17"
         shift
+        ;;
+    --help)
+        print_usage
         ;;
     *)
         [[ "$input_file" == "" ]] || error "More than one input file"

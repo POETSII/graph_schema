@@ -1,5 +1,5 @@
 define apps_tests_supervisor_template
-# $1 base name of text 
+# $1 base name of test 
 
 $(eval $(call provider_rules_template,$1,apps/tests/supervisors/$1_graph_type.xml))
 
@@ -9,6 +9,9 @@ endef
 
 ALL_SUPERVISOR_TEST_GRAPH_TYPES_XML := $(wildcard apps/tests/supervisors/*_graph_type.xml)
 ALL_SUPERVISOR_TEST_GRAPH_TYPES := $(patsubst apps/tests/supervisors/%_graph_type.xml,%,$(ALL_SUPERVISOR_TEST_GRAPH_TYPES_XML))
+
+$(eval $(call provider_rules_template,orchestrator_examples_ring_test,apps/tests/supervisors/instances/orchestrator_examples_ring_test.xml))
+$(eval $(call provider_rules_template,orchestrator_examples_test_ping_pong_timer,apps/tests/supervisors/instances/orchestrator_examples_test_ping_pong_timer.xml))
 
 $(foreach x,$(ALL_SUPERVISOR_TEST_GRAPH_TYPES),$(eval $(call apps_tests_supervisor_template,$x)))
 
@@ -48,7 +51,7 @@ $(eval $(call apps_tests_supervisor_instance_template,test_supervisor_Ndev_to_su
 $(eval $(call apps_tests_supervisor_instance_template,test_supervisor_Ndev_to_sup_relay_bcast,n10_r10,python3 apps/tests/supervisors/test_supervisor_Ndev_to_sup_relay_bcast_generator.py 10 10))
 $(eval $(call apps_tests_supervisor_instance_template,test_supervisor_Ndev_to_sup_relay_bcast,n10000_r2,python3 apps/tests/supervisors/test_supervisor_Ndev_to_sup_relay_bcast_generator.py 10000 2))
 $(eval $(call apps_tests_supervisor_instance_template,test_supervisor_Ndev_to_sup_relay_bcast,n1000_r10,python3 apps/tests/supervisors/test_supervisor_Ndev_to_sup_relay_bcast_generator.py 1000 10))
-$(eval $(call apps_tests_supervisor_instance_template,test_supervisor_Ndev_to_sup_relay_bcast,n100_r1000,python3 apps/tests/supervisors/test_supervisor_Ndrev_to_sup_relay_bcast_generator.py 100 1000))
+$(eval $(call apps_tests_supervisor_instance_template,test_supervisor_Ndev_to_sup_relay_bcast,n100_r1000,python3 apps/tests/supervisors/test_supervisor_Ndev_to_sup_relay_bcast_generator.py 100 1000))
 
 $(eval $(call apps_tests_supervisor_instance_template,test_supervisor_Ndev_to_sup_relay_bcast,n10_r10_flood,python3 apps/tests/supervisors/test_supervisor_Ndev_to_sup_relay_bcast_generator.py 10 10 10))
 $(eval $(call apps_tests_supervisor_instance_template,test_supervisor_Ndev_to_sup_relay_bcast,n1000_r10_flood,python3 apps/tests/supervisors/test_supervisor_Ndev_to_sup_relay_bcast_generator.py 1000 10 1000))

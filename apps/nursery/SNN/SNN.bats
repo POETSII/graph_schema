@@ -7,12 +7,12 @@ load ../../../tools/bats_helpers
 
 function setup_file
 {
-    >&3 echo "# SNN setup_file begin."
-    >&3 echo "# Cleaning SNN"
+    #>&3 echo "# SNN setup_file begin."
+    #>&3 echo "# Cleaning SNN"
     ( cd $BATS_TEST_DIRNAME && make clean )
-    >&3 echo "# Building SNN"
+    #>&3 echo "# Building SNN"
     ( cd $BATS_TEST_DIRNAME && make RELEASE_WITH_ASSERTS=-O3 -j all_generators all_programs all_tests )
-    >&3 echo "# SNN setup_file done."
+    #>&3 echo "# SNN setup_file done."
 }
 
 @test "test_source_sink_inmem." {

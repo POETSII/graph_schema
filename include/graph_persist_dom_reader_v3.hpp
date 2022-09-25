@@ -158,8 +158,9 @@ public:
 
   virtual void onReceive(OrchestratorServices*, const typed_data_t*, const typed_data_t*, typed_data_t*, const typed_data_t*, typed_data_t*, const typed_data_t*) const override
   {
-    throw std::runtime_error("onReceive - input pin not loaded from provider, so functionality not available.");
-  }
+    throw std::runtime_error("onReceive - input pin not loaded from compiled provider, so functionality not available.\n"
+   "Ensure you have a compiled provider <appname>.graph.so. Use POETS_PROVIDER_PATH env var to point to a specific directory.");
+   }
 };
 
 class OutputPinDynamic
@@ -180,7 +181,8 @@ public:
 
   virtual void onSend(OrchestratorServices*, const typed_data_t*, const typed_data_t*, typed_data_t*, typed_data_t*, bool*, unsigned *) const override
   {
-    throw std::runtime_error("onSend - output pin not loaded from provider, so functionality not available.");
+    throw std::runtime_error("onSend - output pin not loaded from compiled provider, so functionality not available.\n"
+   "Ensure you have a compiled provider <appname>.graph.so. Use POETS_PROVIDER_PATH env var to point to a specific directory.");
   }
 };
 
@@ -199,17 +201,20 @@ public:
 
   virtual void init(OrchestratorServices*, const typed_data_t*, const typed_data_t*, typed_data_t*) const override
   {
-    throw std::runtime_error("init - input pin not loaded from provider, so functionality not available.");
+    throw std::runtime_error("init - input pin not loaded from compiled provider, so functionality not available.\n"
+   "Ensure you have a compiled provider <appname>.graph.so. Use POETS_PROVIDER_PATH env var to point to a specific directory.");
   }
 
   virtual uint32_t calcReadyToSend(OrchestratorServices*, const typed_data_t*, const typed_data_t*, const typed_data_t*) const override
   {
-    throw std::runtime_error("calcReadyToSend - input pin not loaded from provider, so functionality not available.");
+    throw std::runtime_error("calcReadyToSend - input pin not loaded from compiled provider, so functionality not available.\n"
+   "Ensure you have a compiled provider <appname>.graph.so. Use POETS_PROVIDER_PATH env var to point to a specific directory.");
   }
 
   virtual void onHardwareIdle(OrchestratorServices*, const typed_data_t*, const typed_data_t*, typed_data_t*) const override
   {
-    throw std::runtime_error("onHardwareIdle - input pin not loaded from provider, so functionality not available.");
+    throw std::runtime_error("onHardwareIdle - input pin not loaded from compiled provider, so functionality not available.\n"
+   "Ensure you have a compiled provider <appname>.graph.so. Use POETS_PROVIDER_PATH env var to point to a specific directory.");
   }
 };
 

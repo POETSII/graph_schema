@@ -41,7 +41,7 @@ How it works:
    stops the application.
 -->
 <Graphs xmlns="https://poets-project.org/schemas/virtual-graph-schema-v4" appname="orchestrator_examples_ping_pong_timer">
-  <GraphType id="ping_pong_timer_type">
+  <GraphType id="orchestrator_examples_ping_pong_timer_type">
     <Properties><![CDATA[
 uint32_t bounces ;
     ]]></Properties>
@@ -136,6 +136,7 @@ else
           << " milliseconds." << std::endl;
     oFile.close();
     Super::stop_application();
+    std::cerr<<"Stop\n";
 }
           ]]></OnReceive>
         </SupervisorInPin>
@@ -143,8 +144,8 @@ else
     </DeviceTypes>
   </GraphType>
   <GraphInstance id="ping_pong_timer_instance"
-                 graphTypeId="ping_pong_timer_type"
-                 P="{1000000}">
+                 graphTypeId="orchestrator_examples_ping_pong_timer_type"
+                 P="{1000}">
     <DeviceInstances>
       <DevI id="N0" type="pinger" P="{1}"/>  <!-- Originator -->
       <DevI id="N1" type="pinger"/>

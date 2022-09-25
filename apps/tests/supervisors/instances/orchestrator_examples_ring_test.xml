@@ -22,7 +22,7 @@ packet has completed ten laps. If an inappropriate packet is received, the
 supervisor device writes "0", and ignores all new packets.
 -->
 <Graphs xmlns="https://poets-project.org/schemas/virtual-graph-schema-v4" appname="ring_test">
-  <GraphType id="ring_test_type">
+  <GraphType id="orchestrator_examples_ring_test_type">
     <Properties><![CDATA[
 uint8_t numDevices;   /* Defined in the graph instance section, used by the
                        * supervisor */
@@ -217,7 +217,7 @@ fclose(SUPSTATE(resultFile));
       </SupervisorType>
     </DeviceTypes>
   </GraphType>
-  <GraphInstance id="ring_test_instance" graphTypeId="ring_test_type" P="{5,9}">
+  <GraphInstance id="ring_test_instance" graphTypeId="orchestrator_examples_ring_test_type" P="{5,9}">
     <DeviceInstances>
       <DevI id="0" type="ring_element" P="{0}"/>
       <DevI id="1" type="ring_element" P="{1}"/>
