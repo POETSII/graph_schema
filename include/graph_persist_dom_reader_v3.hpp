@@ -574,7 +574,7 @@ inline GraphTypePtr loadGraphType(const filepath &srcPath, xmlpp::Element *paren
   xmlpp::Node::PrefixNsMap ns;
   ns["g"]="https://poets-project.org/schemas/virtual-graph-schema-v3";
 
-  std::cerr<<"parent = "<<parent<<"\n";
+  //std::cerr<<"parent = "<<parent<<"\n";
   for(auto *nGraphType : parent->find("./*")){
     std::cerr<<"  "<<nGraphType->get_name()<<"\n";
   }
@@ -597,7 +597,7 @@ inline GraphTypePtr loadGraphType(const filepath &srcPath, xmlpp::Element *paren
   xmlpp::Node::PrefixNsMap ns;
   ns["g"]="https://poets-project.org/schemas/virtual-graph-schema-v3";
 
-  std::cerr<<"parent = "<<parent<<"\n";
+  //std::cerr<<"parent = "<<parent<<"\n";
   for(auto *nGraphType : parent->find("./*")){
     std::cerr<<"  "<<nGraphType->get_name()<<"\n";
   }

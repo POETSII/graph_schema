@@ -1205,7 +1205,9 @@ public:
 
   void loadProvider(const std::string &path)
   {
-    fprintf(stderr, "Loading provider from '%s'\n", path.c_str());
+    if(!getenv("POETS_PROVIDER_QUIET")){
+      fprintf(stderr, "Loading provider from '%s'\n", path.c_str());
+    }
     void *lib=dlopen(path.c_str(), RTLD_NOW|RTLD_LOCAL);
     if(lib==0)
       throw std::runtime_error("Couldn't load provider '"+path+" + '"+dlerror()+"'");
@@ -1223,7 +1225,9 @@ public:
 
   virtual void registerGraphType(GraphTypePtr graph) override
   {
-    fprintf(stderr, "  registerGraphType(%s)\n", graph->getId().c_str());
+    if(!getenv("POETS_PROVIDER_QUIET")){
+      fprintf(stderr, "  registerGraphType(%s)\n", graph->getId().c_str());
+    }
     m_graphs.insert(std::make_pair(graph->getId(), graph));
   }
 

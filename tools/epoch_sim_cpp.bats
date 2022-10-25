@@ -42,6 +42,17 @@ setup() {
     done
 }
 
+@test "epoch_sim --event-log test_supervisor graph_schema tests" {
+    WD=$(make_test_wd)
+    for i in demos/tests/supervisors/*.xml ; do
+        >&3 echo "# $i"
+        # We write to dev null for speed/space, and because test doesn't look at it yet
+        run bin/epoch_sim --log-events /dev/null  --max-steps 10000 --log-level 0 $i
+        #>&3 echo "# $output"
+        echo $output | grep "application_exit(0)"
+    done
+}
+
 @test "epoch_sim test_supervisor Orchestrator_examples tests" {
     for i in apps/tests/supervisors/instances/*.xml ; do
         >&3 echo "# $i"

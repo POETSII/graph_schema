@@ -3,6 +3,11 @@
 $(eval $(call provider_rules_template,relaxation_heat,apps/relaxation_heat/relaxation_heat_graph_type.xml))
 $(eval $(call provider_rules_template,relaxation_heat_noterm,apps/relaxation_heat/relaxation_heat_noterm_graph_type.xml))
 
+relaxation_heat_FILTERS_TIME := \
+  --device-type-filter cell --bind-dev "cell" "state" "currVersion" "color" "blend_colors( (255,255,0), (255,0,255), 0, 10, (value%10))"
+
+relaxation_heat_FILTERS_VALUE := \
+  --device-type-filter cell --bind-dev "cell" "state" "currHeat" "color" "heat(-127, +127, value)"
 
 define relaxation_heat_instance_template
 # $1 = params
@@ -27,16 +32,28 @@ endif
 
 ifeq (,$5)
 
-demos/relaxation_heat/relaxation_heat_$1.mp4 : demos/relaxation_heat/relaxation_heat_$1.xml demos/relaxation_heat/relaxation_heat_$1.snap
-	mkdir -p demos/relaxation_heat/relaxation_heat_$1.tmp
-	-(cd demos/relaxation_heat/relaxation_heat_$1.tmp && rm *.dot)
-	-(cd demos/relaxation_heat/relaxation_heat_$1.tmp && rm *.dot.png)
-	-rm demo/relaxation_heat/relaxation_heat_$1.mp4
-	$(PYTHON) tools/render_graph_as_dot.py demos/relaxation_heat/relaxation_heat_$1.xml --snapshots demos/relaxation_heat/relaxation_heat_$1.snap --output demos/relaxation_heat/relaxation_heat_$1.tmp/out  \
-		$4
-	(cd demos/relaxation_heat/relaxation_heat_$1.tmp/  &&  for i in *.dot; do echo $$$$i; neato -Gsize=5,5\! -Gdpi=100 -Tpng $$$$i > $$$$i.png; done )
-	#(cd demos/relaxation_heat/relaxation_heat_$1.tmp/  && convert -delay 20 -loop 0 *.dot.png ../relaxation_heat_$1.gif)
-	(cd demos/relaxation_heat/relaxation_heat_$1.tmp/  && $(FFMPEG) -y -r 10 -i out_%06d.dot.png -vf "scale=trunc(iw/2)*2:trunc(ih/2)*2" -c:v libx264 -crf 18 ../relaxation_heat_$1.mp4)
+demos/relaxation_heat/relaxation_heat_$1_v.mp4  : demos/relaxation_heat/relaxation_heat_$1.xml demos/relaxation_heat/relaxation_heat_$1.snap
+	mkdir -p demos/relaxation_heat/relaxation_heat_$1.tmp_v
+	-(cd demos/relaxation_heat/relaxation_heat_$1.tmp_v && rm *.dot)
+	-(cd demos/relaxation_heat/relaxation_heat_$1.tmp_v && rm *.dot.png)
+	-rm demo/relaxation_heat/relaxation_heat_$1_v.mp4
+	$(PYTHON) tools/render_graph_as_dot.py demos/relaxation_heat/relaxation_heat_$1.xml --snapshots demos/relaxation_heat/relaxation_heat_$1.snap --output demos/relaxation_heat/relaxation_heat_$1.tmp_v/out  \
+		$(relaxation_heat_FILTERS_VALUE)
+	(cd demos/relaxation_heat/relaxation_heat_$1.tmp_v/  &&  for i in *.dot; do echo $$$$i; neato -Gsize=5,5\! -Gdpi=100 -Tpng $$$$i > $$$$i.png; done )
+	(cd demos/relaxation_heat/relaxation_heat_$1.tmp_v/  && $(FFMPEG) -y -r 10 -i out_%06d.dot.png -vf "scale=trunc(iw/2)*2:trunc(ih/2)*2" -c:v libx264 -crf 18 ../relaxation_heat_$1_v.mp4)
+
+demos/relaxation_heat/relaxation_heat_$1_t.mp4  : demos/relaxation_heat/relaxation_heat_$1.xml demos/relaxation_heat/relaxation_heat_$1.snap
+	mkdir -p demos/relaxation_heat/relaxation_heat_$1.tmp_t
+	-(cd demos/relaxation_heat/relaxation_heat_$1.tmp_t && rm *.dot)
+	-(cd demos/relaxation_heat/relaxation_heat_$1.tmp_t && rm *.dot.png)
+	-rm demo/relaxation_heat/relaxation_heat_$1_t.mp4
+	$(PYTHON) tools/render_graph_as_dot.py demos/relaxation_heat/relaxation_heat_$1.xml --snapshots demos/relaxation_heat/relaxation_heat_$1.snap --output demos/relaxation_heat/relaxation_heat_$1.tmp_t/out  \
+		$(relaxation_heat_FILTERS_TIME)
+	(cd demos/relaxation_heat/relaxation_heat_$1.tmp_t/  &&  for i in *.dot; do echo $$$$i; neato -Gsize=5,5\! -Gdpi=100 -Tpng $$$$i > $$$$i.png; done )
+	(cd demos/relaxation_heat/relaxation_heat_$1.tmp_t/  && $(FFMPEG) -y -r 10 -i out_%06d.dot.png -vf "scale=trunc(iw/2)*2:trunc(ih/2)*2" -c:v libx264 -crf 18 ../relaxation_heat_$1_t.mp4)
+
+ALL_relaxation_heat_DEMOS += demos/relaxation_heat/relaxation_heat_$1_v.mp4
+ALL_relaxation_heat_DEMOS += demos/relaxation_heat/relaxation_heat_$1_t.mp4
 
 else
 
@@ -44,19 +61,15 @@ demos/relaxation_heat/relaxation_heat_$1.mp4 : demos/relaxation_heat/relaxation_
 	apps/relaxation_heat/render_heat_as_video_field.sh demos/relaxation_heat/relaxation_heat_$1.xml demos/relaxation_heat/relaxation_heat_$1.snap
 	mv  demos/relaxation_heat/relaxation_heat_$1.xml.field.mp4 demos/relaxation_heat/relaxation_heat_$1.mp4
 
+ALL_relaxation_heat_DEMOS += demos/relaxation_heat/relaxation_heat_$1.mp4
+
 endif
 
 
-ALL_relaxation_heat_DEMOS += demos/relaxation_heat/relaxation_heat_$1.mp4
+
 
 endef
 
-
-relaxation_heat_FILTERS_TIME = \
-  --device-type-filter cell --bind-dev "cell" "state" "currVersion" "color" "blend_colors( (255,255,0), (255,0,255), 0, 10, (value%10))"
-
-relaxation_heat_FILTERS_VALUE = \
-  --device-type-filter cell --bind-dev "cell" "state" "currHeat" "color" "heat(-127, +127, value)"
 
 ifeq ($(NO_APP_TESTS),)
 

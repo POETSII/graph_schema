@@ -614,9 +614,15 @@ public:
         ev.rts=rts;
         ev.seq=seq;
         ev.L=logs;
-        ev.S=toStr(dt->getStateSpec(), state);
-        // message event
-        ev.pin=pin->getName();
+        if(dt){
+            ev.S=toStr(dt->getStateSpec(), state);
+            // message event
+            ev.pin=pin->getName();
+        }else{
+            // This is a supervisor
+            assert(!pin);
+            ev.pin="__default__";
+        }
         // send event
         ev.sendEventId=sendEventId;
         

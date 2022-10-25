@@ -1221,16 +1221,19 @@ struct Super
     
     void post(const std::string &msg)
     {{
+        assert(curr_services);
         curr_services->log(0, msg.c_str());
     }}
     
     void stop_application()
     {{
+        assert(curr_services);
         curr_services->application_exit(0);
     }}
     
     std::string get_output_directory(std::string suffix="")
     {{
+        assert(curr_services);
         char *tmp=getenv("TMP");
         if(tmp==0){{
             post("Couldn't create supervisor directory.");
@@ -1266,11 +1269,13 @@ private:
     
     void beginHandler(OrchestratorServices *services)
     {{
+        assert(Super::curr_services==0);
         Super::curr_services=services;  
     }}
     
     void endHandler()
     {{
+        assert(Super::curr_services!=0);
         Super::curr_services=0;
     }}
     
@@ -1280,6 +1285,7 @@ public:
         : supervisorProperties(&m_properties)
         , supervisorState(&m_state)
     {{
+        Super::curr_services=0;
     }}
 
     ~{st.id}_Instance()

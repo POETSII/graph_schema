@@ -145,7 +145,7 @@ else
   </GraphType>
   <GraphInstance id="ping_pong_timer_instance"
                  graphTypeId="orchestrator_examples_ping_pong_timer_type"
-                 P="{1000}">
+                 P="{100}">
     <DeviceInstances>
       <DevI id="N0" type="pinger" P="{1}"/>  <!-- Originator -->
       <DevI id="N1" type="pinger"/>
