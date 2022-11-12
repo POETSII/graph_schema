@@ -361,6 +361,9 @@ public:
     }
 
   public:
+    virtual ~Event()
+    {}
+
     const HashSim *get_parent() const
     { return m_parent; }
 
@@ -656,6 +659,7 @@ public:
 
 namespace std
 {
+  #ifndef __arm64
   template<>
   class hash<HashSim::world_hash_t>{
   public:
@@ -664,6 +668,8 @@ namespace std
       return uint64_t(h>>64) ^ uint64_t(h);
     }
   };
+  
+  #endif
 };
 
 struct visit_params

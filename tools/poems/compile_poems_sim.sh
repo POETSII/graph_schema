@@ -87,6 +87,14 @@ LIBXML_PKG_CONFIG_LDLIBS="-lxml++-2.6 -lxml2 -lglibmm-2.4 -lgobject-2.0 -lglib-2
 LIBXML_PKG_CONFIG_LDFLAGS=
 fi
 
+UNAME_S=$(uname -s)
+if [[ "${UNAME_S}" == "Darwin" ]] ; then
+CPPFLAGS="-I /opt/homebrew/include ${CPPFLAGS} "
+CPPFLAGS+="-Wno-inconsistent-missing-override"
+CPPFLAGS+=" -D_LIBCPP_ENABLE_CXX17_REMOVED_AUTO_PTR=1"
+LDFLAGS+=" -L /opt/homebrew/lib"
+fi
+
 CPPFLAGS+=" -std=c++17"
 CPPFLAGS+=" -I include -W -Wall -Wno-unused-parameter -Wno-unused-variable"
 CPPFLAGS+=" -I include/include_cache"

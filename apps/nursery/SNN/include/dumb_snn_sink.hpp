@@ -29,6 +29,21 @@ struct config_item
     std::string unit;
     std::variant<double,std::string> value;
 
+    config_item()
+    {}
+
+    config_item(const std::string &_name, const std::string &_unit, double _value)
+        : name(_name)
+        , unit(_unit)
+        , value(_value)
+    {}
+
+    config_item(const std::string &_name, const std::string &_unit, const std::string &_value)
+        : name(_name)
+        , unit(_unit)
+        , value(_value)
+    {}
+
     int64_t get_value_int(std::string_view _unit) const
     {
         if(unit!=_unit){

@@ -1428,7 +1428,7 @@ int main(int argc, char *argv[])
           for(unsigned i=0; i<f.size(); i++){
             const auto &d=f[i];
             if(graph.m_devices[d.dstDevice].isExternal && (d.dstDevice!=(unsigned)graph.m_haltDeviceIndex)){
-              fanout[i]=makeEndpoint(poets_device_address_t{d.dstDevice}, poets_pin_index_t{d.dstPinIndex});
+              fanout[i]=makeEndpoint(poets_device_address_t{d.dstDevice}, poets_pin_index_t{uint32_t(d.dstPinIndex)});
             }else{
               fanout[i]=poets_endpoint_address_t();
             }
@@ -1439,7 +1439,7 @@ int main(int argc, char *argv[])
           for(unsigned i=0; i<f.size(); i++){ 
             const auto &d=f[i];
             if(graph.m_devices[d.dstDevice].isExternal && (d.dstDevice!=(unsigned)graph.m_haltDeviceIndex)){
-              fanout.push_back(makeEndpoint(poets_device_address_t{d.dstDevice}, poets_pin_index_t{d.dstPinIndex}));
+              fanout.push_back(makeEndpoint(poets_device_address_t{d.dstDevice}, poets_pin_index_t{uint32_t(d.dstPinIndex)}));
             }
           }
         }

@@ -60,7 +60,7 @@
   }
 
 // Hack
-#ifdef __x86_64
+#if defined(__x86_64) || defined(__arm64)
   #include <time.h>
 
   uint32_t now()

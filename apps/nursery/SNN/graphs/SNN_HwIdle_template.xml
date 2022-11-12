@@ -172,7 +172,7 @@
                 message->t=deviceState->time_step;
                 message->hash=deviceState->state_hash;
                 if(0){
-                    handler_log_dump<typeof(handler_log)> dumper{handler_log, 3};
+                    handler_log_dump<decltype(handler_log)> dumper{handler_log, 3};
                     ${ModelType}::dump(handler_log, deviceProperties->p, deviceState->s);
                 }
                 neuron_stats_acc_export(*deviceState, *message);

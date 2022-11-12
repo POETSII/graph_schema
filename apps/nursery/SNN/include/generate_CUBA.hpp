@@ -77,13 +77,14 @@ void generate_CUBA(
         }
     };
 
-    sink.on_begin_network({
+    std::vector<config_item> items({
         {"dt" , "second", (float)dt},
-        {"numSteps" ,    "steps", numSteps},
+        {"numSteps" ,    "steps", (double)numSteps},
         {"calc_type",    "type", "float_ftz_daz"}, // Calculations should be done in this form
-        {"globalSeed",   "1",    rng()&0xFFFFFFFFFFFFull},
-        {"sendHashOnSpike", "1", 1}
+        {"globalSeed",   "1",    double(rng()&0xFFFFFFFFFFFFull)},
+        {"sendHashOnSpike", "1", 1.0}
     });
+    sink.on_begin_network(items);
 
     sink.on_begin_prototypes();
     sink.on_neuron_prototype(Neu);

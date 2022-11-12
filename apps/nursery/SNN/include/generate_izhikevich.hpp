@@ -73,13 +73,14 @@ void generate_izhikevich(
         }
     };
 
-    sink.on_begin_network({
-        {"dt" , "second", (float)dt},
-        {"numSteps" ,    "steps", numSteps},
-        {"calc_type",    "type", "float_ftz_daz"}, // Calculations should be done in this form
-        {"globalSeed",   "1",    rng()&0xFFFFFFFFFFFFull},
-        {"sendHashOnSpike", "1", 1}
+    std::vector<config_item> items({
+        {"dt" , "second", (double)dt},
+        {"numSteps" ,    "steps", (double)numSteps},
+        {"calc_type",    "type", std::string("float_ftz_daz")}, // Calculations should be done in this form
+        {"globalSeed",   "1",    double(rng()&0xFFFFFFFFFFFFull)},
+        {"sendHashOnSpike", "1", 1.0}
     });
+    sink.on_begin_network(items);
 
     sink.on_begin_prototypes();
     sink.on_neuron_prototype(Ex);

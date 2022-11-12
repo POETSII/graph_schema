@@ -806,7 +806,7 @@ class GraphTypeImpl : public GraphType
 private:
   std::string m_id;
 
-  unsigned m_nativeDimension;
+  //unsigned m_nativeDimension;
 
   TypedDataSpecPtr m_propertiesSpec;
 
@@ -1090,6 +1090,7 @@ private:
   int m_line;
   const char *m_assertFunc;
   const char *m_cond;
+  std::string m_what;
 
   static std::string make_what(const char *file, int line, const char *assertFunc,const char *cond)
   {
@@ -1104,8 +1105,13 @@ public:
     , m_line(line)
     , m_assertFunc(assertFunc)
     , m_cond(cond)
+    , m_what(make_what(m_file, m_line, m_assertFunc, m_cond))
   {
+  }
 
+  const char *what() const noexcept override
+  {
+    return m_what.c_str();
   }
 };
 

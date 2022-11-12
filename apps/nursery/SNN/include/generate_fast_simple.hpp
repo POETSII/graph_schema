@@ -43,10 +43,11 @@ void generate_fast_simple(
         }
     };
 
-    sink.on_begin_network({
+    std::vector<config_item> items({
         {"dt" , "second", 1e-4},
-        {"T" , "second", 1}
+        {"T" , "second", 1.0}
     });
+    sink.on_begin_network(items);
 
     sink.on_begin_prototypes();
     sink.on_neuron_prototype(Ex);

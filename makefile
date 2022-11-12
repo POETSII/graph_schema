@@ -16,11 +16,14 @@ endif
 SHELL=/bin/bash
 
 # For some reason pkg-config stopped working on byron...
-ifeq ($(shell pkg-config libxml++-2.6 ; echo $?),0)
+
+$(info $(shell pkg-config libxml++-2.6 ; echo $$?))
+ifeq ($(shell pkg-config libxml++-2.6 ; echo $$?),0)
 LIBXML_PKG_CONFIG_CPPFLAGS := $(shell pkg-config --cflags libxml++-2.6)
 LIBXML_PKG_CONFIG_LDLIBS := $(shell pkg-config --libs-only-l libxml++-2.6)
 LIBXML_PKG_CONFIG_LDFLAGS := $(shell pkg-config --libs-only-L --libs-only-other libxml++-2.6)
 else
+$(info "nooo")
 LIBXML_PKG_CONFIG_CPPFLAGS := -I/usr/include/libxml++-2.6 -I/usr/lib/x86_64-linux-gnu/libxml++-2.6/include -I/usr/include/libxml2 -I/usr/include/glibmm-2.4 -I/usr/lib/x86_64-linux-gnu/glibmm-2.4/include -I/usr/include/glib-2.0 -I/usr/lib/x86_64-linux-gnu/glib-2.0/include -I/usr/include/sigc++-2.0 -I/usr/lib/x86_64-linux-gnu/sigc++-2.0/include
 LIBXML_PKG_CONFIG_LDLIBS := -lxml++-2.6 -lxml2 -lglibmm-2.4 -lgobject-2.0 -lglib-2.0 -lsigc-2.0
 LIBXML_PKG_CONFIG_LDFLAGS := 
@@ -43,7 +46,12 @@ else
 # http://stackoverflow.com/a/12099167
 UNAME_S := $(shell uname -s)
 ifeq ($(UNAME_S),Darwin)
+# libxml++ uses auto_ptr, which is deprecated in c++17. This brings it back for clang on OSX.
+CPPFLAGS += -D_LIBCPP_ENABLE_CXX17_REMOVED_AUTO_PTR=1
+CPPFLAGS += -I /opt/homebrew/include
 SO_CPPFLAGS += -dynamiclib -fPIC
+# These are correct warnings, but ....
+CPPFLAGS += -Wno-inconsistent-missing-override -Wno-deprecated-declarations
 else
 SO_CPPFLAGS += -shared -fPIC
 LDFLAGS += -pthread
@@ -59,11 +67,15 @@ CPPFLAGS += -std=c++17 -O1 -gdwarf-4
 # https://stackoverflow.com/a/57379835
 CPPFLAGS += -rdynamic
 
+ifeq ($(UNAME_S),Darwin)
+# ? Anything needed here to control denormals?
+else
 # In some cases we want to try to achieve reproducible floating-point,
 # including with no denormals. This (hopefully) convinces gcc not to
 # optimise past those things. 
 # Using SSE is generally a good things anyway
 CPPFLAGS+= -mfpmath=sse -msse2
+endif
 # These may inhibit optimisations
 CPPFLAGS+= -frounding-math -fsignaling-nans
 

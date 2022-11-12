@@ -134,7 +134,18 @@ CPPFLAGS+=" -Wno-unused-local-typedefs -Wno-unused-but-set-variable"
 
 CPPFLAGS+=" -I ~/local/include"
 
+UNAME_S=$(uname -s)
+if [[ "${UNAME_S}" != "Darwin" ]] ; then
 CPPFLAGS+=" -mfpmath=sse -msse2"
+else
+CPPFLAGS="-I /opt/homebrew/include $CPPFLAGS"
+CPPFLAGS+=" -std=c++17"
+fi
+# These are correct warnings, but ....
+CPPFLAGS+=" -Wno-inconsistent-missing-override -Wno-deprecated-declarations"
+
+
+
 CPPFLAGS+=" -frounding-math -fsignaling-nans -fmax-errors=1"
 
 SO_CPPFLAGS+=" -shared -fPIC"

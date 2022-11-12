@@ -16,6 +16,7 @@
 #include <chrono>
 #include <cstdarg>
 #include <functional>
+#include <array>
 
 #include <metis.h>
 #include "tbb/concurrent_queue.h"
@@ -108,7 +109,6 @@ struct POEMS
 {
     struct device;
     struct edge;
-    struct device;
     struct message;
     struct device_cluster;
 
